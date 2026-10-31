@@ -1,0 +1,48 @@
+# Rust
+backend-rust/target/
+**/target/
+**/*.rs.bk
+
+# Android & Gradle
+android-app/.gradle/
+android-app/build/
+android-app/app/build/
+android-app/local.properties
+.gradle/
+build/
+*.apk
+*.aab
+.idea/
+*.iml
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# Secrets & Environment variables
+.env
+.env.rust
+.env.local
+*.pem
+*.key
+*.pfx
+
+# Legacy Python backups and temp folders with hardcoded keys
+Backup/
+lixo/
+yesdominadas/
+noDominadas/
+
+# Logs
+*.log
+nohup.out
+
+# VS Code & IDEs
+.vscode/

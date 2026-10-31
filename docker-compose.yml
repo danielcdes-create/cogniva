@@ -1,0 +1,41 @@
+# Arquivo para ser copiado para /opt/apps/docker-compose.yml no Droplet DigitalOcean
+# Conforme §5 da Nota Técnica: Arquitetura e Pipeline CI/CD em VPS
+services:
+  api-rust-core:
+    image: ghcr.io/danielcdes-create/api-rust-core:latest
+    container_name: api-rust-core
+    restart: unless-stopped
+    env_file: .env.rust
+    ports:
+      - "127.0.0.1:8001:8000"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  api-python-service:
+    image: ghcr.io/${GITHUB_OWNER:-seu_usuario}/api-python-service:latest
+    container_name: api-python-service
+    restart: unless-stopped
+    env_file: .env.python
+    ports:
+      - "127.0.0.1:8002:8000"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  api-ts-service:
+    image: ghcr.io/${GITHUB_OWNER:-seu_usuario}/api-ts-service:latest
+    container_name: api-ts-service
+    restart: unless-stopped
+    env_file: .env.ts
+    ports:
+      - "127.0.0.1:8003:8000"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

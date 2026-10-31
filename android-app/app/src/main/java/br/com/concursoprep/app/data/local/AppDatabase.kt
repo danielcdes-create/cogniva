@@ -1,0 +1,82 @@
+package br.com.concursoprep.app.data.local
+
+import androidx.room.Dao
+import androidx.room.Database
+import androidx.room.Entity
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.PrimaryKey
+import androidx.room.Query
+import androidx.room.RoomDatabase
+import kotlinx.coroutines.flow.Flow
+
+/**
+ * Entidade Room para armazenamento Offline-First de questões (estudo no transporte sem internet)
+ */
+@Entity(tableName = "cached_questions")
+data class CachedQuestionEntity(
+    @PrimaryKey val id: String,
+    val question: String,
+    val questionType: String,
+    val answersJson: String,
+    val correctIndicesJson: String,
+    val disciplina: String,
+    val source: String,
+    val examYear: Int?,
+    val level: String,
+    val explanation: String?,
+    val inErrorNotebook: Boolean,
+    val isMastered: Boolean,
+    val userNote: String? = null
+)
+
+/**
+ * Fila local de respostas registradas offline para sincronização automática via WorkManager
+ * com o endpoint `POST /api/v1/quiz/submit-batch` do backend Rust.
+ */
+@Entity(tableName = "pending_attempts")
+data class PendingAttemptEntity(
+    @PrimaryKey(autoGenerate = true) val localId: Long = 0,
+    val questionId: String,
+    val chosenIndex: Int,
+    val chosenText: String,
+    val isCorrect: Boolean,
+    val timeSpentSeconds: Int,
+    val confidenceLevel: Int,
+    val sessionUuid: String,
+    val quizMode: String,
+    val examBlock: String?,
+    val contestId: String?,
+    val userNote: String?,
+    val createdAtEpochMs: Long = System.currentTimeMillis()
+)
+
+@Dao
+interface ConcursoLocalDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertQuestions(questions: List<CachedQuestionEntity>)
+
+    @Query("SELECT * FROM cached_questions WHERE (:disciplina IS NULL OR disciplina = :disciplina) LIMIT :limit")
+    suspend fun getCachedQuestions(disciplina: String?, limit: Int): List<CachedQuestionEntity>
+
+    @Query("SELECT * FROM cached_questions WHERE inErrorNotebook = 1")
+    fun observeErrorNotebook(): Flow<List<CachedQuestionEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun enqueuePendingAttempt(attempt: PendingAttemptEntity)
+
+    @Query("SELECT * FROM pending_attempts ORDER BY createdAtEpochMs ASC")
+    suspend fun getAllPendingAttempts(): List<PendingAttemptEntity>
+
+    @Query("DELETE FROM pending_attempts WHERE localId IN (:ids)")
+    suspend fun deleteSyncedAttempts(ids: List<Long>)
+}
+
+@Database(
+    entities = [CachedQuestionEntity::class, PendingAttemptEntity::class],
+    version = 1,
+    exportSchema = false
+)
+abstract class AppDatabase : RoomDatabase() {
+    abstract fun concursoDao(): ConcursoLocalDao
+}
