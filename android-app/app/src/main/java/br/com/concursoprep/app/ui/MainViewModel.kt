@@ -88,8 +88,9 @@ class MainViewModel(
     private val _currentSessionUuid = MutableStateFlow(UUID.randomUUID().toString())
 
     init {
-        // Carrega dados iniciais com resiliência offline-first
+        // Carrega dados iniciais com resiliência offline-first e verifica automaticamente nova versão OTA
         refreshAllData()
+        checkApkUpdate()
     }
 
     fun completeOnboarding(

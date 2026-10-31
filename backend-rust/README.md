@@ -21,6 +21,7 @@ Microsserviço de alta performance em **Rust (`Axum 0.7` + `Tokio` + `MongoDB 3.
 * `services/difficulty.rs`: Classificador automático de dificuldade (`Fácil`, `Média`, `Difícil`, `Muito Difícil`) e estimador heurístico de plausibilidade de distratores em Rust puro.
 * `services/quiz_selector.rs`: Seletores para os 8 modos de estudo (`STANDARD`, `SHUFFLE`, `SIMULADO`, `MOST_BADASS`, `SRS_REVIEW`, `ERROR_NOTEBOOK`, `COMMON_TRUNK`, `SINGLE`).
 * `services/ai_tutor.rs`: Cliente HTTP assíncrono (`reqwest` + `rustls`) para Gemini 1.5 Flash e OpenAI `gpt-4o-mini` com persistência imediata na coleção `todasQuestoes`.
+* `routes/apk_ota.rs`: Servidor de atualização OTA (*Over-The-Air*) do aplicativo Android (`GET /api/v1/apk/info` e `GET /api/v1/apk/download`), lendo dinamicamente `output-metadata.json` e calculando o hash **SHA-256** do binário publicado em `/app/apk/app-debug.apk`.
 
 ---
 

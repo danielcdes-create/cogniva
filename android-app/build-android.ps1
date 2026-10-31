@@ -1,5 +1,5 @@
 param(
-    [switch]$PublishToVps = $false
+    [switch]$SkipVpsPublish = $false
 )
 
 $ErrorActionPreference = 'Stop'
@@ -56,11 +56,19 @@ try {
         Write-Host "APK Debug COGNIVA gerado com sucesso em: $apkPath" -ForegroundColor Green
         Write-Host "Publicado em: $targetApk (SHA-256: $hash, Tamanho: $size bytes)" -ForegroundColor Cyan
 
-        if ($PublishToVps) {
-            Write-Host "Enviando APK e output-metadata.json para a VPS DigitalOcean (198.199.65.103:/opt/apps/apk/)..." -ForegroundColor Yellow
-            & ssh -o StrictHostKeyChecking=no root@198.199.65.103 "mkdir -p /opt/apps/apk"
-            & scp -o StrictHostKeyChecking=no (Join-Path $distDir 'app-debug.apk') (Join-Path $distDir 'output-metadata.json') (Join-Path $distDir 'apk-info.json') "root@198.199.65.103:/opt/apps/apk/"
-            Write-Host "APK OTA publicado com sucesso no servidor!" -ForegroundColor Green
+        if (-not $SkipVpsPublish) {
+            try {
+                Write-Host "Publicando automaticamente APK e output-metadata.json na VPS DigitalOcean (198.199.65.103:/opt/apps/apk/)..." -ForegroundColor Yellow
+                & ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no root@198.199.65.103 "mkdir -p /opt/apps/apk"
+                if ($LASTEXITCODE -eq 0) {
+                    & scp -o BatchMode=yes -o StrictHostKeyChecking=no (Join-Path $distDir 'app-debug.apk') (Join-Path $distDir 'output-metadata.json') (Join-Path $distDir 'apk-info.json') "root@198.199.65.103:/opt/apps/apk/"
+                    Write-Host "APK OTA publicado automaticamente no servidor!" -ForegroundColor Green
+                } else {
+                    Write-Host "Nota: Chave SSH local sem BatchMode para 198.199.65.103. A publicação ocorrerá automaticamente via GitHub Actions no push da tag." -ForegroundColor DarkYellow
+                }
+            } catch {
+                Write-Host "Nota: Publicação remota será realizada automaticamente pelo GitHub Actions." -ForegroundColor DarkYellow
+            }
         }
     }
 } finally {

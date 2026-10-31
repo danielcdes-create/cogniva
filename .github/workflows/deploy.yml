@@ -44,7 +44,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 5. Build e Push da Imagem (Multi-Stage < 50MB + Cache de Camadas GHA)
+      - name: 5. Build e Push da Imagem Rust (Multi-Stage < 50MB + Cache de Camadas GHA)
         uses: docker/build-push-action@v5
         with:
           context: ./backend-rust
@@ -54,13 +54,40 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: 6. Deploy Automatizado no Droplet via SSH (Zero Build na VPS)
+      - name: 6. Configurar JDK 21 (para Build Automatizado do APK OTA)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'gradle'
+
+      - name: 7. Compilar APK Android (COGNIVA OTA) e calcular metadados
+        working-directory: ./android-app
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --console=plain
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk dist/app-debug.apk
+          cp app/build/outputs/apk/debug/output-metadata.json dist/output-metadata.json
+
+      - name: 8. Publicar APK OTA Automaticamente no Droplet (/opt/apps/apk) via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          source: "android-app/dist/app-debug.apk,android-app/dist/output-metadata.json"
+          target: "/opt/apps/apk"
+          strip_components: 2
+
+      - name: 9. Deploy Automatizado do Container no Droplet via SSH (Zero Build na VPS)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DO_HOST }}
           username: ${{ secrets.DO_USER }}
           key: ${{ secrets.DO_SSH_KEY }}
           script: |
+            mkdir -p /opt/apps/apk
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             cd /opt/apps
             docker compose pull ${{ env.SERVICE_NAME }}

@@ -148,23 +148,27 @@ curl http://127.0.0.1:8001/api/v1/health
 
 ---
 
-## 6. Compilação e Sistemática de Atualização OTA do App (`android-app/`)
+## 6. Sistemática de Atualização OTA Automatizada (`android-app/` & `CI/CD`)
 
-O **COGNIVA** possui uma sistemática de atualização OTA (*Over-The-Air*) integrada entre o aplicativo Android e o `api-rust-core` (idêntica à arquitetura do projeto `SpamShield`):
+O **COGNIVA** possui uma sistemática 100% automatizada de compilação, distribuição e verificação OTA (*Over-The-Air*) do aplicativo Android integrada ao `api-rust-core` e ao pipeline do GitHub Actions:
 
-1. **No Servidor (`api-rust-core`):**
-   * O volume `/opt/apps/apk` do Droplet é montado em `/app/apk:ro` dentro do container.
-   * `GET /api/v1/apk/info` lê `output-metadata.json` e calcula dinamicamente o tamanho e o hash **SHA-256** do APK.
-   * `GET /api/v1/apk/download` (ou `/apk` e `/cogniva.apk`) entrega o binário com `Content-Type: application/vnd.android.package-archive`.
-2. **No Aplicativo Android:**
-   * Na aba **Hoje**, o card **"Atualização do App (OTA · Cogniva)"** permite consultar a versão publicada no servidor, baixar o APK no cache interno, validar o **checksum SHA-256** antes da abertura e acionar o instalador nativo do Android via `FileProvider` (`br.com.concursoprep.app.fileprovider`).
+1. **Publicação Automática no CI/CD ([.github/workflows/deploy.yml](file:///c:/Users/danie/Telebot/.github/workflows/deploy.yml)):**
+   * Sempre que uma tag de versão é enviada (`git tag v1.x.x && git push origin v1.x.x`) ou o workflow é disparado no GitHub Actions, o runner Ubuntu executa automaticamente:
+     1. Build multi-stage e push da imagem Docker do `api-rust-core` para o GHCR.
+     2. Configuração do JDK 21 + cache do Gradle e compilação limpa do APK (`./gradlew assembleDebug`).
+     3. Envio automático via SCP (`appleboy/scp-action`) do `app-debug.apk` e do `output-metadata.json` diretamente para `/opt/apps/apk/` no Droplet DigitalOcean (`198.199.65.103`), respeitando a regra de **Zero Build na VPS**.
+     4. Atualização do container `api-rust-core` com o volume `./apk:/app/apk:ro` montado.
+2. **No Servidor (`api-rust-core`):**
+   * `GET /api/v1/apk/info`: Lê dinamicamente o `output-metadata.json` (`version_code` e `version_name`) e calcula o tamanho em bytes e o hash **SHA-256** do APK publicado em `/app/apk/app-debug.apk`.
+   * `GET /api/v1/apk/download` (ou `/apk` e `/cogniva.apk`): Entrega o binário com `Content-Type: application/vnd.android.package-archive`.
+3. **Verificação Automática no App Android:**
+   * Ao abrir o aplicativo (`MainViewModel.init`), o **COGNIVA** consulta automaticamente `GET /api/v1/apk/info` em segundo plano e compara com o `BuildConfig.VERSION_CODE` instalado.
+   * Na aba **Hoje**, o card **"Atualização do App (OTA · Cogniva)"** exibe imediatamente quando há nova versão disponível. Ao tocar em **"Atualizar APK"**, o app baixa o pacote em `cacheDir/updates`, valida o **checksum SHA-256** e abre o instalador nativo do Android via `FileProvider`.
 
-### Gerar e Publicar Nova Versão OTA via Linha de Comando
+### Build Local (Opcional para Desenvolvimento)
+
+Ao executar o script local no Windows, ele compila o APK, gera `dist/apk-info.json` com o hash SHA-256 e também tenta publicar automaticamente via SCP na VPS:
 
 ```powershell
-# Apenas compilar e gerar dist/Cogniva-debug.apk + dist/apk-info.json (com SHA-256)
 powershell -ExecutionPolicy Bypass -File C:\Users\danie\Telebot\android-app\build-android.ps1
-
-# Compilar e publicar automaticamente no Droplet DigitalOcean (/opt/apps/apk/) via SCP
-powershell -ExecutionPolicy Bypass -File C:\Users\danie\Telebot\android-app\build-android.ps1 -PublishToVps
 ```

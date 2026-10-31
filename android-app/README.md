@@ -33,22 +33,20 @@ Aplicativo nativo Android construído em **Kotlin + Jetpack Compose (Material 3)
 
 ---
 
-## 3. Sistemática de Atualização OTA & Build (`build-android.ps1`)
+## 3. Sistemática de Atualização OTA 100% Automatizada (CI/CD + `build-android.ps1`)
 
-O aplicativo implementa o mesmo fluxo seguro de atualização OTA (*Over-The-Air*) do projeto `SpamShield`:
+O aplicativo implementa o fluxo completo e automatizado de atualização OTA (*Over-The-Air*):
 
-1. **Consulta de Versão (`GET /api/v1/apk/info`):** Compara `BuildConfig.VERSION_CODE` local com o `version_code` publicado no servidor.
-2. **Download com Verificação SHA-256 (`GET /api/v1/apk/download`):** Baixa o binário em `context.cacheDir/updates/cogniva-update.apk`, calcula o hash SHA-256 local e rejeita o arquivo caso divirja do `sha256_checksum` informado pelo backend.
-3. **Instalação Nativa via `FileProvider`:** Verifica a permissão `REQUEST_INSTALL_PACKAGES` (`Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES`) e dispara o instalador do Android para `br.com.concursoprep.app.fileprovider`.
+1. **Verificação Automática na Inicialização (`MainViewModel.init`):** Ao abrir o app, `checkApkUpdate()` consulta automaticamente `GET /api/v1/apk/info` no servidor e compara o `version_code` remoto com `BuildConfig.VERSION_CODE`.
+2. **Download com Verificação Criptográfica SHA-256 (`GET /api/v1/apk/download`):** Baixa o binário em `context.cacheDir/updates/cogniva-update.apk`, calcula o hash SHA-256 local e rejeita o arquivo caso divirja do `sha256_checksum` oficial do backend.
+3. **Instalação Nativa via `FileProvider`:** Verifica a permissão `REQUEST_INSTALL_PACKAGES` (`Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES`) e dispara o instalador nativo do Android para `br.com.concursoprep.app.fileprovider`.
+4. **Publicação Automática via GitHub Actions (`deploy.yml`):** A cada release/tag (`v*`), o pipeline do GitHub Actions compila o APK Android com JDK 21 e envia automaticamente `app-debug.apk` e `output-metadata.json` via SCP para `/opt/apps/apk/` no Droplet DigitalOcean (`198.199.65.103`), sem precisar rodar nenhum comando manual.
 
-### Como Compilar e Gerar Artefatos OTA
+### Build Local (Desenvolvimento)
 
 ```powershell
-# Compila o APK, calcula o SHA-256 e gera dist/Cogniva-debug.apk + dist/apk-info.json
+# Compila o APK, calcula o SHA-256 em dist/apk-info.json e publica via SCP na VPS (se chave SSH local ativa)
 powershell -ExecutionPolicy Bypass -File C:\Users\danie\Telebot\android-app\build-android.ps1
-
-# Compila e envia automaticamente via SCP para o Droplet (198.199.65.103:/opt/apps/apk/)
-powershell -ExecutionPolicy Bypass -File C:\Users\danie\Telebot\android-app\build-android.ps1 -PublishToVps
 ```
 
 O endereço do backend de produção é configurado em `gradle.properties`:
