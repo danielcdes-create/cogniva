@@ -60,7 +60,7 @@ import kotlinx.coroutines.flow.collectLatest
 class MainActivity : ComponentActivity() {
 
     private val viewModel: MainViewModel by viewModels {
-        MainViewModelFactory(ConcursoApp.instance.repository)
+        MainViewModelFactory(ConcursoApp.instance.repository, applicationContext)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

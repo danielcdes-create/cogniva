@@ -32,7 +32,7 @@ class ConcursoApp : Application() {
             AppDatabase::class.java,
             "concurso_prep.db"
         )
-            .fallbackToDestructiveMigration()
+            .fallbackToDestructiveMigration(true)
             .build()
 
         // 2. Configura OkHttp com timeouts generosos para LLMs (Gemini / OpenAI)

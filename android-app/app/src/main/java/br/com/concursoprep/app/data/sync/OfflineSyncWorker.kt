@@ -8,6 +8,7 @@ import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import br.com.concursoprep.app.ConcursoApp
 import java.util.concurrent.TimeUnit
 
 /**
@@ -21,7 +22,9 @@ class OfflineSyncWorker(
 
     override suspend fun doWork(): Result {
         return try {
-            // Sincroniza tentativas offline acumuladas no Room com o endpoint /api/v1/quiz/submit-batch
+            val prefs = applicationContext.getSharedPreferences("cogniva_prefs", Context.MODE_PRIVATE)
+            val userId = prefs.getLong("user_id", 1001L)
+            ConcursoApp.instance.repository.syncPendingAttempts(userId)
             Result.success()
         } catch (e: Exception) {
             Result.retry()

@@ -321,6 +321,13 @@ pub async fn handle_report_problem(
         .upsert(true)
         .await?;
 
+    // Incrementa contador `reports` na coleção `todasQuestoes` (retrocompatibilidade com AFTBot.py)
+    let _ = state
+        .db
+        .collection::<bson::Document>("todasQuestoes")
+        .update_one(doc! { "_id": q_oid }, doc! { "$inc": { "reports": 1 } })
+        .await;
+
     Ok(Json(serde_json::json!({
         "status": "ok",
         "question_id": question_id,

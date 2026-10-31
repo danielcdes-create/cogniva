@@ -151,10 +151,20 @@ pub async fn get_today_dashboard(
         badge_text: "Estudar 15 questões de Finanças Públicas avança CPNU e Receita Federal ao mesmo tempo".to_string(),
     };
 
+    // 5. Meta diária configurada pelo usuário na coleção `usuarios` (default 50)
+    let daily_goal_questions = db
+        .collection::<Document>("usuarios")
+        .find_one(doc! { "user_id": query.user_id })
+        .await
+        .ok()
+        .flatten()
+        .and_then(|u| u.get_i32("daily_questions_target").ok())
+        .unwrap_or(50);
+
     Ok(Json(TodayDashboardResponse {
         user_id: query.user_id,
         date_iso: now.to_rfc3339(),
-        daily_goal_questions: 50,
+        daily_goal_questions,
         questions_answered_today,
         accuracy_today_pct,
         pending_srs_reviews_count,

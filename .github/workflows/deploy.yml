@@ -70,17 +70,16 @@ jobs:
           cp app/build/outputs/apk/debug/app-debug.apk dist/app-debug.apk
           cp app/build/outputs/apk/debug/output-metadata.json dist/output-metadata.json
 
-      - name: 8. Publicar APK OTA Automaticamente no Droplet (/opt/apps/apk) via SCP
+      - name: 8. Publicar APK OTA, docker-compose.yml e nginx.conf no Droplet via SCP
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.DO_HOST }}
           username: ${{ secrets.DO_USER }}
           key: ${{ secrets.DO_SSH_KEY }}
-          source: "android-app/dist/app-debug.apk,android-app/dist/output-metadata.json"
-          target: "/opt/apps/apk"
-          strip_components: 2
+          source: "android-app/dist/app-debug.apk,android-app/dist/output-metadata.json,docker-compose.yml,deploy/nginx-concursoprep.conf"
+          target: "/opt/apps/deploy_bundle"
 
-      - name: 9. Deploy Automatizado do Container no Droplet via SSH (Zero Build na VPS)
+      - name: 9. Deploy Automatizado do Container e Rotas no Droplet via SSH (Zero Build na VPS)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DO_HOST }}
@@ -88,8 +87,14 @@ jobs:
           key: ${{ secrets.DO_SSH_KEY }}
           script: |
             mkdir -p /opt/apps/apk
+            cp -f /opt/apps/deploy_bundle/android-app/dist/app-debug.apk /opt/apps/apk/app-debug.apk
+            cp -f /opt/apps/deploy_bundle/android-app/dist/output-metadata.json /opt/apps/apk/output-metadata.json
+            cp -f /opt/apps/deploy_bundle/docker-compose.yml /opt/apps/docker-compose.yml
+            cp -f /opt/apps/deploy_bundle/deploy/nginx-concursoprep.conf /etc/nginx/sites-available/cogniva
+            chmod -R a+r /opt/apps/apk
+            nginx -t && systemctl reload nginx
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             cd /opt/apps
             docker compose pull ${{ env.SERVICE_NAME }}
-            docker compose up -d --no-deps ${{ env.SERVICE_NAME }}
+            docker compose up -d --no-deps --force-recreate ${{ env.SERVICE_NAME }}
             docker image prune -f

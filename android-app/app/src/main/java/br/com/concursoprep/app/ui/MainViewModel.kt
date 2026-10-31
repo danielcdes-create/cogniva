@@ -32,19 +32,22 @@ sealed interface ApkInstallEvent {
 }
 
 class MainViewModel(
-    private val repository: ConcursoRepository
+    private val repository: ConcursoRepository,
+    private val appContext: Context? = null
 ) : ViewModel() {
 
-    private val _userId = MutableStateFlow(1001L)
+    private val prefs = appContext?.getSharedPreferences("cogniva_prefs", Context.MODE_PRIVATE)
+
+    private val _userId = MutableStateFlow(prefs?.getLong("user_id", 1001L) ?: 1001L)
     val userId: StateFlow<Long> = _userId.asStateFlow()
 
     private val _userProfile = MutableStateFlow<UserProfileDto?>(null)
     val userProfile: StateFlow<UserProfileDto?> = _userProfile.asStateFlow()
 
-    private val _isOnboardingCompleted = MutableStateFlow(false)
+    private val _isOnboardingCompleted = MutableStateFlow(prefs?.getBoolean("onboarding_completed", false) ?: false)
     val isOnboardingCompleted: StateFlow<Boolean> = _isOnboardingCompleted.asStateFlow()
 
-    private val _selectedContestId = MutableStateFlow("CPNU")
+    private val _selectedContestId = MutableStateFlow(prefs?.getString("selected_contest_id", "CPNU") ?: "CPNU")
     val selectedContestId: StateFlow<String> = _selectedContestId.asStateFlow()
 
     private val _todayDashboard = MutableStateFlow<TodayDashboardDto?>(null)
@@ -114,6 +117,10 @@ class MainViewModel(
             )
             _userProfile.value = profile
             _isOnboardingCompleted.value = true
+            prefs?.edit()
+                ?.putLong("user_id", auth.profile.userId)
+                ?.putBoolean("onboarding_completed", true)
+                ?.apply()
             refreshAllData()
             _userFeedbackMessage.emit("Perfil configurado com sucesso!")
         }
@@ -121,6 +128,7 @@ class MainViewModel(
 
     fun skipOnboarding() {
         _isOnboardingCompleted.value = true
+        prefs?.edit()?.putBoolean("onboarding_completed", true)?.apply()
         refreshAllData()
     }
 
@@ -136,6 +144,7 @@ class MainViewModel(
 
     fun selectContest(contestId: String) {
         _selectedContestId.value = contestId
+        prefs?.edit()?.putString("selected_contest_id", contestId)?.apply()
         viewModelScope.launch {
             val uid = _userId.value
             _syllabusGroups.value = repository.getContestSyllabus(contestId, uid)
@@ -293,12 +302,13 @@ class MainViewModel(
 }
 
 class MainViewModelFactory(
-    private val repository: ConcursoRepository
+    private val repository: ConcursoRepository,
+    private val appContext: Context? = null
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(MainViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return MainViewModel(repository) as T
+            return MainViewModel(repository, appContext) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
     }
