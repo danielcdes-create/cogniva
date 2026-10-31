@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import br.com.concursoprep.app.domain.model.ContestStatus
 import br.com.concursoprep.app.domain.model.QuizMode
 import br.com.concursoprep.app.domain.model.TodayDashboardDto
+import br.com.concursoprep.app.ui.theme.CognivaBrandHeader
 import br.com.concursoprep.app.ui.theme.CorrectGreen
 import br.com.concursoprep.app.ui.theme.ErrorRed
 import br.com.concursoprep.app.ui.theme.EstimatedNeutral
@@ -68,13 +69,12 @@ fun TodayScreen(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // 1. Cabeçalho Sóbrio + Pulso do Dia
+        // 1. Cabeçalho Sóbrio COGNIVA + Pulso do Dia
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = "Hoje · Pulso de Preparação",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                CognivaBrandHeader(
+                    ecosystemProduct = "Cogniva Planner · Learn",
+                    subtitle = "Conhecimento em evolução · Pulso diário"
                 )
                 val primaryExam = dashboard.upcomingExams.firstOrNull()
                 if (primaryExam != null) {

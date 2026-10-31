@@ -8,7 +8,9 @@
     <application
         android:name=".ConcursoApp"
         android:allowBackup="true"
-        android:label="ConcursoPrep"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:label="COGNIVA"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">

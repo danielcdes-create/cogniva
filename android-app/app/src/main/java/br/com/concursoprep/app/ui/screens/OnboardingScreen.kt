@@ -34,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import br.com.concursoprep.app.ui.theme.CognivaBrandHeader
 
 /**
  * Fluxo de Onboarding em 4 Passos (§4 da Nota Técnica Quiz Kotlin):
@@ -75,10 +76,9 @@ fun OnboardingScreen(
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Text(
-            text = "Passo $currentStep de 4 · Configuração Tática",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.primary
+        CognivaBrandHeader(
+            ecosystemProduct = "LEARN · PRACTICE · EVOLVE",
+            subtitle = "Conhecimento em evolução · Passo $currentStep de 4"
         )
         LinearProgressIndicator(
             progress = { currentStep / 4f },

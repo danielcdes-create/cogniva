@@ -26,6 +26,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import br.com.concursoprep.app.domain.model.ProgressAnalyticsDto
+import br.com.concursoprep.app.ui.theme.CognivaBrandHeader
 import br.com.concursoprep.app.ui.theme.CorrectGreen
 import br.com.concursoprep.app.ui.theme.ErrorRed
 import br.com.concursoprep.app.ui.theme.ReviewAmber
@@ -50,9 +51,9 @@ fun ProgressScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            Text(
-                text = "Progresso · Diagnóstico de Aprovação",
-                style = MaterialTheme.typography.headlineMedium
+            CognivaBrandHeader(
+                ecosystemProduct = "Cogniva Insights",
+                subtitle = "Analytics, Matriz de Confiança & Diagnóstico"
             )
         }
 

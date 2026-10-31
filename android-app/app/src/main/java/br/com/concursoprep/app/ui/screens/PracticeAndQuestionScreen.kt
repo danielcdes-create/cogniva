@@ -59,6 +59,7 @@ import br.com.concursoprep.app.domain.model.QuestionDto
 import br.com.concursoprep.app.domain.model.QuestionType
 import br.com.concursoprep.app.domain.model.QuizMode
 import br.com.concursoprep.app.domain.model.VALID_PROBLEM_CATEGORIES
+import br.com.concursoprep.app.ui.theme.CognivaBrandHeader
 import br.com.concursoprep.app.ui.theme.CorrectGreen
 import br.com.concursoprep.app.ui.theme.ErrorRed
 import br.com.concursoprep.app.ui.theme.ReviewAmber
@@ -82,9 +83,9 @@ fun PracticeHubScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Text(
-            text = "Praticar · Baterias & Simulados",
-            style = MaterialTheme.typography.headlineMedium
+        CognivaBrandHeader(
+            ecosystemProduct = "Cogniva Questions · Exams",
+            subtitle = "Banco de questões, simulados & Cogniva AI"
         )
         Text(
             text = "Quantidade de questões da bateria:",
@@ -102,12 +103,12 @@ fun PracticeHubScreen(
         }
 
         PracticeModeCard(
-            title = "🔥 The Most Badass (Desafio Adaptativo)",
+            title = "🔥 Cogniva Questions · The Most Badass",
             description = "Seleciona as questões com maior índice de erro, tempo gasto e reincidência no seu histórico.",
             onClick = { onLaunchSession(QuizMode.MOST_BADASS, selectedQuantity) }
         )
         PracticeModeCard(
-            title = "⏱️ Simulado Oficial Ponderado",
+            title = "⏱️ Cogniva Exams · Simulado Oficial Ponderado",
             description = "Full-screen com cronômetro, distribuição exata de pesos do edital e cálculo de nota líquida.",
             onClick = { onLaunchSession(QuizMode.SIMULADO, selectedQuantity) }
         )
@@ -616,7 +617,7 @@ fun QuestionSessionScreen(
 
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Aprofundar com Tutores de IA (Cache Instantâneo):",
+                            text = "Aprofundar com Cogniva AI (Assistente Inteligente):",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

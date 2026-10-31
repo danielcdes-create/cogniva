@@ -6,7 +6,7 @@ import br.com.concursoprep.app.data.local.AppDatabase
 import br.com.concursoprep.app.data.remote.ConcursoApiService
 import br.com.concursoprep.app.data.repository.ConcursoRepository
 import br.com.concursoprep.app.data.sync.OfflineSyncWorker
-import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
+import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient

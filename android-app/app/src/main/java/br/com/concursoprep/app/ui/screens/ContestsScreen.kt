@@ -44,6 +44,7 @@ import br.com.concursoprep.app.domain.model.ConfidenceBadge
 import br.com.concursoprep.app.domain.model.ContestDiffScreenDto
 import br.com.concursoprep.app.domain.model.DisciplineSyllabusGroupDto
 import br.com.concursoprep.app.domain.model.SyllabusTopicDto
+import br.com.concursoprep.app.ui.theme.CognivaBrandHeader
 import br.com.concursoprep.app.ui.theme.CorrectGreen
 import br.com.concursoprep.app.ui.theme.ErrorRed
 import br.com.concursoprep.app.ui.theme.EstimatedNeutral
@@ -74,10 +75,9 @@ fun ContestsScreen(
             .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        Text(
-            text = "Edital Verticalizado · Cobertura Real",
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.onBackground
+        CognivaBrandHeader(
+            ecosystemProduct = "Cogniva Planner",
+            subtitle = "Edital Verticalizado · Cobertura Real"
         )
         Spacer(modifier = Modifier.height(8.dp))
 
