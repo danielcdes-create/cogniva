@@ -155,27 +155,92 @@ curl http://127.0.0.1:8001/api/v1/health
 
 ## 6. Sistemática de Atualização OTA Automatizada (`android-app/` & `CI/CD`)
 
-O **COGNIVA** possui uma sistemática 100% automatizada de compilação, distribuição e verificação OTA (*Over-The-Air*) do aplicativo Android integrada ao `api-rust-core` e ao pipeline do GitHub Actions:
+O **COGNIVA** possui uma sistemática 100% automatizada de compilação, distribuição e verificação OTA (*Over-The-Air*) do aplicativo Android integrada ao `api-rust-core` e ao pipeline do GitHub Actions.
 
-1. **Publicação Automática no CI/CD ([.github/workflows/deploy.yml](file:///c:/Users/danie/Cogniva/.github/workflows/deploy.yml)):**
-   * Sempre que uma tag de versão é enviada (`git tag v1.x.x && git push origin v1.x.x`) ou o workflow é disparado no GitHub Actions, o runner Ubuntu executa automaticamente:
-     1. Build multi-stage e push da imagem Docker do `api-rust-core` para o GHCR.
-     2. Configuração do JDK 21 + cache do Gradle e compilação limpa do APK (`./gradlew assembleDebug`).
-     3. Envio automático via SCP (`appleboy/scp-action`) do `app-debug.apk` e do `output-metadata.json` diretamente para `/opt/apps/apk/` no Droplet DigitalOcean (`198.199.65.103`), respeitando a regra de **Zero Build na VPS**.
-     4. Atualização do container `api-rust-core` com o volume `./apk:/app/apk:ro` montado.
-2. **No Servidor (`api-rust-core`):**
-   * `GET /api/v1/apk/info`: Lê dinamicamente o `output-metadata.json` (`version_code` e `version_name`) e calcula o tamanho em bytes e o hash **SHA-256** do APK publicado em `/app/apk/app-debug.apk`.
-   * `GET /api/v1/apk/download` (ou `/apk` e `/cogniva.apk`): Entrega o binário com `Content-Type: application/vnd.android.package-archive`.
-3. **Verificação Automática no App Android:**
-   * Ao abrir o aplicativo (`MainViewModel.init`), o **COGNIVA** consulta automaticamente `GET /api/v1/apk/info` em segundo plano e compara com o `BuildConfig.VERSION_CODE` instalado.
-   * Na aba **Hoje**, o card **"Atualização do App (OTA · Cogniva)"** exibe imediatamente quando há nova versão disponível. Ao tocar em **"Atualizar APK"**, o app baixa o pacote em `cacheDir/updates`, valida o **checksum SHA-256** e abre o instalador nativo do Android via `FileProvider`.
+### Procedimento Operacional Padrão (SOP) a Cada Modificação no App
 
-### Build Local (Opcional para Desenvolvimento)
+Sempre que forem feitas correções ou novas funcionalidades no app Android ou no backend, deve-se seguir rigorosamente o seguinte fluxo de publicação:
 
-Ao executar o script local no Windows, ele compila o APK, gera `dist/apk-info.json` com o hash SHA-256 e também tenta publicar automaticamente via SCP na VPS:
+```mermaid
+flowchart TD
+    A["1. Modificação de Código (Android / Backend)"] --> B["2. Incrementar versionCode e versionName<br/>(android-app/app/build.gradle.kts)"]
+    B --> C["3. Validação Local<br/>(cargo test + ./gradlew assembleDebug)"]
+    C --> D["4. Git Commit Semântico + Git Tag vX.Y.Z"]
+    D --> E["5. Git Push (main e tag)"]
+    E --> F["6. GitHub Actions CI/CD (deploy.yml)"]
+    F --> G["Build Docker Rust -> GHCR"]
+    F --> H["Build APK Android + output-metadata.json"]
+    G --> I["Deploy Container no Droplet"]
+    H --> J["Upload SCP do APK para /opt/apps/apk/ na VPS"]
+    I --> K["Nginx recarrega rotas"]
+    J --> L["App detecta OTA via GET /api/v1/apk/info"]
+    L --> M["Usuário atualiza com 1 clique no celular"]
+```
+
+#### Passo 1: Incrementar obrigatoriamente a versão no Gradle
+Em `android-app/app/build.gradle.kts`:
+* Incrementar o `versionCode` inteiro (ex.: `3` -> `4`).
+* Atualizar o `versionName` semântico (ex.: `"1.2.0"` -> `"1.2.1"`).
+> [!IMPORTANT]
+> A detecção de atualização no app compara `remote.versionCode > BuildConfig.VERSION_CODE`. Se o `versionCode` não for incrementado, o app instalado não oferecerá o botão de atualização ao usuário.
+
+#### Passo 2: Validação local de integridade
+Garantir que os testes do backend e a compilação do Android passam com sucesso:
+```powershell
+# Validar backend Rust
+cargo test --manifest-path backend-rust/Cargo.toml
+
+# Validar compilação do Android Kotlin
+$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
+cd android-app
+./gradlew compileDebugKotlin --no-daemon
+cd ..
+```
+
+#### Passo 3: Commit semântico e criação da Tag de release
+```powershell
+git add android-app/ backend-rust/
+git commit -m "fix(quiz): descricao clara das correcoes (v1.2.1)"
+git tag v1.2.1
+```
+
+#### Passo 4: Push para o GitHub (aciona a publicação remota)
+```powershell
+git push origin main
+git push origin v1.2.1
+```
+
+#### Passo 5: Execução automatizada no CI/CD ([.github/workflows/deploy.yml](file:///c:/Users/danie/Cogniva/.github/workflows/deploy.yml))
+A tag `v*` dispara automaticamente a esteira do GitHub Actions que:
+1. Faz o build multi-stage e envia a nova imagem Docker do `api-rust-core` ao GHCR.
+2. Configura JDK 21 e compila o `app-debug.apk` e o `output-metadata.json`.
+3. Envia o APK e metadados via SCP diretamente para `/opt/apps/apk/` no Droplet DigitalOcean (`198.199.65.103`), garantindo **Zero Build na VPS**.
+4. Atualiza o container Rust e recarrega o Nginx sem downtime.
+
+#### Passo 6: Atualização no dispositivo do usuário
+* **No Servidor (`api-rust-core`):**
+  * `GET /api/v1/apk/info`: Lê dinamicamente o `output-metadata.json` (`version_code` e `version_name`) e calcula em tempo de execução o tamanho e o hash **SHA-256** do APK em `/app/apk/app-debug.apk`.
+  * `GET /api/v1/apk/download` (ou `/apk` e `/cogniva.apk`): Entrega o binário com cabeçalho `application/vnd.android.package-archive`.
+* **No App Android:**
+  * Na inicialização (`MainViewModel.init`), o app consulta `GET /api/v1/apk/info`.
+  * Se houver nova versão, o card **"Atualização do App (OTA · Cogniva)"** é exibido na aba **Hoje** e na tela de **Ajustes**.
+  * Ao tocar em **"Atualizar APK"**, o app baixa o binário em `cacheDir/updates`, valida a integridade via **SHA-256** e dispara a instalação nativa via `FileProvider`.
+
+### Build e Instalação Manual Direta (Opcional)
+
+Se o desenvolvedor precisar testar imediatamente via cabo USB ou envio manual sem esperar o CI/CD:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File C:\Users\danie\Cogniva\android-app\build-android.ps1
+# Compilar APK localmente
+$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
+cd android-app
+./gradlew assembleDebug --no-daemon
+Copy-Item app/build/outputs/apk/debug/app-debug.apk ../Cogniva-v1.2.1.apk -Force
+cd ..
+```
+O arquivo gerado em `Cogniva-vX.Y.Z.apk` pode ser transferido ou instalado via ADB:
+```powershell
+& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" install -r Cogniva-v1.2.1.apk
 ```
 
 ---

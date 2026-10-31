@@ -33,7 +33,7 @@ Aplicativo nativo Android construído em **Kotlin + Jetpack Compose (Material 3)
 
 ---
 
-## 3. Sistemática de Atualização OTA 100% Automatizada (CI/CD + `build-android.ps1`)
+## 3. Sistemática de Atualização OTA 100% Automatizada (CI/CD + App)
 
 O aplicativo implementa o fluxo completo e automatizado de atualização OTA (*Over-The-Air*):
 
@@ -42,12 +42,33 @@ O aplicativo implementa o fluxo completo e automatizado de atualização OTA (*O
 3. **Instalação Nativa via `FileProvider`:** Verifica a permissão `REQUEST_INSTALL_PACKAGES` (`Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES`) e dispara o instalador nativo do Android para `br.com.concursoprep.app.fileprovider`.
 4. **Publicação Automática via GitHub Actions (`deploy.yml`):** A cada release/tag (`v*`), o pipeline do GitHub Actions compila o APK Android com JDK 21 e envia automaticamente `app-debug.apk` e `output-metadata.json` via SCP para `/opt/apps/apk/` no Droplet DigitalOcean (`198.199.65.103`), sem precisar rodar nenhum comando manual.
 
-### Build Local (Desenvolvimento)
+### 📌 Procedimento Obrigatório a Cada Modificação no App
 
-```powershell
-# Compila o APK, calcula o SHA-256 em dist/apk-info.json e publica via SCP na VPS (se chave SSH local ativa)
-powershell -ExecutionPolicy Bypass -File C:\Users\danie\Cogniva\android-app\build-android.ps1
-```
+Sempre que realizar alterações em telas, regras de negócio ou recursos do app Android:
+
+1. **Incrementar versão em `app/build.gradle.kts`:**
+   ```kotlin
+   versionCode = 4       // Incrementar sempre +1
+   versionName = "1.2.1" // SemVer da nova release
+   ```
+2. **Validar compilação localmente:**
+   ```powershell
+   $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
+   ./gradlew compileDebugKotlin
+   ```
+3. **Commit e Tag de versão:**
+   ```powershell
+   git add .
+   git commit -m "fix(escopo): descricao da mudanca (vX.Y.Z)"
+   git tag vX.Y.Z
+   git push origin main
+   git push origin vX.Y.Z
+   ```
+4. **Instalação local para testes imediatos (opcional):**
+   ```powershell
+   ./gradlew assembleDebug --no-daemon
+   # APK gerado em: app/build/outputs/apk/debug/app-debug.apk
+   ```
 
 O endereço do backend de produção é configurado em `gradle.properties`:
 ```properties
