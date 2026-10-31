@@ -152,7 +152,7 @@ curl http://127.0.0.1:8001/api/v1/health
 
 O **COGNIVA** possui uma sistemática 100% automatizada de compilação, distribuição e verificação OTA (*Over-The-Air*) do aplicativo Android integrada ao `api-rust-core` e ao pipeline do GitHub Actions:
 
-1. **Publicação Automática no CI/CD ([.github/workflows/deploy.yml](file:///c:/Users/danie/Telebot/.github/workflows/deploy.yml)):**
+1. **Publicação Automática no CI/CD ([.github/workflows/deploy.yml](file:///c:/Users/danie/Cogniva/.github/workflows/deploy.yml)):**
    * Sempre que uma tag de versão é enviada (`git tag v1.x.x && git push origin v1.x.x`) ou o workflow é disparado no GitHub Actions, o runner Ubuntu executa automaticamente:
      1. Build multi-stage e push da imagem Docker do `api-rust-core` para o GHCR.
      2. Configuração do JDK 21 + cache do Gradle e compilação limpa do APK (`./gradlew assembleDebug`).
@@ -170,5 +170,5 @@ O **COGNIVA** possui uma sistemática 100% automatizada de compilação, distrib
 Ao executar o script local no Windows, ele compila o APK, gera `dist/apk-info.json` com o hash SHA-256 e também tenta publicar automaticamente via SCP na VPS:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File C:\Users\danie\Telebot\android-app\build-android.ps1
+powershell -ExecutionPolicy Bypass -File C:\Users\danie\Cogniva\android-app\build-android.ps1
 ```

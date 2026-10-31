@@ -46,7 +46,7 @@ O aplicativo implementa o fluxo completo e automatizado de atualização OTA (*O
 
 ```powershell
 # Compila o APK, calcula o SHA-256 em dist/apk-info.json e publica via SCP na VPS (se chave SSH local ativa)
-powershell -ExecutionPolicy Bypass -File C:\Users\danie\Telebot\android-app\build-android.ps1
+powershell -ExecutionPolicy Bypass -File C:\Users\danie\Cogniva\android-app\build-android.ps1
 ```
 
 O endereço do backend de produção é configurado em `gradle.properties`:
