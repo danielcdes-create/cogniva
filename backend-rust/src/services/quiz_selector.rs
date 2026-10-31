@@ -172,6 +172,41 @@ async fn fetch_single_mode(
     Ok(Vec::new())
 }
 
+async fn get_contest_disciplines(db: &Database, contest_id: Option<&str>) -> Vec<String> {
+    let Some(concurso) = contest_id else {
+        return Vec::new();
+    };
+    if concurso == "Geral" || concurso.is_empty() {
+        return Vec::new();
+    }
+
+    let contest_doc = db
+        .collection::<ContestDocument>("concursos")
+        .find_one(doc! { "$or": [{ "_id": concurso }, { "code": concurso }] })
+        .await
+        .ok()
+        .flatten();
+
+    if let Some(c) = contest_doc {
+        c.simulation_proportions.into_keys().collect()
+    } else if concurso == "CPNU" {
+        vec![
+            "Segurança e Saúde do Trabalhador".to_string(),
+            "Direito do Trabalho".to_string(),
+            "Sociologia e Psicologia Aplicadas ao Trabalho".to_string(),
+            "Políticas Públicas".to_string(),
+            "Gestão Governamental e Governança Pública".to_string(),
+            "Desafios do Estado de Direito".to_string(),
+            "Ética e Integridade".to_string(),
+            "Administração Pública Federal".to_string(),
+            "Diversidade e Inclusão na Sociedade".to_string(),
+            "Finanças Públicas".to_string(),
+        ]
+    } else {
+        Vec::new()
+    }
+}
+
 async fn fetch_standard_or_shuffle_mode(
     db: &Database,
     req: &QuizGenerateRequest,
@@ -183,14 +218,33 @@ async fn fetch_standard_or_shuffle_mode(
     if !excluded.is_empty() {
         match_doc.insert("_id", doc! { "$nin": excluded });
     }
-    if let Some(concurso) = &req.contest_id {
-        if concurso != "Geral" && !concurso.is_empty() {
-            match_doc.insert("concursos", concurso);
-        }
-    }
+
+    let contest_disciplines = get_contest_disciplines(db, req.contest_id.as_deref()).await;
+
     if let Some(disc) = &req.disciplina {
         if !disc.is_empty() {
             match_doc.insert("disciplina", disc);
+        }
+    } else if let Some(concurso) = &req.contest_id {
+        if concurso != "Geral" && !concurso.is_empty() {
+            if !contest_disciplines.is_empty() {
+                match_doc.insert(
+                    "$or",
+                    vec![
+                        doc! { "concursos": concurso },
+                        doc! { "concursos": { "$in": [concurso] } },
+                        doc! { "disciplina": { "$in": &contest_disciplines } },
+                    ],
+                );
+            } else {
+                match_doc.insert(
+                    "$or",
+                    vec![
+                        doc! { "concursos": concurso },
+                        doc! { "concursos": { "$in": [concurso] } },
+                    ],
+                );
+            }
         }
     }
     if let Some(topic_id) = &req.syllabus_topic_id {
@@ -298,11 +352,36 @@ async fn fetch_badass_mode(
         doc! { "$unwind": "$questao_completa" },
     ];
 
-    if let Some(concurso) = &req.contest_id {
-        if concurso != "Geral" && !concurso.is_empty() {
+    let contest_disciplines = get_contest_disciplines(db, req.contest_id.as_deref()).await;
+
+    if let Some(disc) = &req.disciplina {
+        if !disc.is_empty() {
             pipeline.push(doc! {
-                "$match": { "questao_completa.concursos": concurso }
+                "$match": { "questao_completa.disciplina": disc }
             });
+        }
+    } else if let Some(concurso) = &req.contest_id {
+        if concurso != "Geral" && !concurso.is_empty() {
+            if !contest_disciplines.is_empty() {
+                pipeline.push(doc! {
+                    "$match": {
+                        "$or": [
+                            { "questao_completa.concursos": concurso },
+                            { "questao_completa.concursos": { "$in": [concurso] } },
+                            { "questao_completa.disciplina": { "$in": &contest_disciplines } },
+                        ]
+                    }
+                });
+            } else {
+                pipeline.push(doc! {
+                    "$match": {
+                        "$or": [
+                            { "questao_completa.concursos": concurso },
+                            { "questao_completa.concursos": { "$in": [concurso] } },
+                        ]
+                    }
+                });
+            }
         }
     }
 

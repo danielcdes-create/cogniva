@@ -56,7 +56,10 @@ interface ConcursoLocalDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertQuestions(questions: List<CachedQuestionEntity>)
 
-    @Query("SELECT * FROM cached_questions WHERE (:disciplina IS NULL OR disciplina = :disciplina) LIMIT :limit")
+    @Query("SELECT * FROM cached_questions WHERE id = :id LIMIT 1")
+    suspend fun findQuestionById(id: String): CachedQuestionEntity?
+
+    @Query("SELECT * FROM cached_questions WHERE (:disciplina IS NULL OR disciplina = :disciplina) ORDER BY RANDOM() LIMIT :limit")
     suspend fun getCachedQuestions(disciplina: String?, limit: Int): List<CachedQuestionEntity>
 
     @Query("SELECT * FROM cached_questions WHERE inErrorNotebook = 1")
@@ -77,7 +80,7 @@ interface ConcursoLocalDao {
     @Query("SELECT COUNT(*) FROM cached_questions")
     suspend fun countCachedQuestions(): Int
 
-    @Query("SELECT * FROM cached_questions WHERE inErrorNotebook = 1 LIMIT :limit")
+    @Query("SELECT * FROM cached_questions WHERE inErrorNotebook = 1 ORDER BY RANDOM() LIMIT :limit")
     suspend fun getErrorNotebookQuestions(limit: Int): List<CachedQuestionEntity>
 
     @Query("UPDATE cached_questions SET inErrorNotebook = :inErrorNotebook WHERE id = :questionId")

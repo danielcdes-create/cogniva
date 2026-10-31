@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.UUID
@@ -363,16 +364,27 @@ class MainViewModel(
         }
     }
 
+    private var activeAiJob: Job? = null
+    private var activeAiQuestionId: String? = null
+
     fun requestAiTutor(questionId: String, kind: String, title: String, hintIndex: Int? = null) {
-        viewModelScope.launch {
-            _activeAiSheetTitle.value = title
-            _activeAiSheetMarkdown.value = "⏳ Consultando tutor pedagógico Cogniva AI..."
+        activeAiJob?.cancel()
+        activeAiQuestionId = questionId
+        _activeAiSheetTitle.value = title
+        _activeAiSheetMarkdown.value = "⏳ Consultando tutor pedagógico Cogniva AI..."
+
+        activeAiJob = viewModelScope.launch {
             val content = repository.requestAiTutor(questionId, kind, hintIndex)
-            _activeAiSheetMarkdown.value = content
+            if (activeAiQuestionId == questionId) {
+                _activeAiSheetMarkdown.value = content
+            }
         }
     }
 
     fun dismissAiSheet() {
+        activeAiJob?.cancel()
+        activeAiJob = null
+        activeAiQuestionId = null
         _activeAiSheetMarkdown.value = null
         _activeAiSheetTitle.value = null
     }

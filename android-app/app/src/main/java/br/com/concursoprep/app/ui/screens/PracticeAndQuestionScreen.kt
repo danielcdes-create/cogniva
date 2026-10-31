@@ -243,6 +243,10 @@ fun QuestionSessionScreen(
         handleBackNavigation()
     }
 
+    LaunchedEffect(currentIndex) {
+        onDismissAiSheet()
+    }
+
     var secondsRemaining by rememberSaveable {
         mutableIntStateOf(if (isSimuladoMode) questions.size * 180 else 0)
     }
@@ -445,21 +449,28 @@ fun QuestionSessionScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            OutlinedButton(
-                                onClick = { if (currentIndex > 0) currentIndex -= 1 },
-                                enabled = currentIndex > 0,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .heightIn(min = 52.dp)
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.action_previous_question),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
+                            if (currentIndex > 0) {
+                                OutlinedButton(
+                                    onClick = {
+                                        onDismissAiSheet()
+                                        currentIndex -= 1
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .heightIn(min = 52.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.action_previous_question),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
                             }
                             Button(
                                 onClick = {
+                                    onDismissAiSheet()
                                     if (currentIndex + 1 < questions.size) {
                                         currentIndex += 1
                                     } else {
@@ -467,8 +478,10 @@ fun QuestionSessionScreen(
                                     }
                                 },
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .heightIn(min = 52.dp)
+                                    .weight(if (currentIndex > 0) 1.15f else 1f)
+                                    .heightIn(min = 52.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                shape = RoundedCornerShape(12.dp)
                             ) {
                                 Text(
                                     text = if (currentIndex + 1 < questions.size) {
@@ -488,10 +501,14 @@ fun QuestionSessionScreen(
                         ) {
                             if (currentIndex > 0) {
                                 OutlinedButton(
-                                    onClick = { currentIndex -= 1 },
+                                    onClick = {
+                                        onDismissAiSheet()
+                                        currentIndex -= 1
+                                    },
                                     modifier = Modifier
-                                        .weight(0.4f)
+                                        .weight(1f)
                                         .heightIn(min = 52.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                                     shape = RoundedCornerShape(12.dp)
                                 ) {
                                     Text(
@@ -513,8 +530,9 @@ fun QuestionSessionScreen(
                                 enabled = selectedOptionIndex != null,
                                 modifier = Modifier
                                     .testTag("confirm_answer_cta")
-                                    .weight(1f)
+                                    .weight(if (currentIndex > 0) 1.15f else 1f)
                                     .heightIn(min = 52.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                                 shape = RoundedCornerShape(12.dp)
                             ) {
                                 Text(
@@ -532,10 +550,14 @@ fun QuestionSessionScreen(
                         ) {
                             if (currentIndex > 0) {
                                 OutlinedButton(
-                                    onClick = { currentIndex -= 1 },
+                                    onClick = {
+                                        onDismissAiSheet()
+                                        currentIndex -= 1
+                                    },
                                     modifier = Modifier
-                                        .weight(0.4f)
+                                        .weight(1f)
                                         .heightIn(min = 52.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                                     shape = RoundedCornerShape(12.dp)
                                 ) {
                                     Text(
@@ -547,6 +569,7 @@ fun QuestionSessionScreen(
                             }
                             Button(
                                 onClick = {
+                                    onDismissAiSheet()
                                     if (currentIndex + 1 < questions.size) {
                                         currentIndex += 1
                                     } else if (isSimuladoReviewMode) {
@@ -556,8 +579,9 @@ fun QuestionSessionScreen(
                                     }
                                 },
                                 modifier = Modifier
-                                    .weight(1f)
+                                    .weight(if (currentIndex > 0) 1.15f else 1f)
                                     .heightIn(min = 52.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                                 shape = RoundedCornerShape(12.dp)
                             ) {
                                 Text(

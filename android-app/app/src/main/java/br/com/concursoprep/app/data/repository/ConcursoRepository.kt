@@ -223,9 +223,9 @@ class ConcursoRepository(
         val seed = buildOfflineSeedQuestions()
         return if (!disciplina.isNullOrBlank()) {
             val filtered = seed.filter { it.disciplina.contains(disciplina, ignoreCase = true) || disciplina.contains(it.disciplina, ignoreCase = true) }
-            filtered.ifEmpty { seed }.take(quantity)
+            filtered.ifEmpty { seed }.shuffled().take(quantity)
         } else {
-            seed.take(quantity)
+            seed.shuffled().take(quantity)
         }
     }
 
@@ -284,7 +284,7 @@ class ConcursoRepository(
             val response: AiAssistResponseDto = api.requestAiTutor(questionId, kind, hintIndex)
             response.contentMarkdown
         } catch (e: Exception) {
-            buildOfflineFallbackAiResponse(kind)
+            buildOfflineFallbackAiResponse(questionId, kind)
         }
     }
 
@@ -780,15 +780,34 @@ class ConcursoRepository(
         )
     )
 
-    private fun buildOfflineFallbackAiResponse(kind: String): String = when (kind) {
-        "dr-sincero" -> "🔥 **Dr. Sincero:** A banca adora colocar que 'basta entregar o EPI no papel' ou exigir 'exclusividade' para vínculo de emprego. Súmula 289 do TST e art. 3º da CLT mandam lembranças: papel sem eficácia fática não afasta direito trabalhista!"
-        "mnemonic" -> "🧠 **Mnemônico de Fixação — Requisitos (S.H.O.P.P.):**\n- **S**ubordinação jurídica\n- **H**abitualidade (Não eventualidade)\n- **O**nerosidade\n- **P**essoalidade\n- **P**essoa Física"
-        "contextual-hint" -> "💡 **Dica Progressiva:** Observe se a alternativa tenta criar uma exigência formal (como exclusividade ou simples recibo) que a lei e a jurisprudência não exigem."
-        "plausibility" -> "⚖️ **Análise de Plausibilidade dos Distratores:**\n- *Simples entrega formal / Exclusividade:* **Plausível (Armadilha Clássica)** — confunde o candidato que lembra do instituto mas esquece o princípio da primazia da realidade.\n- *Pagamento substitutivo / Decreto unilateral:* **Improvável** — viola frontalmente as garantias constitucionais."
-        "child-friendly-pre" -> "🧒 **Simplificando a Pergunta (ELI10):**\nImagine que a regra diz que você precisa usar um capacete que funcione de verdade para se proteger da chuva. A pergunta quer saber: basta o chefe te dar um chapéu furado no papel ou o ambiente/equipamento precisa realmente te proteger?"
-        "child-friendly-post" -> "🧒 **Explicação Simples (ELI10):**\nNo Direito e nas Normas de Segurança, o que vale é o que acontece de verdade (primazia da realidade). Não adianta só assinar um papel dizendo que está tudo seguro se o trabalhador continua correndo perigo!"
-        "extra-concepts" -> "🎯 **Conceitos-Chave & Exemplos Práticos:**\n1. **Primazia da Realidade:** Os fatos reais prevalecem sobre meros documentos formais.\n2. **Súmula 289 do TST:** O simples fornecimento do aparelho de proteção pelo empregador não o exime do pagamento do adicional de insalubridade; cabe-lhe tomar as medidas que conduzam à diminuição ou eliminação da nocividade.\n3. **Hierarquia das Medidas (NR-01):** Medidas de proteção coletiva (EPC) têm prioridade sobre medidas administrativas e individuais (EPI)."
-        else -> "📚 **Explicação Detalhada:** A alternativa correta reflete a literalidade normativa e a jurisprudência consolidada das bancas examinadoras (Cesgranrio, FGV e Cebraspe)."
+    private suspend fun buildOfflineFallbackAiResponse(questionId: String, kind: String): String {
+        val seedQ = buildOfflineSeedQuestions().firstOrNull { it.id == questionId }
+        val explanation = seedQ?.explanation ?: runCatching {
+            dao.findQuestionById(questionId)?.explanation
+        }.getOrNull()
+
+        if (!explanation.isNullOrBlank()) {
+            return when (kind) {
+                "explanation" -> explanation
+                "child-friendly-pre" -> "🧒 **Simplificando a Pergunta:**\n${seedQ?.question ?: "Analise cuidadosamente o cerne da questão e a regra geral aplicável."}"
+                "child-friendly-post" -> "🧒 **Explicação Didática:**\n$explanation"
+                "dr-sincero" -> "🔥 **Dr. Sincero:** Sem enrolação — atente-se ao cerne da questão e às pegadinhas da banca:\n\n$explanation"
+                "contextual-hint" -> "💡 **Dica Pedagógica:** Lembre-se da fundamentação do gabarito oficial para descartar as alternativas incorretas."
+                "extra-concepts" -> "🎯 **Conceitos-Chave:**\n$explanation"
+                "mnemonic" -> "🧠 **Mnemônico & Fixação:** Fixe os elementos centrais do gabarito oficial:\n\n$explanation"
+                "plausibility" -> "⚖️ **Análise dos Distratores:**\n$explanation"
+                else -> explanation
+            }
+        }
+
+        return when (kind) {
+            "dr-sincero" -> "🔥 **Dr. Sincero:** Fique atento aos termos absolutos da banca (como 'sempre', 'nunca', 'apenas') que costumam invalidar alternativas."
+            "mnemonic" -> "🧠 **Dica de Fixação:** Revise os requisitos essenciais da disciplina e anote a fundamentação do gabarito."
+            "contextual-hint" -> "💡 **Dica Progressiva:** Elimine primeiro as alternativas que contrariam expressamente a legislação ou o bom senso constitucional."
+            "child-friendly-pre" -> "🧒 **Dica:** Identifique qual é a regra principal que a questão está cobrando antes de ler as opções."
+            "child-friendly-post" -> "🧒 **Explicação:** A alternativa correta reflete a literalidade e a interpretação consolidada da banca examinadora."
+            else -> "📚 **Explicação:** Não foi possível carregar o comentário detalhado da IA no momento. Conecte-se à internet para consultar o tutor pedagógico completo."
+        }
     }
 
     private suspend fun buildOfflineFallbackAnalytics(userId: Long): ProgressAnalyticsDto {

@@ -173,9 +173,9 @@ pub async fn get_or_generate_ai_assist(
     }
 
     // 2. Se não está em cache, gera via Gemini ou OpenAI e grava em `todasQuestoes`
-    let generated_text = match &kind {
+    let generated_result = match &kind {
         AiAssistKind::Explanation => {
-            generate_gemini_explanation(config, &questao, &correct_answer).await?
+            generate_gemini_explanation(config, &questao, &correct_answer).await
         }
         AiAssistKind::ContextualHint => {
             let prev = questao.contextual_hint.join("; ");
@@ -188,7 +188,7 @@ pub async fn get_or_generate_ai_assist(
                 "Você é um especialista em concursos públicos. Dê uma dica progressiva sem entregar a resposta.",
                 &prompt,
             )
-            .await?
+            .await
         }
         AiAssistKind::DrSincero => {
             let prompt = format!(
@@ -200,7 +200,7 @@ pub async fn get_or_generate_ai_assist(
                 "Você é o Dr. Sincero, um mentor sarcástico, direto e cirúrgico em concursos públicos.",
                 &prompt,
             )
-            .await?
+            .await
         }
         AiAssistKind::ChildFriendlyPre => {
             let prompt = format!(
@@ -212,7 +212,7 @@ pub async fn get_or_generate_ai_assist(
                 "Você traduz questões complexas de concursos para uma linguagem simples e clara.",
                 &prompt,
             )
-            .await?
+            .await
         }
         AiAssistKind::ChildFriendlyPost => {
             let prompt = format!(
@@ -224,7 +224,7 @@ pub async fn get_or_generate_ai_assist(
                 "Você explica conceitos difíceis de concursos com analogias simples e didáticas.",
                 &prompt,
             )
-            .await?
+            .await
         }
         AiAssistKind::ExtraConcepts => {
             let prompt = format!(
@@ -236,7 +236,7 @@ pub async fn get_or_generate_ai_assist(
                 "Você é um professor especialista em concursos públicos de alto nível.",
                 &prompt,
             )
-            .await?
+            .await
         }
         AiAssistKind::Mnemonic => {
             let prompt = format!(
@@ -248,7 +248,7 @@ pub async fn get_or_generate_ai_assist(
                 "Você é especialista em técnicas de memorização e mnemônicos para concurseiros.",
                 &prompt,
             )
-            .await?
+            .await
         }
         AiAssistKind::Plausibility => {
             let prompt = format!(
@@ -260,7 +260,32 @@ pub async fn get_or_generate_ai_assist(
                 "Você é um examinador de banca de concurso público analisando distratores.",
                 &prompt,
             )
-            .await?
+            .await
+        }
+    };
+
+    let generated_text = match generated_result {
+        Ok(t) => t,
+        Err(e) => {
+            // Se a IA externa falhou (offline ou sem chave no servidor), usa a explicação da própria questão
+            if let Some(exp) = &questao.explanation {
+                if !exp.trim().is_empty() {
+                    match &kind {
+                        AiAssistKind::ChildFriendlyPre => format!("🧒 **Simplificando a Pergunta:**\n\n{}\n\n**Gabarito Correto:** {}", questao.question, correct_answer),
+                        AiAssistKind::ChildFriendlyPost => format!("🧒 **Explicação Didática:**\n\n{}", exp),
+                        AiAssistKind::DrSincero => format!("🔥 **Atenção Concurseiro:** O cerne da questão e a fundamentação do gabarito é:\n\n{}", exp),
+                        AiAssistKind::ContextualHint => format!("💡 **Dica Pedagógica:** Atente-se ao gabarito oficial: {}", correct_answer),
+                        AiAssistKind::ExtraConcepts => format!("🎯 **Conceitos Essenciais:**\n\n{}", exp),
+                        AiAssistKind::Mnemonic => format!("🧠 **Fixação:** Guarde o cerne da resposta correta:\n> {}", correct_answer),
+                        AiAssistKind::Plausibility => format!("⚖️ **Análise Pedagógica da Questão:**\n\n{}", exp),
+                        AiAssistKind::Explanation => exp.clone(),
+                    }
+                } else {
+                    return Err(e);
+                }
+            } else {
+                return Err(e);
+            }
         }
     };
 
@@ -346,6 +371,15 @@ async fn call_openai_chat(
         .await
         .map_err(|e| AppError::ExternalAiError(e.to_string()))?;
 
+    let status = res.status();
+    if !status.is_success() {
+        let err_text = res.text().await.unwrap_or_default();
+        return Err(AppError::ExternalAiError(format!(
+            "Erro HTTP {} da OpenAI: {}",
+            status, err_text
+        )));
+    }
+
     let body: serde_json::Value = res
         .json()
         .await
@@ -408,6 +442,15 @@ async fn generate_gemini_explanation(
         .send()
         .await
         .map_err(|e| AppError::ExternalAiError(e.to_string()))?;
+
+    let status = res.status();
+    if !status.is_success() {
+        let err_text = res.text().await.unwrap_or_default();
+        return Err(AppError::ExternalAiError(format!(
+            "Erro HTTP {} do Gemini: {}",
+            status, err_text
+        )));
+    }
 
     let body: serde_json::Value = res
         .json()
