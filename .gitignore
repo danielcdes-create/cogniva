@@ -17,16 +17,6 @@ build/
 *.iml
 .DS_Store
 
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-venv/
-ENV/
-
 # Secrets & Environment variables
 .env
 .env.rust
@@ -34,12 +24,6 @@ ENV/
 *.pem
 *.key
 *.pfx
-
-# Legacy Python backups and temp folders with hardcoded keys
-Backup/
-lixo/
-yesdominadas/
-noDominadas/
 
 # Logs
 *.log
