@@ -23,12 +23,15 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,6 +41,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import br.com.concursoprep.app.domain.model.ApkUpdateUiState
 import br.com.concursoprep.app.domain.model.ContestStatus
 import br.com.concursoprep.app.domain.model.QuizMode
 import br.com.concursoprep.app.domain.model.TodayDashboardDto
@@ -56,6 +60,9 @@ import br.com.concursoprep.app.ui.theme.ReviewAmber
 fun TodayScreen(
     dashboard: TodayDashboardDto,
     pausedDiscipline: String?,
+    apkUpdateState: ApkUpdateUiState = ApkUpdateUiState(),
+    onCheckApkUpdate: () -> Unit = {},
+    onInstallApkUpdate: () -> Unit = {},
     onStartQuizMode: (QuizMode, String?) -> Unit,
     onOpenContestSyllabus: (String) -> Unit
 ) {
@@ -300,6 +307,63 @@ fun TodayScreen(
                         fontWeight = FontWeight.Bold,
                         color = if (exam.daysRemaining != null) ErrorRed else EstimatedNeutral
                     )
+                }
+            }
+        }
+
+        // 8. Sistemática de Atualização OTA de APK (estilo SpamShield)
+        item {
+            Card(
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.SystemUpdate,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Atualização do App (OTA · Cogniva)",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Versão instalada: v${apkUpdateState.installedVersionName} (build ${apkUpdateState.installedVersionCode})",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = apkUpdateState.statusMessage,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = if (apkUpdateState.hasUpdate) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (apkUpdateState.hasUpdate) CorrectGreen else MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = onCheckApkUpdate,
+                            enabled = !apkUpdateState.isChecking && !apkUpdateState.isDownloading,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(if (apkUpdateState.isChecking) "Verificando..." else "Verificar Versão")
+                        }
+                        Button(
+                            onClick = onInstallApkUpdate,
+                            enabled = (apkUpdateState.remoteInfo != null) && !apkUpdateState.isDownloading,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(if (apkUpdateState.isDownloading) "Baixando..." else "Atualizar APK")
+                        }
+                    }
                 }
             }
         }

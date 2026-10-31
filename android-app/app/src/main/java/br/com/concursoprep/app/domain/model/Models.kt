@@ -296,3 +296,22 @@ val VALID_PROBLEM_CATEGORIES = listOf(
     "Explicação c/ Erros de Gramática ou Ortografia",
     "Outro Problema com a Questão"
 )
+
+@Serializable
+data class ApkInfoDto(
+    @SerialName("version_code") val versionCode: Int,
+    @SerialName("version_name") val versionName: String,
+    @SerialName("size_bytes") val sizeBytes: Long,
+    @SerialName("sha256_checksum") val sha256Checksum: String,
+    @SerialName("download_path") val downloadPath: String = "/api/v1/apk/download"
+)
+
+data class ApkUpdateUiState(
+    val isChecking: Boolean = false,
+    val isDownloading: Boolean = false,
+    val installedVersionCode: Int = 1,
+    val installedVersionName: String = "1.0.0",
+    val remoteInfo: ApkInfoDto? = null,
+    val hasUpdate: Boolean = false,
+    val statusMessage: String = "Toque em 'Verificar Versão' para consultar o servidor COGNIVA."
+)

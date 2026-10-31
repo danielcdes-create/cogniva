@@ -1,5 +1,6 @@
 package br.com.concursoprep.app.data.repository
 
+import br.com.concursoprep.app.BuildConfig
 import br.com.concursoprep.app.data.local.CachedQuestionEntity
 import br.com.concursoprep.app.data.local.ConcursoLocalDao
 import br.com.concursoprep.app.data.local.PendingAttemptEntity
@@ -10,6 +11,7 @@ import br.com.concursoprep.app.data.remote.ReportProblemPayload
 import br.com.concursoprep.app.data.remote.TelegramLinkPayload
 import br.com.concursoprep.app.domain.model.AiAssistResponseDto
 import br.com.concursoprep.app.domain.model.AnswerAttemptPayload
+import br.com.concursoprep.app.domain.model.ApkInfoDto
 import br.com.concursoprep.app.domain.model.AuthSessionDto
 import br.com.concursoprep.app.domain.model.CommonTrunkSuggestion
 import br.com.concursoprep.app.domain.model.ConfidenceBadge
@@ -32,8 +34,16 @@ import br.com.concursoprep.app.domain.model.TopicDiffStatus
 import br.com.concursoprep.app.domain.model.UpcomingExamCard
 import br.com.concursoprep.app.domain.model.UserProfileDto
 import br.com.concursoprep.app.domain.model.UserQuestionBriefStats
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.io.File
+import java.io.FileOutputStream
+import java.security.MessageDigest
+import java.util.concurrent.TimeUnit
 
 /**
  * Repositório Unificado (API Rust + Room Offline-First):
@@ -259,6 +269,65 @@ class ConcursoRepository(
             true
         } catch (e: Exception) {
             false
+        }
+    }
+
+    // --- Sistemática de Atualização OTA de APK (estilo SpamShield) ---
+    suspend fun fetchRemoteApkInfo(): ApkInfoDto? {
+        return try {
+            api.getApkInfo()
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    suspend fun downloadApkUpdate(targetDir: File): File? = withContext(Dispatchers.IO) {
+        try {
+            val info = fetchRemoteApkInfo() ?: return@withContext null
+            val baseUrl = BuildConfig.API_BASE_URL.trimEnd('/')
+            val downloadUrl = "$baseUrl/apk/download"
+
+            val client = OkHttpClient.Builder()
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(120, TimeUnit.SECONDS)
+                .build()
+
+            val request = Request.Builder().url(downloadUrl).build()
+            val response = client.newCall(request).execute()
+            if (!response.isSuccessful) {
+                response.close()
+                return@withContext null
+            }
+
+            val body = response.body ?: return@withContext null
+            if (!targetDir.exists()) targetDir.mkdirs()
+            val outFile = File(targetDir, "cogniva-update.apk")
+
+            body.byteStream().use { input ->
+                FileOutputStream(outFile).use { output ->
+                    input.copyTo(output)
+                }
+            }
+
+            // Verifica integridade SHA-256 do APK baixado
+            val digest = MessageDigest.getInstance("SHA-256")
+            outFile.inputStream().use { fis ->
+                val buffer = ByteArray(8192)
+                var read: Int
+                while (fis.read(buffer).also { read = it } != -1) {
+                    digest.update(buffer, 0, read)
+                }
+            }
+            val calculatedSha = digest.digest().joinToString("") { "%02x".format(it) }
+
+            if (!calculatedSha.equals(info.sha256Checksum, ignoreCase = true)) {
+                outFile.delete()
+                return@withContext null
+            }
+
+            outFile
+        } catch (e: Exception) {
+            null
         }
     }
 

@@ -8,6 +8,8 @@ services:
     env_file: .env.rust
     ports:
       - "127.0.0.1:8001:8000"
+    volumes:
+      - ./apk:/app/apk:ro
     logging:
       driver: "json-file"
       options:

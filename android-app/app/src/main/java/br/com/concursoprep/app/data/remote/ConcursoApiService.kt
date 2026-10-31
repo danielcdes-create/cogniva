@@ -1,6 +1,7 @@
 package br.com.concursoprep.app.data.remote
 
 import br.com.concursoprep.app.domain.model.AiAssistResponseDto
+import br.com.concursoprep.app.domain.model.ApkInfoDto
 import br.com.concursoprep.app.domain.model.AuthSessionDto
 import br.com.concursoprep.app.domain.model.ContestDiffScreenDto
 import br.com.concursoprep.app.domain.model.DisciplineSyllabusGroupDto
@@ -109,4 +110,7 @@ interface ConcursoApiService {
     suspend fun getProgressAnalytics(
         @Query("user_id") userId: Long
     ): ProgressAnalyticsDto
+
+    @GET("apk/info")
+    suspend fun getApkInfo(): ApkInfoDto
 }

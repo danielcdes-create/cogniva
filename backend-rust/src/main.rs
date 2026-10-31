@@ -62,10 +62,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Json(json!({
                     "status": "ok",
                     "service": "api-rust-core",
+                    "brand": "COGNIVA",
                     "stack": "Rust (Axum + Tokio + MongoDB)"
                 }))
             }),
         )
+        // Distribuição e Atualização OTA de Pacotes APK (estilo SpamShield)
+        .route("/api/v1/apk/info", get(routes::apk_ota::get_apk_info))
+        .route("/api/v1/apk/download", get(routes::apk_ota::download_apk))
+        .route("/apk", get(routes::apk_ota::download_apk))
+        .route("/cogniva.apk", get(routes::apk_ota::download_apk))
         // Autenticação, Vínculo com Conta Telegram Legada e Onboarding em 4 Passos
         .route(
             "/api/v1/auth/telegram-link",

@@ -1,4 +1,5 @@
 use std::env;
+use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
 pub struct AppConfig {
@@ -10,6 +11,8 @@ pub struct AppConfig {
     pub gemini_api_key: Option<String>,
     pub gemini_model: String,
     pub jwt_secret: String,
+    pub apk_storage_path: PathBuf,
+    pub apk_metadata_path: PathBuf,
 }
 
 impl AppConfig {
@@ -37,6 +40,14 @@ impl AppConfig {
         let jwt_secret = env::var("JWT_SECRET")
             .unwrap_or_else(|_| "dev_concurso_secret_key_change_in_prod".to_string());
 
+        let apk_storage_path = env::var("APK_STORAGE_PATH")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("/app/apk/app-debug.apk"));
+
+        let apk_metadata_path = env::var("APK_METADATA_PATH")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("/app/apk/output-metadata.json"));
+
         Self {
             port,
             mongodb_uri,
@@ -46,6 +57,8 @@ impl AppConfig {
             gemini_api_key,
             gemini_model,
             jwt_secret,
+            apk_storage_path,
+            apk_metadata_path,
         }
     }
 }

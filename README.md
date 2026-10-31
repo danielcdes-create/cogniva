@@ -116,6 +116,8 @@ Base URL em Produção: `http://198.199.65.103/api/v1`
 | `POST` | `/api/v1/questions/:id/ai/:kind` | Cogniva AI | Aciona ou lê do cache em `todasQuestoes` os 8 assistentes de IA (`explanation`, `dr-sincero`, `contextual-hint`, `mnemonic`, `plausibility`, `extra-concepts`, `child-friendly-pre`, `child-friendly-post`) |
 | `POST` | `/api/v1/questions/:id/report` | Cogniva Questions | Registra inconsistência na coleção `reportedQuestoes` e incrementa `reports` na questão |
 | `GET` | `/api/v1/analytics/progress?user_id={id}` | Cogniva Insights | Retorna Índice de Prontidão vs. Nota de Corte, Matriz 2×2 Confiança × Acerto, barras por disciplina e Heatmap |
+| `GET` | `/api/v1/apk/info` | Core / OTA Update | Retorna metadados da versão do APK publicada no servidor (`version_code`, `version_name`, `size_bytes`, `sha256_checksum`) |
+| `GET` | `/api/v1/apk/download` (ou `/apk` e `/cogniva.apk`) | Core / OTA Update | Faz o download direto do instalador `Cogniva-debug.apk` com validação criptográfica SHA-256 |
 
 ---
 
@@ -146,15 +148,23 @@ curl http://127.0.0.1:8001/api/v1/health
 
 ---
 
-## 6. Compilação do App Android (`android-app/`)
+## 6. Compilação e Sistemática de Atualização OTA do App (`android-app/`)
 
-Para gerar um novo APK pela linha de comando no Windows:
+O **COGNIVA** possui uma sistemática de atualização OTA (*Over-The-Air*) integrada entre o aplicativo Android e o `api-rust-core` (idêntica à arquitetura do projeto `SpamShield`):
+
+1. **No Servidor (`api-rust-core`):**
+   * O volume `/opt/apps/apk` do Droplet é montado em `/app/apk:ro` dentro do container.
+   * `GET /api/v1/apk/info` lê `output-metadata.json` e calcula dinamicamente o tamanho e o hash **SHA-256** do APK.
+   * `GET /api/v1/apk/download` (ou `/apk` e `/cogniva.apk`) entrega o binário com `Content-Type: application/vnd.android.package-archive`.
+2. **No Aplicativo Android:**
+   * Na aba **Hoje**, o card **"Atualização do App (OTA · Cogniva)"** permite consultar a versão publicada no servidor, baixar o APK no cache interno, validar o **checksum SHA-256** antes da abertura e acionar o instalador nativo do Android via `FileProvider` (`br.com.concursoprep.app.fileprovider`).
+
+### Gerar e Publicar Nova Versão OTA via Linha de Comando
 
 ```powershell
-$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
-cd C:\Users\danie\Telebot\android-app
-.\gradlew.bat assembleDebug
-```
+# Apenas compilar e gerar dist/Cogniva-debug.apk + dist/apk-info.json (com SHA-256)
+powershell -ExecutionPolicy Bypass -File C:\Users\danie\Telebot\android-app\build-android.ps1
 
-O APK compilado estará disponível em:
-`android-app/app/build/outputs/apk/debug/app-debug.apk` (e copiado na raiz como `Cogniva-v1.0.0.apk`).
+# Compilar e publicar automaticamente no Droplet DigitalOcean (/opt/apps/apk/) via SCP
+powershell -ExecutionPolicy Bypass -File C:\Users\danie\Telebot\android-app\build-android.ps1 -PublishToVps
+```

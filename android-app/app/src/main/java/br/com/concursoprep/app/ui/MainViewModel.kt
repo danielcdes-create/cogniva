@@ -1,10 +1,14 @@
 package br.com.concursoprep.app.ui
 
+import android.content.Context
+import android.os.Build
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import br.com.concursoprep.app.BuildConfig
 import br.com.concursoprep.app.data.local.PendingAttemptEntity
 import br.com.concursoprep.app.data.repository.ConcursoRepository
+import br.com.concursoprep.app.domain.model.ApkUpdateUiState
 import br.com.concursoprep.app.domain.model.ContestDiffScreenDto
 import br.com.concursoprep.app.domain.model.DisciplineSyllabusGroupDto
 import br.com.concursoprep.app.domain.model.ProgressAnalyticsDto
@@ -19,7 +23,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.io.File
 import java.util.UUID
+
+sealed interface ApkInstallEvent {
+    data object NeedsUnknownSourcesPermission : ApkInstallEvent
+    data class ReadyToInstall(val apkFile: File) : ApkInstallEvent
+}
 
 class MainViewModel(
     private val repository: ConcursoRepository
@@ -63,6 +73,17 @@ class MainViewModel(
 
     private val _userFeedbackMessage = MutableSharedFlow<String>()
     val userFeedbackMessage: SharedFlow<String> = _userFeedbackMessage.asSharedFlow()
+
+    private val _apkUpdateState = MutableStateFlow(
+        ApkUpdateUiState(
+            installedVersionCode = BuildConfig.VERSION_CODE,
+            installedVersionName = BuildConfig.VERSION_NAME
+        )
+    )
+    val apkUpdateState: StateFlow<ApkUpdateUiState> = _apkUpdateState.asStateFlow()
+
+    private val _apkInstallEvents = MutableSharedFlow<ApkInstallEvent>()
+    val apkInstallEvents: SharedFlow<ApkInstallEvent> = _apkInstallEvents.asSharedFlow()
 
     private val _currentSessionUuid = MutableStateFlow(UUID.randomUUID().toString())
 
@@ -199,6 +220,74 @@ class MainViewModel(
         _isSimuladoSession.value = false
         _activeAiSheetMarkdown.value = null
         refreshAllData()
+    }
+
+    fun checkApkUpdate() {
+        viewModelScope.launch {
+            _apkUpdateState.value = _apkUpdateState.value.copy(
+                isChecking = true,
+                statusMessage = "Consultando servidor Cogniva..."
+            )
+            val remote = repository.fetchRemoteApkInfo()
+            if (remote == null) {
+                _apkUpdateState.value = _apkUpdateState.value.copy(
+                    isChecking = false,
+                    statusMessage = "Servidor sem novo APK publicado ou offline no momento."
+                )
+                return@launch
+            }
+
+            val currentCode = BuildConfig.VERSION_CODE
+            val hasNewer = remote.versionCode > currentCode
+            val msg = if (hasNewer) {
+                "Nova versão disponível: v${remote.versionName} (build ${remote.versionCode})"
+            } else {
+                "App atualizado (servidor: v${remote.versionName} · SHA-256 ${remote.sha256Checksum.take(8)}…)"
+            }
+
+            _apkUpdateState.value = _apkUpdateState.value.copy(
+                isChecking = false,
+                remoteInfo = remote,
+                hasUpdate = hasNewer,
+                statusMessage = msg
+            )
+        }
+    }
+
+    fun downloadAndInstallApk(context: Context) {
+        viewModelScope.launch {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (!context.packageManager.canRequestPackageInstalls()) {
+                    _apkUpdateState.value = _apkUpdateState.value.copy(
+                        statusMessage = "Permita 'Instalar apps desconhecidos' para o Cogniva e toque em Atualizar novamente."
+                    )
+                    _apkInstallEvents.emit(ApkInstallEvent.NeedsUnknownSourcesPermission)
+                    return@launch
+                }
+            }
+
+            _apkUpdateState.value = _apkUpdateState.value.copy(
+                isDownloading = true,
+                statusMessage = "Baixando APK e verificando assinatura SHA-256..."
+            )
+
+            val updatesDir = File(context.cacheDir, "updates")
+            val apkFile = repository.downloadApkUpdate(updatesDir)
+            if (apkFile == null) {
+                _apkUpdateState.value = _apkUpdateState.value.copy(
+                    isDownloading = false,
+                    statusMessage = "Falha no download ou checksum SHA-256 inválido."
+                )
+                _userFeedbackMessage.emit("Falha ao baixar ou validar o APK no servidor.")
+                return@launch
+            }
+
+            _apkUpdateState.value = _apkUpdateState.value.copy(
+                isDownloading = false,
+                statusMessage = "APK verificado com sucesso! Abrindo instalador do Android..."
+            )
+            _apkInstallEvents.emit(ApkInstallEvent.ReadyToInstall(apkFile))
+        }
     }
 }
 

@@ -33,12 +33,22 @@ Aplicativo nativo Android construído em **Kotlin + Jetpack Compose (Material 3)
 
 ---
 
-## 3. Como Compilar via Linha de Comando
+## 3. Sistemática de Atualização OTA & Build (`build-android.ps1`)
+
+O aplicativo implementa o mesmo fluxo seguro de atualização OTA (*Over-The-Air*) do projeto `SpamShield`:
+
+1. **Consulta de Versão (`GET /api/v1/apk/info`):** Compara `BuildConfig.VERSION_CODE` local com o `version_code` publicado no servidor.
+2. **Download com Verificação SHA-256 (`GET /api/v1/apk/download`):** Baixa o binário em `context.cacheDir/updates/cogniva-update.apk`, calcula o hash SHA-256 local e rejeita o arquivo caso divirja do `sha256_checksum` informado pelo backend.
+3. **Instalação Nativa via `FileProvider`:** Verifica a permissão `REQUEST_INSTALL_PACKAGES` (`Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES`) e dispara o instalador do Android para `br.com.concursoprep.app.fileprovider`.
+
+### Como Compilar e Gerar Artefatos OTA
 
 ```powershell
-$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
-cd C:\Users\danie\Telebot\android-app
-.\gradlew.bat assembleDebug
+# Compila o APK, calcula o SHA-256 e gera dist/Cogniva-debug.apk + dist/apk-info.json
+powershell -ExecutionPolicy Bypass -File C:\Users\danie\Telebot\android-app\build-android.ps1
+
+# Compila e envia automaticamente via SCP para o Droplet (198.199.65.103:/opt/apps/apk/)
+powershell -ExecutionPolicy Bypass -File C:\Users\danie\Telebot\android-app\build-android.ps1 -PublishToVps
 ```
 
 O endereço do backend de produção é configurado em `gradle.properties`:

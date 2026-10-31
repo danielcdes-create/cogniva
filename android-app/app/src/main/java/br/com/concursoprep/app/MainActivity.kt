@@ -1,6 +1,10 @@
 package br.com.concursoprep.app
 
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -30,6 +34,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.FileProvider
 import br.com.concursoprep.app.domain.model.ContestStatus
 import br.com.concursoprep.app.domain.model.QuizMode
 import br.com.concursoprep.app.domain.model.TodayDashboardDto
@@ -39,6 +45,7 @@ import br.com.concursoprep.app.domain.model.ConfidenceMatrixSummaryDto
 import br.com.concursoprep.app.domain.model.DailyHeatmapCellDto
 import br.com.concursoprep.app.domain.model.DisciplineMasteryBarDto
 import br.com.concursoprep.app.domain.model.ProgressAnalyticsDto
+import br.com.concursoprep.app.ui.ApkInstallEvent
 import br.com.concursoprep.app.ui.MainViewModel
 import br.com.concursoprep.app.ui.MainViewModelFactory
 import br.com.concursoprep.app.ui.screens.ContestsScreen
@@ -75,6 +82,7 @@ private enum class BottomTab(val label: String) {
 
 @Composable
 fun ConcursoPrepRootApp(viewModel: MainViewModel) {
+    val context = LocalContext.current
     var currentTab by remember { mutableStateOf(BottomTab.HOJE) }
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -88,11 +96,52 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
     val analytics by viewModel.analytics.collectAsState()
     val activeAiSheetMarkdown by viewModel.activeAiSheetMarkdown.collectAsState()
     val activeAiSheetTitle by viewModel.activeAiSheetTitle.collectAsState()
+    val apkUpdateState by viewModel.apkUpdateState.collectAsState()
 
     // Ouve notificações e feedbacks do ViewModel
     LaunchedEffect(Unit) {
         viewModel.userFeedbackMessage.collectLatest { msg ->
             snackbarHostState.showSnackbar(msg)
+        }
+    }
+
+    // Ouve eventos de instalação OTA de APK (FileProvider + Unknown Sources)
+    LaunchedEffect(Unit) {
+        viewModel.apkInstallEvents.collectLatest { event ->
+            when (event) {
+                is ApkInstallEvent.NeedsUnknownSourcesPermission -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        val intent = Intent(
+                            Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                            Uri.parse("package:${context.packageName}")
+                        ).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(intent)
+                    }
+                }
+                is ApkInstallEvent.ReadyToInstall -> {
+                    try {
+                        val apkUri = FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.fileprovider",
+                            event.apkFile
+                        )
+                        val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                            setDataAndType(apkUri, "application/vnd.android.package-archive")
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(installIntent)
+                    } catch (e: Exception) {
+                        Toast.makeText(
+                            context,
+                            "Erro ao abrir instalador: ${e.message}",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+            }
         }
     }
 
@@ -185,6 +234,9 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                     TodayScreen(
                         dashboard = safeDashboard,
                         pausedDiscipline = "Segurança e Saúde do Trabalhador (NR-15)",
+                        apkUpdateState = apkUpdateState,
+                        onCheckApkUpdate = { viewModel.checkApkUpdate() },
+                        onInstallApkUpdate = { viewModel.downloadAndInstallApk(context) },
                         onStartQuizMode = { mode, _ ->
                             viewModel.startQuizSession(mode = mode, quantity = 10)
                         },
