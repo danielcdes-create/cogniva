@@ -25,15 +25,24 @@ class QuestionInsetCollisionTest {
     fun topBarClearsCutoutAndCtaClearsNavigation() {
         rule.waitForIdle()
         val decor = rule.activity.window.decorView
-        ViewCompat.requestApplyInsets(decor)
+        rule.runOnUiThread {
+            ViewCompat.requestApplyInsets(decor)
+        }
         rule.waitForIdle()
-
-        val insets = ViewCompat.getRootWindowInsets(decor)
-            ?: error("system insets unavailable on the question window")
-        val topObstacle = insets.getInsets(
-            WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.displayCutout()
-        ).top
-        val navBottom = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+        val measured = rule.runOnUiThread {
+            val insets = ViewCompat.getRootWindowInsets(decor)
+                ?: error("system insets unavailable on the question window")
+            Triple(
+                insets.getInsets(
+                    WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.displayCutout()
+                ).top,
+                insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom,
+                decor.height,
+            )
+        }
+        val topObstacle = measured.first
+        val navBottom = measured.second
+        val windowHeight = measured.third.toFloat()
         assertTrue(
             "status/cutout inset was 0; the emulator did not expose a top inset",
             topObstacle > 0
@@ -45,7 +54,6 @@ class QuestionInsetCollisionTest {
 
         val topBar = rule.onNodeWithTag("question_top_bar").fetchSemanticsNode().boundsInWindow
         val cta = rule.onNodeWithTag("confirm_answer_cta").fetchSemanticsNode().boundsInWindow
-        val windowHeight = decor.height.toFloat()
 
         assertTrue(
             "top bar collides with status/cutout inset: top=${topBar.top} obstacle=$topObstacle",
