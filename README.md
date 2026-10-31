@@ -84,10 +84,14 @@ flowchart LR
 ├── android-app/                    # Aplicativo Android Nativo COGNIVA (Kotlin + Jetpack Compose)
 │   ├── app/src/main/java/br/com/concursoprep/app/
 │   │   ├── ConcursoApp.kt          # Inicialização Room + OkHttp + Retrofit + WorkManager
-│   │   ├── MainActivity.kt         # Host de navegação (Onboarding, 4 Abas e Sessão Full-Screen)
+│   │   ├── MainActivity.kt         # Host de navegação Edge-to-Edge (Onboarding, 5 Abas e Sessão Imersiva)
 │   │   ├── data/                   # Room DAO/Entities, Retrofit Service, Repository e OfflineSyncWorker
-│   │   ├── domain/model/Models.kt  # DTOs serializáveis e as 20 categorias de reporte (VALID_PROBLEM_CATEGORIES)
-│   │   └── ui/                     # MainViewModel, Theme COGNIVA e Telas (Today, Contests, Practice, Progress, Onboarding)
+│   │   ├── domain/model/Models.kt  # DTOs serializáveis e categorias de reporte (VALID_PROBLEM_CATEGORIES)
+│   │   └── ui/
+│   │       ├── MainViewModel.kt    # StateFlow desacoplado, offline sync e OTA manager
+│   │       ├── components/         # LetterBadge (36dp fixo), OptionCard, ActionChips, ConfidenceGrid, MarkdownParser
+│   │       ├── theme/              # Theme.kt (Tokens WCAG AA), Type.kt (Métricas sp), PreviewMatrix.kt
+│   │       └── screens/            # TodayScreen, ContestsScreen, PracticeAndQuestionScreen, ProgressScreen, SettingsScreen, OnboardingScreen
 ├── deploy/
 │   └── nginx-concursoprep.conf     # Configuração do Proxy Reverso Nginx (/api/v1/ -> 127.0.0.1:8001)
 ├── Notas Conversao Kotlin_Rust/    # Especificações de produto, UX e diretrizes arquiteturais de CI/CD
@@ -117,6 +121,7 @@ Base URL em Produção: `http://198.199.65.103/api/v1`
 | `POST` | `/api/v1/questions/:id/report` | Cogniva Questions | Registra inconsistência na coleção `reportedQuestoes` e incrementa `reports` na questão |
 | `GET` | `/api/v1/analytics/progress?user_id={id}` | Cogniva Insights | Retorna Índice de Prontidão vs. Nota de Corte, Matriz 2×2 Confiança × Acerto, barras por disciplina e Heatmap |
 | `GET` | `/api/v1/apk/info` | Core / OTA Update | Retorna metadados da versão do APK publicada no servidor (`version_code`, `version_name`, `size_bytes`, `sha256_checksum`) |
+| `GET` | `/api/app/latest-apk` | Core / OTA Update | Retorna JSON com metadados do APK mais recente (`size_bytes` e `sha256_checksum` calculados sob demanda dos bytes reais) |
 | `GET` | `/api/v1/apk/download` (ou `/apk` e `/cogniva.apk`) | Core / OTA Update | Faz o download direto do instalador `Cogniva-debug.apk` com validação criptográfica SHA-256 |
 
 ---
@@ -172,3 +177,33 @@ Ao executar o script local no Windows, ele compila o APK, gera `dist/apk-info.js
 ```powershell
 powershell -ExecutionPolicy Bypass -File C:\Users\danie\Cogniva\android-app\build-android.ps1
 ```
+
+---
+
+## 7. Diretrizes de UI/UX, Design System & Validação de Acessibilidade
+
+O cliente Android do **COGNIVA** implementa as diretrizes estritas da [Nota Técnica de Correção de UI/UX](file:///c:/Users/danie/Cogniva/Notas%20Conversao%20Kotlin_Rust/nota_t_cnica_corre_o_de_ui_cogniva.md), otimizado especificamente para telas topo de linha (como Samsung Galaxy S23 Ultra, Android 17 / One UI 9):
+
+1. **Arquitetura Edge-to-Edge & Samsung One UI:**
+   * Invocação explícita de `enableEdgeToEdge()` no ciclo de vida da `MainActivity` antes de `super.onCreate()`.
+   * Prevenção de inversão cromática indesejada da One UI via `android:forceDarkAllowed="false"` nos temas XML com `tools:targetApi="q"`.
+   * Tratamento de teclado virtual e insets de IME com `android:windowSoftInputMode="adjustResize"`.
+   * CTA ("Confirmar Resposta") rigidamente ancorado no slot `bottomBar` do `Scaffold` com `Modifier.navigationBarsPadding()` e alvos de toque $\ge 48\text{ dp}$.
+2. **Tokens Semânticos e Acessibilidade WCAG AA:**
+   * Nenhuma cor literal fora de `ui/theme/Theme.kt`.
+   * Contraste $\ge 4.5:1$ para textos normais, $\ge 3.0:1$ para títulos e elementos gráficos, e $\ge 2.5:1$ para estados desabilitados translúcidos sobre superfície base.
+   * Validação contínua através do teste unitário autônomo `ThemeContrastTest`.
+3. **Métricas Tipográficas & Preview Matrix:**
+   * Escala completa declarada em `Type.kt` com tamanhos e line-heights estritamente em `sp`, aplicando `includeFontPadding = false` e `LineHeightStyle(alignment = Alignment.Center, trim = Trim.None)`.
+   * Anotação `@PreviewMatrix` cobrindo modos Claro/Escuro, escalas de fonte acessíveis (1.3× e 2.0×) e densidades variadas.
+4. **Padronização de Componentes:**
+   * `LetterBadge`: Largura fixa de 36 dp em círculo perfeito, eliminando desalinhamentos entre opções curtas e largas.
+   * `ConfidenceSelectorGrid`: Grade 2×2 simétrica com largura uniforme distribuída (`weight(1f)`).
+   * `TopicTreeRow`: Eliminação de artefatos ASCII (`└ ☐`) em favor de recuo real por nível e ícones vetoriais nativos.
+5. **Sanitização de Markdown Upstream e Downstream:**
+   * **Backend Rust (`ai_tutor.rs`):** Função `sanitize_ai_content()` remove na fonte prefixos redundantes (`🔥 **Dr. Sincero:**`) e colapsa quebras consecutivas.
+   * **Frontend Compose (`MarkdownParser.kt`):** Converte negrito, itálico, bullet points e trechos de código em `AnnotatedString` com `FontFamily.Monospace`.
+6. **Matriz de Testes em Duas Camadas:**
+   * **Camada 1 (Gates Offline):** `cargo test` no backend Rust, `testDebugUnitTest` (comprovando WCAG e parser), `assembleDebug` e `lintDebug` com zero erros.
+   * **Camada 2 (Dispositivo Físico):** Validação interativa via ADB quando dispositivo físico estiver conectado.
+
