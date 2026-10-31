@@ -74,7 +74,7 @@ pub async fn get_or_generate_ai_assist(
                     return Ok(AiAssistResponse {
                         question_id: question_id.to_string(),
                         kind,
-                        content_markdown: exp.clone(),
+                        content_markdown: sanitize_ai_content(exp),
                         from_cache: true,
                         plausibility_structured: None,
                     });
@@ -87,7 +87,7 @@ pub async fn get_or_generate_ai_assist(
                 return Ok(AiAssistResponse {
                     question_id: question_id.to_string(),
                     kind,
-                    content_markdown: questao.contextual_hint[idx].clone(),
+                    content_markdown: sanitize_ai_content(&questao.contextual_hint[idx]),
                     from_cache: true,
                     plausibility_structured: None,
                 });
@@ -99,7 +99,7 @@ pub async fn get_or_generate_ai_assist(
                     return Ok(AiAssistResponse {
                         question_id: question_id.to_string(),
                         kind,
-                        content_markdown: txt.clone(),
+                        content_markdown: sanitize_ai_content(txt),
                         from_cache: true,
                         plausibility_structured: None,
                     });
@@ -112,7 +112,7 @@ pub async fn get_or_generate_ai_assist(
                     return Ok(AiAssistResponse {
                         question_id: question_id.to_string(),
                         kind,
-                        content_markdown: txt.clone(),
+                        content_markdown: sanitize_ai_content(txt),
                         from_cache: true,
                         plausibility_structured: None,
                     });
@@ -125,7 +125,7 @@ pub async fn get_or_generate_ai_assist(
                     return Ok(AiAssistResponse {
                         question_id: question_id.to_string(),
                         kind,
-                        content_markdown: txt.clone(),
+                        content_markdown: sanitize_ai_content(txt),
                         from_cache: true,
                         plausibility_structured: None,
                     });
@@ -138,7 +138,7 @@ pub async fn get_or_generate_ai_assist(
                     return Ok(AiAssistResponse {
                         question_id: question_id.to_string(),
                         kind,
-                        content_markdown: txt.clone(),
+                        content_markdown: sanitize_ai_content(txt),
                         from_cache: true,
                         plausibility_structured: None,
                     });
@@ -151,7 +151,7 @@ pub async fn get_or_generate_ai_assist(
                     return Ok(AiAssistResponse {
                         question_id: question_id.to_string(),
                         kind,
-                        content_markdown: txt.clone(),
+                        content_markdown: sanitize_ai_content(txt),
                         from_cache: true,
                         plausibility_structured: None,
                     });
@@ -164,7 +164,7 @@ pub async fn get_or_generate_ai_assist(
                 return Ok(AiAssistResponse {
                     question_id: question_id.to_string(),
                     kind,
-                    content_markdown: formatted,
+                    content_markdown: sanitize_ai_content(&formatted),
                     from_cache: true,
                     plausibility_structured: Some(pa.clone()),
                 });
@@ -278,13 +278,23 @@ pub async fn get_or_generate_ai_assist(
 
     let _ = coll.update_one(doc! { "_id": oid }, update_doc).await;
 
+    let final_content = sanitize_ai_content(&generated_text);
+
     Ok(AiAssistResponse {
         question_id: question_id.to_string(),
         kind,
-        content_markdown: generated_text,
+        content_markdown: final_content,
         from_cache: false,
         plausibility_structured: None,
     })
+}
+
+pub fn sanitize_ai_content(raw: &str) -> String {
+    let collapsed = regex::Regex::new(r"\n{3,}").unwrap().replace_all(raw.trim(), "\n\n");
+    let cleaned = regex::Regex::new(r"(?i)^\s*(?:🔥\s*)?(?:\*\*Dr\.\s*Sincero:?\*\*:?\s*)")
+        .unwrap()
+        .replace(&collapsed, "");
+    cleaned.trim().to_string()
 }
 
 fn format_plausibility_markdown(pa: &PlausibilityAnalysis) -> String {
@@ -408,4 +418,25 @@ async fn generate_gemini_explanation(
         .as_str()
         .map(|s| s.to_string())
         .ok_or_else(|| AppError::ExternalAiError("Resposta inválida do Gemini".to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sanitize_ai_content_removes_redundant_dr_sincero_prefix() {
+        let raw = "🔥 **Dr. Sincero:** Esta questão é uma pegadinha evidente da banca.";
+        let cleaned = sanitize_ai_content(raw);
+        assert_eq!(cleaned, "Esta questão é uma pegadinha evidente da banca.");
+
+        let raw_no_emoji = "**Dr. Sincero:** Análise ácida sem emoji.";
+        assert_eq!(sanitize_ai_content(raw_no_emoji), "Análise ácida sem emoji.");
+    }
+
+    #[test]
+    fn test_sanitize_ai_content_collapses_newlines() {
+        let raw = "Linha 1\n\n\n\nLinha 2";
+        assert_eq!(sanitize_ai_content(raw), "Linha 1\n\nLinha 2");
+    }
 }

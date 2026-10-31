@@ -54,6 +54,21 @@ pub async fn get_apk_info(State(state): State<Arc<AppState>>) -> Json<Value> {
     Json(apk_info_value(version_code, &version_name, &apk_bytes))
 }
 
+/// `GET /api/app/latest-apk` — same file-derived size and SHA-256 as `/api/v1/apk/info`.
+pub async fn get_latest_apk(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    let apk_bytes = tokio::fs::read(&state.config.apk_storage_path)
+        .await
+        .map_err(|e| (StatusCode::NOT_FOUND, format!("APK not found: {e}")))?;
+    let (version_code, version_name) = read_apk_version(&state.config.apk_metadata_path).await;
+    Ok(Json(apk_info_value(
+        version_code,
+        &version_name,
+        &apk_bytes,
+    )))
+}
+
 pub async fn download_apk(
     State(state): State<Arc<AppState>>,
 ) -> Result<Response, (StatusCode, String)> {

@@ -111,11 +111,15 @@ class ConcursoRepository(
         }
     }
 
-    suspend fun getTodayDashboard(userId: Long): TodayDashboardDto {
+    suspend fun getTodayDashboard(
+        userId: Long,
+        dailyGoalQuestions: Int = 50,
+        activeContestIds: List<String> = listOf("CPNU", "RFB")
+    ): TodayDashboardDto {
         return try {
             api.getTodayDashboard(userId)
         } catch (e: Exception) {
-            buildOfflineFallbackDashboard(userId)
+            buildOfflineFallbackDashboard(userId, dailyGoalQuestions, activeContestIds)
         }
     }
 
@@ -180,14 +184,23 @@ class ConcursoRepository(
                 dao.insertQuestions(entities)
                 return remoteQuestions
             }
-            loadFromLocalRoomOrSeed(disciplina, quantity)
+            loadFromLocalRoomOrSeed(disciplina, quantity, mode)
         } catch (e: Exception) {
-            loadFromLocalRoomOrSeed(disciplina, quantity)
+            loadFromLocalRoomOrSeed(disciplina, quantity, mode)
         }
     }
 
-    private suspend fun loadFromLocalRoomOrSeed(disciplina: String?, quantity: Int): List<QuestionDto> {
-        val local = dao.getCachedQuestions(disciplina, quantity)
+    private suspend fun loadFromLocalRoomOrSeed(
+        disciplina: String?,
+        quantity: Int,
+        mode: QuizMode = QuizMode.STANDARD
+    ): List<QuestionDto> {
+        val local = if (mode == QuizMode.ERROR_NOTEBOOK) {
+            val errList = dao.getErrorNotebookQuestions(quantity)
+            errList.ifEmpty { dao.getCachedQuestions(disciplina, quantity) }
+        } else {
+            dao.getCachedQuestions(disciplina, quantity)
+        }
         if (local.isNotEmpty()) {
             return local.map { entity ->
                 QuestionDto(
@@ -207,14 +220,29 @@ class ConcursoRepository(
                 )
             }
         }
-        return buildOfflineSeedQuestions()
+        val seed = buildOfflineSeedQuestions()
+        return if (!disciplina.isNullOrBlank()) {
+            val filtered = seed.filter { it.disciplina.contains(disciplina, ignoreCase = true) || disciplina.contains(it.disciplina, ignoreCase = true) }
+            filtered.ifEmpty { seed }.take(quantity)
+        } else {
+            seed.take(quantity)
+        }
     }
 
     suspend fun recordAttemptOfflineFirst(
         userId: Long,
         attempt: PendingAttemptEntity
     ) {
-        dao.enqueuePendingAttempt(attempt)
+        val existingInSession = dao.findPendingAttemptInSession(attempt.sessionUuid, attempt.questionId)
+        val entityToSave = if (existingInSession != null) {
+            attempt.copy(localId = existingInSession.localId)
+        } else {
+            attempt
+        }
+        dao.enqueuePendingAttempt(entityToSave)
+        if (!attempt.isCorrect) {
+            dao.updateQuestionErrorNotebookFlag(attempt.questionId, true)
+        }
         syncPendingAttempts(userId)
     }
 
@@ -269,6 +297,23 @@ class ConcursoRepository(
             true
         } catch (e: Exception) {
             false
+        }
+    }
+
+    suspend fun getLocalStorageStats(): Pair<Int, Int> {
+        return try {
+            val cached = dao.countCachedQuestions()
+            val pending = dao.countPendingAttempts()
+            Pair(cached, pending)
+        } catch (e: Exception) {
+            Pair(0, 0)
+        }
+    }
+
+    suspend fun clearLocalQuestionCache() {
+        try {
+            dao.clearCachedQuestions()
+        } catch (_: Exception) {
         }
     }
 
@@ -332,16 +377,27 @@ class ConcursoRepository(
     }
 
     // --- Fallbacks Offline-First para primeira execução sem servidor acessível ---
-    private fun buildOfflineFallbackDashboard(userId: Long) = TodayDashboardDto(
-        userId = userId,
-        dateIso = "2026-10-30",
-        dailyGoalQuestions = 50,
-        questionsAnsweredToday = 18,
-        accuracyTodayPct = 78.0,
-        pendingSrsReviewsCount = 14,
-        errorNotebookCount = 23,
-        highConfidenceErrorsCount = 3,
-        upcomingExams = listOf(
+    private suspend fun buildOfflineFallbackDashboard(
+        userId: Long,
+        dailyGoalQuestions: Int = 50,
+        activeContestIds: List<String> = listOf("CPNU", "RFB")
+    ): TodayDashboardDto {
+        val pendingAttempts = runCatching { dao.getAllPendingAttempts() }.getOrDefault(emptyList())
+        val startOfDayMs = java.time.LocalDate.now()
+            .atStartOfDay(java.time.ZoneId.systemDefault())
+            .toInstant()
+            .toEpochMilli()
+        val todayLocal = pendingAttempts.filter { it.createdAtEpochMs >= startOfDayMs }
+        val localCountToday = todayLocal.size
+        val localCorrectToday = todayLocal.count { it.isCorrect }
+
+        val baseAnswered = 18 + localCountToday
+        val baseCorrect = 14 + localCorrectToday
+        val accPct = if (baseAnswered > 0) (baseCorrect.toDouble() / baseAnswered.toDouble()) * 100.0 else 78.0
+        val localErrors = todayLocal.count { !it.isCorrect }
+        val localHcErrors = todayLocal.count { !it.isCorrect && it.confidenceLevel >= 2 }
+
+        val allExams = listOf(
             UpcomingExamCard(
                 contestId = "CPNU",
                 name = "CPNU · Auditor-Fiscal do Trabalho",
@@ -366,95 +422,229 @@ class ConcursoRepository(
                 estimatedWindow = "Previsto: 2º sem/2027",
                 examBoard = "Cesgranrio (Provável)"
             )
-        ),
-        commonTrunkSuggestion = CommonTrunkSuggestion(
-            discipline = "Finanças Públicas",
-            sharedContests = listOf("CPNU", "RFB"),
-            badgeText = "Estudar 15 questões de Finanças Públicas avança CPNU e Receita Federal ao mesmo tempo"
         )
-    )
+        val filteredExams = allExams.filter { activeContestIds.contains(it.contestId) }.ifEmpty { allExams }
+
+        return TodayDashboardDto(
+            userId = userId,
+            dateIso = java.time.LocalDate.now().toString(),
+            dailyGoalQuestions = dailyGoalQuestions,
+            questionsAnsweredToday = baseAnswered,
+            accuracyTodayPct = accPct,
+            pendingSrsReviewsCount = 14L + localErrors,
+            errorNotebookCount = 23L + localErrors,
+            highConfidenceErrorsCount = 3L + localHcErrors,
+            upcomingExams = filteredExams,
+            commonTrunkSuggestion = CommonTrunkSuggestion(
+                discipline = "Finanças Públicas",
+                sharedContests = activeContestIds.ifEmpty { listOf("CPNU", "RFB") },
+                badgeText = "Estudar 15 questões de Finanças Públicas avança ${
+                    activeContestIds.ifEmpty { listOf("CPNU", "RFB") }.joinToString(" e ")
+                } ao mesmo tempo"
+            )
+        )
+    }
 
     private fun buildOfflineFallbackSyllabus(contestId: String): List<DisciplineSyllabusGroupDto> {
-        val isEstimated = contestId != "CPNU"
-        return listOf(
-            DisciplineSyllabusGroupDto(
-                blockName = "Conhecimentos Específicos",
-                discipline = "Segurança e Saúde do Trabalhador",
-                disciplineMasteryPct = 82.0,
-                topics = listOf(
-                    SyllabusTopicNodeDto(
-                        topic = SyllabusTopicDto(
-                            id = "sst_nr15",
-                            contestId = contestId,
-                            blockName = "Conhecimentos Específicos",
-                            discipline = "Segurança e Saúde do Trabalhador",
-                            title = "NR-15 — Atividades e Operações Insalubres e Limites de Tolerância",
-                            order = 1,
-                            commonTrunkId = "tronco_sst_nrs",
-                            estimation = EstimationMetadata(
-                                isEstimated = isEstimated,
-                                confidenceBadge = ConfidenceBadge.HIGH,
-                                rationale = "Cobrado em 100% das últimas 3 provas de AFT e Segurança do Trabalho.",
-                                referenceExams = listOf("CNU 2024", "AFT 2013")
+        return when (contestId) {
+            "RFB" -> listOf(
+                DisciplineSyllabusGroupDto(
+                    blockName = "Conhecimentos Específicos",
+                    discipline = "Direito Tributário",
+                    disciplineMasteryPct = 64.0,
+                    topics = listOf(
+                        SyllabusTopicNodeDto(
+                            topic = SyllabusTopicDto(
+                                id = "rfb_trib_01",
+                                contestId = "RFB",
+                                blockName = "Conhecimentos Específicos",
+                                discipline = "Direito Tributário",
+                                title = "Reforma Tributária (EC 132/2023 e IBS/CBS) e Sistema Tributário Nacional",
+                                order = 1,
+                                commonTrunkId = "tronco_tributario_reforma",
+                                estimation = EstimationMetadata(
+                                    isEstimated = true,
+                                    confidenceBadge = ConfidenceBadge.HIGH,
+                                    rationale = "Tema central pós-EC 132/2023 e presente em 100% das provas fiscais recentes.",
+                                    referenceExams = listOf("RFB 2023", "ISS-RJ 2025")
+                                ),
+                                diffStatus = TopicDiffStatus.CONFIRMED
                             ),
-                            diffStatus = TopicDiffStatus.CONFIRMED
-                        ),
-                        userMasteryPct = 85.0,
-                        questionsPracticed = 34,
-                        statusLabel = "DOMINADO"
-                    ),
-                    SyllabusTopicNodeDto(
-                        topic = SyllabusTopicDto(
-                            id = "sst_nr01",
-                            contestId = contestId,
-                            blockName = "Conhecimentos Específicos",
-                            discipline = "Segurança e Saúde do Trabalhador",
-                            title = "NR-01 — Gerenciamento de Riscos Ocupacionais (GRO e PGR)",
-                            order = 2,
-                            commonTrunkId = "tronco_sst_nrs",
-                            estimation = EstimationMetadata(
-                                isEstimated = isEstimated,
-                                confidenceBadge = ConfidenceBadge.HIGH,
-                                rationale = "Núcleo estruturante da fiscalização moderna do trabalho.",
-                                referenceExams = listOf("CNU 2024")
-                            ),
-                            diffStatus = TopicDiffStatus.CONFIRMED
-                        ),
-                        userMasteryPct = 52.0,
-                        questionsPracticed = 12,
-                        statusLabel = "REVISAO"
+                            userMasteryPct = 64.0,
+                            questionsPracticed = 22,
+                            statusLabel = "QUESTOES"
+                        )
                     )
-                )
-            ),
-            DisciplineSyllabusGroupDto(
-                blockName = "Conhecimentos Gerais",
-                discipline = "Finanças Públicas",
-                disciplineMasteryPct = 61.0,
-                topics = listOf(
-                    SyllabusTopicNodeDto(
-                        topic = SyllabusTopicDto(
-                            id = "fin_01",
-                            contestId = contestId,
-                            blockName = "Conhecimentos Gerais",
-                            discipline = "Finanças Públicas",
-                            title = "Orçamento Público: PPA, LDO, LOA e Créditos Adicionais",
-                            order = 1,
-                            commonTrunkId = "tronco_financas_orcamento",
-                            estimation = EstimationMetadata(
-                                isEstimated = isEstimated,
-                                confidenceBadge = ConfidenceBadge.HIGH,
-                                rationale = "Tronco comum entre CPNU, Receita Federal e Controladorias.",
-                                referenceExams = listOf("CPNU 2024", "RFB 2023")
+                ),
+                DisciplineSyllabusGroupDto(
+                    blockName = "Conhecimentos Específicos",
+                    discipline = "Finanças Públicas",
+                    disciplineMasteryPct = 61.0,
+                    topics = listOf(
+                        SyllabusTopicNodeDto(
+                            topic = SyllabusTopicDto(
+                                id = "rfb_fin_01",
+                                contestId = "RFB",
+                                blockName = "Conhecimentos Específicos",
+                                discipline = "Finanças Públicas",
+                                title = "Orçamento Público: PPA, LDO, LOA e Créditos Adicionais",
+                                order = 2,
+                                commonTrunkId = "tronco_financas_orcamento",
+                                estimation = EstimationMetadata(
+                                    isEstimated = true,
+                                    confidenceBadge = ConfidenceBadge.HIGH,
+                                    rationale = "Tronco comum entre CPNU, Receita Federal e Controladorias.",
+                                    referenceExams = listOf("RFB 2023", "CPNU 2024")
+                                ),
+                                diffStatus = TopicDiffStatus.CONFIRMED
                             ),
-                            diffStatus = TopicDiffStatus.CONFIRMED
-                        ),
-                        userMasteryPct = 61.0,
-                        questionsPracticed = 19,
-                        statusLabel = "QUESTOES"
+                            userMasteryPct = 61.0,
+                            questionsPracticed = 19,
+                            statusLabel = "QUESTOES"
+                        )
                     )
                 )
             )
-        )
+
+            "BNDES" -> listOf(
+                DisciplineSyllabusGroupDto(
+                    blockName = "Conhecimentos Transversais",
+                    discipline = "Papel do BNDES no desenvolvimento brasileiro",
+                    disciplineMasteryPct = 70.0,
+                    topics = listOf(
+                        SyllabusTopicNodeDto(
+                            topic = SyllabusTopicDto(
+                                id = "bndes_trans_01",
+                                contestId = "BNDES",
+                                blockName = "Conhecimentos Transversais",
+                                discipline = "Papel do BNDES no desenvolvimento brasileiro",
+                                title = "Políticas de Financiamento de Longo Prazo, Transição Ecológica e Neoindustrialização",
+                                order = 1,
+                                commonTrunkId = "tronco_politicas_publicas",
+                                estimation = EstimationMetadata(
+                                    isEstimated = true,
+                                    confidenceBadge = ConfidenceBadge.HIGH,
+                                    rationale = "Eixo estruturante exigido pela banca Cesgranrio no último edital BNDES.",
+                                    referenceExams = listOf("BNDES 2024")
+                                ),
+                                diffStatus = TopicDiffStatus.CONFIRMED
+                            ),
+                            userMasteryPct = 70.0,
+                            questionsPracticed = 15,
+                            statusLabel = "QUESTOES"
+                        )
+                    )
+                ),
+                DisciplineSyllabusGroupDto(
+                    blockName = "Conhecimentos Específicos",
+                    discipline = "Finanças Públicas",
+                    disciplineMasteryPct = 61.0,
+                    topics = listOf(
+                        SyllabusTopicNodeDto(
+                            topic = SyllabusTopicDto(
+                                id = "bndes_fin_01",
+                                contestId = "BNDES",
+                                blockName = "Conhecimentos Específicos",
+                                discipline = "Finanças Públicas",
+                                title = "Orçamento Público, Responsabilidade Fiscal e Crédito Público",
+                                order = 2,
+                                commonTrunkId = "tronco_financas_orcamento",
+                                estimation = EstimationMetadata(
+                                    isEstimated = true,
+                                    confidenceBadge = ConfidenceBadge.MEDIUM,
+                                    rationale = "Tronco comum compartilhado com CPNU e carreiras econômicas.",
+                                    referenceExams = listOf("BNDES 2024", "CPNU 2024")
+                                ),
+                                diffStatus = TopicDiffStatus.CONFIRMED
+                            ),
+                            userMasteryPct = 61.0,
+                            questionsPracticed = 19,
+                            statusLabel = "QUESTOES"
+                        )
+                    )
+                )
+            )
+
+            else -> listOf(
+                DisciplineSyllabusGroupDto(
+                    blockName = "Conhecimentos Específicos",
+                    discipline = "Segurança e Saúde do Trabalhador",
+                    disciplineMasteryPct = 82.0,
+                    topics = listOf(
+                        SyllabusTopicNodeDto(
+                            topic = SyllabusTopicDto(
+                                id = "sst_nr15",
+                                contestId = "CPNU",
+                                blockName = "Conhecimentos Específicos",
+                                discipline = "Segurança e Saúde do Trabalhador",
+                                title = "NR-15 — Atividades e Operações Insalubres e Limites de Tolerância",
+                                order = 1,
+                                commonTrunkId = "tronco_sst_nrs",
+                                estimation = EstimationMetadata(
+                                    isEstimated = false,
+                                    confidenceBadge = ConfidenceBadge.HIGH,
+                                    rationale = "Cobrado em 100% das últimas 3 provas de AFT e Segurança do Trabalho.",
+                                    referenceExams = listOf("CNU 2024", "AFT 2013")
+                                ),
+                                diffStatus = TopicDiffStatus.CONFIRMED
+                            ),
+                            userMasteryPct = 85.0,
+                            questionsPracticed = 34,
+                            statusLabel = "DOMINADO"
+                        ),
+                        SyllabusTopicNodeDto(
+                            topic = SyllabusTopicDto(
+                                id = "sst_nr01",
+                                contestId = "CPNU",
+                                blockName = "Conhecimentos Específicos",
+                                discipline = "Segurança e Saúde do Trabalhador",
+                                title = "NR-01 — Gerenciamento de Riscos Ocupacionais (GRO e PGR)",
+                                order = 2,
+                                commonTrunkId = "tronco_sst_nrs",
+                                estimation = EstimationMetadata(
+                                    isEstimated = false,
+                                    confidenceBadge = ConfidenceBadge.HIGH,
+                                    rationale = "Núcleo estruturante da fiscalização moderna do trabalho.",
+                                    referenceExams = listOf("CNU 2024")
+                                ),
+                                diffStatus = TopicDiffStatus.CONFIRMED
+                            ),
+                            userMasteryPct = 52.0,
+                            questionsPracticed = 12,
+                            statusLabel = "REVISAO"
+                        )
+                    )
+                ),
+                DisciplineSyllabusGroupDto(
+                    blockName = "Conhecimentos Gerais",
+                    discipline = "Finanças Públicas",
+                    disciplineMasteryPct = 61.0,
+                    topics = listOf(
+                        SyllabusTopicNodeDto(
+                            topic = SyllabusTopicDto(
+                                id = "fin_01",
+                                contestId = "CPNU",
+                                blockName = "Conhecimentos Gerais",
+                                discipline = "Finanças Públicas",
+                                title = "Orçamento Público: PPA, LDO, LOA e Créditos Adicionais",
+                                order = 1,
+                                commonTrunkId = "tronco_financas_orcamento",
+                                estimation = EstimationMetadata(
+                                    isEstimated = false,
+                                    confidenceBadge = ConfidenceBadge.HIGH,
+                                    rationale = "Tronco comum entre CPNU, Receita Federal e Controladorias.",
+                                    referenceExams = listOf("CPNU 2024", "RFB 2023")
+                                ),
+                                diffStatus = TopicDiffStatus.CONFIRMED
+                            ),
+                            userMasteryPct = 61.0,
+                            questionsPracticed = 19,
+                            statusLabel = "QUESTOES"
+                        )
+                    )
+                )
+            )
+        }
     }
 
     private fun buildOfflineFallbackDiff() = ContestDiffScreenDto(
@@ -540,43 +730,107 @@ class ConcursoRepository(
             hasPlausibility = true,
             hintsCount = 1,
             userStats = null
+        ),
+        QuestionDto(
+            id = "66afca336caf9b5d37185cdf",
+            question = "No âmbito da Reforma Tributária (EC nº 132/2023), a Contribuição sobre Bens e Serviços (CBS) e o Imposto sobre Bens e Serviços (IBS) compartilham regras harmônicas de incidência. Assinale a alternativa correta sobre o princípio informador da cobrança no destino:",
+            questionType = QuestionType.MULTIPLE_CHOICE,
+            answers = listOf(
+                "O imposto e a contribuição incidem de forma não cumulativa, cabendo a arrecadação do IBS ao ente federativo de destino da operação ou prestação.",
+                "A alíquota de referência do IBS é fixada unilateralmente pela União por decreto presidencial sem participação do Comitê Gestor.",
+                "A CBS substitui o Imposto sobre Produtos Industrializados (IPI), extinguindo imediatamente os incentivos da Zona Franca de Manaus.",
+                "O IBS possui caráter cumulativo nas cadeias industriais de exportação.",
+                "O imposto seletivo incide sobre exportações de bens minerais e produtos primários em geral sem limite de alíquota."
+            ),
+            correctAnswerIndices = listOf(0),
+            disciplina = "Direito Tributário",
+            source = "FGV",
+            examYear = 2025,
+            level = "Difícil",
+            isBorrowedAnalogous = true,
+            explanation = "✅ Correta: A EC 132/2023 consagrou a não cumulatividade plena e a tributação no destino para o IVA Dual (CBS federal e IBS subnacional).",
+            hasDrSincero = true,
+            hasMnemonic = true,
+            hasPlausibility = true,
+            hintsCount = 1,
+            userStats = null
+        ),
+        QuestionDto(
+            id = "66afca336caf9b5d37185ce0",
+            question = "Acerca da relação de emprego prevista nos artigos 2º e 3º da Consolidação das Leis do Trabalho (CLT), constitui requisito essencial configurador do vínculo empregatício:",
+            questionType = QuestionType.MULTIPLE_CHOICE,
+            answers = listOf(
+                "A prestação de serviços de natureza não eventual a empregador, sob a dependência deste e mediante salário, com pessoalidade.",
+                "A exclusividade absoluta do trabalhador perante um único tomador de serviços.",
+                "A realização das atividades obrigatoriamente nas dependências físicas da sede da empresa.",
+                "O pagamento de remuneração exclusivamente em periodicidade mensal fixa.",
+                "O registro formal prévio em carteira de trabalho como condição de existência fática do direito."
+            ),
+            correctAnswerIndices = listOf(0),
+            disciplina = "Direito do Trabalho",
+            source = "Cesgranrio",
+            examYear = 2024,
+            level = "Fácil",
+            explanation = "✅ Correta: Os elementos fático-jurídicos da relação de emprego (pessoalidade, pessoa física, não eventualidade, onerosidade e subordinação) independem de exclusividade ou do local de trabalho (art. 3º e art. 6º da CLT).",
+            hasDrSincero = true,
+            hasMnemonic = true,
+            hasPlausibility = true,
+            hintsCount = 1,
+            userStats = null
         )
     )
 
     private fun buildOfflineFallbackAiResponse(kind: String): String = when (kind) {
-        "dr-sincero" -> "🔥 **Dr. Sincero:** A banca adora colocar que 'basta entregar o EPI no papel' para se livrar do adicional de insalubridade. Súmula 289 do TST manda lembranças: o simples fornecimento do aparelho de proteção pelo empregador NÃO o exime do pagamento do adicional! Tem que neutralizar de verdade dentro do limite de tolerância."
-        "mnemonic" -> "🧠 **Mnemônico — Neutralização da Insalubridade (M.E.L.):**\n- **M**edidas de Ordem Geral (EPC)\n- **E**PI com CA e uso efetivo\n- **L**imite de Tolerância respeitado!"
-        "contextual-hint" -> "💡 **Dica 1:** Lembre-se do art. 191 da CLT: existem exatamente duas vias para neutralizar o agente insalubre (coletiva no ambiente ou individual eficaz)."
-        "plausibility" -> "⚖️ **Análise de Plausibilidade dos Distratores:**\n- *Simples entrega formal do EPI:* **Plausível (Armadilha Clássica)** — confunde o candidato que lembra da existência do EPI mas esquece da Súmula 289 do TST.\n- *Pagamento substitutivo de bônus:* **Improvável** — direitos de saúde e segurança são indisponíveis."
-        else -> "📚 **Explicação Detalhada:** O art. 191 da CLT e o item 15.4 da NR-15 estabelecem que a eliminação ou neutralização da insalubridade depende da conservação do ambiente dentro dos limites de tolerância ou da redução da intensidade do agente via EPI."
+        "dr-sincero" -> "🔥 **Dr. Sincero:** A banca adora colocar que 'basta entregar o EPI no papel' ou exigir 'exclusividade' para vínculo de emprego. Súmula 289 do TST e art. 3º da CLT mandam lembranças: papel sem eficácia fática não afasta direito trabalhista!"
+        "mnemonic" -> "🧠 **Mnemônico de Fixação — Requisitos (S.H.O.P.P.):**\n- **S**ubordinação jurídica\n- **H**abitualidade (Não eventualidade)\n- **O**nerosidade\n- **P**essoalidade\n- **P**essoa Física"
+        "contextual-hint" -> "💡 **Dica Progressiva:** Observe se a alternativa tenta criar uma exigência formal (como exclusividade ou simples recibo) que a lei e a jurisprudência não exigem."
+        "plausibility" -> "⚖️ **Análise de Plausibilidade dos Distratores:**\n- *Simples entrega formal / Exclusividade:* **Plausível (Armadilha Clássica)** — confunde o candidato que lembra do instituto mas esquece o princípio da primazia da realidade.\n- *Pagamento substitutivo / Decreto unilateral:* **Improvável** — viola frontalmente as garantias constitucionais."
+        "child-friendly-pre" -> "🧒 **Simplificando a Pergunta (ELI10):**\nImagine que a regra diz que você precisa usar um capacete que funcione de verdade para se proteger da chuva. A pergunta quer saber: basta o chefe te dar um chapéu furado no papel ou o ambiente/equipamento precisa realmente te proteger?"
+        "child-friendly-post" -> "🧒 **Explicação Simples (ELI10):**\nNo Direito e nas Normas de Segurança, o que vale é o que acontece de verdade (primazia da realidade). Não adianta só assinar um papel dizendo que está tudo seguro se o trabalhador continua correndo perigo!"
+        "extra-concepts" -> "🎯 **Conceitos-Chave & Exemplos Práticos:**\n1. **Primazia da Realidade:** Os fatos reais prevalecem sobre meros documentos formais.\n2. **Súmula 289 do TST:** O simples fornecimento do aparelho de proteção pelo empregador não o exime do pagamento do adicional de insalubridade; cabe-lhe tomar as medidas que conduzam à diminuição ou eliminação da nocividade.\n3. **Hierarquia das Medidas (NR-01):** Medidas de proteção coletiva (EPC) têm prioridade sobre medidas administrativas e individuais (EPI)."
+        else -> "📚 **Explicação Detalhada:** A alternativa correta reflete a literalidade normativa e a jurisprudência consolidada das bancas examinadoras (Cesgranrio, FGV e Cebraspe)."
     }
 
-    private fun buildOfflineFallbackAnalytics(userId: Long) = ProgressAnalyticsDto(
-        userId = userId,
-        globalAccuracyPct = 71.4,
-        totalQuestionsPracticed = 412,
-        totalMasteredQuestions = 128,
-        readinessIndexScore = 69.5,
-        historicalCutoffReference = 74.0,
-        disciplinesSortedByWeakness = listOf(
-            DisciplineMasteryBarDto("Sociologia e Psicologia Aplicadas ao Trabalho", 54.0, 45, 8, 6.2),
-            DisciplineMasteryBarDto("Finanças Públicas", 61.5, 52, 14, 11.4),
-            DisciplineMasteryBarDto("Políticas Públicas", 68.0, 60, 19, 15.0),
-            DisciplineMasteryBarDto("Direito do Trabalho", 76.5, 120, 42, 38.5),
-            DisciplineMasteryBarDto("Segurança e Saúde do Trabalhador", 82.0, 135, 45, 44.1)
-        ),
-        confidenceMatrix = ConfidenceMatrixSummaryDto(
-            highConfidenceCorrect = 215,
-            lowConfidenceCorrect = 79,
-            lowConfidenceError = 94,
-            highConfidenceError = 24
-        ),
-        activityHeatmap = (1..14).map { day ->
-            DailyHeatmapCellDto(
-                dateYmd = "2026-10-${(16 + day).toString().padStart(2, '0')}",
-                questionsCount = 25,
-                accuracyPct = 72.0
-            )
-        }
-    )
+    private suspend fun buildOfflineFallbackAnalytics(userId: Long): ProgressAnalyticsDto {
+        val pendingAttempts = runCatching { dao.getAllPendingAttempts() }.getOrDefault(emptyList())
+        val localTotal = pendingAttempts.size
+        val localCorrect = pendingAttempts.count { it.isCorrect }
+        val localHcCorrect = pendingAttempts.count { it.isCorrect && it.confidenceLevel >= 2 }
+        val localLcCorrect = pendingAttempts.count { it.isCorrect && it.confidenceLevel < 2 }
+        val localLcError = pendingAttempts.count { !it.isCorrect && it.confidenceLevel < 2 }
+        val localHcError = pendingAttempts.count { !it.isCorrect && it.confidenceLevel >= 2 }
+
+        val totalPracticed = 412 + localTotal
+        val totalCorrect = 294 + localCorrect
+        val globalAcc = ((totalCorrect.toDouble() / totalPracticed.coerceAtLeast(1).toDouble()) * 1000.0).toInt() / 10.0
+
+        return ProgressAnalyticsDto(
+            userId = userId,
+            globalAccuracyPct = globalAcc,
+            totalQuestionsPracticed = totalPracticed,
+            totalMasteredQuestions = 128 + (localHcCorrect / 3),
+            readinessIndexScore = (69.5 + (localCorrect * 0.2)).coerceAtMost(99.0),
+            historicalCutoffReference = 74.0,
+            disciplinesSortedByWeakness = listOf(
+                DisciplineMasteryBarDto("Sociologia e Psicologia Aplicadas ao Trabalho", 54.0, 45, 8, 6.2),
+                DisciplineMasteryBarDto("Finanças Públicas", 61.5, 52, 14, 11.4),
+                DisciplineMasteryBarDto("Políticas Públicas", 68.0, 60, 19, 15.0),
+                DisciplineMasteryBarDto("Direito do Trabalho", 76.5, 120, 42, 38.5),
+                DisciplineMasteryBarDto("Segurança e Saúde do Trabalhador", 82.0, 135, 45, 44.1)
+            ),
+            confidenceMatrix = ConfidenceMatrixSummaryDto(
+                highConfidenceCorrect = 215 + localHcCorrect,
+                lowConfidenceCorrect = 79 + localLcCorrect,
+                lowConfidenceError = 94 + localLcError,
+                highConfidenceError = 24 + localHcError
+            ),
+            activityHeatmap = (1..14).map { day ->
+                DailyHeatmapCellDto(
+                    dateYmd = "2026-10-${(16 + day).toString().padStart(2, '0')}",
+                    questionsCount = if (day == 14) 25 + localTotal else 25,
+                    accuracyPct = if (day == 14) globalAcc else 72.0
+                )
+            }
+        )
+    }
 }

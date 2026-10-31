@@ -1,0 +1,90 @@
+name: Headless emulator insets (API 35 at S23 Ultra geometry)
+
+# The report names one profile as "Android 17 / API 35". Those are different
+# platform levels: Android 17 is API 37, and API 35 is Android 15. No system
+# image carries both labels. This job boots the report's numeric API
+# (android-35 / google_apis) at the S23 Ultra geometry the inset gate
+# requires: 1440x3088 px, 500 dpi, centered punch-hole. The log prints the
+# real release and sdk. It does not relabel the image as Android 17.
+#
+# Manual only. This job does not build on the droplet and does not run on tags.
+on:
+  workflow_dispatch:
+
+jobs:
+  s23-ultra-insets:
+    name: API 35 1440x3088 500dpi punch-hole
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Boot headless emulator and check question insets
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -no-audio -no-boot-anim -gpu swiftshader_indirect
+          pre-emulator-launch-script: |
+            set -euo pipefail
+            python3 - <<'PY'
+            import os
+            from pathlib import Path
+            roots = [
+                Path(os.environ["ANDROID_AVD_HOME"]) if os.environ.get("ANDROID_AVD_HOME") else None,
+                Path.home() / ".android" / "avd",
+            ]
+            configs = []
+            for root in roots:
+                if root and root.exists():
+                    configs.extend(root.rglob("config.ini"))
+            if not configs:
+                print("AVD_CONFIG missing; wm size after boot still enforces 1440x3088 @ 500 dpi")
+                raise SystemExit(0)
+            path = configs[0]
+            wanted = {
+                "hw.lcd.width": "1440",
+                "hw.lcd.height": "3088",
+                "hw.lcd.density": "500",
+                "showDeviceFrame": "no",
+            }
+            lines = path.read_text(encoding="utf-8").splitlines()
+            kept = [line for line in lines if line.split("=", 1)[0] not in wanted]
+            for key, value in wanted.items():
+                kept.append(f"{key}={value}")
+            path.write_text("\n".join(kept) + "\n", encoding="utf-8")
+            print(f"AVD_CONFIG {path}")
+            PY
+          script: |
+            set -euo pipefail
+            adb shell wm size 1440x3088
+            adb shell wm density 500
+            adb shell cmd overlay enable com.android.internal.display.cutout.emulation.hole
+            adb shell cmd overlay list | tr -d '\r' | grep -E '\[x\].*com\.android\.internal\.display\.cutout\.emulation\.hole'
+            SIZE="$(adb shell wm size | tr -d '\r')"
+            DENSITY="$(adb shell wm density | tr -d '\r')"
+            RELEASE="$(adb shell getprop ro.build.version.release | tr -d '\r')"
+            SDK="$(adb shell getprop ro.build.version.sdk | tr -d '\r')"
+            echo "PROFILE_RESOLUTION report='Android 17 / API 35' booted_release=${RELEASE} booted_sdk=${SDK}"
+            echo "Android 17 is API 37. API 35 is Android 15. Booting the report numeric API at S23 Ultra geometry."
+            echo "EMULATOR_BOOTED release=${RELEASE} sdk=${SDK} ${SIZE} ${DENSITY} punch-hole=hole"
+            echo "${SIZE}" | grep -q "1440x3088"
+            echo "${DENSITY}" | grep -q "500"
+            cd android-app
+            chmod +x gradlew
+            ./gradlew :app:connectedDebugAndroidTest --tests br.com.concursoprep.app.QuestionInsetCollisionTest --no-daemon --console=plain
+            adb logcat -d -s INSET_CHECK:I
+            adb logcat -d | tr -d '\r' | grep -q "INSET_CHECK: success"

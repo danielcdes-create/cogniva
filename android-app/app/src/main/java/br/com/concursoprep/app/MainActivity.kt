@@ -8,14 +8,19 @@ import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Assessment
-import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Quiz
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Today
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -36,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.FileProvider
+import br.com.concursoprep.app.domain.model.AppThemeMode
 import br.com.concursoprep.app.domain.model.ContestStatus
 import br.com.concursoprep.app.domain.model.QuizMode
 import br.com.concursoprep.app.domain.model.TodayDashboardDto
@@ -53,6 +59,7 @@ import br.com.concursoprep.app.ui.screens.OnboardingScreen
 import br.com.concursoprep.app.ui.screens.PracticeHubScreen
 import br.com.concursoprep.app.ui.screens.ProgressScreen
 import br.com.concursoprep.app.ui.screens.QuestionSessionScreen
+import br.com.concursoprep.app.ui.screens.SettingsScreen
 import br.com.concursoprep.app.ui.screens.TodayScreen
 import br.com.concursoprep.app.ui.theme.ConcursoPrepTheme
 import kotlinx.coroutines.flow.collectLatest
@@ -64,9 +71,16 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContent {
-            ConcursoPrepTheme {
+            val themeMode by viewModel.themeMode.collectAsState()
+            val isDark = when (themeMode) {
+                AppThemeMode.SYSTEM -> isSystemInDarkTheme()
+                AppThemeMode.LIGHT -> false
+                AppThemeMode.DARK -> true
+            }
+            ConcursoPrepTheme(darkTheme = isDark) {
                 ConcursoPrepRootApp(viewModel)
             }
         }
@@ -77,7 +91,8 @@ private enum class BottomTab(val label: String) {
     HOJE("Hoje"),
     CONCURSOS("Concursos"),
     PRATICAR("Praticar"),
-    PROGRESSO("Progresso")
+    PROGRESSO("Progresso"),
+    AJUSTES("Ajustes")
 }
 
 @Composable
@@ -97,6 +112,11 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
     val activeAiSheetMarkdown by viewModel.activeAiSheetMarkdown.collectAsState()
     val activeAiSheetTitle by viewModel.activeAiSheetTitle.collectAsState()
     val apkUpdateState by viewModel.apkUpdateState.collectAsState()
+    val userProfile by viewModel.userProfile.collectAsState()
+    val themeMode by viewModel.themeMode.collectAsState()
+    val cachedQuestionsCount by viewModel.cachedQuestionsCount.collectAsState()
+    val pendingSyncCount by viewModel.pendingSyncCount.collectAsState()
+    val pausedDiscipline by viewModel.pausedDiscipline.collectAsState()
 
     // Ouve notificações e feedbacks do ViewModel
     LaunchedEffect(Unit) {
@@ -148,6 +168,7 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
     // 1. Rota de Onboarding (para novos usuários ou vínculo inicial com o Bot Telegram)
     if (!isOnboardingCompleted) {
         OnboardingScreen(
+            onSkipOnboarding = { viewModel.skipOnboarding() },
             onCompleteOnboarding = { telegramUserId, telegramUsername, displayName, contests, dailyQ, dailyH ->
                 viewModel.completeOnboarding(
                     telegramUserId = telegramUserId,
@@ -178,12 +199,12 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
             historicalCutoffPct = 78.5,
             aiTutorMarkdown = activeAiSheetMarkdown,
             aiTutorTitle = activeAiSheetTitle,
-            onRequestAiTutor = { qId, kind, title ->
-                viewModel.requestAiTutor(qId, kind, title)
+            onRequestAiTutor = { qId, kind, title, hintIdx ->
+                viewModel.requestAiTutor(qId, kind, title, hintIdx)
             },
             onDismissAiSheet = { viewModel.dismissAiSheet() },
-            onSubmitAnswer = { question, chosenIndex, confidenceLevel ->
-                viewModel.submitAnswer(question, chosenIndex, confidenceLevel)
+            onSubmitAnswer = { question, chosenIndex, confidenceLevel, timeSpentSeconds ->
+                viewModel.submitAnswer(question, chosenIndex, confidenceLevel, timeSpentSeconds)
             },
             onReportProblem = { qId, category ->
                 viewModel.reportProblem(qId, category)
@@ -197,6 +218,7 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
 
     // 3. Aplicação Principal: 4 Abas com Scaffold e Bottom Navigation Bar
     Scaffold(
+        contentWindowInsets = WindowInsets.safeDrawing,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             NavigationBar {
@@ -209,7 +231,7 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                 NavigationBarItem(
                     selected = currentTab == BottomTab.CONCURSOS,
                     onClick = { currentTab = BottomTab.CONCURSOS },
-                    icon = { Icon(Icons.Default.MenuBook, contentDescription = null) },
+                    icon = { Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = null) },
                     label = { Text(BottomTab.CONCURSOS.label) }
                 )
                 NavigationBarItem(
@@ -224,6 +246,12 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                     icon = { Icon(Icons.Default.Assessment, contentDescription = null) },
                     label = { Text(BottomTab.PROGRESSO.label) }
                 )
+                NavigationBarItem(
+                    selected = currentTab == BottomTab.AJUSTES,
+                    onClick = { currentTab = BottomTab.AJUSTES },
+                    icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                    label = { Text(BottomTab.AJUSTES.label) }
+                )
             }
         }
     ) { innerPadding ->
@@ -233,12 +261,13 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                     val safeDashboard = todayDashboard ?: buildOfflineFallbackDashboard()
                     TodayScreen(
                         dashboard = safeDashboard,
-                        pausedDiscipline = "Segurança e Saúde do Trabalhador (NR-15)",
+                        pausedDiscipline = pausedDiscipline,
                         apkUpdateState = apkUpdateState,
                         onCheckApkUpdate = { viewModel.checkApkUpdate() },
                         onInstallApkUpdate = { viewModel.downloadAndInstallApk(context) },
-                        onStartQuizMode = { mode, _ ->
-                            viewModel.startQuizSession(mode = mode, quantity = 10)
+                        onOpenSettings = { currentTab = BottomTab.AJUSTES },
+                        onStartQuizMode = { mode, disc ->
+                            viewModel.startQuizSession(mode = mode, quantity = 10, disciplina = disc)
                         },
                         onOpenContestSyllabus = { cid ->
                             viewModel.selectContest(cid)
@@ -251,9 +280,9 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                     ContestsScreen(
                         selectedContestId = selectedContestId,
                         availableContests = listOf(
-                            "CPNU" to "🔴 CPNU (AFT)",
-                            "RFB" to "🟡 Receita Federal",
-                            "BNDES" to "⚪ BNDES"
+                            "CPNU" to "CPNU (AFT)",
+                            "RFB" to "Receita Federal",
+                            "BNDES" to "BNDES"
                         ),
                         syllabusGroups = syllabusGroups,
                         diffData = contestDiff,
@@ -267,6 +296,9 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                                 contestId = selectedContestId,
                                 disciplina = disc
                             )
+                        },
+                        onApplyDiffConsent = { cid ->
+                            viewModel.applyEditalDiffUpdate(cid)
                         }
                     )
                 }
@@ -285,7 +317,48 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
 
                 BottomTab.PROGRESSO -> {
                     val safeAnalytics = analytics ?: buildOfflineFallbackAnalytics()
-                    ProgressScreen(analytics = safeAnalytics)
+                    ProgressScreen(
+                        analytics = safeAnalytics,
+                        onPracticeQuizMode = { mode, disc ->
+                            viewModel.startQuizSession(
+                                mode = mode,
+                                quantity = 10,
+                                contestId = selectedContestId,
+                                disciplina = disc
+                            )
+                        }
+                    )
+                }
+
+                BottomTab.AJUSTES -> {
+                    SettingsScreen(
+                        userProfile = userProfile,
+                        themeMode = themeMode,
+                        apkUpdateState = apkUpdateState,
+                        cachedQuestionsCount = cachedQuestionsCount,
+                        pendingSyncCount = pendingSyncCount,
+                        onSelectThemeMode = { mode ->
+                            viewModel.setThemeMode(mode)
+                        },
+                        onSaveUserSettings = { tgId, tgUsername, dispName, contests, dailyQ, dailyH ->
+                            viewModel.updateUserSettings(
+                                telegramUserId = tgId,
+                                telegramUsername = tgUsername,
+                                displayName = dispName,
+                                selectedContests = contests,
+                                dailyQuestionsTarget = dailyQ,
+                                dailyHoursTarget = dailyH
+                            )
+                        },
+                        onCheckApkUpdate = { viewModel.checkApkUpdate() },
+                        onInstallApkUpdate = { viewModel.downloadAndInstallApk(context) },
+                        onSyncNow = { viewModel.syncNow() },
+                        onClearOfflineCache = { viewModel.clearOfflineQuestionCache() },
+                        onReopenOnboarding = {
+                            currentTab = BottomTab.HOJE
+                            viewModel.reopenOnboardingWizard()
+                        }
+                    )
                 }
             }
         }

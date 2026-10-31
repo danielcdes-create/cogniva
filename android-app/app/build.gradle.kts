@@ -4,22 +4,36 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
     id("com.google.devtools.ksp")
+    id("app.cash.paparazzi")
 }
 
 android {
     namespace = "br.com.concursoprep.app"
-    compileSdk = 36
+    // Paparazzi 1.3.5 layoutlib crashes on API 36 (android.os.Build.VERSION_CODES_FULL).
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "br.com.concursoprep.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.1.2"
+        versionCode = 3
+        versionName = "1.2.0"
 
         val doApiBaseUrl = (project.findProperty("DO_API_BASE_URL") as? String)
             ?: "http://198.199.65.103/api/v1/"
         buildConfigField("String", "API_BASE_URL", "\"$doApiBaseUrl\"")
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            isReturnDefaultValues = true
+            all {
+                it.maxHeapSize = "4096m"
+                it.systemProperty("robolectric.pixelCopyRenderMode", "hardware")
+            }
+        }
     }
 
     buildFeatures {
@@ -69,4 +83,38 @@ dependencies {
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-kotlinx-serialization:2.11.0")
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation(composeBom)
+    testImplementation("io.github.sergio-sastre.ComposablePreviewScanner:android:0.7.1")
+
+    androidTestImplementation(composeBom)
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+    debugImplementation(composeBom)
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
+}
+
+// Paparazzi 1.3.5 replaces Gradle's test reporter with one that calls a Gradle 8
+// internal method removed in Gradle 9.3. Put the stock reporter back so verify
+// still fails the task when a screenshot test fails.
+tasks.withType<Test>().configureEach {
+    // Runs after Paparazzi's doFirst (which installs its Gradle 8 reporter) and
+    // before the test action reads the reporter back.
+    actions.add(
+        0,
+        Action<Task> {
+            val reporterType = Class.forName("org.gradle.api.internal.tasks.testing.report.TestReporter")
+            val setter = org.gradle.api.tasks.testing.AbstractTestTask::class.java.getDeclaredMethod(
+                "setTestReporter",
+                reporterType,
+            )
+            setter.isAccessible = true
+            val noop = Class.forName("cogniva.NoopTestReporter")
+                .getMethod("create", Class::class.java)
+                .invoke(null, reporterType)
+            setter.invoke(this, noop)
+        },
+    )
 }

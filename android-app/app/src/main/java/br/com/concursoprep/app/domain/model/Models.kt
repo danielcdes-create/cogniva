@@ -53,6 +53,13 @@ enum class ConfidenceQuadrant {
 }
 
 @Serializable
+enum class AppThemeMode(val label: String) {
+    SYSTEM("Sistema"),
+    LIGHT("Claro"),
+    DARK("Escuro")
+}
+
+@Serializable
 data class UserProfileDto(
     @SerialName("user_id") val userId: Long,
     val username: String? = null,

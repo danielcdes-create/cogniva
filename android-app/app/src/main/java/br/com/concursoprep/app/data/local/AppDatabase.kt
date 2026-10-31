@@ -65,8 +65,26 @@ interface ConcursoLocalDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun enqueuePendingAttempt(attempt: PendingAttemptEntity)
 
+    @Query("SELECT * FROM pending_attempts WHERE sessionUuid = :sessionUuid AND questionId = :questionId LIMIT 1")
+    suspend fun findPendingAttemptInSession(sessionUuid: String, questionId: String): PendingAttemptEntity?
+
     @Query("SELECT * FROM pending_attempts ORDER BY createdAtEpochMs ASC")
     suspend fun getAllPendingAttempts(): List<PendingAttemptEntity>
+
+    @Query("SELECT COUNT(*) FROM pending_attempts")
+    suspend fun countPendingAttempts(): Int
+
+    @Query("SELECT COUNT(*) FROM cached_questions")
+    suspend fun countCachedQuestions(): Int
+
+    @Query("SELECT * FROM cached_questions WHERE inErrorNotebook = 1 LIMIT :limit")
+    suspend fun getErrorNotebookQuestions(limit: Int): List<CachedQuestionEntity>
+
+    @Query("UPDATE cached_questions SET inErrorNotebook = :inErrorNotebook WHERE id = :questionId")
+    suspend fun updateQuestionErrorNotebookFlag(questionId: String, inErrorNotebook: Boolean)
+
+    @Query("DELETE FROM cached_questions")
+    suspend fun clearCachedQuestions()
 
     @Query("DELETE FROM pending_attempts WHERE localId IN (:ids)")
     suspend fun deleteSyncedAttempts(ids: List<Long>)

@@ -1,44 +1,55 @@
 package br.com.concursoprep.app.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -48,85 +59,110 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import br.com.concursoprep.app.R
 import br.com.concursoprep.app.domain.model.QuestionDto
 import br.com.concursoprep.app.domain.model.QuestionType
 import br.com.concursoprep.app.domain.model.QuizMode
 import br.com.concursoprep.app.domain.model.VALID_PROBLEM_CATEGORIES
+import br.com.concursoprep.app.ui.components.ConfidenceSelectorGrid
+import br.com.concursoprep.app.ui.components.MarkdownParser
+import br.com.concursoprep.app.ui.components.OptionCard
+import br.com.concursoprep.app.ui.components.QuestionActionChips
 import br.com.concursoprep.app.ui.theme.CognivaBrandHeader
-import br.com.concursoprep.app.ui.theme.CorrectGreen
-import br.com.concursoprep.app.ui.theme.ErrorRed
-import br.com.concursoprep.app.ui.theme.ReviewAmber
+import br.com.concursoprep.app.ui.theme.LocalExtendedColors
 import kotlinx.coroutines.delay
 
 /**
  * Aba "Praticar": Hub de início rápido para qualquer modalidade herdada do Bot ou nova do App
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PracticeHubScreen(
     onLaunchSession: (QuizMode, Int) -> Unit
 ) {
-    var selectedQuantity by remember { mutableIntStateOf(10) }
+    var selectedQuantity by rememberSaveable { mutableIntStateOf(10) }
     val quantities = listOf(5, 10, 20, 40, 60)
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+    Surface(
+        color = MaterialTheme.colorScheme.background,
+        contentColor = MaterialTheme.colorScheme.onBackground,
+        modifier = Modifier.fillMaxSize()
     ) {
-        CognivaBrandHeader(
-            ecosystemProduct = "Cogniva Questions · Exams",
-            subtitle = "Banco de questões, simulados & Cogniva AI"
-        )
-        Text(
-            text = "Quantidade de questões da bateria:",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            quantities.forEach { q ->
-                FilterChip(
-                    selected = selectedQuantity == q,
-                    onClick = { selectedQuantity = q },
-                    label = { Text("$q") }
-                )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            CognivaBrandHeader(
+                ecosystemProduct = "Cogniva Questions · Exams",
+                subtitle = "Banco de questões, simulados & Cogniva AI"
+            )
+            Text(
+                text = "Quantidade de questões da bateria:",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(0.dp)
+            ) {
+                quantities.forEach { q ->
+                    FilterChip(
+                        selected = selectedQuantity == q,
+                        onClick = { selectedQuantity = q },
+                        label = { Text("$q") },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    )
+                }
             }
-        }
 
-        PracticeModeCard(
-            title = "🔥 Cogniva Questions · The Most Badass",
-            description = "Seleciona as questões com maior índice de erro, tempo gasto e reincidência no seu histórico.",
-            onClick = { onLaunchSession(QuizMode.MOST_BADASS, selectedQuantity) }
-        )
-        PracticeModeCard(
-            title = "⏱️ Cogniva Exams · Simulado Oficial Ponderado",
-            description = "Full-screen com cronômetro, distribuição exata de pesos do edital e cálculo de nota líquida.",
-            onClick = { onLaunchSession(QuizMode.SIMULADO, selectedQuantity) }
-        )
-        PracticeModeCard(
-            title = "🔗 Tronco Comum (Multi-Concurso)",
-            description = "Questões de matérias compartilhadas que avançam simultaneamente seus concursos ativos.",
-            onClick = { onLaunchSession(QuizMode.COMMON_TRUNK, selectedQuantity) }
-        )
-        PracticeModeCard(
-            title = "📕 Caderno de Erros & Pontos Cegos",
-            description = "Foco cirúrgico nas questões que você errou (priorizando erros com alta confiança).",
-            onClick = { onLaunchSession(QuizMode.ERROR_NOTEBOOK, selectedQuantity) }
-        )
-        PracticeModeCard(
-            title = "🎲 Shuffle Geral / Prática Livre",
-            description = "Treino sem timer com feedback imediato e tutores de IA sob demanda.",
-            onClick = { onLaunchSession(QuizMode.SHUFFLE, selectedQuantity) }
-        )
+            PracticeModeCard(
+                title = "Revisão Espaçada (SRS)",
+                description = "Prioridade máxima: questões com curva de esquecimento ativa para retenção de longo prazo.",
+                onClick = { onLaunchSession(QuizMode.SRS_REVIEW, selectedQuantity) }
+            )
+            PracticeModeCard(
+                title = "Cogniva Questions · The Most Badass",
+                description = "Seleciona as questões com maior índice de erro, tempo gasto e reincidência no seu histórico.",
+                onClick = { onLaunchSession(QuizMode.MOST_BADASS, selectedQuantity) }
+            )
+            PracticeModeCard(
+                title = "Cogniva Exams · Simulado Oficial Ponderado",
+                description = "Full-screen com cronômetro, distribuição exata de pesos do edital e cálculo de nota líquida.",
+                onClick = { onLaunchSession(QuizMode.SIMULADO, selectedQuantity) }
+            )
+            PracticeModeCard(
+                title = "Tronco Comum (Multi-Concurso)",
+                description = "Questões de matérias compartilhadas que avançam simultaneamente seus concursos ativos.",
+                onClick = { onLaunchSession(QuizMode.COMMON_TRUNK, selectedQuantity) }
+            )
+            PracticeModeCard(
+                title = "Caderno de Erros & Pontos Cegos",
+                description = "Foco cirúrgico nas questões que você errou (priorizando erros com alta confiança).",
+                onClick = { onLaunchSession(QuizMode.ERROR_NOTEBOOK, selectedQuantity) }
+            )
+            PracticeModeCard(
+                title = "Shuffle Geral / Prática Livre",
+                description = "Treino sem timer com feedback imediato e tutores de IA sob demanda.",
+                onClick = { onLaunchSession(QuizMode.SHUFFLE, selectedQuantity) }
+            )
+        }
     }
 }
 
@@ -138,7 +174,10 @@ private fun PracticeModeCard(
 ) {
     Card(
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface
+        ),
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
@@ -178,21 +217,33 @@ fun QuestionSessionScreen(
     historicalCutoffPct: Double = 78.5,
     aiTutorMarkdown: String?,
     aiTutorTitle: String?,
-    onRequestAiTutor: (questionId: String, kind: String, title: String) -> Unit,
+    onRequestAiTutor: (questionId: String, kind: String, title: String, hintIndex: Int?) -> Unit,
     onDismissAiSheet: () -> Unit,
-    onSubmitAnswer: (question: QuestionDto, chosenIndex: Int, confidenceLevel: Int) -> Unit,
+    onSubmitAnswer: (question: QuestionDto, chosenIndex: Int, confidenceLevel: Int, timeSpentSeconds: Int) -> Unit,
     onReportProblem: (questionId: String, category: String) -> Unit,
-    onExitSession: () -> Unit
+    onExitSession: () -> Unit,
+    initialSelectedOptionIndex: Int? = null
 ) {
-    var currentIndex by remember { mutableIntStateOf(initialIndex) }
+    var currentIndex by rememberSaveable { mutableIntStateOf(initialIndex) }
     val userAnswers = remember { mutableStateMapOf<String, UserAttemptState>() }
-    var isSimuladoFinished by remember { mutableStateOf(false) }
-    var isSimuladoReviewMode by remember { mutableStateOf(false) }
-    var showReportSheet by remember { mutableStateOf(false) }
-    var reportFeedbackMessage by remember { mutableStateOf<String?>(null) }
+    var isSimuladoFinished by rememberSaveable { mutableStateOf(false) }
+    var isSimuladoReviewMode by rememberSaveable { mutableStateOf(false) }
+    var showReportSheet by rememberSaveable { mutableStateOf(false) }
+    var questionStartEpochMs by remember(currentIndex) { mutableStateOf(System.currentTimeMillis()) }
 
-    // Cronômetro Regressivo do Simulado (3 minutos por questão, ex: 10 questões = 30 min)
-    var secondsRemaining by remember {
+    val handleBackNavigation = {
+        if (isSimuladoReviewMode) {
+            isSimuladoReviewMode = false
+        } else {
+            onExitSession()
+        }
+    }
+
+    BackHandler(enabled = !showReportSheet && aiTutorMarkdown == null) {
+        handleBackNavigation()
+    }
+
+    var secondsRemaining by rememberSaveable {
         mutableIntStateOf(if (isSimuladoMode) questions.size * 180 else 0)
     }
 
@@ -208,13 +259,12 @@ fun QuestionSessionScreen(
         }
     }
 
-    // Se o simulado foi finalizado e o concurseiro não está em modo revisão, exibe a tela de resultado
     if (isSimuladoMode && isSimuladoFinished && !isSimuladoReviewMode) {
         val totalQuestions = questions.size
         var correctCount = 0
         var wrongCount = 0
         var blankCount = 0
-        val disciplineMap = mutableMapOf<String, Pair<Int, Int>>() // disciplina -> (acertos, total)
+        val disciplineMap = mutableMapOf<String, Pair<Int, Int>>()
         val hasCebraspeQuestions = questions.any { it.questionType == QuestionType.TRUE_FALSE }
 
         questions.forEach { q ->
@@ -263,492 +313,581 @@ fun QuestionSessionScreen(
 
     val question = questions.getOrNull(currentIndex) ?: return
     val currentAttempt = userAnswers[question.id]
-    var selectedOptionIndex by remember(question.id) { mutableStateOf(currentAttempt?.chosenIndex) }
-    var selectedConfidence by remember(question.id) { mutableIntStateOf(currentAttempt?.confidenceLevel ?: 2) }
-    var isAnswerSubmitted by remember(question.id) {
+    var selectedOptionIndex by remember(question.id, isSimuladoReviewMode) {
+        mutableStateOf(currentAttempt?.chosenIndex ?: initialSelectedOptionIndex)
+    }
+    var selectedConfidence by remember(question.id, isSimuladoReviewMode) {
+        mutableIntStateOf(currentAttempt?.confidenceLevel ?: 2)
+    }
+    var isAnswerSubmitted by remember(question.id, isSimuladoReviewMode) {
         mutableStateOf(currentAttempt != null || isSimuladoReviewMode)
     }
+    var hintClickCount by remember(question.id) { mutableIntStateOf(0) }
 
-    val confidenceOptions = listOf(
-        0 to "😔 Nenhuma Ideia",
-        1 to "🤔 Chute",
-        2 to "😅 Mais ou Menos",
-        3 to "😎 Dominei!"
-    )
+    val computeElapsedSeconds = {
+        ((System.currentTimeMillis() - questionStartEpochMs) / 1000L).toInt().coerceIn(1, 3600)
+    }
 
     val correctIndex = question.correctAnswerIndices.firstOrNull() ?: 0
-    val isUserCorrect = selectedOptionIndex == correctIndex
-    val isHighConfidenceError = isAnswerSubmitted && !isUserCorrect && selectedConfidence >= 2
-
-    // Modo em que gabarito e IA ficam ocultos durante o teste
+    val isBlankAnswer = isSimuladoReviewMode && selectedOptionIndex == null
+    val isUserCorrect = selectedOptionIndex != null && selectedOptionIndex == correctIndex
+    val isHighConfidenceError = isAnswerSubmitted && !isBlankAnswer && !isUserCorrect && selectedConfidence >= 2
     val hideFeedback = isSimuladoMode && !isSimuladoReviewMode
+    val ext = LocalExtendedColors.current
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(16.dp)
-    ) {
-        // 1. Top Bar da Sessão
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            IconButton(onClick = onExitSession) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Sair da sessão")
-            }
-
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "Questão ${currentIndex + 1} de ${questions.size} · ${question.level}",
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Text(
-                    text = "${question.disciplina} · ${question.source}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (isSimuladoMode && !isSimuladoReviewMode) {
-                    val minutes = secondsRemaining / 60
-                    val seconds = secondsRemaining % 60
-                    val timerColor = if (secondsRemaining < 300) ErrorRed else MaterialTheme.colorScheme.primary
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(end = 4.dp)
-                    ) {
-                        Icon(Icons.Default.Timer, contentDescription = null, tint = timerColor)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = String.format("%02d:%02d", minutes, seconds),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = timerColor
-                        )
-                    }
-                }
-                IconButton(onClick = { showReportSheet = true }) {
-                    Icon(Icons.Default.Flag, contentDescription = "Reportar problema na questão")
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(6.dp))
-        LinearProgressIndicator(
-            progress = { (currentIndex + 1).toFloat() / questions.size.coerceAtLeast(1).toFloat() },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(6.dp)
-                .clip(RoundedCornerShape(3.dp))
-        )
-
-        if (hideFeedback) {
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        contentWindowInsets = WindowInsets.safeDrawing,
+        topBar = {
             Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp)
+                color = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+                tonalElevation = 2.dp
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = "⏱️ Modo Simulado Oficial: Gabarito e IAs revelados no final.",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                    OutlinedButton(
-                        onClick = { isSimuladoFinished = true },
-                        modifier = Modifier.height(30.dp)
-                    ) {
-                        Text("Finalizar Prova", style = MaterialTheme.typography.labelSmall)
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // 2. Conteúdo Rolável: Enunciado, Metadados e Alternativas
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            if (question.isBorrowedAnalogous) {
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant
-                ) {
-                    Text(
-                        text = "[estimado] Fonte análoga: ${question.source} · Tópico de alta recorrência",
-                        style = MaterialTheme.typography.labelMedium,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                    )
-                }
-            }
-
-            question.userStats?.let { st ->
-                Text(
-                    text = "Seu histórico nesta questão: ${st.attempts} tentativa(s) · ${st.accuracyPct.toInt()}% acerto",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-
-            // Enunciado Principal (22sp)
-            Card(
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Text(
-                    text = question.question,
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(16.dp)
-                )
-            }
-
-            // Tutores de IA Pré-Resposta (ocultos em modo simulado ativo)
-            if (!isAnswerSubmitted && !hideFeedback) {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    AssistChip(
-                        onClick = { onRequestAiTutor(question.id, "contextual-hint", "💡 Dica Contextual Progressiva") },
-                        label = { Text("💡 Pedir Dica") }
-                    )
-                    AssistChip(
-                        onClick = { onRequestAiTutor(question.id, "dr-sincero", "🔥 Análise do Dr. Sincero") },
-                        label = { Text("🔥 Dr. Sincero") }
-                    )
-                    AssistChip(
-                        onClick = { onRequestAiTutor(question.id, "child-friendly-pre", "🧒 Simplificar Pergunta") },
-                        label = { Text("🧒 Simplificar Pergunta") }
-                    )
-                }
-            }
-
-            // Alternativas: Cebraspe vs Múltipla Escolha
-            if (question.questionType == QuestionType.TRUE_FALSE) {
-                Text(
-                    text = "⚠️ Padrão Cebraspe: 1 resposta errada anula 1 resposta certa.",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = ReviewAmber
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    listOf(0 to "CERTO", 1 to "ERRADO").forEach { (idx, label) ->
-                        val isSelected = selectedOptionIndex == idx
-                        val showColor = isAnswerSubmitted && !hideFeedback
-                        Button(
-                            onClick = {
-                                selectedOptionIndex = idx
-                                if (hideFeedback) {
-                                    val attempt = UserAttemptState(idx, selectedConfidence, 60)
-                                    userAnswers[question.id] = attempt
-                                    onSubmitAnswer(question, idx, selectedConfidence)
-                                }
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(68.dp),
-                            shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = when {
-                                    showColor && idx == correctIndex -> CorrectGreen
-                                    showColor && isSelected && idx != correctIndex -> ErrorRed
-                                    isSelected -> MaterialTheme.colorScheme.primary
-                                    else -> MaterialTheme.colorScheme.surfaceVariant
-                                }
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .windowInsetsPadding(
+                            WindowInsets.safeDrawing.only(
+                                WindowInsetsSides.Top + WindowInsetsSides.Horizontal
                             )
+                        )
+                        .testTag("question_top_bar")
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        IconButton(onClick = handleBackNavigation) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Sair da sessão"
+                            )
+                        }
+
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.weight(1f)
                         ) {
-                            Text(text = label, style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                text = "Questão ${currentIndex + 1} de ${questions.size} · ${question.level}",
+                                style = MaterialTheme.typography.titleMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = "${question.disciplina} · ${question.source}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (isSimuladoMode && !isSimuladoReviewMode) {
+                                val minutes = secondsRemaining / 60
+                                val seconds = secondsRemaining % 60
+                                val timerColor = if (secondsRemaining < 300) ext.error else MaterialTheme.colorScheme.primary
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(end = 4.dp)
+                                ) {
+                                    Icon(Icons.Default.Timer, contentDescription = null, tint = timerColor)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = String.format("%02d:%02d", minutes, seconds),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = timerColor
+                                    )
+                                }
+                            }
+                            IconButton(onClick = { showReportSheet = true }) {
+                                Icon(Icons.Default.Flag, contentDescription = "Reportar problema na questão")
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+                    LinearProgressIndicator(
+                        progress = { (currentIndex + 1).toFloat() / questions.size.coerceAtLeast(1).toFloat() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(3.dp)),
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                }
+            }
+        },
+        bottomBar = {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+                tonalElevation = 3.dp
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .windowInsetsPadding(
+                            WindowInsets.safeDrawing.only(
+                                WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal
+                            )
+                        )
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                ) {
+                    if (hideFeedback) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { if (currentIndex > 0) currentIndex -= 1 },
+                                enabled = currentIndex > 0,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 52.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.action_previous_question),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            Button(
+                                onClick = {
+                                    if (currentIndex + 1 < questions.size) {
+                                        currentIndex += 1
+                                    } else {
+                                        isSimuladoFinished = true
+                                    }
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 52.dp)
+                            ) {
+                                Text(
+                                    text = if (currentIndex + 1 < questions.size) {
+                                        stringResource(R.string.action_next_question)
+                                    } else {
+                                        stringResource(R.string.action_deliver_simulado)
+                                    },
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    } else if (!isAnswerSubmitted) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            if (currentIndex > 0) {
+                                OutlinedButton(
+                                    onClick = { currentIndex -= 1 },
+                                    modifier = Modifier
+                                        .weight(0.4f)
+                                        .heightIn(min = 52.dp),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.action_previous_question),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                            Button(
+                                onClick = {
+                                    val chosen = selectedOptionIndex ?: return@Button
+                                    isAnswerSubmitted = true
+                                    val elapsed = computeElapsedSeconds()
+                                    val attempt = UserAttemptState(chosen, selectedConfidence, elapsed)
+                                    userAnswers[question.id] = attempt
+                                    onSubmitAnswer(question, chosen, selectedConfidence, elapsed)
+                                },
+                                enabled = selectedOptionIndex != null,
+                                modifier = Modifier
+                                    .testTag("confirm_answer_cta")
+                                    .weight(1f)
+                                    .heightIn(min = 52.dp),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.action_confirm_answer),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            if (currentIndex > 0) {
+                                OutlinedButton(
+                                    onClick = { currentIndex -= 1 },
+                                    modifier = Modifier
+                                        .weight(0.4f)
+                                        .heightIn(min = 52.dp),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.action_previous_question),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                            Button(
+                                onClick = {
+                                    if (currentIndex + 1 < questions.size) {
+                                        currentIndex += 1
+                                    } else if (isSimuladoReviewMode) {
+                                        isSimuladoReviewMode = false
+                                    } else {
+                                        onExitSession()
+                                    }
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 52.dp),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(
+                                    text = when {
+                                        currentIndex + 1 < questions.size -> stringResource(R.string.action_next_question)
+                                        isSimuladoReviewMode -> stringResource(R.string.action_back_to_results)
+                                        else -> stringResource(R.string.action_finish_session)
+                                    },
+                                    style = MaterialTheme.typography.titleMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
                     }
                 }
-            } else {
-                question.answers.forEachIndexed { idx, answerText ->
-                    val isSelected = selectedOptionIndex == idx
-                    val showColor = isAnswerSubmitted && !hideFeedback
-
-                    val borderColor = when {
-                        showColor && idx == correctIndex -> CorrectGreen
-                        showColor && isSelected && idx != correctIndex -> ErrorRed
-                        isSelected -> MaterialTheme.colorScheme.primary
-                        else -> MaterialTheme.colorScheme.surfaceVariant
+            }
+        }
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .widthIn(max = 680.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (hideFeedback) {
+                    item(key = "simulado_banner") {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "Modo Simulado Oficial: Gabarito e IAs revelados no final.",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                OutlinedButton(
+                                    onClick = { isSimuladoFinished = true },
+                                    modifier = Modifier.heightIn(min = 36.dp)
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.action_finish_simulado),
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                }
+                            }
+                        }
                     }
-                    val bgColor = when {
-                        showColor && idx == correctIndex -> CorrectGreen.copy(alpha = 0.14f)
-                        showColor && isSelected && idx != correctIndex -> ErrorRed.copy(alpha = 0.14f)
-                        isSelected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
-                        else -> MaterialTheme.colorScheme.surface
-                    }
+                }
 
+                if (question.isBorrowedAnalogous) {
+                    item(key = "borrowed_badge") {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ) {
+                            Text(
+                                text = "[estimado] Fonte análoga: ${question.source} · Tópico de alta recorrência",
+                                style = MaterialTheme.typography.labelMedium,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+                }
+
+                question.userStats?.let { st ->
+                    item(key = "user_stats") {
+                        Text(
+                            text = "Seu histórico nesta questão: ${st.attempts} tentativa(s) · ${st.accuracyPct.toInt()}% acerto",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                item(key = "question_text") {
                     Card(
-                        shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(2.dp, borderColor),
-                        colors = CardDefaults.cardColors(containerColor = bgColor),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 64.dp)
-                            .clickable {
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = question.question,
+                            style = MaterialTheme.typography.titleLarge,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
+                }
+
+                if (!isAnswerSubmitted && !hideFeedback) {
+                    item(key = "pre_chips") {
+                        QuestionActionChips(
+                            hintCount = hintClickCount,
+                            onHint = {
+                                val hIdx = hintClickCount
+                                hintClickCount += 1
+                                onRequestAiTutor(
+                                    question.id,
+                                    "contextual-hint",
+                                    "Dica Contextual Progressiva #${hIdx + 1}",
+                                    hIdx
+                                )
+                            },
+                            onSincereDoctor = {
+                                onRequestAiTutor(question.id, "dr-sincero", "Análise do Dr. Sincero", null)
+                            },
+                            onSimplify = {
+                                onRequestAiTutor(question.id, "child-friendly-pre", "Simplificar Pergunta", null)
+                            }
+                        )
+                    }
+                }
+
+                if (question.questionType == QuestionType.TRUE_FALSE) {
+                    item(key = "cebraspe_warning") {
+                        Text(
+                            text = "Padrão Cebraspe: 1 resposta errada anula 1 resposta certa.",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = ext.warning
+                        )
+                    }
+                    item(key = "cebraspe_options") {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            listOf(0 to "CERTO", 1 to "ERRADO").forEach { (idx, label) ->
+                                val isSelected = selectedOptionIndex == idx
+                                val showColor = isAnswerSubmitted && !hideFeedback
+                                Button(
+                                    onClick = {
+                                        if (!isAnswerSubmitted || hideFeedback) {
+                                            selectedOptionIndex = idx
+                                            if (hideFeedback) {
+                                                val elapsed = computeElapsedSeconds()
+                                                val attempt = UserAttemptState(idx, selectedConfidence, elapsed)
+                                                userAnswers[question.id] = attempt
+                                                onSubmitAnswer(question, idx, selectedConfidence, elapsed)
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .heightIn(min = 56.dp),
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = when {
+                                            showColor && idx == correctIndex -> ext.correct
+                                            showColor && isSelected && idx != correctIndex -> ext.error
+                                            isSelected -> MaterialTheme.colorScheme.primary
+                                            else -> MaterialTheme.colorScheme.surfaceVariant
+                                        },
+                                        contentColor = when {
+                                            showColor && idx == correctIndex -> ext.onCorrect
+                                            showColor && isSelected && idx != correctIndex -> ext.onError
+                                            isSelected -> MaterialTheme.colorScheme.onPrimary
+                                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                                        }
+                                    )
+                                ) {
+                                    Text(text = label, style = MaterialTheme.typography.titleMedium)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    items(
+                        count = question.answers.size,
+                        key = { idx -> "answer_$idx" }
+                    ) { idx ->
+                        val answerText = question.answers[idx]
+                        OptionCard(
+                            letter = ('A' + idx).toString(),
+                            text = answerText,
+                            selected = selectedOptionIndex == idx,
+                            isAnswerSubmitted = isAnswerSubmitted,
+                            isCorrectOption = idx == correctIndex,
+                            hideFeedback = hideFeedback,
+                            onClick = {
                                 if (!isAnswerSubmitted || hideFeedback) {
                                     selectedOptionIndex = idx
                                     if (hideFeedback) {
-                                        val attempt = UserAttemptState(idx, selectedConfidence, 60)
+                                        val elapsed = computeElapsedSeconds()
+                                        val attempt = UserAttemptState(idx, selectedConfidence, elapsed)
                                         userAnswers[question.id] = attempt
-                                        onSubmitAnswer(question, idx, selectedConfidence)
+                                        onSubmitAnswer(question, idx, selectedConfidence, elapsed)
                                     }
                                 }
                             }
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            val optionLetter = ('A' + idx)
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = borderColor.copy(alpha = 0.2f)
-                            ) {
-                                Text(
-                                    text = "$optionLetter",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = answerText,
-                                style = MaterialTheme.typography.bodyLarge,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
+                        )
                     }
                 }
-            }
 
-            // Metacognição (Confiança)
-            if (selectedOptionIndex != null && (!isAnswerSubmitted || hideFeedback)) {
-                Card(
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(
-                            text = "Nível de confiança nesta resposta:",
-                            style = MaterialTheme.typography.labelMedium
+                if (selectedOptionIndex != null && (!isAnswerSubmitted || hideFeedback)) {
+                    item(key = "confidence_grid") {
+                        ConfidenceSelectorGrid(
+                            selectedConfidence = selectedConfidence,
+                            onSelectConfidence = { level ->
+                                selectedConfidence = level
+                                if (hideFeedback && selectedOptionIndex != null) {
+                                    val elapsed = computeElapsedSeconds()
+                                    val attempt = UserAttemptState(selectedOptionIndex!!, level, elapsed)
+                                    userAnswers[question.id] = attempt
+                                    onSubmitAnswer(question, selectedOptionIndex!!, level, elapsed)
+                                }
+                            }
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            confidenceOptions.forEach { (level, label) ->
-                                FilterChip(
-                                    selected = selectedConfidence == level,
-                                    onClick = {
-                                        selectedConfidence = level
-                                        if (hideFeedback && selectedOptionIndex != null) {
-                                            val attempt = UserAttemptState(selectedOptionIndex!!, level, 60)
-                                            userAnswers[question.id] = attempt
-                                            onSubmitAnswer(question, selectedOptionIndex!!, level)
-                                        }
+                    }
+                }
+
+                if (isAnswerSubmitted && !hideFeedback) {
+                    item(key = "post_feedback") {
+                        Card(
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = when {
+                                    isBlankAnswer -> ext.warningContainer
+                                    isUserCorrect -> ext.correctContainer
+                                    else -> ext.errorContainer
+                                },
+                                contentColor = when {
+                                    isBlankAnswer -> ext.onWarningContainer
+                                    isUserCorrect -> ext.onCorrectContainer
+                                    else -> ext.onErrorContainer
+                                }
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = when {
+                                        isBlankAnswer -> "Questão em Branco · Veja o gabarito comentado abaixo"
+                                        isUserCorrect -> "Resposta Correta! (+Pontos SRS)"
+                                        else -> "Resposta Incorreta · Adicionada ao Caderno de Erros"
                                     },
-                                    label = { Text(label) }
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
                                 )
-                            }
-                        }
-                    }
-                }
-            }
 
-            // Feedback Pós-Resposta (apenas quando revelado)
-            if (isAnswerSubmitted && !hideFeedback) {
-                Card(
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isUserCorrect) CorrectGreen.copy(alpha = 0.12f)
-                        else ErrorRed.copy(alpha = 0.12f)
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = if (isUserCorrect) "✅ Resposta Correta! (+Pontos SRS)"
-                            else "❌ Resposta Incorreta · Adicionada ao Caderno de Erros",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = if (isUserCorrect) CorrectGreen else ErrorRed
-                        )
+                                if (isHighConfidenceError) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = ext.error,
+                                        contentColor = ext.onError
+                                    ) {
+                                        Text(
+                                            text = "Alerta de Ponto Cego: Você errou com alta confiança. Prioridade máxima na próxima revisão!",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            modifier = Modifier.padding(10.dp)
+                                        )
+                                    }
+                                }
 
-                        if (isHighConfidenceError) {
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = ErrorRed.copy(alpha = 0.2f)
-                            ) {
+                                val expText = question.explanation
+                                    ?: "Toque em 'Análise das Alternativas' abaixo para ver o comentário pedagógico detalhado."
                                 Text(
-                                    text = "🚨 Alerta de Ponto Cego: Você errou com alta confiança. Prioridade máxima na próxima revisão!",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = ErrorRed,
-                                    modifier = Modifier.padding(10.dp)
+                                    text = MarkdownParser.parseSimpleMarkdownToAnnotatedString(expText),
+                                    style = MaterialTheme.typography.bodyMedium
                                 )
+
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Aprofundar com Cogniva AI:",
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(0.dp)
+                                ) {
+                                    AssistChip(
+                                        onClick = { onRequestAiTutor(question.id, "explanation", "Gabarito Comentado Completo", null) },
+                                        label = { Text("Análise das Alternativas") }
+                                    )
+                                    AssistChip(
+                                        onClick = { onRequestAiTutor(question.id, "mnemonic", "Mnemônico de Fixação", null) },
+                                        label = { Text("Criar Mnemônico") }
+                                    )
+                                    AssistChip(
+                                        onClick = { onRequestAiTutor(question.id, "extra-concepts", "Conceitos-Chave & Exemplos", null) },
+                                        label = { Text("Conceitos-Chave") }
+                                    )
+                                    AssistChip(
+                                        onClick = { onRequestAiTutor(question.id, "plausibility", "Plausibilidade dos Distratores", null) },
+                                        label = { Text("Plausibilidade") }
+                                    )
+                                    AssistChip(
+                                        onClick = { onRequestAiTutor(question.id, "child-friendly-post", "Explicação Infantil (ELI10)", null) },
+                                        label = { Text("Explicação Simples") }
+                                    )
+                                }
                             }
                         }
-
-                        Text(
-                            text = question.explanation
-                                ?: "Toque em 'Análise das Alternativas' abaixo para ver o comentário pedagógico detalhado.",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Aprofundar com Cogniva AI (Assistente Inteligente):",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            AssistChip(
-                                onClick = { onRequestAiTutor(question.id, "explanation", "📚 Gabarito Comentado Completo") },
-                                label = { Text("📚 Análise das Alternativas") }
-                            )
-                            AssistChip(
-                                onClick = { onRequestAiTutor(question.id, "mnemonic", "🧠 Mnemônico de Fixação") },
-                                label = { Text("🧠 Criar Mnemônico") }
-                            )
-                            AssistChip(
-                                onClick = { onRequestAiTutor(question.id, "extra-concepts", "🎯 Conceitos-Chave & Exemplos") },
-                                label = { Text("🎯 Conceitos-Chave") }
-                            )
-                            AssistChip(
-                                onClick = { onRequestAiTutor(question.id, "plausibility", "⚖️ Plausibilidade dos Distratores") },
-                                label = { Text("⚖️ Plausibilidade") }
-                            )
-                            AssistChip(
-                                onClick = { onRequestAiTutor(question.id, "child-friendly-post", "🧒 Explicação Infantil (ELI10)") },
-                                label = { Text("🧒 Explicação Simples") }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // 3. Controles Inferiores de Navegação
-        if (hideFeedback) {
-            // Em modo simulado, o concurseiro pode ir e voltar entre questões
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                OutlinedButton(
-                    onClick = { if (currentIndex > 0) currentIndex -= 1 },
-                    enabled = currentIndex > 0,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(52.dp)
-                ) {
-                    Text("← Anterior")
-                }
-
-                Button(
-                    onClick = {
-                        if (currentIndex + 1 < questions.size) {
-                            currentIndex += 1
-                        } else {
-                            isSimuladoFinished = true
-                        }
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(52.dp)
-                ) {
-                    Text(if (currentIndex + 1 < questions.size) "Próxima →" else "Entregar Simulado")
-                }
-            }
-        } else {
-            // Em treino padrão ou revisão
-            if (!isAnswerSubmitted) {
-                Button(
-                    onClick = {
-                        val chosen = selectedOptionIndex ?: return@Button
-                        isAnswerSubmitted = true
-                        val attempt = UserAttemptState(chosen, selectedConfidence, 60)
-                        userAnswers[question.id] = attempt
-                        onSubmitAnswer(question, chosen, selectedConfidence)
-                    },
-                    enabled = selectedOptionIndex != null,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(54.dp),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("Confirmar Resposta", style = MaterialTheme.typography.titleMedium)
-                }
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    if (isSimuladoReviewMode && currentIndex > 0) {
-                        OutlinedButton(
-                            onClick = { currentIndex -= 1 },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(54.dp)
-                        ) {
-                            Text("← Anterior")
-                        }
-                    }
-                    Button(
-                        onClick = {
-                            if (currentIndex + 1 < questions.size) {
-                                currentIndex += 1
-                            } else {
-                                onExitSession()
-                            }
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(54.dp),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text(
-                            text = if (currentIndex + 1 < questions.size) "Próxima Questão →" else "Finalizar Bateria",
-                            style = MaterialTheme.typography.titleMedium
-                        )
                     }
                 }
             }
         }
     }
 
-    // Modal de Reporte de Problemas (20 categorias oficiais herdadas do AFTBot.py)
     if (showReportSheet) {
-        ModalBottomSheet(onDismissRequest = { showReportSheet = false }) {
+        ModalBottomSheet(
+            onDismissRequest = { showReportSheet = false }
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
                     .verticalScroll(rememberScrollState())
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -757,7 +896,7 @@ fun QuestionSessionScreen(
                     Icon(
                         imageVector = Icons.Default.Flag,
                         contentDescription = null,
-                        tint = ErrorRed
+                        tint = ext.error
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
@@ -775,12 +914,14 @@ fun QuestionSessionScreen(
                 VALID_PROBLEM_CATEGORIES.forEach { category ->
                     Card(
                         shape = RoundedCornerShape(8.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
                                 onReportProblem(question.id, category)
-                                reportFeedbackMessage = "Problema registrado! Agradecemos o reporte."
                                 showReportSheet = false
                             }
                     ) {
@@ -796,12 +937,14 @@ fun QuestionSessionScreen(
         }
     }
 
-    // Bottom Sheet de Tutor de IA
     if (aiTutorMarkdown != null) {
-        ModalBottomSheet(onDismissRequest = onDismissAiSheet) {
+        ModalBottomSheet(
+            onDismissRequest = onDismissAiSheet
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
                     .verticalScroll(rememberScrollState())
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -819,13 +962,16 @@ fun QuestionSessionScreen(
                     )
                 }
                 Text(
-                    text = aiTutorMarkdown,
-                    style = MaterialTheme.typography.bodyLarge
+                    text = MarkdownParser.parseSimpleMarkdownToAnnotatedString(aiTutorMarkdown),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 OutlinedButton(
                     onClick = onDismissAiSheet,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
                 ) {
                     Text("Fechar e voltar para a questão")
                 }
@@ -854,187 +1000,209 @@ fun SimuladoResultScreen(
     onFinishAndExit: () -> Unit
 ) {
     val isApproved = netScorePct >= historicalCutoffPct
+    val ext = LocalExtendedColors.current
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text(
-            text = "Resultado do Simulado Oficial",
-            style = MaterialTheme.typography.headlineMedium
-        )
-        Text(
-            text = contestName,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary
-        )
-
-        // Card Principal de Nota Líquida & Corte
-        Card(
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = if (isApproved) CorrectGreen.copy(alpha = 0.15f)
-                else ReviewAmber.copy(alpha = 0.15f)
-            ),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        contentWindowInsets = WindowInsets.safeDrawing,
+        bottomBar = {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+                tonalElevation = 3.dp
             ) {
-                Text(
-                    text = "Aproveitamento Líquido",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = String.format("%.1f%%", netScorePct),
-                    style = MaterialTheme.typography.displayMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isApproved) CorrectGreen else ReviewAmber
-                )
-                Text(
-                    text = if (isCebraspeRuleApplied) {
-                        "⚠️ Regra Cebraspe aplicada: cada erro anulou um acerto ($correctCount certos - $wrongCount errados)."
-                    } else {
-                        "Padrão Oficial: $correctCount acertos de $totalQuestions questões."
-                    },
-                    style = MaterialTheme.typography.bodySmall
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.CheckCircle,
-                        contentDescription = null,
-                        tint = if (isApproved) CorrectGreen else ReviewAmber
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = if (isApproved) {
-                            "🎯 Na Zona de Aprovação! Corte histórico de referência: ${historicalCutoffPct}%"
-                        } else {
-                            val diff = historicalCutoffPct - netScorePct
-                            "⚠️ Abaixo da Nota de Corte de Referência (${historicalCutoffPct}%). Diferença de ${String.format("%.1f", diff)}%."
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
-        }
-
-        // Grade Resumo de Métricas
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            MetricCard(
-                title = "Acertos",
-                value = "$correctCount",
-                color = CorrectGreen,
-                modifier = Modifier.weight(1f)
-            )
-            MetricCard(
-                title = "Erros",
-                value = "$wrongCount",
-                color = ErrorRed,
-                modifier = Modifier.weight(1f)
-            )
-            MetricCard(
-                title = "Em Branco",
-                value = "$blankCount",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        // Alerta de Automação no Caderno de Erros
-        Card(
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-        ) {
-            Column(modifier = Modifier.padding(14.dp)) {
-                Text(
-                    text = "📕 Caderno de Erros & Fila SRS Atualizados",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Todas as $wrongCount questões erradas foram salvas localmente no Room e integradas ao algoritmo SRS para reapresentação em 1, 7 ou 30 dias.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-        }
-
-        // Desempenho por Disciplina
-        Text(
-            text = "Desempenho por Disciplina no Simulado:",
-            style = MaterialTheme.typography.titleMedium
-        )
-        disciplineBreakdown.forEach { (discipline, stats) ->
-            val correct = stats.first
-            val total = stats.second
-            val pct = if (total > 0) (correct.toDouble() / total.toDouble()) * 100.0 else 0.0
-
-            Card(
-                shape = RoundedCornerShape(10.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(text = discipline, style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            text = "$correct / $total (${pct.toInt()}%)",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .windowInsetsPadding(
+                            WindowInsets.safeDrawing.only(
+                                WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal
+                            )
                         )
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    LinearProgressIndicator(
-                        progress = { (pct / 100.0).toFloat() },
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = onReviewQuestions,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(6.dp)
-                            .clip(RoundedCornerShape(3.dp)),
-                        color = if (pct >= 70.0) CorrectGreen else ReviewAmber
-                    )
+                            .heightIn(min = 52.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Revisar Gabarito do Simulado", style = MaterialTheme.typography.titleMedium)
+                    }
+                    OutlinedButton(
+                        onClick = onFinishAndExit,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 52.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Concluir e Voltar ao Início", style = MaterialTheme.typography.titleMedium)
+                    }
                 }
             }
         }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Ações de Conclusão
-        Button(
-            onClick = onReviewQuestions,
+    ) { innerPadding ->
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp),
-            shape = RoundedCornerShape(12.dp)
+                .fillMaxSize()
+                .padding(innerPadding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text("Revisar Gabarito do Simulado", style = MaterialTheme.typography.titleMedium)
-        }
+            Text(
+                text = "Resultado do Simulado Oficial",
+                style = MaterialTheme.typography.headlineMedium
+            )
+            Text(
+                text = contestName,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
 
-        OutlinedButton(
-            onClick = onFinishAndExit,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Text("Concluir e Voltar ao Início", style = MaterialTheme.typography.titleMedium)
-        }
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isApproved) ext.correctContainer else ext.warningContainer,
+                    contentColor = if (isApproved) ext.onCorrectContainer else ext.onWarningContainer
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Aproveitamento Líquido",
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                    Text(
+                        text = String.format("%.1f%%", netScorePct),
+                        style = MaterialTheme.typography.displayMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isApproved) ext.correct else ext.warning
+                    )
+                    Text(
+                        text = if (isCebraspeRuleApplied) {
+                            "Regra Cebraspe aplicada: cada erro anulou um acerto ($correctCount certos - $wrongCount errados)."
+                        } else {
+                            "Padrão Oficial: $correctCount acertos de $totalQuestions questões."
+                        },
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = if (isApproved) ext.correct else ext.warning
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isApproved) {
+                                "Na Zona de Aprovação! Corte histórico de referência: ${historicalCutoffPct}%"
+                            } else {
+                                val diff = historicalCutoffPct - netScorePct
+                                "Abaixo da Nota de Corte de Referência (${historicalCutoffPct}%). Diferença de ${String.format("%.1f", diff)}%."
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
 
-        Spacer(modifier = Modifier.height(16.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                MetricCard(
+                    title = "Acertos",
+                    value = "$correctCount",
+                    textColor = ext.correct,
+                    modifier = Modifier.weight(1f)
+                )
+                MetricCard(
+                    title = "Erros",
+                    value = "$wrongCount",
+                    textColor = ext.error,
+                    modifier = Modifier.weight(1f)
+                )
+                MetricCard(
+                    title = "Em Branco",
+                    value = "$blankCount",
+                    textColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text(
+                        text = "Caderno de Erros & Fila SRS Atualizados",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Todas as $wrongCount questões erradas foram salvas localmente no Room e integradas ao algoritmo SRS para reapresentação em 1, 7 ou 30 dias.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+
+            Text(
+                text = "Desempenho por Disciplina no Simulado:",
+                style = MaterialTheme.typography.titleMedium
+            )
+            disciplineBreakdown.forEach { (discipline, stats) ->
+                val correct = stats.first
+                val total = stats.second
+                val pct = if (total > 0) (correct.toDouble() / total.toDouble()) * 100.0 else 0.0
+
+                Card(
+                    shape = RoundedCornerShape(10.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(text = discipline, style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                text = "$correct / $total (${pct.toInt()}%)",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        LinearProgressIndicator(
+                            progress = { (pct / 100.0).toFloat() },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp)),
+                            color = if (pct >= 70.0) ext.correct else ext.warning
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
     }
 }
 
@@ -1042,12 +1210,15 @@ fun SimuladoResultScreen(
 private fun MetricCard(
     title: String,
     value: String,
-    color: Color,
+    textColor: androidx.compose.ui.graphics.Color,
     modifier: Modifier = Modifier
 ) {
     Card(
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface
+        ),
         modifier = modifier
     ) {
         Column(
@@ -1060,7 +1231,7 @@ private fun MetricCard(
                 text = value,
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = color
+                color = textColor
             )
         }
     }
