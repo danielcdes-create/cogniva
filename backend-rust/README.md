@@ -1,0 +1,38 @@
+# 🦀 COGNIVA Backend (`api-rust-core`)
+
+Microsserviço de alta performance em **Rust (`Axum 0.7` + `Tokio` + `MongoDB 3.1`)** que alimenta o ecossistema **COGNIVA**.
+
+---
+
+## 1. Destaques Arquiteturais
+
+* **Retrocompatibilidade Total com o Banco `CNU`:** Lê e atualiza nativamente os documentos legados gerados pelo antigo `AFTBot.py` nas coleções `todasQuestoes`, `userActivityLog`, `usuarios`, `reportedQuestoes` e `utils`, utilizando `#[serde(default)]` para novos atributos de governança.
+* **Consumo Mínimo de Recursos:** Binário nativo estático compilado com `lto = true`, `codegen-units = 1` e `strip = true`, rodando em container `debian:bookworm-slim` com menos de 40 MB de imagem e ~15 MB de RAM.
+* **Agendador Assíncrono Integrado (`services/scheduler.rs`):** Substitui o antigo loop `schedule` em Python e o script `countdown.py` por uma *task* nativa do Tokio que aplica diariamente o decaimento de 1% (`points_with_decay`), recalcula vencimentos do SRS e atualiza a contagem regressiva oficial dos concursos.
+
+---
+
+## 2. Módulos Internos (`src/`)
+
+* `models/question.rs`: Estrutura completa da questão, gabarito, vigência legislativa (`VIGENTE`, `DESATUALIZADA`, `ANULADA`), vínculo com o edital verticalizado (`syllabus_topic_ids`) e campos cacheados do **Cogniva AI**.
+* `models/contest.rs`: Máquina de estados do concurso (`PREVISTO`, `SOLICITADO_AUTORIZADO`, `EDITAL_PUBLICADO`, `EM_ANDAMENTO`, `ENCERRADO`), blocos com pesos e metadados de estimativa transparente.
+* `models/activity.rs`: Histórico individual por questão (`pastSessions`), *streak*, pontuação com decaimento, intervalo SRS, flag de Caderno de Erros e flag de Ponto Cego (`high_confidence_error_flag`).
+* `services/srs_engine.rs`: Motor matemático de repetição espaçada (curva de 3 a 90 dias ou degraus de 1, 7 e 30 dias) e classificador da Matriz 2×2 Confiança × Acerto.
+* `services/difficulty.rs`: Classificador automático de dificuldade (`Fácil`, `Média`, `Difícil`, `Muito Difícil`) e estimador heurístico de plausibilidade de distratores em Rust puro.
+* `services/quiz_selector.rs`: Seletores para os 8 modos de estudo (`STANDARD`, `SHUFFLE`, `SIMULADO`, `MOST_BADASS`, `SRS_REVIEW`, `ERROR_NOTEBOOK`, `COMMON_TRUNK`, `SINGLE`).
+* `services/ai_tutor.rs`: Cliente HTTP assíncrono (`reqwest` + `rustls`) para Gemini 1.5 Flash e OpenAI `gpt-4o-mini` com persistência imediata na coleção `todasQuestoes`.
+
+---
+
+## 3. Execução Local e Testes
+
+```powershell
+# Rodar a suíte de testes unitários do motor SRS e Matriz de Confiança
+cargo test
+
+# Verificar compilação sem gerar binário
+cargo check
+
+# Executar servidor localmente (requer arquivo .env)
+cargo run
+```
