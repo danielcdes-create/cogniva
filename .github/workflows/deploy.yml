@@ -61,6 +61,7 @@ jobs:
           username: ${{ secrets.DO_USER }}
           key: ${{ secrets.DO_SSH_KEY }}
           script: |
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             cd /opt/apps
             docker compose pull ${{ env.SERVICE_NAME }}
             docker compose up -d --no-deps ${{ env.SERVICE_NAME }}
