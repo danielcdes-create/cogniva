@@ -84,7 +84,7 @@ pub async fn generate(
             .filter(|t| t.diff_status != CanonicalTopicStatus::Arquivado)
             .map(|t| t.canonical_topic_id.clone())
             .collect();
-        let subjects: Vec<_> = exam
+        let mut subjects: Vec<_> = exam
             .subjects
             .iter()
             .filter(|s| {
@@ -94,6 +94,19 @@ pub async fn generate(
             })
             .map(|s| s.display_name.clone())
             .collect();
+        let catalog = canonical_subjects();
+        for subject in exam.subjects.iter().filter(|s| {
+            s.topics
+                .iter()
+                .any(|t| t.diff_status != CanonicalTopicStatus::Arquivado)
+        }) {
+            if let Some(known) = catalog
+                .iter()
+                .find(|s| s.canonical_subject_id == subject.canonical_subject_id)
+            {
+                subjects.extend(known.aliases.clone());
+            }
+        }
         // An exact legacy subject may be studied, but is never assigned a canonical leaf by inference.
         filter.insert(
             "$or",
@@ -104,7 +117,16 @@ pub async fn generate(
         );
     }
     if let Some(disc) = req.disciplina.as_ref().filter(|d| !d.is_empty()) {
-        filter.insert("disciplina", disc);
+        let known = canonical_subjects()
+            .into_iter()
+            .find(|s| s.name == *disc || s.aliases.contains(disc));
+        if let Some(subject) = known {
+            let mut labels = subject.aliases;
+            labels.push(subject.name);
+            filter.insert("disciplina", doc! {"$in":labels});
+        } else {
+            filter.insert("disciplina", disc);
+        }
     }
     if let Some(source) = req
         .source

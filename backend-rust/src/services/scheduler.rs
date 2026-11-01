@@ -47,23 +47,28 @@ pub async fn run_daily_reviews_decay_and_countdown(
 
         let new_points_with_decay = calculate_decay(item.points, item.datas.ultima_sessao, now);
 
-        let mut set_fields = doc! {
-            "points_with_decay": new_points_with_decay
-        };
+        let decay_changes = (new_points_with_decay - item.points_with_decay).abs() > 1e-5;
+        let mark_review = needs_review && !item.revisao_necessaria;
+        let mut set_fields = Document::new();
+        if decay_changes {
+            set_fields.insert("points_with_decay", new_points_with_decay);
+        }
 
         if needs_review && !item.revisao_necessaria {
             set_fields.insert("revisao_necessaria", true);
-            marked_for_review += 1;
         }
 
-        if (new_points_with_decay - item.points_with_decay).abs() > 1e-5
-            || (needs_review && !item.revisao_necessaria)
-        {
+        if decay_changes || mark_review {
             let result = act_coll
-                .update_one(doc! { "_id": doc_id }, doc! { "$set": set_fields })
+                .update_one(doc! { "_id": doc_id,"datas.ultima_sessao":bson::DateTime::from_chrono(item.datas.ultima_sessao),"points":item.points,"spaced_repetition_interval":item.spaced_repetition_interval }, doc! { "$set": set_fields })
                 .await?;
             if result.modified_count > 0 {
-                decay_updated += 1;
+                if decay_changes {
+                    decay_updated += 1;
+                }
+                if mark_review {
+                    marked_for_review += 1;
+                }
             }
         }
     }
@@ -72,6 +77,7 @@ pub async fn run_daily_reviews_decay_and_countdown(
     let utils_coll = db.collection::<Document>("utils");
     let now_bson = bson::DateTime::from_chrono(now);
     let countdown_pipeline = vec![
+        doc! {"$match":{"dataCNU":{"$type":"date"}}},
         doc! {
             "$addFields": {
                 "today": now_bson
@@ -100,8 +106,11 @@ pub async fn run_daily_reviews_decay_and_countdown(
         },
     ];
 
+    let countdown_updated = utils_coll
+        .count_documents(doc! {"dataCNU":{"$type":"date"}})
+        .await?
+        > 0;
     utils_coll.aggregate(countdown_pipeline).await?;
-    let countdown_updated = true;
 
     tracing::info!(
         "Rotina diária concluída: {} registros avaliados, {} novas revisões marcadas, {} decays atualizados.",

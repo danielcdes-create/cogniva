@@ -65,6 +65,9 @@ pub async fn get(state: &AppState, user_id: i64, id: &str) -> Result<ExamBluepri
 }
 pub fn validate(exam: &ExamBlueprint) -> Result<(), AppError> {
     let invalid = |reason: &str| AppError::BadRequest(reason.into());
+    if exam.revision < 0 || exam.revision == i64::MAX {
+        return Err(invalid("Revisão inválida"));
+    }
     if exam.id.is_empty()
         || exam.id.len() > 100
         || !exam
@@ -271,4 +274,36 @@ pub async fn save_command(
         }
     }
     Ok(exam)
+}
+
+#[cfg(test)]
+mod validation_tests {
+    use super::*;
+    #[test]
+    fn invalid_revision_quantity_weight_and_utf8_date_fail_without_panicking() {
+        let template = system_exam_blueprints().remove(0);
+        assert!(validate(&template).is_ok());
+        for revision in [-1, i64::MAX] {
+            let mut e = template.clone();
+            e.revision = revision;
+            assert!(validate(&e).is_err());
+        }
+        let mut e = template.clone();
+        for subject in &mut e.subjects {
+            subject.question_count = Some(u32::MAX);
+        }
+        assert!(validate(&e).is_err());
+        let mut e = template.clone();
+        e.subjects[0].weight = 0.0;
+        assert!(validate(&e).is_err());
+        let mut e = template;
+        e.target_date = ExamDateTarget::ExactDate {
+            iso_date: "2026-01-1ç".into(),
+        };
+        assert!(validate(&e).is_err());
+        assert_eq!(
+            crate::services::exam_engine::days_until("2026-01-1ç", chrono::Utc::now().date_naive()),
+            None
+        );
+    }
 }

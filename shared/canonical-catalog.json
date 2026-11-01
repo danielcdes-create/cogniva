@@ -848,7 +848,9 @@
       "canonical_subject_id": "SOC_TRAB",
       "code": "SOC_TRAB",
       "name": "Sociologia e Psicologia Aplicadas ao Trabalho",
-      "aliases": [],
+      "aliases": [
+        "Sociologia e Psicologia Aplicadas"
+      ],
       "trunk_slugs": [
         "controle"
       ],

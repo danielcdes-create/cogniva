@@ -217,4 +217,25 @@ class RepositoryContractTest {
         val selected=store.repository().fetchOrGetOfflineQuiz(123,QuizMode.COMMON_TRUNK,1,contestId="opened")
         assertEquals(listOf(q.id),selected.map { it.id })
     }
+    @Test fun anExplicitLegacyLabelCanSelectFreePracticeWithoutInventingATopic()=runBlocking {
+        val store=Store();val template=ExamCatalog.systemExams().find { it.examId=="CPNU" }!!
+        store.putExam(template.copy(subjects=template.subjects.filter { it.canonicalSubjectId=="SOC_TRAB" }))
+        val q=question().copy(disciplina="Sociologia e Psicologia Aplicadas")
+        store.questions[q.id]=QuestionCacheMapping.toEntity(q,json)
+        val selected=store.repository().fetchOrGetOfflineQuiz(123,QuizMode.STANDARD,1,contestId="CPNU").single()
+        assertEquals(q.id,selected.id);assertNull(selected.canonicalTopicId);assertNull(selected.canonicalSubjectId)
+    }
+    @Test fun legacyInferredColumnsRemainPreservedButDoNotBecomeVerifiedLinks(){
+        val legacy=QuestionCacheMapping.toEntity(question(),json).copy(payloadJson=null,canonicalSubjectId="FIN_PUB",canonicalTopicId="FIN_PUB_01")
+        val restored=QuestionCacheMapping.toDto(legacy,json)
+        assertNull(restored.canonicalSubjectId);assertNull(restored.canonicalTopicId)
+        assertEquals("FIN_PUB_01",legacy.canonicalTopicId)
+    }
+    @Test fun anOfflinePreAnswerTutorNeverFallsBackToAnAnswerRevealingExplanation()=runBlocking {
+        val store=Store();val q=question().copy(explanation="ANSWER_REFERENCE_DO_NOT_REVEAL")
+        store.questions[q.id]=QuestionCacheMapping.toEntity(q,json)
+        val repo=store.repository()
+        for(kind in listOf("contextual-hint","child-friendly-pre"))assertFalse(repo.requestAiTutor(q.id,kind).contains("ANSWER_REFERENCE_DO_NOT_REVEAL"))
+        assertTrue(repo.requestAiTutor(q.id,"explanation").contains("ANSWER_REFERENCE_DO_NOT_REVEAL"))
+    }
 }

@@ -594,6 +594,80 @@ async fn durable_events_identity_ladder_and_restart_contract() {
         .0,
         StatusCode::UNAUTHORIZED
     );
+    // Weighted accuracy must use counts, not the mean of per-question percentages.
+    db.collection::<Document>("usuarios").insert_one(doc!{"user_id":789_i64,"active_contest_ids":["CPNU"],"daily_questions_target":50,"daily_study_hours_target":2.0}).await.unwrap();
+    for (attempts, correct) in [(100, 99), (1, 0)] {
+        activities.insert_one(doc!{"user_id":789_i64,"question_id":ObjectId::new(),"disciplina":"Same discipline","quantidade_praticas":attempts,"quantidade_acertos":correct,"percentual_acertos":if attempts==100{99.0}else{0.0},"dominada":false,"points":0.0,"pastSessions":[]}).await.unwrap();
+    }
+    let (status, weighted_accuracy) = request(
+        &app,
+        &secret,
+        Some(789),
+        "GET",
+        "/api/v1/analytics/progress?user_id=789",
+        serde_json::Value::Null,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(weighted_accuracy["global_accuracy_pct"], 98.02);
+    assert!(
+        (weighted_accuracy["disciplines_sorted_by_weakness"][0]["accuracy_pct"]
+            .as_f64()
+            .unwrap()
+            - 9900.0 / 101.0)
+            .abs()
+            < 1e-9
+    );
+    activities
+        .delete_many(doc! {"user_id":789_i64})
+        .await
+        .unwrap(); // Synthetic fixture only.
+
+    // Schedule by elapsed interval, count actual mutations, and surface write errors.
+    activities.update_one(doc!{"user_id":123_i64,"question_id":qid},doc!{"$set":{"datas.ultima_sessao":bson::DateTime::from_chrono(chrono::Utc::now()-chrono::Duration::hours(23)),"spaced_repetition_interval":1,"revisao_necessaria":false,"points":0.0,"points_with_decay":0.0}}).await.unwrap();
+    let before_due = services::scheduler::run_daily_reviews_decay_and_countdown(&db)
+        .await
+        .unwrap();
+    assert_eq!(before_due.marked_for_review, 0);
+    assert_eq!(before_due.decay_updated, 0);
+    assert!(!before_due.countdown_updated);
+    activities.update_one(doc!{"user_id":123_i64,"question_id":qid},doc!{"$set":{"datas.ultima_sessao":bson::DateTime::from_chrono(chrono::Utc::now()-chrono::Duration::days(1)-chrono::Duration::seconds(1))}}).await.unwrap();
+    let due = services::scheduler::run_daily_reviews_decay_and_countdown(&db)
+        .await
+        .unwrap();
+    assert_eq!(due.marked_for_review, 1);
+    assert_eq!(due.decay_updated, 0);
+    assert_eq!(
+        services::scheduler::run_daily_reviews_decay_and_countdown(&db)
+            .await
+            .unwrap()
+            .marked_for_review,
+        0
+    );
+    activities
+        .update_one(
+            doc! {"user_id":123_i64,"question_id":qid},
+            doc! {"$set":{"revisao_necessaria":false}},
+        )
+        .await
+        .unwrap();
+    client.database("admin").run_command(doc!{"configureFailPoint":"failCommand","mode":{"times":1},"data":{"failCommands":["update"],"errorCode":121}}).await.unwrap();
+    assert!(
+        services::scheduler::run_daily_reviews_decay_and_countdown(&db)
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        activities
+            .find_one(doc! {"user_id":123_i64,"question_id":qid})
+            .await
+            .unwrap()
+            .unwrap()
+            .get_array("pastSessions")
+            .unwrap()
+            .len(),
+        4
+    );
     // Drop only the unique synthetic database created above on the dedicated loopback server.
     assert!(database_name.starts_with("cogniva_test_"));
     db.drop().await.unwrap();

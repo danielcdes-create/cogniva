@@ -734,6 +734,8 @@ data class QuestionRef(
 )
 
 object ExamCatalog {
+    fun equivalentLabels(label:String):Set<String> = catalog.array("subjects").map { it.jsonObject }.find { it.text("name")==label||it.array("aliases").any { alias->alias.jsonPrimitive.content==label } }?.let { legacyLabels(it.text("canonical_subject_id")) }?:setOf(label)
+    fun legacyLabels(subjectId:String):Set<String> = catalog.array("subjects").map { it.jsonObject }.find { it.text("canonical_subject_id")==subjectId }?.let { setOf(it.text("name"))+it.array("aliases").map { alias->alias.jsonPrimitive.content } }?:emptySet()
     @Volatile private var installed: JsonObject? = null
     private val bundled: JsonObject by lazy {
         val stream=checkNotNull(ExamCatalog::class.java.getResourceAsStream("/canonical-catalog.json")) { "Catálogo canônico ausente" }

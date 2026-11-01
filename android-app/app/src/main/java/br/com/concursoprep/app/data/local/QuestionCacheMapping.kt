@@ -61,8 +61,11 @@ object QuestionCacheMapping {
             examYear = entity.examYear,
             level = entity.level,
             explanation = entity.explanation,
-            canonicalSubjectId = entity.canonicalSubjectId,
-            canonicalTopicId = entity.canonicalTopicId
+            // Rows without the complete server DTO predate the verified
+            // mapping contract. Keep their original columns for review, but
+            // do not project inferred labels as authoritative topic links.
+            canonicalSubjectId = null,
+            canonicalTopicId = null
         ))
     }
 }

@@ -698,13 +698,15 @@ pub fn apply_publish(
         }
     }
     for (subject_id, topics) in by_subject {
+        let display_name = canonical_subjects()
+            .into_iter()
+            .find(|s| s.canonical_subject_id == subject_id)
+            .map(|s| s.name)
+            .unwrap_or_else(|| subject_id.clone());
         exam.subjects.push(ExamSubjectConfig {
             local_subject_id: subject_id.clone(),
             canonical_subject_id: subject_id,
-            display_name: topics
-                .first()
-                .map(|topic| topic.display_title.clone())
-                .unwrap_or_default(),
+            display_name,
             category: SubjectCategory::ConhecimentosEspecificos,
             weight: 1.0,
             question_count: Some(topics.len() as u32),
