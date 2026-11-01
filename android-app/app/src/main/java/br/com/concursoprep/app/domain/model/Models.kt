@@ -333,6 +333,13 @@ data class ApkInfoDto(
     @SerialName("download_path") val downloadPath: String = "/api/v1/apk/download"
 )
 
+data class AccountLinkUiState(
+    val isSubmitting: Boolean = false,
+    val isLinked: Boolean = false,
+    val message: String? = null,
+    val isError: Boolean = false
+)
+
 data class ApkUpdateUiState(
     val isChecking: Boolean = false,
     val isDownloading: Boolean = false,

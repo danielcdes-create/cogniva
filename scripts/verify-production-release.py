@@ -11,6 +11,10 @@ import urllib.request
 
 p = argparse.ArgumentParser()
 p.add_argument('revision')
+p.add_argument('--version-name', default='1.4.0')
+p.add_argument('--version-code', type=int, default=7)
+p.add_argument('--evidence-dir', type=pathlib.Path)
+p.add_argument('--baseline', type=pathlib.Path)
 a = p.parse_args()
 assert len(a.revision) == 40 and all(c in '0123456789abcdef' for c in a.revision)
 root = pathlib.Path(__file__).resolve().parents[1]
@@ -23,10 +27,10 @@ def get(path):
 health, ready = get('/api/v1/health'), get('/api/v1/ready')
 assert health['revision'] == ready['revision'] == a.revision
 assert health['contract_version'] == ready['contract_version'] == 2
-assert health['version'] == '1.4.0'
+assert health['version'] == a.version_name
 info = get('/api/app/latest-apk')
 assert info == get('/api/app/latest-apk'), 'Repeated metadata differs'
-assert info['version_code'] == 7 and info['version_name'] == '1.4.0'
+assert info['version_code'] == a.version_code and info['version_name'] == a.version_name
 try:
     get('/api/v1/exams')
     raise AssertionError('Anonymous protected route accepted')
@@ -35,7 +39,7 @@ except urllib.error.HTTPError as error:
 
 directory = pathlib.Path(os.environ['LOCALAPPDATA']) / 'Cogniva' / 'releases' / a.revision
 directory.mkdir(parents=True, exist_ok=True)
-apk = directory / 'cogniva-1.4.0-7.apk'
+apk = directory / f'cogniva-{a.version_name}-{a.version_code}.apk'
 partial = apk.with_suffix('.part')
 with urllib.request.urlopen(base + info['download_path'], timeout=120) as response, partial.open('wb') as output:
     while chunk := response.read(1024 * 1024):
@@ -68,7 +72,9 @@ server = json.loads(subprocess.check_output([
     'ssh', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes',
     '-o', 'ConnectTimeout=5', 'root@198.199.65.103', 'python3', '-'
 ], input=remote, text=True))
-before = json.loads((root / 'docs/remediation-validation/server-before.json').read_text(encoding='utf-8-sig'))
+baseline = a.baseline or root / 'docs/remediation-validation/server-before.json'
+before = json.loads(baseline.read_text(encoding='utf-8-sig'))
+before = before.get('server', before)
 assert server['compose_sha256'] == before['compose_sha256']
 after_ids = {row['name']: row['id'] for row in server['containers']}
 for row in before['containers']:
@@ -89,6 +95,8 @@ result = {
     'anonymous_protected_status': 401, 'apk': info, 'local_apk': str(apk),
     'compose_and_other_containers_preserved': True, 'server': server
 }
-destination = root / 'docs/remediation-validation/production-release.json'
+evidence = a.evidence_dir or root / 'docs/remediation-validation'
+evidence.mkdir(parents=True, exist_ok=True)
+destination = evidence / 'production-release.json'
 destination.write_text(json.dumps(result, indent=2), encoding='utf-8')
 print(json.dumps(result, indent=2))

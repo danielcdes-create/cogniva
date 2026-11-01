@@ -1,0 +1,124 @@
+{
+  "captured_at": "2026-11-01T20:25:16.547855+00:00",
+  "health": {
+    "status": "ok",
+    "service": "api-rust-core",
+    "version": "1.4.0",
+    "revision": "d8716db8c12653a726c9284b9e28e7ba1c30df64",
+    "contract_version": 2
+  },
+  "ready": {
+    "status": "ready",
+    "contract_version": 2,
+    "revision": "d8716db8c12653a726c9284b9e28e7ba1c30df64"
+  },
+  "metadata_twice_equal": true,
+  "anonymous_protected_status": 401,
+  "apk": {
+    "version_code": 7,
+    "version_name": "1.4.0",
+    "size_bytes": 12708853,
+    "sha256_checksum": "1abfb764909dd4274e351a2c30e3471ba41ab3b11842adf2dd1dc3389bf35c35",
+    "download_path": "/api/v1/apk/download"
+  },
+  "local_apk": "C:\\Users\\danie\\AppData\\Local\\Cogniva\\releases\\d8716db8c12653a726c9284b9e28e7ba1c30df64\\cogniva-1.4.0-7.apk",
+  "compose_and_other_containers_preserved": true,
+  "server": {
+    "manifest": {
+      "revision": "d8716db8c12653a726c9284b9e28e7ba1c30df64",
+      "image": "ghcr.io/danielcdes-create/api-rust-core@sha256:66d519fbfddef52a0492f5efe0047829dcf3dc72a78c9b1713e992b824b37a58",
+      "version_code": 7,
+      "version_name": "1.4.0",
+      "apk_sha256": "1abfb764909dd4274e351a2c30e3471ba41ab3b11842adf2dd1dc3389bf35c35",
+      "apk_size_bytes": 12708853,
+      "signing_policy": "Private rotated signer on API 28+; original signer retained only for API 26-27 upgrade compatibility",
+      "contract_version": 2,
+      "runtime_size_bytes": 25808311,
+      "previous_image_id": "sha256:90a136f66b951d7300d126bbe7f96fc798f5f620dd670d26ece248f3676a3838",
+      "previous_image": "ghcr.io/danielcdes-create/api-rust-core@sha256:90a136f66b951d7300d126bbe7f96fc798f5f620dd670d26ece248f3676a3838"
+    },
+    "compose_sha256": "ae0f543998b6bb3972e32a7942a73e8c269a4ac16af773c5c01e3fcfe531dcc2",
+    "containers": [
+      {
+        "name": "/api-rust-core",
+        "id": "0531cc2d0620b7e07b6358279b23b2527980b10d9dc2ee47d31079ae826d61c8",
+        "image_id": "sha256:66d519fbfddef52a0492f5efe0047829dcf3dc72a78c9b1713e992b824b37a58"
+      },
+      {
+        "name": "/asbuildo-server",
+        "id": "ba879ad18169909c528d85aee1494a276a1013eea196eb6cdce5d5ad61f152f4",
+        "image_id": "sha256:367a4f0c518ad77c42e21be187d1d4c4fd0b3284268bd9ff02a850ffac119bf6"
+      },
+      {
+        "name": "/financial-twin-server",
+        "id": "fb011ad01152e726b746815e30f060fea52f1f709abc06f27b612cb90b6f0f61",
+        "image_id": "sha256:3b1280afd97395b1a2c1996f01d44ebd2d15e50f4e1990f6604f90fb1e4920ba"
+      },
+      {
+        "name": "/spamshield-server",
+        "id": "edda480723c75f16a10e9a27a7a3e7512e06056c29fbb5baaf19131a474bc37c",
+        "image_id": "sha256:9fdd460f985fe6793867e8dda9a7f7e760c3084b6c768a3da5421d235c3e7190"
+      }
+    ],
+    "core": {
+      "user": "65532",
+      "read_only": true,
+      "memory_bytes": 167772160,
+      "nano_cpus": 750000000,
+      "cap_drop": [
+        "ALL"
+      ],
+      "health": "healthy",
+      "gemini_model": "gemini-2.5-flash-lite"
+    },
+    "gate": "set $cogniva_maintenance 0;",
+    "stats": [
+      {
+        "BlockIO": "13.2MB / 0B",
+        "CPUPerc": "0.07%",
+        "Container": "0531cc2d0620b7e07b6358279b23b2527980b10d9dc2ee47d31079ae826d61c8",
+        "ID": "0531cc2d0620",
+        "MemPerc": "1.13%",
+        "MemUsage": "1.812MiB / 160MiB",
+        "Name": "api-rust-core",
+        "NetIO": "1.19MB / 86.6MB",
+        "PIDs": "3"
+      },
+      {
+        "BlockIO": "316MB / 48.4MB",
+        "CPUPerc": "0.31%",
+        "Container": "ba879ad18169909c528d85aee1494a276a1013eea196eb6cdce5d5ad61f152f4",
+        "ID": "ba879ad18169",
+        "MemPerc": "7.04%",
+        "MemUsage": "67.28MiB / 956.3MiB",
+        "Name": "asbuildo-server",
+        "NetIO": "175MB / 40MB",
+        "PIDs": "25"
+      },
+      {
+        "BlockIO": "507MB / 243MB",
+        "CPUPerc": "0.41%",
+        "Container": "fb011ad01152e726b746815e30f060fea52f1f709abc06f27b612cb90b6f0f61",
+        "ID": "fb011ad01152",
+        "MemPerc": "2.31%",
+        "MemUsage": "22.11MiB / 956.3MiB",
+        "Name": "financial-twin-server",
+        "NetIO": "249MB / 111MB",
+        "PIDs": "18"
+      },
+      {
+        "BlockIO": "88.6MB / 717kB",
+        "CPUPerc": "0.03%",
+        "Container": "edda480723c75f16a10e9a27a7a3e7512e06056c29fbb5baaf19131a474bc37c",
+        "ID": "edda480723c7",
+        "MemPerc": "0.59%",
+        "MemUsage": "5.66MiB / 956.3MiB",
+        "Name": "spamshield-server",
+        "NetIO": "215MB / 44.4MB",
+        "PIDs": "3"
+      }
+    ],
+    "renewal_timer": "ActiveState=active\nLastTriggerUSec=Sun 2026-11-01 17:00:45 -03\n",
+    "renewal_service": "Result=success\nExecMainStatus=0\n"
+  }
+}

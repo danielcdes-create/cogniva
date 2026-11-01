@@ -120,6 +120,7 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
     val activeAiSheetTitle by viewModel.activeAiSheetTitle.collectAsState()
     val apkUpdateState by viewModel.apkUpdateState.collectAsState()
     val userProfile by viewModel.userProfile.collectAsState()
+    val accountLinkState by viewModel.accountLinkState.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
     val cachedQuestionsCount by viewModel.cachedQuestionsCount.collectAsState()
     val pendingSyncCount by viewModel.pendingSyncCount.collectAsState()
@@ -364,6 +365,8 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                 BottomTab.AJUSTES -> {
                     SettingsScreen(
                         userProfile = userProfile,
+                        accountLinkState = accountLinkState,
+                        onConfirmAccountLink = { id, username, code -> viewModel.confirmAccountLink(id, username, code) },
                         themeMode = themeMode,
                         apkUpdateState = apkUpdateState,
                         cachedQuestionsCount = cachedQuestionsCount,

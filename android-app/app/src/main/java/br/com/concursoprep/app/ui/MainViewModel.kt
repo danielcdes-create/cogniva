@@ -50,6 +50,7 @@ class MainViewModel(private val repository:ConcursoRepository,private val appCon
     private val _pendingSyncCount=MutableStateFlow(0);val pendingSyncCount=_pendingSyncCount.asStateFlow()
     private val _userFeedbackMessage=MutableSharedFlow<String>(extraBufferCapacity=16);val userFeedbackMessage=_userFeedbackMessage.asSharedFlow()
     private val _accountChanged=MutableSharedFlow<Long>(extraBufferCapacity=1);val accountChanged=_accountChanged.asSharedFlow()
+    private val _accountLinkState=MutableStateFlow(AccountLinkUiState());val accountLinkState=_accountLinkState.asStateFlow()
     private val _isStartingQuiz=MutableStateFlow(false);val isStartingQuiz=_isStartingQuiz.asStateFlow()
     private val _apkUpdateState=MutableStateFlow(ApkUpdateUiState(installedVersionCode=BuildConfig.VERSION_CODE,installedVersionName=BuildConfig.VERSION_NAME));val apkUpdateState=_apkUpdateState.asStateFlow()
     private val _apkInstallEvents=MutableSharedFlow<ApkInstallEvent>();val apkInstallEvents=_apkInstallEvents.asSharedFlow()
@@ -81,10 +82,43 @@ class MainViewModel(private val repository:ConcursoRepository,private val appCon
         }
     }
     fun updateUserSettings(telegramUserId:Long?,telegramUsername:String?,displayName:String,selectedContests:List<String>,dailyQuestionsTarget:Int,dailyHoursTarget:Double,linkCode:String?=null){
+        if(_accountLinkState.value.isSubmitting)return
         if(!linkCode.isNullOrBlank()||(telegramUserId!=null&&telegramUserId!=repository.ownerUserId)){
             completeOnboarding(telegramUserId,telegramUsername,displayName,selectedContests,dailyQuestionsTarget,dailyHoursTarget,linkCode);return
         }
         operation {val profile=repository.saveOnboarding(repository.ownerUserId,selectedContests,dailyQuestionsTarget,dailyHoursTarget,displayName);saveProfile(profile);_userProfile.value=profile;refreshAllData();appContext?.let{OfflineSyncWorker.enqueueNow(it)};_userFeedbackMessage.emit("Preferências salvas neste aparelho. Confira o estado da sincronização em Hoje.")}
+    }
+    fun confirmAccountLink(userId:Long,username:String?,code:String){
+        if(_accountLinkState.value.isSubmitting)return
+        if(userId<=0 || code.isBlank()){
+            _accountLinkState.value=AccountLinkUiState(message="Informe o ID numérico da conta e o código de vínculo.",isError=true)
+            return
+        }
+        _accountLinkState.value=AccountLinkUiState(isSubmitting=true)
+        viewModelScope.launch {
+            try {
+                // Linking authenticates the destination account. It does not copy
+                // this screen's unsaved name, goals or contests to that account.
+                val session=repository.linkTelegramAccountOrLogin(userId,username,null,code.trim())
+                saveProfile(session.profile);_isOnboardingCompleted.value=true
+                if(session.profile.userId!=repository.ownerUserId){_accountChanged.emit(session.profile.userId);return@launch}
+                _userProfile.value=session.profile;refreshAllData()
+                appContext?.let{OfflineSyncWorker.enqueueNow(it)}
+                _accountLinkState.value=AccountLinkUiState(isLinked=true,message="Vínculo confirmado. Sincronização do histórico agendada.")
+            } catch(e:CancellationException){_accountLinkState.value=AccountLinkUiState();throw e}
+            catch(e:Exception){
+                val message=when(e){
+                    is retrofit2.HttpException->when(e.code()){
+                        401->"Código inválido ou expirado. Solicite um novo código e tente novamente."
+                        409->"Este código já foi usado por outra instalação. Solicite um novo código."
+                        else->"Não foi possível confirmar o vínculo. Confira os dados e tente novamente."
+                    }
+                    is java.io.IOException->"Sem conexão com o servidor. O vínculo não foi confirmado; tente novamente."
+                    else->"Não foi possível concluir o vínculo. Seus registros foram preservados."
+                }
+                _accountLinkState.value=AccountLinkUiState(message=message,isError=true)
+            }
+        }
     }
     fun skipOnboarding(){_isOnboardingCompleted.value=true;prefs?.edit()?.putBoolean("onboarding_completed",true)?.apply();refreshAllData()}
     fun reopenOnboardingWizard(){_isOnboardingCompleted.value=false;prefs?.edit()?.putBoolean("onboarding_completed",false)?.apply()}

@@ -57,6 +57,7 @@ import br.com.concursoprep.app.BuildConfig
 import br.com.concursoprep.app.domain.exam.ExamCatalog
 import br.com.concursoprep.app.domain.exam.StoredExam
 import br.com.concursoprep.app.domain.model.ApkUpdateUiState
+import br.com.concursoprep.app.domain.model.AccountLinkUiState
 import br.com.concursoprep.app.domain.model.AppThemeMode
 import br.com.concursoprep.app.domain.model.UserProfileDto
 import br.com.concursoprep.app.ui.theme.CognivaBrandHeader
@@ -100,14 +101,19 @@ fun SettingsScreen(
     onEditExam: (StoredExam) -> Unit = {},
     onArchiveExam: (StoredExam) -> Unit = {},
     onUseServerExam: (StoredExam) -> Unit = {},
-    onOpenPending: () -> Unit = {}
+    onOpenPending: () -> Unit = {},
+    accountLinkState: AccountLinkUiState = AccountLinkUiState(),
+    onConfirmAccountLink: (Long, String?, String) -> Unit = { _, _, _ -> }
 ) {
     val ext = LocalExtendedColors.current
 
     var displayName by remember(userProfile.displayName) {
         mutableStateOf(userProfile.displayName ?: "Concurseiro")
     }
-    var linkCode by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
+    var linkCode by remember(userProfile.userId) { mutableStateOf("") }
+    LaunchedEffect(accountLinkState.isLinked) {
+        if (accountLinkState.isLinked) linkCode = ""
+    }
     var telegramUserIdInput by remember(userProfile.userId) {
         mutableStateOf(if(userProfile.userId>0)userProfile.userId.toString()else "")
     }
@@ -242,10 +248,9 @@ fun SettingsScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
@@ -255,7 +260,7 @@ fun SettingsScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Cadastro de Usuário & Telegram",
+                                text = "Perfil e conta",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
@@ -275,7 +280,7 @@ fun SettingsScreen(
                     }
 
                     Text(
-                        text = "Configure seus dados ou vincule seu ID/@username do Bot Telegram para unificar seu histórico de questões, revisões SRS e XP no banco CNU.",
+                        text = "Edite seu nome ou confirme o acesso a uma conta histórica com um código de vínculo.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -285,29 +290,21 @@ fun SettingsScreen(
                         onValueChange = { displayName = it },
                         label = { Text("Nome de Exibição") },
                         singleLine = true,
+                        enabled = !accountLinkState.isSubmitting,
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        OutlinedTextField(value=linkCode,onValueChange={linkCode=it},label={Text("Código de vínculo (somente para trocar/vincular conta)")},visualTransformation=androidx.compose.ui.text.input.PasswordVisualTransformation(),modifier=Modifier.fillMaxWidth(),singleLine=true)
-                    OutlinedTextField(
-                            value = telegramUserIdInput,
-                            onValueChange = { telegramUserIdInput = it.filter { ch -> ch.isDigit() } },
-                            label = { Text("Telegram ID (Numérico)") },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f)
-                        )
-                        OutlinedTextField(
-                            value = telegramUsernameInput,
-                            onValueChange = { telegramUsernameInput = it },
-                            label = { Text("@username Telegram") },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                    AccountLinkForm(
+                        userId = telegramUserIdInput,
+                        onUserIdChange = { telegramUserIdInput = it },
+                        username = telegramUsernameInput,
+                        onUsernameChange = { telegramUsernameInput = it },
+                        code = linkCode,
+                        onCodeChange = { linkCode = it },
+                        state = accountLinkState,
+                        onConfirm = onConfirmAccountLink,
+                        modifier = Modifier.fillMaxWidth()
+                    )
 
                     // =========================================================================
                     // 3. METAS DE ESTUDO & ESCADA DE CONCURSOS
@@ -409,25 +406,24 @@ fun SettingsScreen(
 
                     Button(
                         onClick = {
-                            val parsedId = telegramUserIdInput.trim().toLongOrNull()
-                            val cleanedUsername = telegramUsernameInput.trim().removePrefix("@").ifBlank { null }
                             onSaveUserSettings(
-                                parsedId,
-                                cleanedUsername,
+                                null,
+                                null,
                                 displayName.trim().ifBlank { "Concurseiro" },
                                 selectedContests.toList(),
                                 dailyQuestions,
                                 dailyHours,
-                                linkCode.takeIf { it.isNotBlank() }
+                                null
                             )
                         },
+                        enabled = !accountLinkState.isSubmitting,
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(min = 48.dp)
                     ) {
                         Icon(Icons.Default.Save, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Salvar Cadastro e Preferências")
+                        Text("Salvar nome e metas")
                     }
                 }
             }
