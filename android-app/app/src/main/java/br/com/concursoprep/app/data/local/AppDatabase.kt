@@ -27,7 +27,9 @@ data class CachedQuestionEntity(
     val explanation: String?,
     val inErrorNotebook: Boolean,
     val isMastered: Boolean,
-    val userNote: String? = null
+    val userNote: String? = null,
+    val canonicalSubjectId: String? = null,
+    val canonicalTopicId: String? = null
 )
 
 /**
@@ -48,7 +50,9 @@ data class PendingAttemptEntity(
     val examBlock: String?,
     val contestId: String?,
     val userNote: String?,
-    val createdAtEpochMs: Long = System.currentTimeMillis()
+    val createdAtEpochMs: Long = System.currentTimeMillis(),
+    val canonicalSubjectId: String? = null,
+    val canonicalTopicId: String? = null
 )
 
 @Dao
@@ -94,10 +98,19 @@ interface ConcursoLocalDao {
 }
 
 @Database(
-    entities = [CachedQuestionEntity::class, PendingAttemptEntity::class],
-    version = 1,
+    entities = [
+        CachedQuestionEntity::class,
+        PendingAttemptEntity::class,
+        CareerTrunkEntity::class,
+        UserExamEntity::class,
+        ExamSubjectEntity::class,
+        ExamTopicEntity::class,
+        CanonicalMasteryEntity::class
+    ],
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun concursoDao(): ConcursoLocalDao
+    abstract fun examDao(): ExamDao
 }

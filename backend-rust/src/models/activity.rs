@@ -53,6 +53,10 @@ pub struct PastSessionEntry {
     pub modo_sessao: String,
     pub modo_prova: Option<String>,
     pub concurso: Option<String>,
+    #[serde(default)]
+    pub canonical_subject_id: Option<String>,
+    #[serde(default)]
+    pub canonical_topic_id: Option<String>,
     pub dias_desde_ultima_sessao: i64,
     pub dias_desde_ultima_revisao: Option<i64>,
     pub percentual_acertos_acumulado: f64,
@@ -119,4 +123,9 @@ pub struct UserActivityDocument {
     pub high_confidence_error_flag: bool,
     #[serde(default)]
     pub user_note: Option<String>,
+    /// Taxonomia canônica: o SRS e a matriz não ficam presos a um concurso.
+    #[serde(default)]
+    pub canonical_subject_id: Option<String>,
+    #[serde(default)]
+    pub canonical_topic_id: Option<String>,
 }

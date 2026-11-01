@@ -54,6 +54,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import br.com.concursoprep.app.BuildConfig
+import br.com.concursoprep.app.domain.exam.ExamCatalog
+import br.com.concursoprep.app.domain.exam.StoredExam
 import br.com.concursoprep.app.domain.model.ApkUpdateUiState
 import br.com.concursoprep.app.domain.model.AppThemeMode
 import br.com.concursoprep.app.domain.model.UserProfileDto
@@ -90,7 +92,10 @@ fun SettingsScreen(
     onInstallApkUpdate: () -> Unit,
     onSyncNow: () -> Unit,
     onClearOfflineCache: () -> Unit,
-    onReopenOnboarding: () -> Unit
+    onReopenOnboarding: () -> Unit,
+    ladderExams: List<StoredExam> = emptyList(),
+    focusedTrunkSlugs: Set<String> = emptySet(),
+    onToggleTrunkFocus: (String) -> Unit = {}
 ) {
     val ext = LocalExtendedColors.current
 
@@ -120,11 +125,7 @@ fun SettingsScreen(
         selectedContests.addAll(userProfile.activeContestIds.ifEmpty { listOf("CPNU", "RFB") })
     }
 
-    val availableContests = listOf(
-        Triple("CPNU", "CPNU · AFT", "Edital Publicado"),
-        Triple("RFB", "Receita Federal", "Solicitado/Autorizado"),
-        Triple("BNDES", "BNDES", "Previsto")
-    )
+    val ladderChips = ladderExams.ifEmpty { emptyList() }
 
     Surface(
         color = MaterialTheme.colorScheme.background,
@@ -320,18 +321,39 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        availableContests.forEach { (code, label, _) ->
-                            val isSelected = selectedContests.contains(code)
+                        ladderChips.forEach { exam ->
+                            val isSelected = selectedContests.contains(exam.examId)
                             FilterChip(
                                 selected = isSelected,
                                 onClick = {
                                     if (isSelected && selectedContests.size > 1) {
-                                        selectedContests.remove(code)
+                                        selectedContests.remove(exam.examId)
                                     } else if (!isSelected) {
-                                        selectedContests.add(code)
+                                        selectedContests.add(exam.examId)
                                     }
                                 },
-                                label = { Text(label) },
+                                label = { Text(exam.shortName) },
+                                modifier = Modifier.heightIn(min = 48.dp)
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "Foco de Tronco Principal",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "O Tronco Comum na prática usa as disciplinas dos troncos marcados.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ExamCatalog.trunks().forEach { trunk ->
+                            FilterChip(
+                                selected = focusedTrunkSlugs.contains(trunk.slug),
+                                onClick = { onToggleTrunkFocus(trunk.slug) },
+                                label = { Text(trunk.name) },
                                 modifier = Modifier.heightIn(min = 48.dp)
                             )
                         }

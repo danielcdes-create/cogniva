@@ -1,4 +1,9 @@
-use crate::{error::AppError, routes::home::UserQuery, AppState};
+use crate::{
+    error::AppError,
+    routes::home::UserQuery,
+    services::exam_engine::{load_canonical_slices, mastery_by_canonical_topic, readiness_for_blueprints},
+    AppState,
+};
 use axum::{
     extract::{Query, State},
     Json,
@@ -197,10 +202,13 @@ pub async fn get_user_progress_analytics(
         });
     }
 
-    // Índice de Prontidão Transparente (pondera acurácia + volume de evidências sem prometer aprovação mágica)
-    let volume_factor = ((total_questions_practiced as f64) / 500.0).min(1.0);
-    let readiness_index_score =
-        ((global_accuracy_pct * (0.5 + 0.5 * volume_factor)) * 100.0).round() / 100.0;
+    let activity = load_canonical_slices(&state.db, query.user_id).await;
+    let topic_mastery = mastery_by_canonical_topic(&activity);
+    let blueprints = {
+        let guard = state.exams.lock().expect("exam store");
+        guard.exams.values().cloned().collect::<Vec<_>>()
+    };
+    let readiness_index_score = readiness_for_blueprints(&blueprints, &topic_mastery);
 
     Ok(Json(ProgressAnalyticsResponse {
         user_id: query.user_id,

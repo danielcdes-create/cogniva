@@ -34,6 +34,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,7 +45,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import br.com.concursoprep.app.R
+import br.com.concursoprep.app.domain.exam.ExamEngine
 import br.com.concursoprep.app.domain.model.ApkUpdateUiState
+import br.com.concursoprep.app.domain.model.UpcomingExamCard
+import java.time.LocalDate
 import br.com.concursoprep.app.domain.model.ContestStatus
 import br.com.concursoprep.app.domain.model.QuizMode
 import br.com.concursoprep.app.domain.model.TodayDashboardDto
@@ -65,7 +69,8 @@ fun TodayScreen(
     onInstallApkUpdate: () -> Unit = {},
     onOpenSettings: () -> Unit = {},
     onStartQuizMode: (QuizMode, String?) -> Unit,
-    onOpenContestSyllabus: (String) -> Unit
+    onOpenContestSyllabus: (String) -> Unit,
+    onAddExam: () -> Unit = {}
 ) {
     val progressFraction = (dashboard.questionsAnsweredToday.toFloat() /
         dashboard.dailyGoalQuestions.coerceAtLeast(1).toFloat()).coerceIn(0f, 1f)
@@ -104,11 +109,7 @@ fun TodayScreen(
                             ) {}
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (primaryExam.daysRemaining != null) {
-                                    "Faltam ${primaryExam.daysRemaining} dias · ${primaryExam.name}"
-                                } else {
-                                    "${primaryExam.name} · Previsto (${primaryExam.estimatedWindow ?: "Sem edital"})"
-                                },
+                                text = "${deadlineLabel(primaryExam)} · ${primaryExam.name}",
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onBackground
                             )
@@ -268,11 +269,20 @@ fun TodayScreen(
 
             // 7. Próximas Provas
             item(key = "upcoming_header") {
-                Text(
-                    text = "Meus Concursos em Escada",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(top = 6.dp)
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Meus Concursos em Escada",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(top = 6.dp)
+                    )
+                    TextButton(onClick = onAddExam, modifier = Modifier.heightIn(min = 48.dp)) {
+                        Text("+ Adicionar Concurso na Escada")
+                    }
+                }
             }
 
             items(
@@ -325,14 +335,10 @@ fun TodayScreen(
                             }
                         }
                         Text(
-                            text = if (exam.daysRemaining != null) {
-                                "${exam.daysRemaining} dias"
-                            } else {
-                                exam.estimatedWindow ?: "Previsto"
-                            },
+                            text = deadlineLabel(exam),
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
-                            color = if (exam.daysRemaining != null) ext.error else ext.neutral
+                            color = if (exam.dateType == "EXACT_DATE" || exam.daysRemaining != null) ext.error else ext.neutral
                         )
                     }
                 }
@@ -462,4 +468,14 @@ private fun PriorityActionCard(
             )
         }
     }
+}
+
+private fun deadlineLabel(exam: UpcomingExamCard): String {
+    return ExamEngine.formatDeadlineFromCard(
+        dateType = exam.dateType,
+        exactDateIso = exam.exactDateIso,
+        windowLabel = exam.estimatedWindow,
+        fallbackDays = exam.daysRemaining,
+        today = LocalDate.now()
+    )
 }

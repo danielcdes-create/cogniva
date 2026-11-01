@@ -11,8 +11,9 @@ use axum::{
 use config::AppConfig;
 use mongodb::{Client, Database};
 use serde_json::json;
+use services::exam_engine::ExamMemory;
 use services::scheduler::spawn_background_daily_scheduler;
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, sync::Mutex};
 use tower_http::{
     compression::CompressionLayer,
     cors::{Any, CorsLayer},
@@ -22,6 +23,17 @@ use tower_http::{
 pub struct AppState {
     pub db: Database,
     pub config: AppConfig,
+    pub exams: Mutex<ExamMemory>,
+}
+
+impl AppState {
+    pub fn new(db: Database, config: AppConfig) -> Self {
+        Self {
+            db,
+            config,
+            exams: Mutex::new(ExamMemory::seeded()),
+        }
+    }
 }
 
 #[tokio::main]
@@ -45,10 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Inicia agendador diário em background (substitui schedule do AFTBot.py + countdown.py)
     spawn_background_daily_scheduler(db.clone());
 
-    let state = Arc::new(AppState {
-        db,
-        config: config.clone(),
-    });
+    let state = Arc::new(AppState::new(db, config.clone()));
 
     let app = build_router(state);
 
@@ -126,6 +135,24 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             "/api/v1/analytics/progress",
             get(routes::analytics::get_user_progress_analytics),
         )
+        .route("/api/v1/catalog/trunks", get(routes::exams::get_trunk_catalog))
+        .route(
+            "/api/v1/exams",
+            get(routes::exams::list_exams).post(routes::exams::create_exam),
+        )
+        .route("/api/v1/exams/:exam_id", put(routes::exams::update_exam))
+        .route(
+            "/api/v1/exams/:exam_id/publish-edital",
+            post(routes::exams::publish_edital),
+        )
+        .route(
+            "/api/v1/exams/:exam_id/weighted-simulado",
+            post(routes::exams::weighted_simulado),
+        )
+        .route(
+            "/api/v1/questions/batch/trunk-common",
+            post(routes::exams::trunk_common_batch),
+        )
         .layer(CompressionLayer::new())
         .layer(TraceLayer::new_for_http())
         .layer(cors)
@@ -179,10 +206,7 @@ mod latest_apk_tests {
         let client = mongodb::Client::with_uri_str(&config.mongodb_uri)
             .await
             .expect("mongodb client parses without dialing");
-        let state = Arc::new(AppState {
-            db: client.database(&config.mongodb_db),
-            config,
-        });
+        let state = Arc::new(AppState::new(client.database(&config.mongodb_db), config));
         let app = build_router(state);
 
         let mut bodies = Vec::new();

@@ -41,6 +41,10 @@ pub struct AnswerAttemptItem {
     pub exam_block: Option<String>,
     pub contest_id: Option<String>,
     pub user_note: Option<String>,
+    #[serde(default)]
+    pub canonical_subject_id: Option<String>,
+    #[serde(default)]
+    pub canonical_topic_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -160,6 +164,8 @@ pub async fn handle_submit_batch(
             in_error_notebook: false,
             high_confidence_error_flag: false,
             user_note: None,
+            canonical_subject_id: None,
+            canonical_topic_id: None,
         });
 
         let dias_desde_ultima = (now.date_naive() - doc_state.datas.ultima_sessao.date_naive())
@@ -196,6 +202,8 @@ pub async fn handle_submit_batch(
             modo_sessao: item.quiz_mode.clone(),
             modo_prova: item.exam_block.clone(),
             concurso: item.contest_id.clone(),
+            canonical_subject_id: item.canonical_subject_id.clone(),
+            canonical_topic_id: item.canonical_topic_id.clone(),
             dias_desde_ultima_sessao: dias_desde_ultima,
             dias_desde_ultima_revisao: None,
             percentual_acertos_acumulado: acc_pct,
@@ -257,6 +265,24 @@ pub async fn handle_submit_batch(
         if let Some(note) = &item.user_note {
             doc_state.user_note = Some(note.clone());
         }
+        doc_state.canonical_subject_id = item
+            .canonical_subject_id
+            .clone()
+            .or_else(|| {
+                questao_doc
+                    .as_ref()
+                    .and_then(|question| question.canonical_subject_id.clone())
+            })
+            .or(doc_state.canonical_subject_id.clone());
+        doc_state.canonical_topic_id = item
+            .canonical_topic_id
+            .clone()
+            .or_else(|| {
+                questao_doc
+                    .as_ref()
+                    .and_then(|question| question.canonical_topic_id.clone())
+            })
+            .or(doc_state.canonical_topic_id.clone());
 
         // Upsert no MongoDB
         let _ = act_coll

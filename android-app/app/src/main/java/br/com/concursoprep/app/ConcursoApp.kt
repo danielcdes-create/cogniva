@@ -3,6 +3,7 @@ package br.com.concursoprep.app
 import android.app.Application
 import androidx.room.Room
 import br.com.concursoprep.app.data.local.AppDatabase
+import br.com.concursoprep.app.data.local.ExamMigrations
 import br.com.concursoprep.app.data.remote.ConcursoApiService
 import br.com.concursoprep.app.data.repository.ConcursoRepository
 import br.com.concursoprep.app.data.sync.OfflineSyncWorker
@@ -32,6 +33,7 @@ class ConcursoApp : Application() {
             AppDatabase::class.java,
             "concurso_prep.db"
         )
+            .addMigrations(ExamMigrations.MIGRATION_1_2)
             .fallbackToDestructiveMigration(true)
             .build()
 
@@ -68,6 +70,7 @@ class ConcursoApp : Application() {
         repository = ConcursoRepository(
             api = apiService,
             dao = database.concursoDao(),
+            examDao = database.examDao(),
             json = json
         )
 

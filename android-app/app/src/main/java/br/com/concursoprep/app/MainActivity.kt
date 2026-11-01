@@ -43,6 +43,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.FileProvider
 import br.com.concursoprep.app.domain.model.AppThemeMode
 import br.com.concursoprep.app.domain.model.ContestStatus
+import br.com.concursoprep.app.domain.exam.ExamEngine
+import br.com.concursoprep.app.ui.screens.ExamFormBottomSheet
 import br.com.concursoprep.app.domain.model.QuizMode
 import br.com.concursoprep.app.domain.model.TodayDashboardDto
 import br.com.concursoprep.app.domain.model.UpcomingExamCard
@@ -117,6 +119,11 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
     val cachedQuestionsCount by viewModel.cachedQuestionsCount.collectAsState()
     val pendingSyncCount by viewModel.pendingSyncCount.collectAsState()
     val pausedDiscipline by viewModel.pausedDiscipline.collectAsState()
+    val storedExams by viewModel.storedExams.collectAsState()
+    val focusedTrunks by viewModel.focusedTrunks.collectAsState()
+    val syllabusViewMode by viewModel.syllabusViewMode.collectAsState()
+    val showExamBuilder by viewModel.showExamBuilder.collectAsState()
+    var trunkSlug by remember { mutableStateOf("fiscal") }
 
     // Ouve notificações e feedbacks do ViewModel
     LaunchedEffect(Unit) {
@@ -185,11 +192,9 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
 
     // 2. Rota Full-Screen Imersiva para Questões e Simulados (esconde a Bottom Bar conforme §3 da Nota Técnica)
     if (activeQuestions != null && activeQuestions!!.isNotEmpty()) {
-        val contestTitle = when (selectedContestId) {
-            "CPNU" -> "CPNU · Auditor-Fiscal do Trabalho (Edital Publicado)"
-            "RFB" -> "Receita Federal · Auditor Fiscal (Estimado)"
-            else -> "BNDES · Analista (Estimado)"
-        }
+        val contestTitle = storedExams.firstOrNull { it.examId == selectedContestId }?.title
+            ?: storedExams.firstOrNull()?.title
+            ?: "Concurso"
 
         QuestionSessionScreen(
             questions = activeQuestions!!,
@@ -272,23 +277,26 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                         onOpenContestSyllabus = { cid ->
                             viewModel.selectContest(cid)
                             currentTab = BottomTab.CONCURSOS
-                        }
+                        },
+                        onAddExam = { viewModel.openExamBuilder() }
                     )
                 }
 
                 BottomTab.CONCURSOS -> {
                     ContestsScreen(
                         selectedContestId = selectedContestId,
-                        availableContests = listOf(
-                            "CPNU" to "CPNU (AFT)",
-                            "RFB" to "Receita Federal",
-                            "BNDES" to "BNDES"
-                        ),
+                        availableContests = storedExams.map { exam -> exam.examId to exam.shortName },
                         syllabusGroups = syllabusGroups,
                         diffData = contestDiff,
                         onSelectContest = { cid ->
                             viewModel.selectContest(cid)
                         },
+                        syllabusViewMode = syllabusViewMode,
+                        onSyllabusViewMode = { viewModel.setSyllabusViewMode(it) },
+                        onAddContest = { viewModel.openExamBuilder() },
+                        trunkRows = ExamEngine.trunkRows(trunkSlug, storedExams),
+                        trunkSlug = trunkSlug,
+                        onSelectTrunk = { trunkSlug = it },
                         onPracticeDiscipline = { disc ->
                             viewModel.startQuizSession(
                                 mode = QuizMode.STANDARD,
@@ -316,7 +324,7 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                 }
 
                 BottomTab.PROGRESSO -> {
-                    val safeAnalytics = analytics ?: buildOfflineFallbackAnalytics()
+                    val safeAnalytics = analytics ?: buildOfflineFallbackAnalytics(storedExams)
                     ProgressScreen(
                         analytics = safeAnalytics,
                         onPracticeQuizMode = { mode, disc ->
@@ -354,6 +362,9 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                         onInstallApkUpdate = { viewModel.downloadAndInstallApk(context) },
                         onSyncNow = { viewModel.syncNow() },
                         onClearOfflineCache = { viewModel.clearOfflineQuestionCache() },
+                        ladderExams = storedExams,
+                        focusedTrunkSlugs = focusedTrunks,
+                        onToggleTrunkFocus = { viewModel.toggleTrunkFocus(it) },
                         onReopenOnboarding = {
                             currentTab = BottomTab.HOJE
                             viewModel.reopenOnboardingWizard()
@@ -362,6 +373,14 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                 }
             }
         }
+    }
+
+    if (showExamBuilder) {
+        ExamFormBottomSheet(
+            existingExams = storedExams,
+            onDismiss = { viewModel.dismissExamBuilder() },
+            onSave = { draft -> viewModel.saveExamDraft(draft) }
+        )
     }
 }
 
@@ -407,12 +426,12 @@ private fun buildOfflineFallbackDashboard() = TodayDashboardDto(
     )
 )
 
-private fun buildOfflineFallbackAnalytics() = ProgressAnalyticsDto(
+private fun buildOfflineFallbackAnalytics(exams: List<br.com.concursoprep.app.domain.exam.StoredExam>) = ProgressAnalyticsDto(
     userId = 1001L,
     globalAccuracyPct = 76.5,
     totalQuestionsPracticed = 428,
     totalMasteredQuestions = 189,
-    readinessIndexScore = 79.2,
+    readinessIndexScore = ExamEngine.readinessForStoredExams(exams, emptyMap()),
     historicalCutoffReference = 78.5,
     disciplinesSortedByWeakness = listOf(
         DisciplineMasteryBarDto(

@@ -87,7 +87,9 @@ data class UpcomingExamCard(
     val status: ContestStatus,
     @SerialName("days_remaining") val daysRemaining: Long? = null,
     @SerialName("estimated_window") val estimatedWindow: String? = null,
-    @SerialName("exam_board") val examBoard: String
+    @SerialName("exam_board") val examBoard: String,
+    @SerialName("date_type") val dateType: String? = null,
+    @SerialName("exact_date_iso") val exactDateIso: String? = null
 )
 
 @Serializable
@@ -180,6 +182,8 @@ data class QuestionDto(
     val level: String,
     @SerialName("syllabus_topic_ids") val syllabusTopicIds: List<String> = emptyList(),
     @SerialName("common_trunk_id") val commonTrunkId: String? = null,
+    @SerialName("canonical_subject_id") val canonicalSubjectId: String? = null,
+    @SerialName("canonical_topic_id") val canonicalTopicId: String? = null,
     @SerialName("is_borrowed_analogous") val isBorrowedAnalogous: Boolean = false,
     val explanation: String? = null,
     @SerialName("has_dr_sincero") val hasDrSincero: Boolean = false,
@@ -201,7 +205,9 @@ data class AnswerAttemptPayload(
     @SerialName("quiz_mode") val quizMode: String,
     @SerialName("exam_block") val examBlock: String? = null,
     @SerialName("contest_id") val contestId: String? = null,
-    @SerialName("user_note") val userNote: String? = null
+    @SerialName("user_note") val userNote: String? = null,
+    @SerialName("canonical_subject_id") val canonicalSubjectId: String? = null,
+    @SerialName("canonical_topic_id") val canonicalTopicId: String? = null
 )
 
 @Serializable

@@ -88,6 +88,10 @@ pub struct QuestionDocument {
     #[serde(default)]
     pub common_trunk_id: Option<String>,
     #[serde(default)]
+    pub canonical_subject_id: Option<String>,
+    #[serde(default)]
+    pub canonical_topic_id: Option<String>,
+    #[serde(default)]
     pub is_borrowed_analogous: bool,
     #[serde(default)]
     pub legal_validity: Option<LegalValidity>,
@@ -125,6 +129,8 @@ pub struct QuestionDto {
     pub level: String,
     pub syllabus_topic_ids: Vec<String>,
     pub common_trunk_id: Option<String>,
+    pub canonical_subject_id: Option<String>,
+    pub canonical_topic_id: Option<String>,
     pub is_borrowed_analogous: bool,
     pub explanation: Option<String>,
     pub has_dr_sincero: bool,
@@ -161,6 +167,8 @@ impl QuestionDocument {
             level: self.level.clone().unwrap_or_else(|| "Médio".to_string()),
             syllabus_topic_ids: self.syllabus_topic_ids.clone(),
             common_trunk_id: self.common_trunk_id.clone(),
+            canonical_subject_id: self.canonical_subject_id.clone(),
+            canonical_topic_id: self.canonical_topic_id.clone(),
             is_borrowed_analogous: self.is_borrowed_analogous,
             explanation: self.explanation.clone(),
             has_dr_sincero: self.dr_sincero.is_some(),

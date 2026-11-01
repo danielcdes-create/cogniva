@@ -8,15 +8,25 @@ import androidx.lifecycle.viewModelScope
 import br.com.concursoprep.app.BuildConfig
 import br.com.concursoprep.app.data.local.PendingAttemptEntity
 import br.com.concursoprep.app.data.repository.ConcursoRepository
+import br.com.concursoprep.app.domain.exam.ExamCatalog
+import br.com.concursoprep.app.domain.exam.ExamDraft
+import br.com.concursoprep.app.domain.exam.ExamEngine
+import br.com.concursoprep.app.domain.exam.OfflineExamQueue
+import br.com.concursoprep.app.domain.exam.StoredExam
+import br.com.concursoprep.app.domain.exam.SyllabusViewMode
 import br.com.concursoprep.app.domain.model.ApkUpdateUiState
 import br.com.concursoprep.app.domain.model.AppThemeMode
+import br.com.concursoprep.app.domain.model.CommonTrunkSuggestion
 import br.com.concursoprep.app.domain.model.ContestDiffScreenDto
+import br.com.concursoprep.app.domain.model.ContestStatus
 import br.com.concursoprep.app.domain.model.DisciplineSyllabusGroupDto
 import br.com.concursoprep.app.domain.model.ProgressAnalyticsDto
 import br.com.concursoprep.app.domain.model.QuestionDto
 import br.com.concursoprep.app.domain.model.QuizMode
 import br.com.concursoprep.app.domain.model.TodayDashboardDto
+import br.com.concursoprep.app.domain.model.UpcomingExamCard
 import br.com.concursoprep.app.domain.model.UserProfileDto
+import java.time.LocalDate
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -76,6 +86,18 @@ class MainViewModel(
 
     private val _selectedContestId = MutableStateFlow(prefs?.getString("selected_contest_id", "CPNU") ?: "CPNU")
     val selectedContestId: StateFlow<String> = _selectedContestId.asStateFlow()
+
+    private val _storedExams = MutableStateFlow(ExamCatalog.systemExams())
+    val storedExams: StateFlow<List<StoredExam>> = _storedExams.asStateFlow()
+
+    private val _focusedTrunks = MutableStateFlow<Set<String>>(emptySet())
+    val focusedTrunks: StateFlow<Set<String>> = _focusedTrunks.asStateFlow()
+
+    private val _syllabusViewMode = MutableStateFlow(SyllabusViewMode.CONTEST)
+    val syllabusViewMode: StateFlow<SyllabusViewMode> = _syllabusViewMode.asStateFlow()
+
+    private val _showExamBuilder = MutableStateFlow(false)
+    val showExamBuilder: StateFlow<Boolean> = _showExamBuilder.asStateFlow()
 
     private val _pausedDiscipline = MutableStateFlow(
         prefs?.getString("paused_discipline", "Segurança e Saúde do Trabalhador (NR-15)")
@@ -260,16 +282,128 @@ class MainViewModel(
         viewModelScope.launch {
             val uid = _userId.value
             val profile = _userProfile.value
-            _todayDashboard.value = repository.getTodayDashboard(
+            val stored = runCatching { repository.loadStoredExams() }.getOrElse { ExamCatalog.systemExams() }
+            if (stored.isNotEmpty()) {
+                _storedExams.value = stored
+            }
+            val focus = runCatching { repository.focusedTrunkSlugs() }.getOrDefault(emptySet())
+            _focusedTrunks.value = focus
+            val remote = repository.getTodayDashboard(
                 userId = uid,
                 dailyGoalQuestions = profile.dailyQuestionsTarget,
                 activeContestIds = profile.activeContestIds
+            )
+            _todayDashboard.value = overlayLadder(
+                remote,
+                _storedExams.value,
+                focus,
+                profile.dailyQuestionsTarget,
+                runCatching { repository.canonicalMasteryBySubject() }.getOrDefault(emptyMap())
             )
             _syllabusGroups.value = repository.getContestSyllabus(_selectedContestId.value, uid)
             _contestDiff.value = repository.getContestDiff(_selectedContestId.value)
             _analytics.value = repository.getProgressAnalytics(uid)
             refreshLocalStats()
         }
+    }
+
+    fun openExamBuilder() {
+        _showExamBuilder.value = true
+    }
+
+    fun dismissExamBuilder() {
+        _showExamBuilder.value = false
+    }
+
+    fun setSyllabusViewMode(mode: SyllabusViewMode) {
+        _syllabusViewMode.value = mode
+    }
+
+    fun toggleTrunkFocus(slug: String) {
+        viewModelScope.launch {
+            val next = _focusedTrunks.value.toMutableSet()
+            val enabled = !next.contains(slug)
+            if (enabled) next.add(slug) else next.remove(slug)
+            _focusedTrunks.value = next
+            runCatching { repository.setTrunkFocus(slug, enabled) }
+            _todayDashboard.value?.let { current ->
+                _todayDashboard.value = overlayLadder(
+                    current,
+                    _storedExams.value,
+                    next,
+                    _userProfile.value.dailyQuestionsTarget,
+                    runCatching { repository.canonicalMasteryBySubject() }.getOrDefault(emptyMap())
+                )
+            }
+        }
+    }
+
+    fun saveExamDraft(draft: ExamDraft) {
+        viewModelScope.launch {
+            val created = runCatching { repository.createExamOffline(draft) }.getOrElse {
+                OfflineExamQueue.createPendingExam(draft)
+            }
+            _storedExams.value = _storedExams.value.filterNot { it.examId == created.examId } + created
+            _selectedContestId.value = created.examId
+            _showExamBuilder.value = false
+            _todayDashboard.value?.let { current ->
+                _todayDashboard.value = overlayLadder(
+                    current,
+                    _storedExams.value,
+                    _focusedTrunks.value,
+                    _userProfile.value.dailyQuestionsTarget,
+                    runCatching { repository.canonicalMasteryBySubject() }.getOrDefault(emptyMap())
+                )
+            }
+            _userFeedbackMessage.emit("Concurso salvo na escada. A sincronização usa o id gerado neste aparelho.")
+        }
+    }
+
+    private fun overlayLadder(
+        dashboard: TodayDashboardDto,
+        exams: List<StoredExam>,
+        focus: Set<String>,
+        suggestedQuestions: Int,
+        masteryBySubject: Map<String, Double>
+    ): TodayDashboardDto {
+        val today = LocalDate.now()
+        val active = exams.filter { it.isActiveInLadder }.sortedBy { it.ladderPriority }
+        val cards = active.map { exam ->
+            UpcomingExamCard(
+                contestId = exam.examId,
+                name = exam.shortName,
+                status = when (exam.lifecycleStatus) {
+                    "EDITAL_PUBLICADO" -> ContestStatus.EDITAL_PUBLICADO
+                    "AUTORIZADO", "BANCA_DEFINIDA" -> ContestStatus.SOLICITADO_AUTORIZADO
+                    "PROVA_REALIZADA", "EM_ANDAMENTO" -> ContestStatus.EM_ANDAMENTO
+                    "ARQUIVADO", "ENCERRADO" -> ContestStatus.ENCERRADO
+                    else -> ContestStatus.PREVISTO
+                },
+                daysRemaining = if (exam.dateType == "EXACT_DATE") ExamEngine.daysUntil(exam.exactDateIso, today) else null,
+                estimatedWindow = exam.estimatedWindowLabel,
+                examBoard = exam.examBoards.joinToString(" / ").ifBlank { "A definir" },
+                dateType = exam.dateType,
+                exactDateIso = exam.exactDateIso
+            )
+        }
+        val battery = OfflineExamQueue.commonTrunkFromCache(
+            exams = active,
+            cachedQuestions = emptyList(),
+            masteryBySubject = masteryBySubject,
+            today = today,
+            suggestedQuestions = suggestedQuestions,
+            focusedTrunkSlugs = focus
+        )
+        return dashboard.copy(
+            upcomingExams = cards.ifEmpty { dashboard.upcomingExams },
+            commonTrunkSuggestion = battery?.let { item ->
+                CommonTrunkSuggestion(
+                    discipline = item.card.subjectName,
+                    sharedContests = item.card.contestNames,
+                    badgeText = item.card.sentence
+                )
+            } ?: dashboard.commonTrunkSuggestion
+        )
     }
 
     fun selectContest(contestId: String) {
@@ -344,7 +478,9 @@ class MainViewModel(
                 quizMode = _currentQuizMode.value.name,
                 examBlock = null,
                 contestId = _selectedContestId.value,
-                userNote = null
+                userNote = null,
+                canonicalSubjectId = question.canonicalSubjectId,
+                canonicalTopicId = question.canonicalTopicId
             )
 
             // Registra offline no Room e dispara sincronização em background

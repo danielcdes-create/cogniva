@@ -2,6 +2,8 @@ package br.com.concursoprep.app.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,6 +34,7 @@ import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -55,6 +58,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import br.com.concursoprep.app.domain.exam.ExamCatalog
+import br.com.concursoprep.app.domain.exam.SyllabusViewMode
+import br.com.concursoprep.app.domain.exam.TrunkSubjectRow
 import br.com.concursoprep.app.domain.model.ConfidenceBadge
 import br.com.concursoprep.app.domain.model.ContestDiffScreenDto
 import br.com.concursoprep.app.domain.model.DisciplineSyllabusGroupDto
@@ -68,7 +74,7 @@ import br.com.concursoprep.app.ui.theme.LocalExtendedColors
  * - Selos de confiança clicáveis que abrem Bottom Sheet com as fontes.
  * - Banner de transição "Previsto -> Edital Publicado" com Tela de Diff.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ContestsScreen(
     selectedContestId: String,
@@ -77,7 +83,13 @@ fun ContestsScreen(
     diffData: ContestDiffScreenDto?,
     onSelectContest: (String) -> Unit,
     onPracticeDiscipline: (String) -> Unit,
-    onApplyDiffConsent: (String) -> Unit = {}
+    onApplyDiffConsent: (String) -> Unit = {},
+    syllabusViewMode: SyllabusViewMode = SyllabusViewMode.CONTEST,
+    onSyllabusViewMode: (SyllabusViewMode) -> Unit = {},
+    onAddContest: () -> Unit = {},
+    trunkRows: List<TrunkSubjectRow> = emptyList(),
+    trunkSlug: String = "fiscal",
+    onSelectTrunk: (String) -> Unit = {}
 ) {
     var selectedTopicForSourceSheet by remember { mutableStateOf<SyllabusTopicDto?>(null) }
     var showEditalDiffSheet by remember { mutableStateOf(false) }
@@ -147,6 +159,47 @@ fun ContestsScreen(
                         }
                     }
                 }
+                Tab(
+                    selected = false,
+                    onClick = onAddContest,
+                    modifier = Modifier.heightIn(min = 48.dp)
+                ) {
+                    Text(
+                        text = "+ Novo / Tronco",
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = syllabusViewMode == SyllabusViewMode.CONTEST,
+                    onClick = { onSyllabusViewMode(SyllabusViewMode.CONTEST) },
+                    label = { Text("Visão por Concurso") },
+                    modifier = Modifier.heightIn(min = 48.dp)
+                )
+                FilterChip(
+                    selected = syllabusViewMode == SyllabusViewMode.TRUNK,
+                    onClick = { onSyllabusViewMode(SyllabusViewMode.TRUNK) },
+                    label = { Text("Visão por Tronco") },
+                    modifier = Modifier.heightIn(min = 48.dp)
+                )
+            }
+            if (syllabusViewMode == SyllabusViewMode.TRUNK) {
+                Spacer(modifier = Modifier.height(8.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ExamCatalog.trunks().forEach { trunk ->
+                        FilterChip(
+                            selected = trunk.slug == trunkSlug,
+                            onClick = { onSelectTrunk(trunk.slug) },
+                            label = { Text(trunk.name) },
+                            modifier = Modifier.heightIn(min = 48.dp)
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -191,8 +244,47 @@ fun ContestsScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
+                if (syllabusViewMode == SyllabusViewMode.TRUNK) {
+                    items(items = trunkRows, key = { row -> row.canonicalSubjectId }) { row ->
+                        Card(
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surface,
+                                contentColor = MaterialTheme.colorScheme.onSurface
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(text = row.name, style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    text = if (row.tier == "CORE") "CORE" else "COMPLEMENTARY",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    row.contestBadges.forEach { badge ->
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = MaterialTheme.colorScheme.secondaryContainer,
+                                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                        ) {
+                                            Text(
+                                                text = badge,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                style = MaterialTheme.typography.labelMedium
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 items(
-                    items = syllabusGroups,
+                    items = if (syllabusViewMode == SyllabusViewMode.TRUNK) emptyList() else syllabusGroups,
                     key = { group -> group.discipline }
                 ) { group ->
                     Card(

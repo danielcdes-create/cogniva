@@ -1,6 +1,7 @@
 use crate::{
     error::AppError,
     models::contest::{ContestDocument, ContestStatus},
+    services::exam_engine::{card_from_canonical_activity, load_canonical_slices},
     AppState,
 };
 use axum::{
@@ -145,11 +146,28 @@ pub async fn get_today_dashboard(
         });
     }
 
-    let common_trunk_suggestion = CommonTrunkSuggestion {
-        discipline: "Finanças Públicas".to_string(),
-        shared_contests: vec!["CPNU".to_string(), "RFB".to_string()],
-        badge_text: "Estudar 15 questões de Finanças Públicas avança CPNU e Receita Federal ao mesmo tempo".to_string(),
+    let leverage_inputs = {
+        let guard = state.exams.lock().expect("exam store");
+        guard.leverage_inputs()
     };
+    let activity = load_canonical_slices(db, query.user_id).await;
+    let common_trunk_suggestion = card_from_canonical_activity(
+        &leverage_inputs,
+        &activity,
+        &[],
+        15,
+        now.date_naive(),
+    )
+    .map(|card| CommonTrunkSuggestion {
+        discipline: card.subject_name,
+        shared_contests: card.contest_names,
+        badge_text: card.sentence,
+    })
+    .unwrap_or(CommonTrunkSuggestion {
+        discipline: String::new(),
+        shared_contests: Vec::new(),
+        badge_text: String::new(),
+    });
 
     // 5. Meta diária configurada pelo usuário na coleção `usuarios` (default 50)
     let daily_goal_questions = db

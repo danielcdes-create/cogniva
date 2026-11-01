@@ -2,13 +2,25 @@ package br.com.concursoprep.app.data.repository
 
 import br.com.concursoprep.app.BuildConfig
 import br.com.concursoprep.app.data.local.CachedQuestionEntity
+import br.com.concursoprep.app.data.local.CanonicalMasteryEntity
+import br.com.concursoprep.app.data.local.CareerTrunkEntity
 import br.com.concursoprep.app.data.local.ConcursoLocalDao
+import br.com.concursoprep.app.data.local.ExamDao
+import br.com.concursoprep.app.data.local.ExamLocalMapping
 import br.com.concursoprep.app.data.local.PendingAttemptEntity
+import br.com.concursoprep.app.data.local.QuestionCacheMapping
+import br.com.concursoprep.app.data.remote.ExamBlueprintPayload
 import br.com.concursoprep.app.data.remote.ConcursoApiService
 import br.com.concursoprep.app.data.remote.OnboardingPayload
 import br.com.concursoprep.app.data.remote.QuizGeneratePayload
 import br.com.concursoprep.app.data.remote.ReportProblemPayload
 import br.com.concursoprep.app.data.remote.TelegramLinkPayload
+import br.com.concursoprep.app.domain.exam.ExamCatalog
+import br.com.concursoprep.app.domain.exam.ExamEngine
+import br.com.concursoprep.app.domain.exam.OfflineExamQueue
+import br.com.concursoprep.app.domain.exam.QuestionRef
+import br.com.concursoprep.app.domain.exam.QuizSelection
+import br.com.concursoprep.app.domain.exam.StoredExam
 import br.com.concursoprep.app.domain.model.AiAssistResponseDto
 import br.com.concursoprep.app.domain.model.AnswerAttemptPayload
 import br.com.concursoprep.app.domain.model.ApkInfoDto
@@ -38,6 +50,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import java.time.LocalDate
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
@@ -53,6 +68,7 @@ import java.util.concurrent.TimeUnit
 class ConcursoRepository(
     private val api: ConcursoApiService,
     private val dao: ConcursoLocalDao,
+    private val examDao: ExamDao,
     private val json: Json = Json { ignoreUnknownKeys = true }
 ) {
     suspend fun linkTelegramAccountOrLogin(
@@ -124,6 +140,46 @@ class ConcursoRepository(
     }
 
     suspend fun getContestSyllabus(contestId: String, userId: Long): List<DisciplineSyllabusGroupDto> {
+        val stored = runCatching { loadStoredExams() }.getOrDefault(emptyList())
+        val exam = stored.firstOrNull { it.examId == contestId }
+        if (exam != null) {
+            val history = runCatching { examDao.listMastery() }.getOrDefault(emptyList()).map { row ->
+                br.com.concursoprep.app.domain.exam.CanonicalMasteryRecord(
+                    canonicalSubjectId = row.canonicalSubjectId,
+                    canonicalTopicId = row.canonicalTopicId,
+                    mastery = row.mastery
+                )
+            }
+            return ExamEngine.projectSyllabus(exam, history).map { group ->
+                DisciplineSyllabusGroupDto(
+                    blockName = exam.trunkSlug,
+                    discipline = group.discipline,
+                    disciplineMasteryPct = group.masteryPct,
+                    topics = group.topicTitles.mapIndexed { index, title ->
+                        SyllabusTopicNodeDto(
+                            topic = SyllabusTopicDto(
+                                id = "${group.canonicalSubjectId}-$index",
+                                contestId = contestId,
+                                blockName = exam.trunkSlug,
+                                discipline = group.discipline,
+                                title = title,
+                                order = index,
+                                estimation = EstimationMetadata(
+                                    isEstimated = exam.lifecycleStatus != "EDITAL_PUBLICADO",
+                                    confidenceBadge = ConfidenceBadge.HIGH,
+                                    rationale = "Projeção do edital salvo e do domínio canônico.",
+                                    referenceExams = emptyList()
+                                ),
+                                diffStatus = TopicDiffStatus.CONFIRMED
+                            ),
+                            userMasteryPct = group.masteryPct,
+                            questionsPracticed = if (group.masteryPct > 0.0) 1 else 0,
+                            statusLabel = if (group.masteryPct > 0.0) "QUESTOES" else "NAO_INICIADO"
+                        )
+                    }
+                )
+            }
+        }
         return try {
             api.getContestSyllabus(contestId, userId)
         } catch (e: Exception) {
@@ -165,29 +221,56 @@ class ConcursoRepository(
                 )
             )
             if (remoteQuestions.isNotEmpty()) {
-                val entities = remoteQuestions.map { dto ->
-                    CachedQuestionEntity(
-                        id = dto.id,
-                        question = dto.question,
-                        questionType = dto.questionType.name,
-                        answersJson = json.encodeToString(dto.answers),
-                        correctIndicesJson = json.encodeToString(dto.correctAnswerIndices),
-                        disciplina = dto.disciplina,
-                        source = dto.source,
-                        examYear = dto.examYear,
-                        level = dto.level,
-                        explanation = dto.explanation,
-                        inErrorNotebook = dto.userStats?.inErrorNotebook ?: false,
-                        isMastered = dto.userStats?.isMastered ?: false
-                    )
-                }
-                dao.insertQuestions(entities)
-                return remoteQuestions
+                dao.insertQuestions(remoteQuestions.map { dto -> QuestionCacheMapping.toEntity(dto, json) })
             }
-            loadFromLocalRoomOrSeed(disciplina, quantity, mode)
+            val pool = if (remoteQuestions.isNotEmpty()) {
+                remoteQuestions
+            } else {
+                loadFromLocalRoomOrSeed(null, quantity.coerceAtLeast(40), QuizMode.STANDARD)
+            }
+            return selectModeQuestions(mode, quantity, contestId, disciplina, pool, remoteQuestions)
         } catch (e: Exception) {
-            loadFromLocalRoomOrSeed(disciplina, quantity, mode)
+            val pool = loadFromLocalRoomOrSeed(null, quantity.coerceAtLeast(40), QuizMode.STANDARD)
+            selectModeQuestions(mode, quantity, contestId, disciplina, pool, emptyList())
         }
+    }
+
+    private suspend fun selectModeQuestions(
+        mode: QuizMode,
+        quantity: Int,
+        contestId: String?,
+        disciplina: String?,
+        pool: List<QuestionDto>,
+        remoteQuestions: List<QuestionDto>
+    ): List<QuestionDto> {
+        return when (mode) {
+            QuizMode.SIMULADO -> {
+                val exam = loadStoredExams().firstOrNull { it.examId == contestId }
+                if (exam == null) pool.take(quantity) else {
+                    val ids = QuizSelection.weightedSimuladoIds(exam, pool.map { it.toRef() })
+                    val byId = pool.associateBy { it.id }
+                    ids.mapNotNull { byId[it] }
+                }
+            }
+            QuizMode.COMMON_TRUNK -> {
+                val ids = QuizSelection.commonTrunkIds(
+                    exams = loadStoredExams(),
+                    questions = pool.map { it.toRef() },
+                    focusedTrunkSlugs = focusedTrunkSlugs(),
+                    masteryBySubject = canonicalMasteryBySubject(),
+                    today = LocalDate.now(),
+                    quantity = quantity
+                )
+                val byId = pool.associateBy { it.id }
+                ids.mapNotNull { byId[it] }
+            }
+            else -> if (remoteQuestions.isNotEmpty()) remoteQuestions else loadFromLocalRoomOrSeed(disciplina, quantity, mode)
+        }
+    }
+
+    suspend fun canonicalMasteryBySubject(): Map<String, Double> {
+        val rows = runCatching { examDao.listMastery() }.getOrDefault(emptyList())
+        return rows.groupBy { it.canonicalSubjectId }.mapValues { (_, items) -> items.map { it.mastery }.average() }
     }
 
     private suspend fun loadFromLocalRoomOrSeed(
@@ -202,23 +285,7 @@ class ConcursoRepository(
             dao.getCachedQuestions(disciplina, quantity)
         }
         if (local.isNotEmpty()) {
-            return local.map { entity ->
-                QuestionDto(
-                    id = entity.id,
-                    question = entity.question,
-                    questionType = runCatching { QuestionType.valueOf(entity.questionType) }
-                        .getOrDefault(QuestionType.MULTIPLE_CHOICE),
-                    answers = runCatching { json.decodeFromString<List<String>>(entity.answersJson) }
-                        .getOrDefault(emptyList()),
-                    correctAnswerIndices = runCatching { json.decodeFromString<List<Int>>(entity.correctIndicesJson) }
-                        .getOrDefault(listOf(0)),
-                    disciplina = entity.disciplina,
-                    source = entity.source,
-                    examYear = entity.examYear,
-                    level = entity.level,
-                    explanation = entity.explanation
-                )
-            }
+            return local.map { entity -> QuestionCacheMapping.toDto(entity, json) }
         }
         val seed = buildOfflineSeedQuestions()
         return if (!disciplina.isNullOrBlank()) {
@@ -243,12 +310,25 @@ class ConcursoRepository(
         if (!attempt.isCorrect) {
             dao.updateQuestionErrorNotebookFlag(attempt.questionId, true)
         }
+        val mastery = if (attempt.isCorrect) {
+            attempt.confidenceLevel.coerceIn(0, 3) / 3.0
+        } else if (attempt.confidenceLevel >= 3) {
+            0.0
+        } else {
+            0.25
+        }
+        recordCanonicalMastery(attempt.canonicalSubjectId, attempt.canonicalTopicId, mastery)
         syncPendingAttempts(userId)
     }
 
     suspend fun syncPendingAttempts(userId: Long): Int {
         val pending = dao.getAllPendingAttempts()
-        if (pending.isEmpty()) return 0
+        val attemptsSynced = if (pending.isEmpty()) 0 else syncAttemptBatch(userId, pending)
+        return attemptsSynced + syncPendingExams()
+    }
+
+    private suspend fun syncAttemptBatch(userId: Long, pending: List<PendingAttemptEntity>): Int {
+        val pendingForBatch = pending
 
         val payload = SubmitBatchPayload(
             userId = userId,
@@ -265,18 +345,137 @@ class ConcursoRepository(
                     quizMode = item.quizMode,
                     examBlock = item.examBlock,
                     contestId = item.contestId,
-                    userNote = item.userNote
+                    userNote = item.userNote,
+                    canonicalSubjectId = item.canonicalSubjectId,
+                    canonicalTopicId = item.canonicalTopicId
                 )
             }
         )
 
         return try {
             val response = api.submitAttemptsBatch(payload)
-            dao.deleteSyncedAttempts(pending.map { it.localId })
+            dao.deleteSyncedAttempts(pendingForBatch.map { it.localId })
             response.processedCount
         } catch (e: Exception) {
             0
         }
+    }
+
+    suspend fun ensureExamSeed() {
+        if (examDao.countExams() > 0) return
+        examDao.upsertTrunks(
+            ExamCatalog.trunks().map { trunk ->
+                CareerTrunkEntity(trunk.slug, trunk.name, trunk.iconKey, false)
+            }
+        )
+        ExamCatalog.systemExams().forEach { saveExamLocal(it) }
+    }
+
+    suspend fun loadStoredExams(): List<StoredExam> {
+        ensureExamSeed()
+        return examDao.listExams().map { entity ->
+            ExamLocalMapping.assemble(entity, examDao.subjectsFor(entity.examId), examDao.topicsFor(entity.examId))
+        }
+    }
+
+    suspend fun saveExamLocal(exam: StoredExam) {
+        examDao.upsertExam(ExamLocalMapping.toEntity(exam))
+        examDao.upsertSubjects(ExamLocalMapping.subjectsOf(exam))
+        examDao.upsertTopics(ExamLocalMapping.topicsOf(exam))
+    }
+
+    suspend fun createExamOffline(draft: br.com.concursoprep.app.domain.exam.ExamDraft): StoredExam {
+        val created = OfflineExamQueue.createPendingExam(draft)
+        saveExamLocal(created)
+        return created
+    }
+
+    suspend fun setTrunkFocus(slug: String, focused: Boolean) {
+        ensureExamSeed()
+        examDao.setTrunkFocus(slug, focused)
+    }
+
+    suspend fun focusedTrunkSlugs(): Set<String> {
+        ensureExamSeed()
+        return examDao.listTrunks().filter { it.isFocusedTrunk }.map { it.slug }.toSet()
+    }
+
+    suspend fun recordCanonicalMastery(subjectId: String?, topicId: String?, mastery: Double) {
+        if (subjectId.isNullOrBlank() || topicId.isNullOrBlank()) return
+        examDao.upsertMastery(
+            CanonicalMasteryEntity(topicId, subjectId, mastery, mastery > 0.0)
+        )
+    }
+
+    private suspend fun syncPendingExams(): Int {
+        val pending = examDao.listPendingExams()
+        var synced = 0
+        for (entity in pending) {
+            val exam = ExamLocalMapping.assemble(
+                entity,
+                examDao.subjectsFor(entity.examId),
+                examDao.topicsFor(entity.examId)
+            )
+            try {
+                val payload = exam.toPayload()
+                if (exam.syncStatus == "PENDING_CREATE") api.createExam(payload) else api.updateExam(exam.examId, payload)
+                examDao.markSynced(exam.examId)
+                synced += 1
+            } catch (_: Exception) {
+                // O id do cliente permanece até a rede voltar.
+            }
+        }
+        return synced
+    }
+
+    private fun StoredExam.toPayload(): ExamBlueprintPayload {
+        val date = when (dateType) {
+            "EXACT_DATE" -> buildJsonObject {
+                put("type", "EXACT_DATE")
+                put("iso_date", exactDateIso ?: "")
+            }
+            "ESTIMATED_WINDOW" -> buildJsonObject {
+                put("type", "ESTIMATED_WINDOW")
+                put("label", estimatedWindowLabel ?: "")
+                put("estimated_sort_date", estimatedSortDateIso)
+            }
+            else -> buildJsonObject { put("type", "UNDEFINED") }
+        }
+        return ExamBlueprintPayload(
+            id = examId,
+            title = title,
+            shortName = shortName,
+            institution = institution,
+            role = role,
+            trunkSlug = trunkSlug,
+            status = lifecycleStatus,
+            examBoards = examBoards,
+            targetDate = date,
+            historicalCutoffScore = historicalCutoffScore,
+            isActiveInLadder = isActiveInLadder,
+            ladderPriority = ladderPriority,
+            syncStatus = syncStatus,
+            subjects = subjects.map { subject ->
+                br.com.concursoprep.app.data.remote.ExamSubjectPayload(
+                    localSubjectId = subject.localSubjectId,
+                    canonicalSubjectId = subject.canonicalSubjectId,
+                    displayName = subject.displayName,
+                    category = subject.category,
+                    weight = subject.weight,
+                    questionCount = subject.questionCount,
+                    relevanceTier = subject.relevanceTier,
+                    topics = subject.topics.map { topic ->
+                        br.com.concursoprep.app.data.remote.ExamTopicPayload(
+                            localTopicId = topic.localTopicId,
+                            canonicalTopicId = topic.canonicalTopicId,
+                            canonicalSubjectId = topic.canonicalSubjectId,
+                            displayTitle = topic.displayTitle,
+                            diffStatus = topic.diffStatus
+                        )
+                    }
+                )
+            }
+        )
     }
 
     suspend fun requestAiTutor(questionId: String, kind: String, hintIndex: Int? = null): String {
@@ -565,7 +764,7 @@ class ConcursoRepository(
                 )
             )
 
-            else -> listOf(
+            "CPNU" -> listOf(
                 DisciplineSyllabusGroupDto(
                     blockName = "Conhecimentos Específicos",
                     discipline = "Segurança e Saúde do Trabalhador",
@@ -644,6 +843,7 @@ class ConcursoRepository(
                     )
                 )
             )
+            else -> emptyList()
         }
     }
 
@@ -720,6 +920,8 @@ class ConcursoRepository(
             answers = listOf("CERTO", "ERRADO"),
             correctAnswerIndices = listOf(0),
             disciplina = "Finanças Públicas",
+            canonicalSubjectId = "FIN_PUB",
+            canonicalTopicId = "FIN_PUB_01",
             source = "CESPE",
             examYear = 2024,
             level = "Médio",
@@ -828,7 +1030,11 @@ class ConcursoRepository(
             globalAccuracyPct = globalAcc,
             totalQuestionsPracticed = totalPracticed,
             totalMasteredQuestions = 128 + (localHcCorrect / 3),
-            readinessIndexScore = (69.5 + (localCorrect * 0.2)).coerceAtMost(99.0),
+            readinessIndexScore = ExamEngine.readinessForStoredExams(
+                runCatching { loadStoredExams() }.getOrDefault(emptyList()),
+                runCatching { examDao.listMastery() }.getOrDefault(emptyList())
+                    .associate { it.canonicalTopicId to it.mastery }
+            ),
             historicalCutoffReference = 74.0,
             disciplinesSortedByWeakness = listOf(
                 DisciplineMasteryBarDto("Sociologia e Psicologia Aplicadas ao Trabalho", 54.0, 45, 8, 6.2),
@@ -852,4 +1058,13 @@ class ConcursoRepository(
             }
         )
     }
+}
+
+private fun QuestionDto.toRef(): QuestionRef {
+    val inferred = QuestionCacheMapping.inferCanonical(disciplina)
+    return QuestionRef(
+        id = id,
+        canonicalSubjectId = canonicalSubjectId ?: inferred?.first,
+        canonicalTopicId = canonicalTopicId ?: inferred?.second
+    )
 }

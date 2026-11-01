@@ -14,6 +14,7 @@ import br.com.concursoprep.app.domain.model.TodayDashboardDto
 import br.com.concursoprep.app.domain.model.UserProfileDto
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
@@ -53,6 +54,45 @@ data class QuizGeneratePayload(
 data class ReportProblemPayload(
     @SerialName("user_id") val userId: Long,
     @SerialName("problem_category") val problemCategory: String
+)
+
+@Serializable
+data class ExamTopicPayload(
+    @SerialName("local_topic_id") val localTopicId: String,
+    @SerialName("canonical_topic_id") val canonicalTopicId: String,
+    @SerialName("canonical_subject_id") val canonicalSubjectId: String,
+    @SerialName("display_title") val displayTitle: String,
+    @SerialName("diff_status") val diffStatus: String
+)
+
+@Serializable
+data class ExamSubjectPayload(
+    @SerialName("local_subject_id") val localSubjectId: String,
+    @SerialName("canonical_subject_id") val canonicalSubjectId: String,
+    @SerialName("display_name") val displayName: String,
+    val category: String,
+    val weight: Double,
+    @SerialName("question_count") val questionCount: Int? = null,
+    @SerialName("relevance_tier") val relevanceTier: String,
+    val topics: List<ExamTopicPayload>
+)
+
+@Serializable
+data class ExamBlueprintPayload(
+    @SerialName("_id") val id: String,
+    val title: String,
+    @SerialName("short_name") val shortName: String,
+    val institution: String,
+    val role: String,
+    @SerialName("trunk_slug") val trunkSlug: String,
+    val status: String,
+    @SerialName("exam_boards") val examBoards: List<String>,
+    @SerialName("target_date") val targetDate: JsonObject,
+    @SerialName("historical_cutoff_score") val historicalCutoffScore: Double,
+    @SerialName("is_active_in_ladder") val isActiveInLadder: Boolean,
+    @SerialName("ladder_priority") val ladderPriority: Int,
+    val subjects: List<ExamSubjectPayload>,
+    @SerialName("sync_status") val syncStatus: String
 )
 
 interface ConcursoApiService {
@@ -113,4 +153,13 @@ interface ConcursoApiService {
 
     @GET("apk/info")
     suspend fun getApkInfo(): ApkInfoDto
+
+    @POST("exams")
+    suspend fun createExam(@Body payload: ExamBlueprintPayload): ExamBlueprintPayload
+
+    @PUT("exams/{examId}")
+    suspend fun updateExam(
+        @Path("examId") examId: String,
+        @Body payload: ExamBlueprintPayload
+    ): ExamBlueprintPayload
 }
