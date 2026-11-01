@@ -27,6 +27,14 @@ fn parse_iso_date(raw: &str) -> Option<NaiveDate> {
     None
 }
 
+pub fn study_date(at: chrono::DateTime<chrono::Utc>) -> NaiveDate {
+    at.with_timezone(&chrono::FixedOffset::west_opt(10800).unwrap())
+        .date_naive()
+}
+pub fn study_today() -> NaiveDate {
+    study_date(chrono::Utc::now())
+}
+
 pub fn days_until(iso_date: &str, today: NaiveDate) -> Option<i64> {
     parse_iso_date(iso_date).map(|date| (date - today).num_days())
 }

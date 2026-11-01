@@ -56,10 +56,7 @@ fn both_runtimes_share_utf8_mastery_weighted_score_srs_and_calendar_fixtures() {
     for v in f["study_days"].as_array().unwrap() {
         let instant = chrono::DateTime::parse_from_rfc3339(v["instant"].as_str().unwrap()).unwrap();
         assert_eq!(
-            instant
-                .with_timezone(&chrono::FixedOffset::west_opt(10800).unwrap())
-                .date_naive()
-                .to_string(),
+            study_date(instant.with_timezone(&chrono::Utc)).to_string(),
             v["day"].as_str().unwrap()
         );
     }

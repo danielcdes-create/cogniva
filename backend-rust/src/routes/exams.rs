@@ -263,7 +263,7 @@ pub async fn trunk_common_batch(
         slug: slug.clone(),
         core_subject_ids: core_subject_ids(slug),
     });
-    let today = Utc::now().date_naive();
+    let today = crate::services::exam_engine::study_today();
     let focuses = focus.into_iter().collect::<Vec<_>>();
     let rows = load_canonical_slices(&state.db, user.0).await?;
     let quantity = request.suggested_questions.clamp(1, 120);

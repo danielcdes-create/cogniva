@@ -200,7 +200,7 @@ pub async fn generate(
                 &rows,
                 &focuses,
                 quantity as u32,
-                chrono::Utc::now().date_naive(),
+                study_today(),
             );
             if let Some(card) = card {
                 let live: Vec<_> = exams

@@ -162,7 +162,7 @@ pub async fn get_today_dashboard(
         .collect::<Vec<_>>();
     let activity = load_canonical_slices(db, query.user_id).await?;
     let common_trunk_suggestion =
-        card_from_canonical_activity(&leverage_inputs, &activity, &[], 15, now.date_naive())
+        card_from_canonical_activity(&leverage_inputs, &activity, &[], 15, local_day)
             .map(|card| CommonTrunkSuggestion {
                 discipline: card.subject_name,
                 shared_contests: card.contest_names,
