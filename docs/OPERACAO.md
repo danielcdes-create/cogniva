@@ -12,6 +12,8 @@ Configurar os modelos explicitamente em `/opt/apps/.env.rust`. Em 01/11/2026, pr
 
 O operador emite `docker exec api-rust-core /usr/local/bin/app --issue-link-code ID` depois de comprovar o proprietário. O código vale dez minutos e vincula uma instalação comprovada. Repetição serve apenas à mesma instalação para recuperar resposta perdida. Não publicar códigos em issues/logs. ID ou @username não comprovam posse. `ADMIN_USER_IDS` vazio não concede administração.
 
+No Android 1.4.1, usar **Ajustes → Recuperar conta e histórico → Confirmar vínculo**. Os três campos ficam separados e há retorno no próprio formulário. **Salvar nome e metas** é independente. Uma instalação já vinculada não precisa de novo código para atualizar o APK.
+
 ## Preservação do banco
 
 `scripts/production-history.py --backup --label before` faz apenas consultas de leitura através de SSH confiável. BSON, índices e definições de views ficam fora do Git, em `%LOCALAPPDATA%/Cogniva/production-backups`. O inventário versionado contém somente contagens e hashes. Uma captura com escritores ativos não é backup transacional: conferir os fingerprints imediatamente antes/depois da promoção.
@@ -30,7 +32,13 @@ Durante a troca e o ensaio de rollback, Nginx bloqueia rotas de dados com 503 e 
 
 O pipeline provoca uma falha de smoke controlada, confirma imagem, ponteiro, Compose e saúde anteriores, e depois promove efetivamente. Falhas reais não contam como sucesso do ensaio. Entre protocolos incompatíveis, rollback mantém as rotas de dados fechadas até nova promoção válida; as filas ficam preservadas.
 
-Release operacional de 01/11/2026: `d8716db8c12653a726c9284b9e28e7ba1c30df64`, run `41343484265`, todos os jobs aprovados. Aceite repetível: `python -X utf8 scripts/verify-production-release.py d8716db8c12653a726c9284b9e28e7ba1c30df64`. Faz somente leituras, baixa o APK para `%LOCALAPPDATA%/Cogniva/releases` e grava evidência sanitizada em `docs/remediation-validation/production-release.json`.
+Release operacional atual de 01/11/2026: **1.4.1/build 8**, `22bd6027acfe277ea2d1e425578d4d4709620f1d`, run `41347592566`, todos os jobs aprovados. Aceite repetível:
+
+```powershell
+python -X utf8 scripts/verify-production-release.py 22bd6027acfe277ea2d1e425578d4d4709620f1d --version-name 1.4.1 --version-code 8 --baseline docs/remediation-validation/1.4.1/before/production-release.json --evidence-dir docs/remediation-validation/1.4.1
+```
+
+Faz somente leituras, baixa o APK para `%LOCALAPPDATA%/Cogniva/releases` e grava evidência sanitizada em `docs/remediation-validation/1.4.1/production-release.json`. As evidências da primeira release, revisão `d8716db8c12653a726c9284b9e28e7ba1c30df64`, permanecem preservadas no diretório pai.
 
 ## Recuperação e TLS
 

@@ -1,8 +1,8 @@
 # Tratamento dos 39 achados
 
-Estado em 01/11/2026: tratamento de C01–C39 implementado e release 1.4.0/build 7 em produção. Gates, assinatura, rollback controlado, promoção e aceite externo concluídos na revisão `d8716db8c12653a726c9284b9e28e7ba1c30df64`. As fronteiras de dados e de aparelho físico abaixo permanecem explícitas. O diagnóstico original e seus bytes permanecem em `auditoria/2026-11-01`.
+Fechamento inicial em 01/11/2026: tratamento de C01–C39 implementado e release 1.4.0/build 7 entregue. Gates, assinatura, rollback controlado, promoção e aceite externo concluídos na revisão `d8716db8c12653a726c9284b9e28e7ba1c30df64`. A versão atual é **1.4.1/build 8**, com a [correção adicional de Ajustes](CORRECAO-VINCULO-1.4.1.md), cinco testes de emulador e novo aceite operacional concluído. As fronteiras de dados e de aparelho físico abaixo permanecem explícitas. O diagnóstico original e seus bytes permanecem em `auditoria/2026-11-01`.
 
-## Resultado operacional
+## Resultado operacional da primeira release (1.4.0)
 
 - [Run 41343484265](https://github.com/danielcdes-create/cogniva/actions/runs/41343484265): todos os cinco jobs aprovados. Backend com 24 testes; Android/JVM, lint e golden aprovados; três testes reais no emulador API 35/Android 15, 1440×3088/500dpi com cutout.
 - Log de promoção registra `ROLLBACK_HEALTHY`, `CONTROLLED_ROLLBACK_VERIFIED` e promoção efetiva às 20:04:07 UTC. O gate de manutenção está aberto e acesso anônimo a dados retorna 401.

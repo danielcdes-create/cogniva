@@ -1,0 +1,37 @@
+{
+  "run": 41347592566,
+  "api": 35,
+  "android": "15",
+  "tests": [
+    {
+      "class": "br.com.concursoprep.app.QuestionInsetCollisionTest",
+      "test": "topBarClearsCutoutAndCtaClearsNavigation",
+      "seconds": "3.89",
+      "passed": true
+    },
+    {
+      "class": "br.com.concursoprep.app.DurableStorageTest",
+      "test": "versionTwoPreservesLegacyBytesAndQuarantinesAmbiguousDelivery",
+      "seconds": "1.078",
+      "passed": true
+    },
+    {
+      "class": "br.com.concursoprep.app.DurableStorageTest",
+      "test": "sessionAndDeadlineSurviveReopenAndLateSavesCannotResurrectCompletion",
+      "seconds": "0.57",
+      "passed": true
+    },
+    {
+      "class": "br.com.concursoprep.app.AccountLinkSettingsTest",
+      "test": "confirmsBesideTheCodeWithoutSavingPreferences",
+      "seconds": "7.46",
+      "passed": true
+    },
+    {
+      "class": "br.com.concursoprep.app.AccountLinkSettingsTest",
+      "test": "largeFontKeepsAllFieldsAndConfirmationReachable",
+      "seconds": "6.686",
+      "passed": true
+    }
+  ]
+}

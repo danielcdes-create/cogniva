@@ -1,0 +1,514 @@
+﻿2026-11-01T20:35:06.7946415Z Current runner version: '2.338.2'
+2026-11-01T20:35:06.7973872Z ##[group]Runner Image Provisioner
+2026-11-01T20:35:06.7974809Z Hosted Compute Agent
+2026-11-01T20:35:06.7975538Z Version: 20261021.618
+2026-11-01T20:35:06.7976270Z Commit: 21505ad2541d5be6135ed84fc33697146cf75b8e
+2026-11-01T20:35:06.7977032Z Build Date: 2026-10-21T00:45:21Z
+2026-11-01T20:35:06.7977865Z Worker ID: {9a56ff39-4c55-4e1b-b0b2-02c45b0386cf}
+2026-11-01T20:35:06.7978653Z Region: westcentralus
+2026-11-01T20:35:06.7979300Z Cloud: Azure
+2026-11-01T20:35:06.7980210Z ##[endgroup]
+2026-11-01T20:35:06.7981806Z ##[group]Operating System
+2026-11-01T20:35:06.7982776Z Ubuntu
+2026-11-01T20:35:06.7983534Z 24.04.5
+2026-11-01T20:35:06.7984363Z LTS
+2026-11-01T20:35:06.7985242Z ##[endgroup]
+2026-11-01T20:35:06.7986128Z ##[group]Runner Image
+2026-11-01T20:35:06.7987241Z Image: ubuntu-24.04
+2026-11-01T20:35:06.7988153Z Version: 20261025.353.1
+2026-11-01T20:35:06.7990545Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261025.353/images/ubuntu/Ubuntu2404-Readme.md
+2026-11-01T20:35:06.7993252Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261025.353
+2026-11-01T20:35:06.7994922Z ##[endgroup]
+2026-11-01T20:35:06.7996520Z ##[group]GITHUB_TOKEN Permissions
+2026-11-01T20:35:06.7999034Z Contents: read
+2026-11-01T20:35:06.7999723Z Metadata: read
+2026-11-01T20:35:06.8000700Z ##[endgroup]
+2026-11-01T20:35:06.8003839Z Secret source: Actions
+2026-11-01T20:35:06.8005420Z Cache mode: write
+2026-11-01T20:35:06.8006330Z Prepare workflow directory
+2026-11-01T20:35:06.8387134Z Prepare all required actions
+2026-11-01T20:35:06.8435744Z Getting action download info
+2026-11-01T20:35:07.1534310Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-11-01T20:35:07.3836664Z Download action repository 'dtolnay/rust-toolchain@stable' (SHA:b725eda525362e7cf34af9a7243cac1e3f01a7ec)
+2026-11-01T20:35:07.5769479Z Download action repository 'Swatinem/rust-cache@v2' (SHA:d1527c8f67ef9af357290475d4af4b0fab8f12e0)
+2026-11-01T20:35:08.3335323Z Uses: danielcdes-create/cogniva/.github/workflows/validate.yml@refs/heads/codex/auditoria-convergencia (22bd6027acfe277ea2d1e425578d4d4709620f1d)
+2026-11-01T20:35:08.3342569Z ##[group] Inputs
+2026-11-01T20:35:08.3344225Z   promote: true
+2026-11-01T20:35:08.3345420Z ##[endgroup]
+2026-11-01T20:35:08.3346454Z Complete job name: verify / backend
+2026-11-01T20:35:08.4435846Z ##[group]Run actions/checkout@v4
+2026-11-01T20:35:08.4437272Z with:
+2026-11-01T20:35:08.4438223Z   repository: danielcdes-create/cogniva
+2026-11-01T20:35:08.4447084Z   token: ***
+2026-11-01T20:35:08.4448003Z   ssh-strict: true
+2026-11-01T20:35:08.4448939Z   ssh-user: git
+2026-11-01T20:35:08.4449882Z   persist-credentials: true
+2026-11-01T20:35:08.4451170Z   clean: true
+2026-11-01T20:35:08.4452125Z   sparse-checkout-cone-mode: true
+2026-11-01T20:35:08.4453234Z   fetch-depth: 1
+2026-11-01T20:35:08.4454159Z   fetch-tags: false
+2026-11-01T20:35:08.4455105Z   show-progress: true
+2026-11-01T20:35:08.4456098Z   lfs: false
+2026-11-01T20:35:08.4456985Z   submodules: false
+2026-11-01T20:35:08.4457960Z   set-safe-directory: true
+2026-11-01T20:35:08.4459036Z   allow-unsafe-pr-checkout: false
+2026-11-01T20:35:08.4460667Z ##[endgroup]
+2026-11-01T20:35:08.6657135Z Syncing repository: danielcdes-create/cogniva
+2026-11-01T20:35:08.6661280Z ##[group]Getting Git version info
+2026-11-01T20:35:08.6663040Z Working directory is '/home/runner/work/cogniva/cogniva'
+2026-11-01T20:35:08.6665494Z [command]/usr/bin/git version
+2026-11-01T20:35:08.6698374Z git version 2.56.0
+2026-11-01T20:35:08.6724144Z ##[endgroup]
+2026-11-01T20:35:08.6739243Z Temporarily overriding HOME='/home/runner/work/_temp/2f8b1183-27af-4b2f-8743-47050580f835' before making global git config changes
+2026-11-01T20:35:08.6744115Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-01T20:35:08.6747988Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/cogniva/cogniva
+2026-11-01T20:35:08.6802119Z Deleting the contents of '/home/runner/work/cogniva/cogniva'
+2026-11-01T20:35:08.6808754Z ##[group]Initializing the repository
+2026-11-01T20:35:08.6829438Z [command]/usr/bin/git init /home/runner/work/cogniva/cogniva
+2026-11-01T20:35:08.6915893Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-11-01T20:35:08.6919377Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-11-01T20:35:08.6922653Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-11-01T20:35:08.6925108Z hint: call:
+2026-11-01T20:35:08.6926476Z hint:
+2026-11-01T20:35:08.6928113Z hint: 	git config --global init.defaultBranch <name>
+2026-11-01T20:35:08.6930299Z hint:
+2026-11-01T20:35:08.6932733Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-11-01T20:35:08.6934991Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-11-01T20:35:08.6936597Z hint:
+2026-11-01T20:35:08.6937538Z hint: 	git branch -m <name>
+2026-11-01T20:35:08.6938638Z hint:
+2026-11-01T20:35:08.6940303Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-11-01T20:35:08.6942953Z Initialized empty Git repository in /home/runner/work/cogniva/cogniva/.git/
+2026-11-01T20:35:08.6946915Z [command]/usr/bin/git remote add origin https://github.com/danielcdes-create/cogniva
+2026-11-01T20:35:08.7039488Z ##[endgroup]
+2026-11-01T20:35:08.7042403Z ##[group]Disabling automatic garbage collection
+2026-11-01T20:35:08.7044446Z [command]/usr/bin/git config --local gc.auto 0
+2026-11-01T20:35:08.7082369Z ##[endgroup]
+2026-11-01T20:35:08.7084094Z ##[group]Setting up auth
+2026-11-01T20:35:08.7090608Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-01T20:35:08.7133549Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-01T20:35:08.7512297Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-01T20:35:08.7566734Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-01T20:35:08.7855807Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-01T20:35:08.7907505Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-01T20:35:08.8175276Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-11-01T20:35:08.8233060Z ##[endgroup]
+2026-11-01T20:35:08.8234646Z ##[group]Fetching the repository
+2026-11-01T20:35:08.8250477Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +22bd6027acfe277ea2d1e425578d4d4709620f1d:refs/remotes/origin/codex/auditoria-convergencia
+2026-11-01T20:35:09.4759099Z From https://github.com/danielcdes-create/cogniva
+2026-11-01T20:35:09.4761156Z  * [new ref]         22bd6027acfe277ea2d1e425578d4d4709620f1d -> origin/codex/auditoria-convergencia
+2026-11-01T20:35:09.4764661Z ##[endgroup]
+2026-11-01T20:35:09.4765506Z ##[group]Determining the checkout info
+2026-11-01T20:35:09.4767969Z ##[endgroup]
+2026-11-01T20:35:09.4774141Z [command]/usr/bin/git sparse-checkout disable
+2026-11-01T20:35:09.4837265Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-11-01T20:35:09.4883681Z ##[group]Checking out the ref
+2026-11-01T20:35:09.4888092Z [command]/usr/bin/git checkout --progress --force -B codex/auditoria-convergencia refs/remotes/origin/codex/auditoria-convergencia
+2026-11-01T20:35:09.5254875Z Switched to a new branch 'codex/auditoria-convergencia'
+2026-11-01T20:35:09.5258036Z branch 'codex/auditoria-convergencia' set up to track 'origin/codex/auditoria-convergencia'.
+2026-11-01T20:35:09.5267013Z ##[endgroup]
+2026-11-01T20:35:09.5325394Z [command]/usr/bin/git log -1 --format=%H
+2026-11-01T20:35:09.5362503Z 22bd6027acfe277ea2d1e425578d4d4709620f1d
+2026-11-01T20:35:09.5845847Z ##[group]Run dtolnay/rust-toolchain@stable
+2026-11-01T20:35:09.5846298Z with:
+2026-11-01T20:35:09.5846594Z   toolchain: 1.93.1
+2026-11-01T20:35:09.5846909Z ##[endgroup]
+2026-11-01T20:35:09.5921274Z ##[start-action display=Parse toolchain version;id=__dtolnay_rust-toolchain.parse]
+2026-11-01T20:35:09.5982308Z ##[group]Run if [[ -z $toolchain ]]; then
+2026-11-01T20:35:09.5982868Z [36;1mif [[ -z $toolchain ]]; then[0m
+2026-11-01T20:35:09.5983554Z [36;1m  # GitHub does not enforce `required: true` inputs itself. https://github.com/actions/runner/issues/1070[0m
+2026-11-01T20:35:09.5984253Z [36;1m  echo "'toolchain' is a required input" >&2[0m
+2026-11-01T20:35:09.5984667Z [36;1m  exit 1[0m
+2026-11-01T20:35:09.5985117Z [36;1melif [[ $toolchain =~ ^stable' '[0-9]+' '(year|month|week|day)s?' 'ago$ ]]; then[0m
+2026-11-01T20:35:09.5985681Z [36;1m  if [[ Linux == macOS ]]; then[0m
+2026-11-01T20:35:09.5986384Z [36;1m    echo "toolchain=1.$((($(date -v-$(sed 's/stable \([0-9]*\) \(.\).*/\1\2/' <<< $toolchain) +%s)/60/60/24-16569)/7/6))" >> $GITHUB_OUTPUT[0m
+2026-11-01T20:35:09.5987041Z [36;1m  else[0m
+2026-11-01T20:35:09.5987570Z [36;1m    echo "toolchain=1.$((($(date --date "${toolchain#stable }" +%s)/60/60/24-16569)/7/6))" >> $GITHUB_OUTPUT[0m
+2026-11-01T20:35:09.5988137Z [36;1m  fi[0m
+2026-11-01T20:35:09.5988544Z [36;1melif [[ $toolchain =~ ^stable' 'minus' '[0-9]+' 'releases?$ ]]; then[0m
+2026-11-01T20:35:09.5989202Z [36;1m  echo "toolchain=1.$((($(date +%s)/60/60/24-16569)/7/6-${toolchain//[^0-9]/}))" >> $GITHUB_OUTPUT[0m
+2026-11-01T20:35:09.5989784Z [36;1melif [[ $toolchain =~ ^1\.[0-9]+$ ]]; then[0m
+2026-11-01T20:35:09.5990568Z [36;1m  echo "toolchain=1.$((i=${toolchain#1.}, c=($(date +%s)/60/60/24-16569)/7/6, i+9*i*(10*i<=c)+90*i*(100*i<=c)))" >> $GITHUB_OUTPUT[0m
+2026-11-01T20:35:09.5991200Z [36;1melse[0m
+2026-11-01T20:35:09.5991508Z [36;1m  delimiter=EOF[0m
+2026-11-01T20:35:09.5991935Z [36;1m  while [[ $toolchain == *$delimiter* ]]; do delimiter+=_; done[0m
+2026-11-01T20:35:09.5992565Z [36;1m  printf 'toolchain<<%s\n%s\n%s\n' "$delimiter" "$toolchain" "$delimiter" >> $GITHUB_OUTPUT[0m
+2026-11-01T20:35:09.5993098Z [36;1mfi[0m
+2026-11-01T20:35:09.6021177Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-11-01T20:35:09.6021657Z env:
+2026-11-01T20:35:09.6021952Z   toolchain: 1.93.1
+2026-11-01T20:35:09.6022260Z ##[endgroup]
+2026-11-01T20:35:09.6127224Z ##[end-action id=__dtolnay_rust-toolchain.parse;outcome=success;conclusion=success;duration_ms=20]
+2026-11-01T20:35:09.6132773Z ##[start-action display=Set $CARGO_HOME;id=__dtolnay_rust-toolchain.__run]
+2026-11-01T20:35:09.6169254Z ##[group]Run echo CARGO_HOME=${CARGO_HOME:-"$HOME/.cargo"} >> $GITHUB_ENV
+2026-11-01T20:35:09.6169939Z [36;1mecho CARGO_HOME=${CARGO_HOME:-"$HOME/.cargo"} >> $GITHUB_ENV[0m
+2026-11-01T20:35:09.6192884Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-11-01T20:35:09.6193409Z ##[endgroup]
+2026-11-01T20:35:09.6252127Z ##[end-action id=__dtolnay_rust-toolchain.__run;outcome=success;conclusion=success;duration_ms=11]
+2026-11-01T20:35:09.6255112Z ##[start-action display=Install rustup if needed;id=__dtolnay_rust-toolchain.__run_2]
+2026-11-01T20:35:09.6286273Z ##[group]Run if ! command -v rustup &>/dev/null; then
+2026-11-01T20:35:09.6286798Z [36;1mif ! command -v rustup &>/dev/null; then[0m
+2026-11-01T20:35:09.6287745Z [36;1m  curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused --location --silent --show-error --fail https://sh.rustup.rs | sh -s -- --default-toolchain none -y[0m
+2026-11-01T20:35:09.6288628Z [36;1m  echo "$CARGO_HOME/bin" >> $GITHUB_PATH[0m
+2026-11-01T20:35:09.6289055Z [36;1mfi[0m
+2026-11-01T20:35:09.6310711Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-11-01T20:35:09.6311199Z env:
+2026-11-01T20:35:09.6311534Z   CARGO_HOME: /home/runner/.cargo
+2026-11-01T20:35:09.6312119Z ##[endgroup]
+2026-11-01T20:35:09.6366906Z ##[end-action id=__dtolnay_rust-toolchain.__run_2;outcome=success;conclusion=success;duration_ms=11]
+2026-11-01T20:35:09.6369905Z ##[start-action display=Install rustup if needed on windows;id=__dtolnay_rust-toolchain.__run_3]
+2026-11-01T20:35:09.6378889Z ##[end-action id=__dtolnay_rust-toolchain.__run_3;outcome=skipped;conclusion=skipped;duration_ms=0]
+2026-11-01T20:35:09.6394436Z ##[start-action display=rustup toolchain install 1.93.1;id=__dtolnay_rust-toolchain.__run_4]
+2026-11-01T20:35:09.6416773Z ##[group]Run set -f  # split targets and components on commas and whitespace, without glob expansion
+2026-11-01T20:35:09.6417662Z [36;1mset -f  # split targets and components on commas and whitespace, without glob expansion[0m
+2026-11-01T20:35:09.6418284Z [36;1mflags=()[0m
+2026-11-01T20:35:09.6418725Z [36;1mfor t in ${targets//,/ }; do flags+=(--target "$t"); done[0m
+2026-11-01T20:35:09.6419309Z [36;1mfor c in ${components//,/ }; do flags+=(--component "$c"); done[0m
+2026-11-01T20:35:09.6420164Z [36;1mif [[ $toolchain == nightly && -n $components ]]; then flags+=(--allow-downgrade); fi[0m
+2026-11-01T20:35:09.6420786Z [36;1mlog=$(mktemp)[0m
+2026-11-01T20:35:09.6421174Z [36;1mtrap 'rm -f "$log"' EXIT[0m
+2026-11-01T20:35:09.6421592Z [36;1mfor attempt in 1 2 3 4 5; do[0m
+2026-11-01T20:35:09.6422335Z [36;1m  if rustup toolchain install "$toolchain" "${flags[@]}" --profile minimal --no-self-update --force-non-host 2>&1 | tee "$log"; then[0m
+2026-11-01T20:35:09.6423119Z [36;1m    break[0m
+2026-11-01T20:35:09.6423483Z [36;1m  else[0m
+2026-11-01T20:35:09.6423832Z [36;1m    status=$?[0m
+2026-11-01T20:35:09.6424189Z [36;1m  fi[0m
+2026-11-01T20:35:09.6424630Z [36;1m  if [[ $attempt == 5 ]] || ! grep -Fq 'checksum failed for ' "$log" \[0m
+2026-11-01T20:35:09.6425439Z [36;1m      || ! grep -Fq 'this is likely due to an ongoing update of the official release server' "$log"; then[0m
+2026-11-01T20:35:09.6426081Z [36;1m    exit "$status"[0m
+2026-11-01T20:35:09.6426461Z [36;1m  fi[0m
+2026-11-01T20:35:09.6426973Z [36;1m  echo "Retrying rustup toolchain install in 30 seconds (retry $attempt of 4)" >&2[0m
+2026-11-01T20:35:09.6427562Z [36;1m  sleep 30[0m
+2026-11-01T20:35:09.6427929Z [36;1mdone[0m
+2026-11-01T20:35:09.6450241Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-11-01T20:35:09.6450769Z env:
+2026-11-01T20:35:09.6451117Z   CARGO_HOME: /home/runner/.cargo
+2026-11-01T20:35:09.6451534Z   toolchain: 1.93.1
+2026-11-01T20:35:09.6451882Z   targets: 
+2026-11-01T20:35:09.6452197Z   components: 
+2026-11-01T20:35:09.6452545Z   RUSTUP_PERMIT_COPY_RENAME: 1
+2026-11-01T20:35:09.6452929Z ##[endgroup]
+2026-11-01T20:35:09.6871213Z info: syncing channel updates for 1.93.1-x86_64-unknown-linux-gnu
+2026-11-01T20:35:09.9815133Z info: latest update on 2026-02-12 for version 1.93.1 (01f6ddf75 2026-02-11)
+2026-11-01T20:35:09.9816148Z info: downloading 3 components
+2026-11-01T20:35:18.5632782Z 
+2026-11-01T20:35:18.5716794Z   1.93.1-x86_64-unknown-linux-gnu installed - rustc 1.93.1 (01f6ddf75 2026-02-11)
+2026-11-01T20:35:18.5717281Z 
+2026-11-01T20:35:18.5875540Z ##[end-action id=__dtolnay_rust-toolchain.__run_4;outcome=success;conclusion=success;duration_ms=8947]
+2026-11-01T20:35:18.5886804Z ##[start-action display=rustup default 1.93.1;id=__dtolnay_rust-toolchain.__run_5]
+2026-11-01T20:35:18.5911272Z ##[group]Run rustup default "$toolchain" --force-non-host
+2026-11-01T20:35:18.5911745Z [36;1mrustup default "$toolchain" --force-non-host[0m
+2026-11-01T20:35:18.5933469Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-11-01T20:35:18.5933866Z env:
+2026-11-01T20:35:18.5934127Z   CARGO_HOME: /home/runner/.cargo
+2026-11-01T20:35:18.5934450Z   toolchain: 1.93.1
+2026-11-01T20:35:18.5934722Z ##[endgroup]
+2026-11-01T20:35:18.6032294Z info: using existing install for 1.93.1-x86_64-unknown-linux-gnu
+2026-11-01T20:35:18.6039071Z info: default toolchain set to 1.93.1-x86_64-unknown-linux-gnu
+2026-11-01T20:35:18.6039700Z 
+2026-11-01T20:35:18.6117651Z   1.93.1-x86_64-unknown-linux-gnu unchanged - rustc 1.93.1 (01f6ddf75 2026-02-11)
+2026-11-01T20:35:18.6118199Z 
+2026-11-01T20:35:18.6139889Z ##[end-action id=__dtolnay_rust-toolchain.__run_5;outcome=success;conclusion=success;duration_ms=25]
+2026-11-01T20:35:18.6145208Z ##[start-action display=Create cachekey;id=__dtolnay_rust-toolchain.rustc-version]
+2026-11-01T20:35:18.6167790Z ##[group]Run DATE=$(rustc +"$toolchain" --version --verbose | sed -ne 's/^commit-date: \(20[0-9][0-9]\)-\([01][0-9]\)-\([0-3][0-9]\)$/\1\2\3/p')
+2026-11-01T20:35:18.6168710Z [36;1mDATE=$(rustc +"$toolchain" --version --verbose | sed -ne 's/^commit-date: \(20[0-9][0-9]\)-\([01][0-9]\)-\([0-3][0-9]\)$/\1\2\3/p')[0m
+2026-11-01T20:35:18.6169431Z [36;1mHASH=$(rustc +"$toolchain" --version --verbose | sed -ne 's/^commit-hash: //p')[0m
+2026-11-01T20:35:18.6170271Z [36;1mecho "cachekey=$(echo $DATE$HASH | head -c12)" >> $GITHUB_OUTPUT[0m
+2026-11-01T20:35:18.6192168Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-11-01T20:35:18.6192580Z env:
+2026-11-01T20:35:18.6192846Z   CARGO_HOME: /home/runner/.cargo
+2026-11-01T20:35:18.6193172Z   toolchain: 1.93.1
+2026-11-01T20:35:18.6193463Z ##[endgroup]
+2026-11-01T20:35:18.6555686Z ##[end-action id=__dtolnay_rust-toolchain.rustc-version;outcome=success;conclusion=success;duration_ms=40]
+2026-11-01T20:35:18.6558998Z ##[start-action display=Disable incremental compilation;id=__dtolnay_rust-toolchain.__run_6]
+2026-11-01T20:35:18.6582706Z ##[group]Run if [ -z "${CARGO_INCREMENTAL+set}" ]; then
+2026-11-01T20:35:18.6583153Z [36;1mif [ -z "${CARGO_INCREMENTAL+set}" ]; then[0m
+2026-11-01T20:35:18.6583536Z [36;1m  echo CARGO_INCREMENTAL=0 >> $GITHUB_ENV[0m
+2026-11-01T20:35:18.6583891Z [36;1mfi[0m
+2026-11-01T20:35:18.6606086Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-11-01T20:35:18.6606511Z env:
+2026-11-01T20:35:18.6606779Z   CARGO_HOME: /home/runner/.cargo
+2026-11-01T20:35:18.6607094Z ##[endgroup]
+2026-11-01T20:35:18.6659538Z ##[end-action id=__dtolnay_rust-toolchain.__run_6;outcome=success;conclusion=success;duration_ms=9]
+2026-11-01T20:35:18.6662667Z ##[start-action display=Enable colors in Cargo output;id=__dtolnay_rust-toolchain.__run_7]
+2026-11-01T20:35:18.6684373Z ##[group]Run if [ -z "${CARGO_TERM_COLOR+set}" ]; then
+2026-11-01T20:35:18.6709074Z [36;1mif [ -z "${CARGO_TERM_COLOR+set}" ]; then[0m
+2026-11-01T20:35:18.6709498Z [36;1m  echo CARGO_TERM_COLOR=always >> $GITHUB_ENV[0m
+2026-11-01T20:35:18.6709857Z [36;1mfi[0m
+2026-11-01T20:35:18.6730679Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-11-01T20:35:18.6731085Z env:
+2026-11-01T20:35:18.6731357Z   CARGO_HOME: /home/runner/.cargo
+2026-11-01T20:35:18.6731680Z   CARGO_INCREMENTAL: 0
+2026-11-01T20:35:18.6731956Z ##[endgroup]
+2026-11-01T20:35:18.6786058Z ##[end-action id=__dtolnay_rust-toolchain.__run_7;outcome=success;conclusion=success;duration_ms=12]
+2026-11-01T20:35:18.6791133Z ##[start-action display=Enable Cargo sparse registry;id=__dtolnay_rust-toolchain.__run_8]
+2026-11-01T20:35:18.6814462Z ##[group]Run # implemented in 1.66, stabilized in 1.68, made default in 1.70
+2026-11-01T20:35:18.6815049Z [36;1m# implemented in 1.66, stabilized in 1.68, made default in 1.70[0m
+2026-11-01T20:35:18.6815806Z [36;1mif [ -z "${CARGO_REGISTRIES_CRATES_IO_PROTOCOL+set}" -o -f "/home/runner/work/_temp"/.implicit_cargo_registries_crates_io_protocol ]; then[0m
+2026-11-01T20:35:18.6816583Z [36;1m  if rustc +"$toolchain" --version --verbose | grep -q '^release: 1\.6[89]\.'; then[0m
+2026-11-01T20:35:18.6817220Z [36;1m    touch "/home/runner/work/_temp"/.implicit_cargo_registries_crates_io_protocol || true[0m
+2026-11-01T20:35:18.6817809Z [36;1m    echo CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse >> $GITHUB_ENV[0m
+2026-11-01T20:35:18.6818374Z [36;1m  elif rustc +"$toolchain" --version --verbose | grep -q '^release: 1\.6[67]\.'; then[0m
+2026-11-01T20:35:18.6819039Z [36;1m    touch "/home/runner/work/_temp"/.implicit_cargo_registries_crates_io_protocol || true[0m
+2026-11-01T20:35:18.6819812Z [36;1m    echo CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git >> $GITHUB_ENV[0m
+2026-11-01T20:35:18.6820438Z [36;1m  fi[0m
+2026-11-01T20:35:18.6820689Z [36;1mfi[0m
+2026-11-01T20:35:18.6840778Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-11-01T20:35:18.6841168Z env:
+2026-11-01T20:35:18.6841433Z   CARGO_HOME: /home/runner/.cargo
+2026-11-01T20:35:18.6841745Z   CARGO_INCREMENTAL: 0
+2026-11-01T20:35:18.6842036Z   CARGO_TERM_COLOR: always
+2026-11-01T20:35:18.6842318Z   toolchain: 1.93.1
+2026-11-01T20:35:18.6842581Z ##[endgroup]
+2026-11-01T20:35:18.7167441Z ##[end-action id=__dtolnay_rust-toolchain.__run_8;outcome=success;conclusion=success;duration_ms=37]
+2026-11-01T20:35:18.7173110Z ##[start-action display=Work around spurious network errors in curl 8.0;id=__dtolnay_rust-toolchain.__run_9]
+2026-11-01T20:35:18.7196193Z ##[group]Run # https://rust-lang.zulipchat.com/#narrow/stream/246057-t-cargo/topic/timeout.20investigation
+2026-11-01T20:35:18.7197021Z [36;1m# https://rust-lang.zulipchat.com/#narrow/stream/246057-t-cargo/topic/timeout.20investigation[0m
+2026-11-01T20:35:18.7197753Z [36;1mif rustc +"$toolchain" --version --verbose | grep -q '^release: 1\.7[01]\.'; then[0m
+2026-11-01T20:35:18.7198274Z [36;1m  echo CARGO_HTTP_MULTIPLEXING=false >> $GITHUB_ENV[0m
+2026-11-01T20:35:18.7198639Z [36;1mfi[0m
+2026-11-01T20:35:18.7220784Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-11-01T20:35:18.7221177Z env:
+2026-11-01T20:35:18.7221486Z   CARGO_HOME: /home/runner/.cargo
+2026-11-01T20:35:18.7221799Z   CARGO_INCREMENTAL: 0
+2026-11-01T20:35:18.7222078Z   CARGO_TERM_COLOR: always
+2026-11-01T20:35:18.7222357Z   toolchain: 1.93.1
+2026-11-01T20:35:18.7222625Z ##[endgroup]
+2026-11-01T20:35:18.7410951Z ##[end-action id=__dtolnay_rust-toolchain.__run_9;outcome=success;conclusion=success;duration_ms=23]
+2026-11-01T20:35:18.7416941Z ##[start-action display=rustc +1.93.1 --version --verbose;id=__dtolnay_rust-toolchain.__run_10]
+2026-11-01T20:35:18.7439192Z ##[group]Run rustc +"$toolchain" --version --verbose
+2026-11-01T20:35:18.7439670Z [36;1mrustc +"$toolchain" --version --verbose[0m
+2026-11-01T20:35:18.7461316Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-11-01T20:35:18.7461712Z env:
+2026-11-01T20:35:18.7461976Z   CARGO_HOME: /home/runner/.cargo
+2026-11-01T20:35:18.7462290Z   CARGO_INCREMENTAL: 0
+2026-11-01T20:35:18.7462580Z   CARGO_TERM_COLOR: always
+2026-11-01T20:35:18.7462887Z   toolchain: 1.93.1
+2026-11-01T20:35:18.7463149Z ##[endgroup]
+2026-11-01T20:35:18.7629679Z rustc 1.93.1 (01f6ddf75 2026-02-11)
+2026-11-01T20:35:18.7630456Z binary: rustc
+2026-11-01T20:35:18.7630971Z commit-hash: 01f6ddf7588f42ae2d7eb0a2f21d44e8e96674cf
+2026-11-01T20:35:18.7631541Z commit-date: 2026-02-11
+2026-11-01T20:35:18.7632232Z host: x86_64-unknown-linux-gnu
+2026-11-01T20:35:18.7632564Z release: 1.93.1
+2026-11-01T20:35:18.7632837Z LLVM version: 21.1.8
+2026-11-01T20:35:18.7649338Z ##[end-action id=__dtolnay_rust-toolchain.__run_10;outcome=success;conclusion=success;duration_ms=23]
+2026-11-01T20:35:18.7779817Z ##[group]Run Swatinem/rust-cache@v2
+2026-11-01T20:35:18.7780478Z with:
+2026-11-01T20:35:18.7780750Z   workspaces: backend-rust
+2026-11-01T20:35:18.7781049Z   prefix-key: v0-rust
+2026-11-01T20:35:18.7781329Z   add-job-id-key: true
+2026-11-01T20:35:18.7781622Z   add-rust-environment-hash-key: true
+2026-11-01T20:35:18.7781944Z   cache-targets: true
+2026-11-01T20:35:18.7782219Z   cache-all-crates: false
+2026-11-01T20:35:18.7782514Z   cache-workspace-crates: false
+2026-11-01T20:35:18.7782816Z   save-if: true
+2026-11-01T20:35:18.7783083Z   cache-provider: github
+2026-11-01T20:35:18.7783365Z   cache-bin: true
+2026-11-01T20:35:18.7783626Z   lookup-only: false
+2026-11-01T20:35:18.7783887Z   cmd-format: {0}
+2026-11-01T20:35:18.7784142Z env:
+2026-11-01T20:35:18.7784401Z   CARGO_HOME: /home/runner/.cargo
+2026-11-01T20:35:18.7784709Z   CARGO_INCREMENTAL: 0
+2026-11-01T20:35:18.7784984Z   CARGO_TERM_COLOR: always
+2026-11-01T20:35:18.7785260Z ##[endgroup]
+2026-11-01T20:35:19.1226435Z ##[group]Cache Configuration
+2026-11-01T20:35:19.1227779Z Cache Provider:
+2026-11-01T20:35:19.1228622Z     github
+2026-11-01T20:35:19.1228923Z Workspaces:
+2026-11-01T20:35:19.1229298Z     /home/runner/work/cogniva/cogniva/backend-rust
+2026-11-01T20:35:19.1229772Z Cache Paths:
+2026-11-01T20:35:19.1230267Z     /home/runner/.cargo/bin
+2026-11-01T20:35:19.1230523Z     /home/runner/.cargo/.crates.toml
+2026-11-01T20:35:19.1230802Z     /home/runner/.cargo/.crates2.json
+2026-11-01T20:35:19.1231081Z     /home/runner/.cargo/registry
+2026-11-01T20:35:19.1231350Z     /home/runner/.cargo/git
+2026-11-01T20:35:19.1231744Z     /home/runner/work/cogniva/cogniva/backend-rust/target
+2026-11-01T20:35:19.1232100Z Restore Key:
+2026-11-01T20:35:19.1232379Z     v0-rust-backend-Linux-x64-b676d4ff
+2026-11-01T20:35:19.1232789Z Cache Key:
+2026-11-01T20:35:19.1233141Z     v0-rust-backend-Linux-x64-b676d4ff-4ad74642
+2026-11-01T20:35:19.1233585Z .. Prefix:
+2026-11-01T20:35:19.1233866Z   - v0-rust-backend-Linux-x64
+2026-11-01T20:35:19.1234143Z .. Environment considered:
+2026-11-01T20:35:19.1234379Z   - Rust Versions:
+2026-11-01T20:35:19.1234716Z     - 1.93.1 x86_64-unknown-linux-gnu 01f6ddf7588f42ae2d7eb0a2f21d44e8e96674cf
+2026-11-01T20:35:19.1235219Z     - 1.99.1 x86_64-unknown-linux-gnu 58cf8f9c35b355199727627d07ae34a4e2846d67
+2026-11-01T20:35:19.1235563Z   - CARGO_HOME
+2026-11-01T20:35:19.1235864Z   - CARGO_INCREMENTAL
+2026-11-01T20:35:19.1236178Z   - CARGO_TERM_COLOR
+2026-11-01T20:35:19.1236605Z .. Lockfiles considered:
+2026-11-01T20:35:19.1236979Z   - /home/runner/work/cogniva/cogniva/backend-rust/Cargo.lock
+2026-11-01T20:35:19.1237472Z   - /home/runner/work/cogniva/cogniva/backend-rust/Cargo.toml
+2026-11-01T20:35:19.1238155Z ##[endgroup]
+2026-11-01T20:35:19.1238269Z 
+2026-11-01T20:35:19.1238371Z ... Restoring cache ...
+2026-11-01T20:35:19.3091409Z Cache hit for: v0-rust-backend-Linux-x64-b676d4ff-4ad74642
+2026-11-01T20:35:20.4935105Z Received 54525952 of 332167163 (16.4%), 51.9 MBs/sec
+2026-11-01T20:35:21.4956172Z Received 150994944 of 332167163 (45.5%), 72.0 MBs/sec
+2026-11-01T20:35:22.4994144Z Received 285212672 of 332167163 (85.9%), 90.5 MBs/sec
+2026-11-01T20:35:22.7901312Z Received 332167163 of 332167163 (100.0%), 96.1 MBs/sec
+2026-11-01T20:35:22.7902370Z Cache Size: ~317 MB (332167163 B)
+2026-11-01T20:35:22.7977611Z [command]/usr/bin/tar -xf /home/runner/work/_temp/23eb4de1-3b8a-43f0-884c-5571467ca41c/cache.tzst -P -C /home/runner/work/cogniva/cogniva --use-compress-program unzstd
+2026-11-01T20:35:24.9505156Z Cache restored successfully
+2026-11-01T20:35:25.0361703Z Restored from cache key "v0-rust-backend-Linux-x64-b676d4ff-4ad74642" full match: true.
+2026-11-01T20:35:25.1781817Z ##[group]Run # Mongo 8.0.34 rejects the hosted Ubuntu kernel release string:
+2026-11-01T20:35:25.1782381Z [36;1m# Mongo 8.0.34 rejects the hosted Ubuntu kernel release string:[0m
+2026-11-01T20:35:25.1782821Z [36;1m# https://jira.mongodb.org/browse/SERVER-136848[0m
+2026-11-01T20:35:25.1783324Z [36;1m# Native Windows validation uses 8.0.34; CI additionally proves 7.0 compatibility.[0m
+2026-11-01T20:35:25.1784411Z [36;1mdocker run -d --name cogniva-test-mongo --memory=512m -p 127.0.0.1:27048:27017 mongo:7.0.41 --bind_ip_all --wiredTigerCacheSizeGB 0.25 --setParameter enableTestCommands=1[0m
+2026-11-01T20:35:25.1785131Z [36;1mfor attempt in $(seq 1 30); do[0m
+2026-11-01T20:35:25.1785690Z [36;1m  if docker exec cogniva-test-mongo mongosh --quiet --eval 'db.adminCommand({ping:1})' > /dev/null 2>&1; then exit 0; fi[0m
+2026-11-01T20:35:25.1786256Z [36;1m  sleep 1[0m
+2026-11-01T20:35:25.1786495Z [36;1mdone[0m
+2026-11-01T20:35:25.1786784Z [36;1mdocker logs cogniva-test-mongo[0m
+2026-11-01T20:35:25.1787057Z [36;1mexit 1[0m
+2026-11-01T20:35:25.1810188Z shell: /usr/bin/bash -e {0}
+2026-11-01T20:35:25.1810459Z env:
+2026-11-01T20:35:25.1810677Z   CARGO_HOME: /home/runner/.cargo
+2026-11-01T20:35:25.1810955Z   CARGO_INCREMENTAL: 0
+2026-11-01T20:35:25.1811198Z   CARGO_TERM_COLOR: always
+2026-11-01T20:35:25.1811439Z   CACHE_ON_FAILURE: false
+2026-11-01T20:35:25.1811905Z ##[endgroup]
+2026-11-01T20:35:25.8419016Z Unable to find image 'mongo:7.0.41' locally
+2026-11-01T20:35:26.5210304Z 7.0.41: Pulling from library/mongo
+2026-11-01T20:35:26.7096955Z 20c3783cc497: Pulling fs layer
+2026-11-01T20:35:26.7097817Z bb5eead025c0: Pulling fs layer
+2026-11-01T20:35:26.7098378Z afd6e2878931: Pulling fs layer
+2026-11-01T20:35:26.7098774Z 5be2e05dd812: Pulling fs layer
+2026-11-01T20:35:26.7099157Z 4f7a82f34d50: Pulling fs layer
+2026-11-01T20:35:26.7099528Z e0fa07947139: Pulling fs layer
+2026-11-01T20:35:26.7099896Z f44e97c1450a: Pulling fs layer
+2026-11-01T20:35:26.7100475Z a12709f48d28: Pulling fs layer
+2026-11-01T20:35:26.7100723Z 5be2e05dd812: Waiting
+2026-11-01T20:35:26.7100951Z 4f7a82f34d50: Waiting
+2026-11-01T20:35:26.7101163Z e0fa07947139: Waiting
+2026-11-01T20:35:26.7101380Z f44e97c1450a: Waiting
+2026-11-01T20:35:26.7101576Z a12709f48d28: Waiting
+2026-11-01T20:35:26.9104820Z bb5eead025c0: Download complete
+2026-11-01T20:35:26.9976962Z afd6e2878931: Verifying Checksum
+2026-11-01T20:35:26.9977488Z afd6e2878931: Download complete
+2026-11-01T20:35:27.1091459Z 20c3783cc497: Verifying Checksum
+2026-11-01T20:35:27.1091942Z 20c3783cc497: Download complete
+2026-11-01T20:35:27.1813628Z 4f7a82f34d50: Verifying Checksum
+2026-11-01T20:35:27.1814171Z 4f7a82f34d50: Download complete
+2026-11-01T20:35:27.1913501Z 5be2e05dd812: Download complete
+2026-11-01T20:35:27.3112737Z e0fa07947139: Verifying Checksum
+2026-11-01T20:35:27.3113230Z e0fa07947139: Download complete
+2026-11-01T20:35:27.3839376Z a12709f48d28: Verifying Checksum
+2026-11-01T20:35:27.3839968Z a12709f48d28: Download complete
+2026-11-01T20:35:28.4207291Z 20c3783cc497: Pull complete
+2026-11-01T20:35:28.4563132Z f44e97c1450a: Verifying Checksum
+2026-11-01T20:35:28.4563539Z f44e97c1450a: Download complete
+2026-11-01T20:35:31.3357686Z bb5eead025c0: Pull complete
+2026-11-01T20:35:31.4473974Z afd6e2878931: Pull complete
+2026-11-01T20:35:31.4764256Z 5be2e05dd812: Pull complete
+2026-11-01T20:35:31.4843111Z 4f7a82f34d50: Pull complete
+2026-11-01T20:35:31.4934440Z e0fa07947139: Pull complete
+2026-11-01T20:35:36.8377648Z f44e97c1450a: Pull complete
+2026-11-01T20:35:36.8494334Z a12709f48d28: Pull complete
+2026-11-01T20:35:36.8535000Z Digest: sha256:b096b4cb9269f3ebcf363be63f1c50920f786879d03a1890347a3bf33f1f0df0
+2026-11-01T20:35:36.8544622Z Status: Downloaded newer image for mongo:7.0.41
+2026-11-01T20:35:36.8693215Z 143055973fab172e47939527e2351d1222c0b835c09f453dd41fabf00fcf4898
+2026-11-01T20:35:38.9039501Z ##[group]Run cargo test --locked -- --include-ignored
+2026-11-01T20:35:38.9040168Z [36;1mcargo test --locked -- --include-ignored[0m
+2026-11-01T20:35:38.9061311Z shell: /usr/bin/bash -e {0}
+2026-11-01T20:35:38.9061571Z env:
+2026-11-01T20:35:38.9061786Z   CARGO_HOME: /home/runner/.cargo
+2026-11-01T20:35:38.9062055Z   CARGO_INCREMENTAL: 0
+2026-11-01T20:35:38.9062299Z   CARGO_TERM_COLOR: always
+2026-11-01T20:35:38.9062542Z   CACHE_ON_FAILURE: false
+2026-11-01T20:35:38.9062843Z   COGNIVA_TEST_MONGODB_URI: mongodb://127.0.0.1:27048/
+2026-11-01T20:35:38.9063192Z ##[endgroup]
+2026-11-01T20:35:39.0161911Z [1m[92m    Updating[0m crates.io index
+2026-11-01T20:35:40.1066398Z [1m[92m   Compiling[0m api-rust-core v1.4.1 (/home/runner/work/cogniva/cogniva/backend-rust)
+2026-11-01T20:35:49.2526560Z [1m[92m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 10.33s
+2026-11-01T20:35:49.2729621Z [1m[92m     Running[0m unittests src/main.rs (target/debug/deps/api_rust_core-fccdcbb03695aee0)
+2026-11-01T20:35:49.2754980Z 
+2026-11-01T20:35:49.2755175Z running 24 tests
+2026-11-01T20:35:49.2808674Z test contract_tests::both_runtimes_share_utf8_mastery_weighted_score_srs_and_calendar_fixtures ... ok
+2026-11-01T20:35:49.2809909Z test security::tests::a_pairing_credential_cannot_be_used_as_session_or_with_another_key ... ok
+2026-11-01T20:35:49.2831607Z test latest_apk_tests::latest_apk_size_and_sha256_come_from_the_file_and_repeat ... ok
+2026-11-01T20:35:49.2832864Z test integration_tests::protected_routes_reject_untrusted_identity_before_database_access ... ok
+2026-11-01T20:35:49.2854922Z test services::ai_tutor::tests::test_sanitize_ai_content_collapses_newlines ... ok
+2026-11-01T20:35:49.2859082Z test services::attempts::tests::fixture_legacy_answer_is_authoritative_and_event_is_append_only ... ok
+2026-11-01T20:35:49.2861225Z test services::exam_engine::tests::common_trunk_card_picks_max_leverage_and_writes_the_sentence ... ok
+2026-11-01T20:35:49.2863660Z test services::exam_engine::tests::client_id_round_trips_and_second_write_does_not_duplicate_the_key ... ok
+2026-11-01T20:35:49.2866607Z test services::exam_engine::tests::deadline_label_renders_day_count_or_window_text ... ok
+2026-11-01T20:35:49.2868958Z test services::exam_engine::tests::publish_classifies_confirmed_new_and_archived_without_clearing_coverage ... ok
+2026-11-01T20:35:49.2870417Z test services::exam_engine::tests::readiness_excludes_archived_topics_and_matches_the_weighted_formula ... ok
+2026-11-01T20:35:49.2883711Z test services::exam_engine::tests::readiness_for_the_primary_exam_drops_archived_topics ... ok
+2026-11-01T20:35:49.2885760Z test services::exam_engine::tests::mastered_subject_does_not_beat_an_unmastered_one ... ok
+2026-11-01T20:35:49.2887093Z test services::exam_engine::tests::second_exam_inherits_canonical_mastery_and_archive_keeps_history ... ok
+2026-11-01T20:35:49.2898404Z test services::ai_tutor::tests::test_sanitize_ai_content_removes_redundant_dr_sincero_prefix ... ok
+2026-11-01T20:35:49.2899620Z test services::exam_engine::tests::two_focused_trunks_keep_a_core_subject_from_either ... ok
+2026-11-01T20:35:49.2901123Z test services::exam_engine::tests::system_catalog_maps_the_six_trunks_and_the_three_current_contests ... ok
+2026-11-01T20:35:49.2902400Z test services::exam_engine::tests::urgency_is_two_inside_sixty_days_then_published_then_pre_edital ... ok
+2026-11-01T20:35:49.2904586Z test services::exam_engine::tests::weighted_simulado_skips_archived_topics_and_scores_by_weight ... ok
+2026-11-01T20:35:49.2906034Z test services::srs_engine::policy_contract_tests::failed_or_guessed_attempts_have_short_intervals_and_both_policies_are_monotone ... ok
+2026-11-01T20:35:49.2908111Z test services::srs_engine::tests::test_high_confidence_error_quadrant ... ok
+2026-11-01T20:35:49.2909251Z test services::srs_engine::tests::test_streak_and_points_progression_and_mastery ... ok
+2026-11-01T20:35:49.2993780Z test services::exam_store::validation_tests::invalid_revision_quantity_weight_and_utf8_date_fail_without_panicking ... ok
+2026-11-01T20:35:49.5201659Z test integration_tests::durable_events_identity_ladder_and_restart_contract ... ok
+2026-11-01T20:35:49.5202064Z 
+2026-11-01T20:35:49.5202343Z test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s
+2026-11-01T20:35:49.5202699Z 
+2026-11-01T20:35:49.5312480Z ##[group]Run docker logs --tail 30 cogniva-test-mongo
+2026-11-01T20:35:49.5312925Z [36;1mdocker logs --tail 30 cogniva-test-mongo[0m
+2026-11-01T20:35:49.5313270Z [36;1mdocker rm -f cogniva-test-mongo[0m
+2026-11-01T20:35:49.5334205Z shell: /usr/bin/bash -e {0}
+2026-11-01T20:35:49.5334493Z env:
+2026-11-01T20:35:49.5334710Z   CARGO_HOME: /home/runner/.cargo
+2026-11-01T20:35:49.5334980Z   CARGO_INCREMENTAL: 0
+2026-11-01T20:35:49.5335218Z   CARGO_TERM_COLOR: always
+2026-11-01T20:35:49.5335462Z   CACHE_ON_FAILURE: false
+2026-11-01T20:35:49.5335698Z ##[endgroup]
+2026-11-01T20:35:49.5540214Z {"t":{"$date":"2026-11-01T20:35:49.515+00:00"},"s":"I",  "c":"COMMAND",  "id":20435,   "ctx":"conn9","msg":"Failing command {command} via 'failCommand' failpoint: returning {errorCode}","attr":{"command":"update","errorCode":121}}
+2026-11-01T20:35:49.5541839Z {"t":{"$date":"2026-11-01T20:35:49.517+00:00"},"s":"I",  "c":"COMMAND",  "id":20337,   "ctx":"conn9","msg":"dropDatabase - starting","attr":{"db":"cogniva_test_750a0ceaf1fc4940a1d1a03363488366"}}
+2026-11-01T20:35:49.5543681Z {"t":{"$date":"2026-11-01T20:35:49.517+00:00"},"s":"I",  "c":"COMMAND",  "id":20338,   "ctx":"conn9","msg":"dropDatabase - dropping collection","attr":{"db":"cogniva_test_750a0ceaf1fc4940a1d1a03363488366","namespace":"cogniva_test_750a0ceaf1fc4940a1d1a03363488366.todasQuestoes"}}
+2026-11-01T20:35:49.5545716Z {"t":{"$date":"2026-11-01T20:35:49.517+00:00"},"s":"I",  "c":"COMMAND",  "id":20338,   "ctx":"conn9","msg":"dropDatabase - dropping collection","attr":{"db":"cogniva_test_750a0ceaf1fc4940a1d1a03363488366","namespace":"cogniva_test_750a0ceaf1fc4940a1d1a03363488366.user_exams"}}
+2026-11-01T20:35:49.5547222Z {"t":{"$date":"2026-11-01T20:35:49.517+00:00"},"s":"I",  "c":"COMMAND",  "id":20338,   "ctx":"conn9","msg":"dropDatabase - dropping collection","attr":{"db":"cogniva_test_750a0ceaf1fc4940a1d1a03363488366","namespace":"cogniva_test_750a0ceaf1fc4940a1d1a03363488366.used_link_codes"}}
+2026-11-01T20:35:49.5548707Z {"t":{"$date":"2026-11-01T20:35:49.517+00:00"},"s":"I",  "c":"COMMAND",  "id":20338,   "ctx":"conn9","msg":"dropDatabase - dropping collection","attr":{"db":"cogniva_test_750a0ceaf1fc4940a1d1a03363488366","namespace":"cogniva_test_750a0ceaf1fc4940a1d1a03363488366.usuarios"}}
+2026-11-01T20:35:49.5550505Z {"t":{"$date":"2026-11-01T20:35:49.517+00:00"},"s":"I",  "c":"COMMAND",  "id":20338,   "ctx":"conn9","msg":"dropDatabase - dropping collection","attr":{"db":"cogniva_test_750a0ceaf1fc4940a1d1a03363488366","namespace":"cogniva_test_750a0ceaf1fc4940a1d1a03363488366.userActivityLog"}}
+2026-11-01T20:35:49.5552016Z {"t":{"$date":"2026-11-01T20:35:49.517+00:00"},"s":"I",  "c":"COMMAND",  "id":20338,   "ctx":"conn9","msg":"dropDatabase - dropping collection","attr":{"db":"cogniva_test_750a0ceaf1fc4940a1d1a03363488366","namespace":"cogniva_test_750a0ceaf1fc4940a1d1a03363488366.tutor_budgets"}}
+2026-11-01T20:35:49.5553533Z {"t":{"$date":"2026-11-01T20:35:49.517+00:00"},"s":"I",  "c":"COMMAND",  "id":20338,   "ctx":"conn9","msg":"dropDatabase - dropping collection","attr":{"db":"cogniva_test_750a0ceaf1fc4940a1d1a03363488366","namespace":"cogniva_test_750a0ceaf1fc4940a1d1a03363488366.native_accounts"}}
+2026-11-01T20:35:49.5555064Z {"t":{"$date":"2026-11-01T20:35:49.517+00:00"},"s":"I",  "c":"REPL",     "id":7360105, "ctx":"conn9","msg":"Wrote oplog entry for dropDatabase","attr":{"namespace":"cogniva_test_750a0ceaf1fc4940a1d1a03363488366.$cmd","opTime":{"ts":{"$timestamp":{"t":0,"i":0}},"t":-1},"object":{"dropDatabase":1}}}
+2026-11-01T20:35:49.5556941Z {"t":{"$date":"2026-11-01T20:35:49.517+00:00"},"s":"I",  "c":"STORAGE",  "id":22206,   "ctx":"conn9","msg":"Deferring table drop for index","attr":{"index":"_id_","namespace":"cogniva_test_750a0ceaf1fc4940a1d1a03363488366.todasQuestoes","uuid":{"uuid":{"$uuid":"0f8ff240-82f4-4095-b20a-9c178d706d63"}},"ident":"index-10-1013375116968361978","dropTime":{"checkpointIteration":"0"}}}
+2026-11-01T20:35:49.5559070Z {"t":{"$date":"2026-11-01T20:35:49.517+00:00"},"s":"I",  "c":"STORAGE",  "id":22214,   "ctx":"conn9","msg":"Deferring table drop for collection","attr":{"namespace":"cogniva_test_750a0ceaf1fc4940a1d1a03363488366.todasQuestoes","ident":"collection-9-1013375116968361978","dropTime":{"checkpointIteration":"0"}}}
+2026-11-01T20:35:49.5561463Z {"t":{"$date":"2026-11-01T20:35:49.517+00:00"},"s":"I",  "c":"STORAGE",  "id":22206,   "ctx":"conn9","msg":"Deferring table drop for index","attr":{"index":"_id_","namespace":"cogniva_test_750a0ceaf1fc4940a1d1a03363488366.user_exams","uuid":{"uuid":{"$uuid":"7032a535-fcc8-4465-ac1a-5373668236a4"}},"ident":"index-14-1013375116968361978","dropTime":{"checkpointIteration":"0"}}}
+2026-11-01T20:35:49.5563516Z {"t":{"$date":"2026-11-01T20:35:49.517+00:00"},"s":"I",  "c":"STORAGE",  "id":22214,   "ctx":"conn9","msg":"Deferring table drop for collection","attr":{"namespace":"cogniva_test_750a0ceaf1fc4940a1d1a03363488366.user_exams","ident":"collection-13-1013375116968361978","dropTime":{"checkpointIteration":"0"}}}
+2026-11-01T20:35:49.5565432Z {"t":{"$date":"2026-11-01T20:35:49.517+00:00"},"s":"I",  "c":"STORAGE",  "id":22206,   "ctx":"conn9","msg":"Deferring table drop for index","attr":{"index":"_id_","namespace":"cogniva_test_750a0ceaf1fc4940a1d1a03363488366.used_link_codes","uuid":{"uuid":{"$uuid":"758c6dc1-edbf-43ef-9b0a-a8c860944d40"}},"ident":"index-20-1013375116968361978","dropTime":{"checkpointIteration":"0"}}}
+2026-11-01T20:35:49.5567767Z {"t":{"$date":"2026-11-01T20:35:49.518+00:00"},"s":"I",  "c":"STORAGE",  "id":22214,   "ctx":"conn9","msg":"Deferring table drop for collection","attr":{"namespace":"cogniva_test_750a0ceaf1fc4940a1d1a03363488366.used_link_codes","ident":"collection-19-1013375116968361978","dropTime":{"checkpointIteration":"0"}}}
+2026-11-01T20:35:49.5569648Z {"t":{"$date":"2026-11-01T20:35:49.518+00:00"},"s":"I",  "c":"STORAGE",  "id":22206,   "ctx":"conn9","msg":"Deferring table drop for index","attr":{"index":"_id_","namespace":"cogniva_test_750a0ceaf1fc4940a1d1a03363488366.usuarios","uuid":{"uuid":{"$uuid":"cb9076bd-9ba2-4de2-a90d-659d3b88f3ec"}},"ident":"index-8-1013375116968361978","dropTime":{"checkpointIteration":"0"}}}
+2026-11-01T20:35:49.5571829Z {"t":{"$date":"2026-11-01T20:35:49.518+00:00"},"s":"I",  "c":"STORAGE",  "id":22214,   "ctx":"conn9","msg":"Deferring table drop for collection","attr":{"namespace":"cogniva_test_750a0ceaf1fc4940a1d1a03363488366.usuarios","ident":"collection-7-1013375116968361978","dropTime":{"checkpointIteration":"0"}}}
+2026-11-01T20:35:49.5573697Z {"t":{"$date":"2026-11-01T20:35:49.518+00:00"},"s":"I",  "c":"STORAGE",  "id":22206,   "ctx":"conn9","msg":"Deferring table drop for index","attr":{"index":"_id_","namespace":"cogniva_test_750a0ceaf1fc4940a1d1a03363488366.userActivityLog","uuid":{"uuid":{"$uuid":"d8b77032-a180-49e1-a17d-ec2535f7c2d6"}},"ident":"index-12-1013375116968361978","dropTime":{"checkpointIteration":"0"}}}
+2026-11-01T20:35:49.5575579Z {"t":{"$date":"2026-11-01T20:35:49.518+00:00"},"s":"I",  "c":"STORAGE",  "id":22214,   "ctx":"conn9","msg":"Deferring table drop for collection","attr":{"namespace":"cogniva_test_750a0ceaf1fc4940a1d1a03363488366.userActivityLog","ident":"collection-11-1013375116968361978","dropTime":{"checkpointIteration":"0"}}}
+2026-11-01T20:35:49.5577445Z {"t":{"$date":"2026-11-01T20:35:49.518+00:00"},"s":"I",  "c":"STORAGE",  "id":22206,   "ctx":"conn9","msg":"Deferring table drop for index","attr":{"index":"_id_","namespace":"cogniva_test_750a0ceaf1fc4940a1d1a03363488366.tutor_budgets","uuid":{"uuid":{"$uuid":"e69d6ab3-e6ca-4443-8406-b06fb63f6510"}},"ident":"index-16-1013375116968361978","dropTime":{"checkpointIteration":"0"}}}
+2026-11-01T20:35:49.5579298Z {"t":{"$date":"2026-11-01T20:35:49.518+00:00"},"s":"I",  "c":"STORAGE",  "id":22214,   "ctx":"conn9","msg":"Deferring table drop for collection","attr":{"namespace":"cogniva_test_750a0ceaf1fc4940a1d1a03363488366.tutor_budgets","ident":"collection-15-1013375116968361978","dropTime":{"checkpointIteration":"0"}}}
+2026-11-01T20:35:49.5581526Z {"t":{"$date":"2026-11-01T20:35:49.518+00:00"},"s":"I",  "c":"STORAGE",  "id":22206,   "ctx":"conn9","msg":"Deferring table drop for index","attr":{"index":"_id_","namespace":"cogniva_test_750a0ceaf1fc4940a1d1a03363488366.native_accounts","uuid":{"uuid":{"$uuid":"fd580a47-80d3-4523-b6b6-9e5b75a12d19"}},"ident":"index-18-1013375116968361978","dropTime":{"checkpointIteration":"0"}}}
+2026-11-01T20:35:49.5583415Z {"t":{"$date":"2026-11-01T20:35:49.518+00:00"},"s":"I",  "c":"STORAGE",  "id":22214,   "ctx":"conn9","msg":"Deferring table drop for collection","attr":{"namespace":"cogniva_test_750a0ceaf1fc4940a1d1a03363488366.native_accounts","ident":"collection-17-1013375116968361978","dropTime":{"checkpointIteration":"0"}}}
+2026-11-01T20:35:49.5584810Z {"t":{"$date":"2026-11-01T20:35:49.518+00:00"},"s":"I",  "c":"COMMAND",  "id":20336,   "ctx":"conn9","msg":"dropDatabase","attr":{"db":"cogniva_test_750a0ceaf1fc4940a1d1a03363488366","numCollectionsDropped":7}}
+2026-11-01T20:35:49.5585797Z {"t":{"$date":"2026-11-01T20:35:49.519+00:00"},"s":"I",  "c":"-",        "id":20883,   "ctx":"conn6","msg":"Interrupted operation as its client disconnected","attr":{"opId":167}}
+2026-11-01T20:35:49.5586985Z {"t":{"$date":"2026-11-01T20:35:49.519+00:00"},"s":"I",  "c":"NETWORK",  "id":22944,   "ctx":"conn7","msg":"Connection ended","attr":{"remote":"172.17.0.1:45820","isLoadBalanced":false,"uuid":{"uuid":{"$uuid":"737d11a6-5058-4cc6-958b-1127bf5520c7"}},"connectionId":7,"connectionCount":3}}
+2026-11-01T20:35:49.5588602Z {"t":{"$date":"2026-11-01T20:35:49.519+00:00"},"s":"I",  "c":"NETWORK",  "id":22944,   "ctx":"conn9","msg":"Connection ended","attr":{"remote":"172.17.0.1:45846","isLoadBalanced":false,"uuid":{"uuid":{"$uuid":"58cc0b13-ebb8-4a11-b492-a52d305a9a27"}},"connectionId":9,"connectionCount":2}}
+2026-11-01T20:35:49.5590196Z {"t":{"$date":"2026-11-01T20:35:49.519+00:00"},"s":"I",  "c":"NETWORK",  "id":22944,   "ctx":"conn8","msg":"Connection ended","attr":{"remote":"172.17.0.1:45834","isLoadBalanced":false,"uuid":{"uuid":{"$uuid":"d68b974a-c780-439e-adb1-570abc7dad49"}},"connectionId":8,"connectionCount":1}}
+2026-11-01T20:35:49.5591652Z {"t":{"$date":"2026-11-01T20:35:49.520+00:00"},"s":"I",  "c":"NETWORK",  "id":22944,   "ctx":"conn6","msg":"Connection ended","attr":{"remote":"172.17.0.1:45816","isLoadBalanced":false,"uuid":{"uuid":{"$uuid":"b3835393-c587-4bcf-9775-f993ebe8f110"}},"connectionId":6,"connectionCount":0}}
+2026-11-01T20:35:50.2924563Z cogniva-test-mongo
+2026-11-01T20:35:50.3037690Z Post job cleanup.
+2026-11-01T20:35:50.4313086Z Cache up-to-date.
+2026-11-01T20:35:50.4448542Z Post job cleanup.
+2026-11-01T20:35:50.5460776Z [command]/usr/bin/git version
+2026-11-01T20:35:50.5511154Z git version 2.56.0
+2026-11-01T20:35:50.5566813Z Temporarily overriding HOME='/home/runner/work/_temp/b1e3aca0-f3a2-48c5-bb01-54761e417c67' before making global git config changes
+2026-11-01T20:35:50.5587222Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-01T20:35:50.5588252Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/cogniva/cogniva
+2026-11-01T20:35:50.5632762Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-01T20:35:50.5679887Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-01T20:35:50.5966111Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-01T20:35:50.5999166Z http.https://github.com/.extraheader
+2026-11-01T20:35:50.6011238Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-11-01T20:35:50.6063812Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-01T20:35:50.6373652Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-01T20:35:50.6426969Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-01T20:35:50.6867054Z Cleaning up orphan processes
+2026-11-01T20:35:50.7309143Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

@@ -4,12 +4,12 @@ Aplicativo Android de estudo para concursos, com cliente Kotlin/Compose e API Ru
 
 ## Estado da recuperação de 2026-11-01
 
-Versão em produção: **1.4.0 / Android build 7 / contrato de sincronização 2**, revisão `d8716db8c12653a726c9284b9e28e7ba1c30df64`, promovida em 01/11/2026 às 17:04 (UTC−03:00). O [pipeline completo](https://github.com/danielcdes-create/cogniva/actions/runs/41343484265) passou gates, assinatura, ensaio de rollback e promoção. HTTPS, prontidão com Mongo, download público e preservação do histórico foram conferidos externamente. Consulte [FECHAMENTO-AUDITORIA.md](docs/FECHAMENTO-AUDITORIA.md) para C01–C39 e os limites de aceite; [REMEDIACAO.md](docs/REMEDIACAO.md) preserva o registro da execução.
+Versão em produção: **1.4.1 / Android build 8 / contrato de sincronização 2**, revisão `22bd6027acfe277ea2d1e425578d4d4709620f1d`, promovida em 01/11/2026 às 17:55 (UTC−03:00). O [pipeline completo](https://github.com/danielcdes-create/cogniva/actions/runs/41347592566) passou gates, assinatura, ensaio de rollback e promoção. HTTPS, prontidão com Mongo, download público e preservação do histórico foram conferidos externamente. A [correção de Ajustes](docs/CORRECAO-VINCULO-1.4.1.md) adiciona confirmação junto ao código e separa vínculo de conta de salvar nome/metas. Consulte [FECHAMENTO-AUDITORIA.md](docs/FECHAMENTO-AUDITORIA.md) para C01–C39 e os limites de aceite; [REMEDIACAO.md](docs/REMEDIACAO.md) preserva o registro da execução.
 
 - API: `https://198.199.65.103/api/v1/`.
 - Metadados públicos medidos do APK: `GET /api/app/latest-apk`.
 - APK: `GET /api/v1/apk/download`. O arquivo servido só muda durante promoção validada.
-- [Baixar APK 1.4.0/build 7](https://198.199.65.103/api/v1/apk/download): 12.708.853 bytes; SHA-256 `1abfb764909dd4274e351a2c30e3471ba41ab3b11842adf2dd1dc3389bf35c35`.
+- [Baixar APK 1.4.1/build 8](https://198.199.65.103/api/v1/apk/download): 12.725.237 bytes; SHA-256 `7b45bc089623ea29e7c33bf2c72319796c34f48050e73c1e2332cf6af455d4f7`.
 - Saúde do processo: `/api/v1/health`; prontidão com MongoDB e revisão: `/api/v1/ready` no backend novo.
 - Não se afirma instalação nem validação física no S23 Ultra sem evidência ADB.
 

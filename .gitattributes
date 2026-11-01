@@ -2,4 +2,4 @@
 *.py text eol=lf
 # Evidence fingerprints refer to the captured bytes, including original CRLF.
 docs/auditoria/2026-11-01/source-snapshot/** -text -whitespace
-docs/remediation-validation/*.log -whitespace
+docs/remediation-validation/**/*.log -whitespace

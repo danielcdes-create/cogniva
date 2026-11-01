@@ -13,7 +13,7 @@ As notas renomeadas pelo usuário e o histórico de produção são preservados.
 - [x] TLS/distribuição, CI com gates, promoção/rollback e documentação.
 - [x] Suítes atuais, cenários adversariais e build Android verificados.
 
-Resultado atual: **1.4.0/build 7 implantado e conferido externamente**, run [41343484265](https://github.com/danielcdes-create/cogniva/actions/runs/41343484265), revisão `d8716db8c12653a726c9284b9e28e7ba1c30df64`. A [matriz de fechamento](FECHAMENTO-AUDITORIA.md) contém o resultado por achado e os limites de aceite. As seções abaixo são o registro cronológico; afirmações de trabalho pendente descrevem aquela etapa, não o estado final.
+Resultado atual: **1.4.1/build 8 implantado e conferido externamente**, run [41347592566](https://github.com/danielcdes-create/cogniva/actions/runs/41347592566), revisão `22bd6027acfe277ea2d1e425578d4d4709620f1d`. A [matriz de fechamento](FECHAMENTO-AUDITORIA.md) contém o resultado por achado e os limites de aceite; a [correção posterior de Ajustes](CORRECAO-VINCULO-1.4.1.md) registra o formulário de vínculo. As seções abaixo são o registro cronológico; afirmações de trabalho pendente descrevem aquela etapa, não o estado final.
 
 Não executar os antigos probes como testes de aceite: eles afirmam o comportamento defeituoso. Os cenários serão incorporados à suíte com os resultados corrigidos. Testes de banco usam apenas uma instância isolada/sintética.
 
@@ -71,3 +71,9 @@ O aceite externo verificou HTTPS, versão/revisão/contrato 2, readiness/Mongo, 
 O inventário posterior manteve 15 documentos/27 eventos e o mesmo hash protegido das duas capturas anteriores. Os seis gabaritos ambíguos e zero vínculos canônicos confirmados permanecem preservados para revisão humana; não houve remapeamento corretivo por inferência. Nenhum aparelho ADB foi conectado, portanto instalação/uso físico continuam sem prova. API 26–27 conserva a limitação do assinante antigo.
 
 As chaves existentes de IA autenticaram em consultas de modelos. Gemini 1.5 não estava disponível; a configuração privada foi copiada para backup e ajustada explicitamente para `gemini-2.5-flash-lite`, cuja disponibilidade e suporte a geração foram confirmados. O container promovido recebeu essa configuração; não foi enviada geração paga. Renovação TLS ativa e serviço com resultado de sucesso. O Mongo sintético local foi encerrado com conferência de identidade do processo.
+
+## Correção de Ajustes — 1.4.1/build 8
+
+A captura do aparelho revelou compressão de ID/username pela linha ocupada pelo código, além da confirmação genérica distante, depois das metas. Os campos agora são empilhados e **Confirmar vínculo** tem envio/erro/sucesso próprios. O vínculo não grava rascunhos de nome/metas/concursos na conta de destino; **Salvar nome e metas** não consome o código.
+
+Build/lint locais, dois verifies reais com nove imagens e controle negativo restaurado por hash passaram. O CI aprovou backend, Android e cinco testes instrumentados, incluindo os dois cenários de Ajustes com fonte normal/200%. Ensaio de rollback e promoção concluídos; o APK baixado externamente corresponde ao bundle assinado. Inventários antes/depois preservaram os mesmos 15 documentos/27 eventos e hash protegido, Compose e outros containers. Evidências e limites em `CORRECAO-VINCULO-1.4.1.md`.
