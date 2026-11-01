@@ -1,36 +1,20 @@
-# ==========================================
-# Estágio 1: Build (Executado EXCLUSIVAMENTE no GitHub Actions)
-# PROIBIDO executar cargo build ou docker build dentro do Droplet!
-# ==========================================
-FROM rust:slim-bookworm AS builder
+# syntax=docker/dockerfile:1
+# Context is repository root. Never build this image on the VPS.
+FROM rust:1.93.1-alpine AS builder
+RUN apk add --no-cache musl-dev gcc make
+WORKDIR /app/backend-rust
+COPY backend-rust/Cargo.toml backend-rust/Cargo.lock ./
+COPY backend-rust/src ./src
+COPY shared /app/shared
+ARG BUILD_REVISION=local
+ENV BUILD_REVISION=${BUILD_REVISION}
+RUN --mount=type=cache,target=/usr/local/cargo/registry --mount=type=cache,target=/app/backend-rust/target cargo build --locked --release && cp target/release/api-rust-core /server
+
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=builder /server /usr/local/bin/app
+ARG BUILD_REVISION=local
+LABEL org.opencontainers.image.revision=${BUILD_REVISION}
 WORKDIR /app
-
-# Dependências de sistema necessárias para compilar suporte TLS (MongoDB Atlas)
-RUN apt-get update && apt-get install -y pkg-config libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
-
-# Truque de Cache (§4 da Nota Técnica): Compila apenas as dependências primeiro se Cargo.toml/Cargo.lock não mudaram
-COPY Cargo.toml Cargo.lock ./
-RUN mkdir src && echo "fn main() {}" > src/main.rs && cargo build --release && rm -rf src
-
-# Copia o código-fonte real e compila o binário final (otimizado com LTO e strip via Cargo.toml)
-COPY src ./src
-RUN touch src/main.rs && cargo build --release
-
-# ==========================================
-# Estágio 2: Runtime Enxuto (< 40MB enviado ao GHCR e baixado pelo Droplet)
-# ==========================================
-FROM debian:bookworm-slim
-WORKDIR /app
-
-# Instala apenas certificados raiz para conexões HTTPS / MongoDB Atlas TLS
-RUN apt-get update && apt-get install -y ca-certificates libssl3 && rm -rf /var/lib/apt/lists/*
-
-# Executa como usuário não-root por segurança
-RUN useradd -m -u 10001 appuser
-USER appuser
-
-# Copia apenas o binário compilado (Imagem final ~25MB a 40MB)
-COPY --from=builder /app/target/release/api-rust-core /usr/local/bin/app
-
 EXPOSE 8000
-CMD ["app"]
+HEALTHCHECK --interval=30s --timeout=8s --start-period=20s --retries=3 CMD ["/usr/local/bin/app", "--health-check"]
+ENTRYPOINT ["/usr/local/bin/app"]

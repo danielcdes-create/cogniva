@@ -39,33 +39,41 @@ import br.com.concursoprep.app.domain.exam.ExamDraft
 import br.com.concursoprep.app.domain.exam.StoredExam
 import br.com.concursoprep.app.domain.exam.StoredSubject
 import kotlin.math.roundToInt
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.Saver
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.decodeFromString
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ExamFormBottomSheet(
     existingExams: List<StoredExam>,
+    editingExam: StoredExam? = null,
     onDismiss: () -> Unit,
     onSave: (ExamDraft) -> Unit
 ) {
     val trunks = remember { ExamCatalog.trunks() }
-    var step by remember { mutableIntStateOf(1) }
-    var trunkSlug by remember { mutableStateOf(trunks.firstOrNull()?.slug ?: "fiscal") }
-    var creationMode by remember { mutableStateOf("template") }
-    var cloneFromId by remember { mutableStateOf(existingExams.firstOrNull()?.examId) }
-    var organ by remember { mutableStateOf("") }
-    var role by remember { mutableStateOf("") }
+    var step by androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(1) }
+    var trunkSlug by rememberSaveable { mutableStateOf(editingExam?.trunkSlug ?: trunks.firstOrNull()?.slug ?: "fiscal") }
+    var creationMode by rememberSaveable { mutableStateOf(if(editingExam!=null)"clone"else"template") }
+    var cloneFromId by rememberSaveable { mutableStateOf(editingExam?.examId ?: existingExams.firstOrNull()?.examId) }
+    var organ by rememberSaveable { mutableStateOf(editingExam?.institution ?: "") }
+    var role by rememberSaveable { mutableStateOf(editingExam?.role ?: "") }
     val boards = remember { listOf("FGV", "Cebraspe", "Cesgranrio", "FCC", "Vunesp", "A definir") }
-    val selectedBoards = remember { androidx.compose.runtime.mutableStateListOf<String>() }
-    var status by remember { mutableStateOf("RUMOR_PREVISTO") }
-    var dateMode by remember { mutableStateOf("ESTIMATED_WINDOW") }
-    var exactDate by remember { mutableStateOf("2027-06-01") }
-    var windowLabel by remember { mutableStateOf("1º sem/2027") }
-    var ladderPriority by remember { mutableIntStateOf(2) }
-    var cutoff by remember { mutableStateOf(75f) }
-    var subjects by remember(trunkSlug, creationMode, cloneFromId) {
+    var selectedBoards by rememberSaveable { mutableStateOf(editingExam?.examBoards.orEmpty()) }
+    var status by rememberSaveable { mutableStateOf(editingExam?.lifecycleStatus ?: "RUMOR_PREVISTO") }
+    var dateMode by rememberSaveable { mutableStateOf(editingExam?.dateType ?: "UNDEFINED") }
+    var exactDate by rememberSaveable { mutableStateOf(editingExam?.exactDateIso ?: "") }
+    var windowLabel by rememberSaveable { mutableStateOf(editingExam?.estimatedWindowLabel ?: "Sem previsão") }
+    var ladderPriority by rememberSaveable { mutableIntStateOf(editingExam?.ladderPriority ?: 2) }
+    var wrongPenalty by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(editingExam?.wrongAnswerPenalty ?: 0.0) }
+    var cutoff by rememberSaveable { mutableStateOf(editingExam?.historicalCutoffScore?.toFloat() ?: 0f) }
+    val subjectSaver=Saver<List<StoredSubject>,String>(save={Json.encodeToString(it)},restore={Json.decodeFromString(it)})
+    var subjects by rememberSaveable(trunkSlug, creationMode, cloneFromId,stateSaver=subjectSaver) {
         mutableStateOf(
             when (creationMode) {
-                "clone" -> existingExams.firstOrNull { it.examId == cloneFromId }?.subjects ?: ExamCatalog.subjectsForTrunk(trunkSlug)
+                "clone" -> existingExams.firstOrNull { it.examId == cloneFromId }?.subjects?.filter { it.topics.any { topic->topic.diffStatus!="ARQUIVADO" } } ?: ExamCatalog.subjectsForTrunk(trunkSlug)
                 "blank" -> emptyList()
                 else -> ExamCatalog.subjectsForTrunk(trunkSlug).filter { it.relevanceTier == "CORE" }
             }
@@ -82,7 +90,7 @@ fun ExamFormBottomSheet(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = "Novo concurso · passo $step de 3",
+                text = "${if(editingExam==null) "Novo concurso" else "Editar concurso"} · passo $step de 3",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
@@ -147,7 +155,7 @@ fun ExamFormBottomSheet(
                             FilterChip(
                                 selected = selected,
                                 onClick = {
-                                    if (selected) selectedBoards.remove(board) else selectedBoards.add(board)
+                                    selectedBoards = if (selected) selectedBoards-board else selectedBoards+board
                                 },
                                 label = { Text(board) },
                                 modifier = Modifier.heightIn(min = 48.dp)
@@ -210,6 +218,10 @@ fun ExamFormBottomSheet(
                             }
                         }
                     }
+                    Text("Desconto por resposta errada (conforme a regra da prova)")
+                    FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                        listOf(0.0,0.25,0.5,1.0).forEach { value ->FilterChip(selected=wrongPenalty==value,onClick={wrongPenalty=value},label={Text(value.toString())}) }
+                    }
                     Text("Posição na escada", style = MaterialTheme.typography.titleMedium)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf(1 to "Foco imediato", 2 to "Médio prazo", 3 to "Longo prazo").forEach { (priority, label) ->
@@ -228,7 +240,7 @@ fun ExamFormBottomSheet(
                     Slider(
                         value = cutoff,
                         onValueChange = { cutoff = it },
-                        valueRange = 70f..85f
+                        valueRange = 0f..100f
                     )
                 }
                 else -> {
@@ -289,10 +301,15 @@ fun ExamFormBottomSheet(
                                     dateType = dateMode,
                                     exactDateIso = if (dateMode == "EXACT_DATE") exactDate else null,
                                     estimatedWindowLabel = if (dateMode == "ESTIMATED_WINDOW") windowLabel else null,
-                                    estimatedSortDateIso = if (dateMode == "EXACT_DATE") exactDate else "2027-06-30",
+                                    estimatedSortDateIso = when(dateMode) {
+                                        "EXACT_DATE" -> exactDate
+                                        "ESTIMATED_WINDOW" -> mapOf("1º sem/2027" to "2027-06-30","2º sem/2027" to "2027-12-31","1º sem/2028" to "2028-06-30")[windowLabel] ?: editingExam?.estimatedSortDateIso.orEmpty()
+                                        else -> ""
+                                    },
                                     historicalCutoffScore = cutoff.toDouble(),
                                     ladderPriority = ladderPriority,
-                                    subjects = subjects
+                                    subjects = subjects,
+                                            wrongAnswerPenalty = wrongPenalty
                                 )
                             )
                         }

@@ -1,0 +1,7 @@
+{
+  "exe": "C:\\Users\\danie\\AppData\\Local\\Temp\\cogniva-test-mongo-8.0.34\\mongodb-win32-x86_64-windows-8.0.34\\bin\\mongod.exe",
+  "dbpath": "C:\\Users\\danie\\AppData\\Local\\Temp\\cogniva-test-mongo-8.0.34\\synthetic-db",
+  "port": 27048,
+  "sha256": "6b021a0864494e4decf278b36477a29eb36072432773e4e62c2f42c302630db0",
+  "source": "https://downloads.mongodb.org/full.json"
+}

@@ -1,5 +1,7 @@
 # 📱 COGNIVA Android App (`android-app`)
 
+> **Registro histórico de 2026-10-31.** As seções abaixo descrevem a baseline anterior à recuperação. Para comportamento atual, versão, autenticação, preservação de filas e evidências, usar o [README principal](../README.md), [REMEDIACAO](../docs/REMEDIACAO.md) e [operação](../docs/OPERACAO.md). O cliente novo exige HTTPS e vínculo comprovado; ID/@username não autenticam. Build local não publica automaticamente. Não considerar os exemplos e garantias históricos abaixo como estado atual.
+
 Aplicativo nativo Android construído em **Kotlin + Jetpack Compose (Material 3)** para o ecossistema **COGNIVA** (*Conhecimento em evolução · LEARN · PRACTICE · EVOLVE*).
 
 ---

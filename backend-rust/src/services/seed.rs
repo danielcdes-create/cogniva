@@ -48,8 +48,14 @@ pub async fn ensure_seed_data(db: &Database) -> Result<usize, AppError> {
                 ("Diversidade e Inclusão na Sociedade".to_string(), 0.04),
                 ("Finanças Públicas".to_string(), 0.04),
                 ("Políticas Públicas".to_string(), 0.105),
-                ("Gestão Governamental e Governança Pública".to_string(), 0.075),
-                ("Sociologia e Psicologia Aplicadas ao Trabalho".to_string(), 0.15),
+                (
+                    "Gestão Governamental e Governança Pública".to_string(),
+                    0.075,
+                ),
+                (
+                    "Sociologia e Psicologia Aplicadas ao Trabalho".to_string(),
+                    0.15,
+                ),
                 ("Segurança e Saúde do Trabalhador".to_string(), 0.225),
                 ("Direito do Trabalho".to_string(), 0.225),
             ]),
@@ -186,7 +192,10 @@ pub async fn ensure_seed_data(db: &Database) -> Result<usize, AppError> {
                 ("Probabilidade e Estatística".to_string(), 0.046),
                 ("Fundamentos Econômicos".to_string(), 0.046),
                 ("Matemática Financeira".to_string(), 0.046),
-                ("Contabilidade Geral, Gerencial e de Custos".to_string(), 0.088),
+                (
+                    "Contabilidade Geral, Gerencial e de Custos".to_string(),
+                    0.088,
+                ),
                 ("Administração e Gestão Estratégica".to_string(), 0.08),
                 ("Análise Setorial".to_string(), 0.046),
                 ("Sustentabilidade e Mudanças Climáticas".to_string(), 0.088),
@@ -195,9 +204,19 @@ pub async fn ensure_seed_data(db: &Database) -> Result<usize, AppError> {
                 ("Mercado de Capitais".to_string(), 0.046),
                 ("Inovação e Empreendedorismo".to_string(), 0.046),
                 ("Gestão de Projetos".to_string(), 0.088),
-                ("Papel do BNDES no desenvolvimento brasileiro".to_string(), 0.046),
-                ("Clima, Sustentabilidade e Responsabilidade Socioambiental e Climática".to_string(), 0.046),
-                ("Princípios de análise de dados e informações".to_string(), 0.046),
+                (
+                    "Papel do BNDES no desenvolvimento brasileiro".to_string(),
+                    0.046,
+                ),
+                (
+                    "Clima, Sustentabilidade e Responsabilidade Socioambiental e Climática"
+                        .to_string(),
+                    0.046,
+                ),
+                (
+                    "Princípios de análise de dados e informações".to_string(),
+                    0.046,
+                ),
                 ("Diversidade e Inclusão".to_string(), 0.016),
                 ("Língua Portuguesa".to_string(), 0.046),
                 ("Língua Inglesa".to_string(), 0.046),
@@ -214,7 +233,8 @@ pub async fn ensure_seed_data(db: &Database) -> Result<usize, AppError> {
                     "Conhecimentos Transversais".to_string(),
                     vec![
                         "Papel do BNDES no desenvolvimento brasileiro".to_string(),
-                        "Clima, Sustentabilidade e Responsabilidade Socioambiental e Climática".to_string(),
+                        "Clima, Sustentabilidade e Responsabilidade Socioambiental e Climática"
+                            .to_string(),
                         "Princípios de análise de dados e informações".to_string(),
                         "Diversidade e Inclusão".to_string(),
                     ],
@@ -258,7 +278,8 @@ pub async fn ensure_seed_data(db: &Database) -> Result<usize, AppError> {
             contest_id: "CPNU".to_string(),
             block_name: "Conhecimentos Específicos".to_string(),
             discipline: "Segurança e Saúde do Trabalhador".to_string(),
-            title: "Normas Regulamentadoras (NR-01, NR-06, NR-07, NR-09, NR-15 e NR-17)".to_string(),
+            title: "Normas Regulamentadoras (NR-01, NR-06, NR-07, NR-09, NR-15 e NR-17)"
+                .to_string(),
             order: 1,
             common_trunk_id: Some("tronco_sst_nrs".to_string()),
             estimation: EstimationMetadata {
@@ -274,7 +295,8 @@ pub async fn ensure_seed_data(db: &Database) -> Result<usize, AppError> {
             contest_id: "CPNU".to_string(),
             block_name: "Conhecimentos Específicos".to_string(),
             discipline: "Direito do Trabalho".to_string(),
-            title: "Relação de Trabalho vs. Relação de Emprego e Trabalho em Plataformas Digitais".to_string(),
+            title: "Relação de Trabalho vs. Relação de Emprego e Trabalho em Plataformas Digitais"
+                .to_string(),
             order: 2,
             common_trunk_id: Some("tronco_dir_trabalho_relacoes".to_string()),
             estimation: EstimationMetadata {
@@ -312,7 +334,8 @@ pub async fn ensure_seed_data(db: &Database) -> Result<usize, AppError> {
             estimation: EstimationMetadata {
                 is_estimated: true,
                 confidence_badge: ConfidenceBadge::High,
-                rationale: "Presente nos últimos 3 editais da Receita Federal (ESAF e FGV).".to_string(),
+                rationale: "Presente nos últimos 3 editais da Receita Federal (ESAF e FGV)."
+                    .to_string(),
                 reference_exams: vec!["RFB 2023".to_string(), "RFB 2014".to_string()],
             },
             diff_status: TopicDiffStatus::Confirmed,

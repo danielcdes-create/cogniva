@@ -1,7 +1,5 @@
 use crate::{
-    error::AppError,
-    models::activity::UserActivityDocument,
-    services::srs_engine::calculate_decay,
+    error::AppError, models::activity::UserActivityDocument, services::srs_engine::calculate_decay,
 };
 use bson::{doc, Document};
 use chrono::Utc;
@@ -25,7 +23,9 @@ pub struct DailyMaintenanceReport {
 pub async fn run_daily_reviews_decay_and_countdown(
     db: &Database,
 ) -> Result<DailyMaintenanceReport, AppError> {
-    tracing::info!("Iniciando rotina diária de revisão espaçada (SRS), decay de pontos e countdown...");
+    tracing::info!(
+        "Iniciando rotina diária de revisão espaçada (SRS), decay de pontos e countdown..."
+    );
     let now = Utc::now();
     let act_coll = db.collection::<UserActivityDocument>("userActivityLog");
 
@@ -40,12 +40,10 @@ pub async fn run_daily_reviews_decay_and_countdown(
             continue;
         };
 
-        let dias_desde_ultima = (now.date_naive() - item.datas.ultima_sessao.date_naive())
-            .num_days()
-            .max(0);
-
-        let needs_review =
-            item.revisao_necessaria || (dias_desde_ultima > (item.spaced_repetition_interval as i64));
+        let needs_review = item.revisao_necessaria
+            || now
+                >= item.datas.ultima_sessao
+                    + chrono::Duration::days(item.spaced_repetition_interval.max(1) as i64);
 
         let new_points_with_decay = calculate_decay(item.points, item.datas.ultima_sessao, now);
 
@@ -61,10 +59,12 @@ pub async fn run_daily_reviews_decay_and_countdown(
         if (new_points_with_decay - item.points_with_decay).abs() > 1e-5
             || (needs_review && !item.revisao_necessaria)
         {
-            let _ = act_coll
+            let result = act_coll
                 .update_one(doc! { "_id": doc_id }, doc! { "$set": set_fields })
-                .await;
-            decay_updated += 1;
+                .await?;
+            if result.modified_count > 0 {
+                decay_updated += 1;
+            }
         }
     }
 
@@ -100,7 +100,8 @@ pub async fn run_daily_reviews_decay_and_countdown(
         },
     ];
 
-    let countdown_updated = utils_coll.aggregate(countdown_pipeline).await.is_ok();
+    utils_coll.aggregate(countdown_pipeline).await?;
+    let countdown_updated = true;
 
     tracing::info!(
         "Rotina diária concluída: {} registros avaliados, {} novas revisões marcadas, {} decays atualizados.",
@@ -127,7 +128,10 @@ pub fn spawn_background_daily_scheduler(db: Database) {
         loop {
             interval.tick().await;
             if let Err(e) = run_daily_reviews_decay_and_countdown(&db).await {
-                tracing::error!("Erro durante execução da rotina diária em background: {:?}", e);
+                tracing::error!(
+                    "Erro durante execução da rotina diária em background: {:?}",
+                    e
+                );
             }
         }
     });

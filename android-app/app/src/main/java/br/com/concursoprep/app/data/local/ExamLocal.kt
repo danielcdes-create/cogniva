@@ -45,7 +45,10 @@ data class UserExamEntity(
     val confirmedTopicsCount: Int = 0,
     val newTopicsCount: Int = 0,
     val archivedTopicsCount: Int = 0,
-    val syncStatus: String = "SYNCED"
+    val syncStatus: String = "SYNCED",
+    @androidx.room.ColumnInfo(defaultValue = "0") val revision: Long = 0,
+    @androidx.room.ColumnInfo(defaultValue = "0") val wrongAnswerPenalty: Double = 0.0,
+    val syncError: String? = null
 )
 
 @Entity(
@@ -137,6 +140,11 @@ interface ExamDao {
 
     @Query("SELECT * FROM canonical_mastery")
     suspend fun listMastery(): List<CanonicalMasteryEntity>
+    @Query("DELETE FROM exam_subjects WHERE examId=:id") suspend fun clearSubjects(id: String)
+    @Query("DELETE FROM exam_topics WHERE examId=:id") suspend fun clearTopics(id: String)
+    @Query("UPDATE user_exams SET isActiveInLadder=:active WHERE examId=:id") suspend fun setActive(id: String, active: Boolean)
+    @Query("UPDATE user_exams SET syncError=:error WHERE examId=:id") suspend fun setSyncError(id: String, error: String?)
+
 }
 
 object ExamLocalMapping {
@@ -159,7 +167,10 @@ object ExamLocalMapping {
         confirmedTopicsCount = exam.confirmedTopicsCount,
         newTopicsCount = exam.newTopicsCount,
         archivedTopicsCount = exam.archivedTopicsCount,
-        syncStatus = exam.syncStatus
+        syncStatus = exam.syncStatus,
+        revision = exam.revision,
+        wrongAnswerPenalty = exam.wrongAnswerPenalty,
+        syncError = exam.syncError
     )
 
     fun subjectsOf(exam: StoredExam): List<ExamSubjectEntity> = exam.subjects.mapIndexed { index, subject ->
@@ -216,6 +227,9 @@ object ExamLocalMapping {
             newTopicsCount = exam.newTopicsCount,
             archivedTopicsCount = exam.archivedTopicsCount,
             syncStatus = exam.syncStatus,
+            revision = exam.revision,
+            wrongAnswerPenalty = exam.wrongAnswerPenalty,
+            syncError = exam.syncError,
             subjects = subjects.map { subject ->
                 StoredSubject(
                     localSubjectId = subject.localSubjectId,
@@ -241,6 +255,25 @@ object ExamLocalMapping {
 }
 
 object ExamMigrations {
+    val MIGRATION_2_3 = object : Migration(2,3) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE cached_questions ADD COLUMN payloadJson TEXT")
+            db.execSQL("ALTER TABLE pending_attempts ADD COLUMN ownerUserId INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE pending_attempts ADD COLUMN attemptId TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE pending_attempts ADD COLUMN questionRevision TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE pending_attempts ADD COLUMN syncError TEXT")
+            db.execSQL("UPDATE pending_attempts SET attemptId=lower(hex(randomblob(4)))||'-'||lower(hex(randomblob(2)))||'-4'||substr(lower(hex(randomblob(2))),2)||'-a'||substr(lower(hex(randomblob(2))),2)||'-'||lower(hex(randomblob(6))), syncError='Registro anterior ao protocolo 2. Revisar recebimento no servidor antes de reenviar.'")
+            db.execSQL("ALTER TABLE user_exams ADD COLUMN revision INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE user_exams ADD COLUMN syncError TEXT")
+            db.execSQL("UPDATE user_exams SET syncStatus='REVIEW_REQUIRED', syncError='Edição anterior ao protocolo 2: confira e salve para enviar com identidade autenticada.' WHERE syncStatus!='SYNCED'")
+            db.execSQL("ALTER TABLE user_exams ADD COLUMN wrongAnswerPenalty REAL NOT NULL DEFAULT 0")
+            db.execSQL("CREATE TABLE learning_records (questionId TEXT NOT NULL PRIMARY KEY, revision INTEGER NOT NULL, payloadJson TEXT NOT NULL)")
+            db.execSQL("CREATE TABLE pending_reports (eventId TEXT NOT NULL PRIMARY KEY, ownerUserId INTEGER NOT NULL, questionId TEXT NOT NULL, category TEXT NOT NULL)")
+            db.execSQL("CREATE TABLE quiz_sessions (sessionId TEXT NOT NULL PRIMARY KEY, ownerUserId INTEGER NOT NULL, payloadJson TEXT NOT NULL, revision INTEGER NOT NULL, active INTEGER NOT NULL, updatedAt INTEGER NOT NULL)")
+            db.execSQL("CREATE TABLE local_metadata (`key` TEXT NOT NULL PRIMARY KEY, value TEXT NOT NULL)")
+        }
+    }
+
     val MIGRATION_1_2 = object : Migration(1, 2) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE pending_attempts ADD COLUMN canonicalSubjectId TEXT")

@@ -4,4 +4,5 @@
     <external-files-path name="updates" path="updates/" />
     <files-path name="internal_updates" path="updates/" />
     <cache-path name="cache_updates" path="updates/" />
+    <cache-path name="preserved" path="preserved/" />
 </paths>

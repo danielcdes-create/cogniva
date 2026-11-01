@@ -26,7 +26,30 @@ import retrofit2.http.Query
 data class TelegramLinkPayload(
     @SerialName("user_id") val userId: Long? = null,
     val username: String? = null,
+    @SerialName("display_name") val displayName: String? = null,
+    @SerialName("link_code") val linkCode: String? = null,
+    @SerialName("installation_id") val installationId: String? = null,
+    @SerialName("installation_secret") val installationSecret: String? = null
+)
+
+@Serializable
+data class NativeSessionPayload(
+    @SerialName("installation_id") val installationId: String,
+    @SerialName("installation_secret") val installationSecret: String,
     @SerialName("display_name") val displayName: String? = null
+)
+
+@Serializable
+data class PublishedTopicPayload(
+    @SerialName("canonical_topic_id") val canonicalTopicId: String,
+    @SerialName("canonical_subject_id") val canonicalSubjectId: String,
+    @SerialName("display_title") val displayTitle: String
+)
+@Serializable
+data class PublishEditalPayload(
+    @SerialName("expected_revision") val expectedRevision: Long,
+    @SerialName("published_topics") val publishedTopics: List<PublishedTopicPayload>,
+    @SerialName("practiced_canonical_topic_ids") val practicedCanonicalTopicIds: List<String> = emptyList()
 )
 
 @Serializable
@@ -43,6 +66,7 @@ data class QuizGeneratePayload(
     @SerialName("user_id") val userId: Long,
     val mode: QuizMode,
     val quantity: Int,
+    @SerialName("trunk_focus_slugs") val trunkFocusSlugs: List<String> = emptyList(),
     @SerialName("contest_id") val contestId: String? = null,
     @SerialName("block_name") val blockName: String? = null,
     val disciplina: String? = null,
@@ -80,6 +104,8 @@ data class ExamSubjectPayload(
 @Serializable
 data class ExamBlueprintPayload(
     @SerialName("_id") val id: String,
+    val revision: Long = 0,
+    @SerialName("wrong_answer_penalty") val wrongAnswerPenalty: Double = 0.0,
     val title: String,
     @SerialName("short_name") val shortName: String,
     val institution: String,
@@ -96,6 +122,24 @@ data class ExamBlueprintPayload(
 )
 
 interface ConcursoApiService {
+    @GET("auth/profile")
+    suspend fun profile(): UserProfileDto
+
+
+    @POST("auth/native-session")
+    suspend fun nativeSession(@Body payload: NativeSessionPayload): AuthSessionDto
+
+    @GET("exams")
+    suspend fun listExams(): List<ExamBlueprintPayload>
+
+    @GET("catalog/trunks")
+    suspend fun catalog(): JsonObject
+
+    @GET("learning/state")
+    suspend fun learningState(@Query("after") after: String? = null): br.com.concursoprep.app.domain.model.LearningPage
+
+    @POST("exams/{examId}/publish-edital")
+    suspend fun publishEdital(@Path("examId") examId: String, @Body payload: PublishEditalPayload): ExamBlueprintPayload
 
     @POST("auth/telegram-link")
     suspend fun linkTelegramOrLogin(

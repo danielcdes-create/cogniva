@@ -4,8 +4,9 @@ import android.content.res.Configuration
 import androidx.compose.ui.tooling.preview.Preview
 
 /**
- * Matriz de Previews do Jetpack Compose para validação de Light/Dark,
- * escalas de fonte e dimensões de tela do Samsung S23 Ultra e tablets.
+ * Android Studio previews include the dimensions below. The JVM Paparazzi
+ * gate uses stock PIXEL geometry for every variant and varies font/night mode.
+ * Real S23 Ultra geometry and cutout are verified by the API 35 emulator job.
  */
 @Preview(name = "Light Mode", showBackground = true, uiMode = Configuration.UI_MODE_NIGHT_NO, widthDp = 411, heightDp = 891)
 @Preview(name = "Dark Mode", showBackground = true, uiMode = Configuration.UI_MODE_NIGHT_YES, widthDp = 411, heightDp = 891)

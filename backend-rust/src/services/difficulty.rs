@@ -87,7 +87,10 @@ pub fn analyze_question_difficulty(questao: &QuestionDocument) -> DifficultyMetr
     }
 
     // Conceitos-chave capitalizados
-    let re_concepts = Regex::new(r"\b[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]+(?:\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]+)*\b").unwrap();
+    let re_concepts = Regex::new(
+        r"\b[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]+(?:\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]+)*\b",
+    )
+    .unwrap();
     let key_concepts = re_concepts.find_iter(q_text).count();
 
     // Presença de dados numéricos
@@ -98,7 +101,15 @@ pub fn analyze_question_difficulty(questao: &QuestionDocument) -> DifficultyMetr
     };
 
     // Nível de abstração
-    let abstract_words = ["conceito", "teoria", "princípio", "abstrato", "filosófico", "jurisprudência", "doutrina"];
+    let abstract_words = [
+        "conceito",
+        "teoria",
+        "princípio",
+        "abstrato",
+        "filosófico",
+        "jurisprudência",
+        "doutrina",
+    ];
     let abstraction_level = abstract_words
         .iter()
         .filter(|w| q_lower.contains(**w))

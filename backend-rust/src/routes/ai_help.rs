@@ -5,7 +5,7 @@ use crate::{
 };
 use axum::{
     extract::{Path, Query, State},
-    Json,
+    Extension, Json,
 };
 use serde::Deserialize;
 use std::sync::Arc;
@@ -20,9 +20,11 @@ pub struct AiHelpQuery {
 /// `child-friendly-post`, `extra-concepts`, `mnemonic`, `plausibility`
 pub async fn handle_question_ai_assist(
     State(state): State<Arc<AppState>>,
+    Extension(user): Extension<crate::security::SessionUser>,
     Path((question_id, kind)): Path<(String, AiAssistKind)>,
     Query(query): Query<AiHelpQuery>,
 ) -> Result<Json<AiAssistResponse>, AppError> {
+    crate::services::rate_limit::reserve_tutor(&state.db, user.0).await?;
     let res = get_or_generate_ai_assist(
         &state.db,
         &state.config,

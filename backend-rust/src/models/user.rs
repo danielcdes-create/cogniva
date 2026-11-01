@@ -3,7 +3,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserProfileDocument {
     pub user_id: i64,
+    #[serde(default)]
     pub username: Option<String>,
+    #[serde(default)]
     pub display_name: Option<String>,
     #[serde(default = "default_daily_target")]
     pub daily_questions_target: i32,

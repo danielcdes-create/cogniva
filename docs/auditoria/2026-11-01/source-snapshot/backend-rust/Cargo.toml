@@ -1,0 +1,28 @@
+[package]
+name = "api-rust-core"
+version = "1.0.0"
+edition = "2021"
+authors = ["Daniel Caires <daniel.caires@yahoo.com>"]
+description = "Backend em Rust (Axum + MongoDB) para Plataforma de Preparação de Concursos Públicos"
+
+[dependencies]
+axum = { version = "0.7", features = ["macros", "json"] }
+tokio = { version = "1.40", features = ["full"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip"] }
+mongodb = "3.1"
+bson = { version = "2.13", features = ["chrono-0_4"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+dotenvy = "0.15"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+jsonwebtoken = "9.3"
+uuid = { version = "1.10", features = ["v4", "serde"] }
+thiserror = "1.0"
+rand = "0.8"
+futures = "0.3"
+regex = "1.11"
+sha2 = "0.10"

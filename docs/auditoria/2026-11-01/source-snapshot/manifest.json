@@ -1,0 +1,488 @@
+[
+  {
+    "path": "backend-rust/src/config.rs",
+    "sha256": "20b87d7937aeb7d08621d19d6e02d75904486b9a710d67ab23449d4053f38c1a",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "backend-rust/src/error.rs",
+    "sha256": "11a8f2d6ef24b933929333a027d80b6225743fee314229a5e31f5d9c2caa2d62",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "backend-rust/src/main.rs",
+    "sha256": "5667eb5354bff4098ad60b4a0e81fe806edfe50ac19f1ce5286a8d078697db14",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "backend-rust/src/models/activity.rs",
+    "sha256": "2d7db345ca25197f464288e3596498e9799fb15274d23f4756d9b0da581d7dc2",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "backend-rust/src/models/contest.rs",
+    "sha256": "bdfac615830f6e2d8318856facfd37cf98ac77e2c877a4b2f2667be81cf0f396",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "backend-rust/src/models/exam_hierarchy.rs",
+    "sha256": "68ee17e6029d744174c2ba57721e2d9506790ae6919ac1967b43cbc79bf9d686",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "backend-rust/src/models/mod.rs",
+    "sha256": "68090b194c0741d51357d520816888c2376bfcc93461bc0b9ac504ccc441770d",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "backend-rust/src/models/question.rs",
+    "sha256": "92fc598a07255157c4a9cfc391e1df71154d9a8b1a0d2d7d06bfa18e02440ee5",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "backend-rust/src/models/user.rs",
+    "sha256": "460098f518624256072fba261e28a47580862943b542ba7375421ef11eaec56d",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "backend-rust/src/routes/ai_help.rs",
+    "sha256": "52e9a9e452fcec8a18d3fe7cbd156846ff5cf3ff33262c57077708214e60c9e6",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "backend-rust/src/routes/analytics.rs",
+    "sha256": "aefe1cb6206b126ceb0a786bd098f8f7824b46c9d29af67f991fd88942a797ba",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "backend-rust/src/routes/apk_ota.rs",
+    "sha256": "a5d1d8490f5bab143f506295ca86f5a98a67b969b4aa0d644971dee2f0b24850",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "backend-rust/src/routes/auth.rs",
+    "sha256": "e5a51ca9d25c8ab2867705ee7f7fbfd73a5dd0c2f5ee3f2bc361eaba41adafd8",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "backend-rust/src/routes/contests.rs",
+    "sha256": "26c61233554cc5ad1e5fc6591295962d0db8b91350d8190f0c8103a772e4a6ab",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "backend-rust/src/routes/exams.rs",
+    "sha256": "4c09acd7735c470156bd20f84fb6e0958dd14b014a292d11d1b8a0e876b7ad62",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "backend-rust/src/routes/home.rs",
+    "sha256": "f673b571fd1512aa5f0e3803e42704adff31ed396da43933c22dec0cd54a36bb",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "backend-rust/src/routes/mod.rs",
+    "sha256": "bce7444001628430f19e292a930e5185ad5f8c3b588567700cfe0531b8522e88",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "backend-rust/src/routes/quiz.rs",
+    "sha256": "402d308b9e5c5a8a18e37c58cd6c94124f734a8b924ff835c57b363080735a67",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "backend-rust/src/services/ai_tutor.rs",
+    "sha256": "8e1b36ab124336a694380659e3ef6eb569349d527e4a5e7f664f7ad2a415062c",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "backend-rust/src/services/difficulty.rs",
+    "sha256": "99b6a115b848c0dcf0d2fd67578c7294d05771d6b63bf542b2c9b947683ff20d",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "backend-rust/src/services/exam_engine.rs",
+    "sha256": "d4dd647df7c316473f8e3d972a969c8156a9ab6cd0598b3af3d7e7984cd361d8",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "backend-rust/src/services/mod.rs",
+    "sha256": "04bcee241f04cb2fe91253535fbf8a0ae2ec6690c2284f699ae70fbcb01ba6e6",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "backend-rust/src/services/quiz_selector.rs",
+    "sha256": "75331d041140d1444843ff7796f1edfca7dd3301d6ae84e7c2ac151f40ce8a77",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "backend-rust/src/services/scheduler.rs",
+    "sha256": "142af58d776ac09d931382996276619a34753a43b4fcfc6cc26e7a4b944e1331",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "backend-rust/src/services/seed.rs",
+    "sha256": "a0f7bdeb8070dc0ece4d00426c1ffe9da78fe6a4b162875665cf968c7d62fd01",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "backend-rust/src/services/srs_engine.rs",
+    "sha256": "9e2bbc72340a46ec7122793b38221716a6ad42e64c090985102a4ab4585a19c4",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/androidTest/java/br/com/concursoprep/app/QuestionInsetCollisionTest.kt",
+    "sha256": "a1b231d29815fe87062acc86b24e314162df0cb9448e2a5bb36c589e72e76b9a",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/debug/AndroidManifest.xml",
+    "sha256": "ad5965e9190189e7b96288fd1bfa3e847e78463c4efc43c0c9050828dd2fda41",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/debug/java/br/com/concursoprep/app/ui/QuestionInsetProbeActivity.kt",
+    "sha256": "5cafff151bb47c27fb1efde0f0142d3c78b509d15d81820b032b78f82ebbf575",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/AndroidManifest.xml",
+    "sha256": "db308f1a62108661611072d100e43d245ff8137a2efbda71a7b1e5b9352d2fd0",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/java/br/com/concursoprep/app/ConcursoApp.kt",
+    "sha256": "e54a5678fc6646da457a2efb963b711abd13dc3c2c3dd410ec44f01692c9f99f",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/java/br/com/concursoprep/app/data/local/AppDatabase.kt",
+    "sha256": "f55d44c02e6359af871c1285358fd2c308ef08ee407f2d0bea04bb96f29bd084",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/java/br/com/concursoprep/app/data/local/ExamLocal.kt",
+    "sha256": "a5db3ec4a995976581cf3ee5735693517d79cf0c7266ed6c871f80e3c307ab15",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/java/br/com/concursoprep/app/data/local/QuestionCacheMapping.kt",
+    "sha256": "2408cf40bdf5f5cc838f322567705e88220db0443efd9fb4e1c2d2a3ed066fc9",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/java/br/com/concursoprep/app/data/remote/ConcursoApiService.kt",
+    "sha256": "c52265f192f08f19d756c4ed56ef90d1ef7d407dc8f09ada16cb5ca51f444711",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/java/br/com/concursoprep/app/data/repository/ConcursoRepository.kt",
+    "sha256": "af4a659b9c6e809a9b356f6d51200e0ff04ae4339438cbae082c620d47809770",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/java/br/com/concursoprep/app/data/sync/OfflineSyncWorker.kt",
+    "sha256": "a39cee6734766eae0a55613f3e45f15401d0e0e895e943340f297fb4fc17e7be",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/java/br/com/concursoprep/app/domain/exam/ExamEngine.kt",
+    "sha256": "64256f6ad0845979380bf5a9ec40ccdea1f8faed2e263145bc739dcb720c6ff7",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/java/br/com/concursoprep/app/domain/model/Models.kt",
+    "sha256": "e4ae321ae4be0c8ead51d9770eb690c3217b034244254ce25723ad26c0124c72",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/java/br/com/concursoprep/app/MainActivity.kt",
+    "sha256": "228740a265b9e8f21b0ffa1fca10c098e1ba34416fcfc9436b0059ea546166bf",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/java/br/com/concursoprep/app/ui/components/MarkdownParser.kt",
+    "sha256": "b20d0b2644db7e7243732427004f70c00817e61136d15e379fe9af2b74a0bef4",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/java/br/com/concursoprep/app/ui/components/QuestionComponents.kt",
+    "sha256": "427bb72794464f317c1bb1d75bdf680fdf636817741a2e7064d2868f571a08b5",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/java/br/com/concursoprep/app/ui/MainViewModel.kt",
+    "sha256": "3c6e9965f37fa235cbab0da0f94a5fc7da18465763993a1ecefcbd11b92c47a6",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/java/br/com/concursoprep/app/ui/screens/ContestsScreen.kt",
+    "sha256": "267ebb3afac0f145b50e683d7f1a22b751bff9567a4ec7066c5a1d71f7e1b196",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/java/br/com/concursoprep/app/ui/screens/ExamBuilderSheet.kt",
+    "sha256": "7a9a6a95aa6181e7c0fb189809a97d48aabd4522864ed75589521fdba6325344",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/java/br/com/concursoprep/app/ui/screens/OnboardingScreen.kt",
+    "sha256": "789855467837604d2ebc03857a2f092d34391dda3ad870912f663c0073b021b0",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/java/br/com/concursoprep/app/ui/screens/PracticeAndQuestionScreen.kt",
+    "sha256": "aeca77c97dfd3a030c3b2c3620de941d3536f7dd45bcab9a31b7a06605f249fc",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/java/br/com/concursoprep/app/ui/screens/ProgressScreen.kt",
+    "sha256": "70a4acb605e939388f417039707aeabec113027fa4561de69799cf4f0b68b110",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/java/br/com/concursoprep/app/ui/screens/QuestionSessionPreview.kt",
+    "sha256": "81c64b6e9404c785a99f4714a296c3ad1fd31a51e2ad3f45fe3606da63f523e5",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/java/br/com/concursoprep/app/ui/screens/SettingsScreen.kt",
+    "sha256": "628abec4bea5e9c3d98e5c35af3359f83a4c7b48e6460629a608901c9fe5616c",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/java/br/com/concursoprep/app/ui/screens/TodayScreen.kt",
+    "sha256": "7c307fd8ddd7c4c51b8d7558b232ad49eeef0b6a82a48eed1e6876f8f77f2cbe",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/java/br/com/concursoprep/app/ui/theme/PreviewMatrix.kt",
+    "sha256": "1a477446945df3c58c64eb794ead72f776705ea4d4d4ceebc645b54a4f48b522",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/java/br/com/concursoprep/app/ui/theme/Theme.kt",
+    "sha256": "8416aa28f4199f7713730abe6fb1ae774d6364f7c8023d7baed221ef03acf818",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/java/br/com/concursoprep/app/ui/theme/Type.kt",
+    "sha256": "ce109e31859154ab099dc0c86d67ae5d61d1a72157d5192a21fdb8c5aa007420",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/res/drawable/ic_launcher_background.xml",
+    "sha256": "e6b8ff2956782d4cd2d49592d74359bdb5ffc6649758b9308440404faf83ddf9",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/res/drawable/ic_launcher_foreground.xml",
+    "sha256": "bc4e11ba0880ba9baf47d496dcd2b981eaaa29a3dd91788b28ba0a2ca00e1c36",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml",
+    "sha256": "1c832bf194d8eecd439a92bcced0df144c9f566b934b3d7865e983d8ee8dbdeb",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/res/values/strings.xml",
+    "sha256": "bde0aaef2a0239f228b6cc10017a9ea4addf6320010627390ef561318d0a2e86",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/res/values/themes.xml",
+    "sha256": "b8f7d0af03b2da36974f708f0050ab763e2cb72a939d0d1b6dcaeb43b06a74cd",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/res/values-night/themes.xml",
+    "sha256": "345b7d55aab8c9d99cc6dba6a1855bcf65abc691fb6829c83f7e36905012d902",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/main/res/xml/file_paths.xml",
+    "sha256": "26d52d34e567da5446e639fcfb1df7308e09c0b9bcd0462ac4f33ddbfa85ae04",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/test/java/br/com/concursoprep/app/ExamEngineTest.kt",
+    "sha256": "86b1d9f9398205000583a71d05fc919b0fd79b537cab3c1d202ab30d80fa3cfd",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/test/java/br/com/concursoprep/app/MarkdownParserTest.kt",
+    "sha256": "5e7d085f27499e27f227fc24050254a0af0623d894d74c587810146beda0ff75",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/test/java/br/com/concursoprep/app/QuestionPreviewMatrixScreenshotTest.kt",
+    "sha256": "dfb92d8d4c8d6047ece5ff8aca2c104a223e0df115df6edcecfed12a8d45e68d",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/src/test/java/br/com/concursoprep/app/ThemeContrastTest.kt",
+    "sha256": "2a5c7710e6683d51794bb48a147d2927013703a6146da6b9852b6d71d00461c3",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "Notas Conversao Kotlin_Rust/Nota Tecnica - arquitetura_de_concursos_futuros_e_troncos_de_carreira - Conceitos.md",
+    "sha256": "e49786204b8ffb89af4f64e90a2eeaa8b0022146444fa4413ecd1a4b0d5b43fa",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "Notas Conversao Kotlin_Rust/Nota Tecnica - corre_o_de_ui_cogniva - Guidelines_Arquitetura.md",
+    "sha256": "00491d4276143173f173b8fb6668e2916dba7ab4039c4fd2dbcd4038e6404b2d",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "Notas Conversao Kotlin_Rust/Nota Tecnica - Screenshot JVM, emulador headless e hash de APK - Guidelines_Arquitetura.md",
+    "sha256": "686ab082c8404f9a1b3d303c0ee988feb58bb560d4721e19ad55f62c13da7282",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "Notas Conversao Kotlin_Rust/Nota T\u00e9cnica - Arquitetura e Pipeline CI_CD em VPS - Guidelines_Arquitetura.md",
+    "sha256": "4fdf97e3928ab28f6c118b301559dc1dcc1e8c97548cce4bc2e0cecfda59283b",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "Notas Conversao Kotlin_Rust/Nota T\u00e9cnica - Conceito - concurso_app - Base_Fundamentos.md",
+    "sha256": "58b78c7ede79d1e0b85dd0410df379fd9a0863647b36d5d02db353ad453f5765",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "Notas Conversao Kotlin_Rust/Nota T\u00e9cnica - Conceito - N\u00ba_001_2026 - Base_Fundamentos.md",
+    "sha256": "cd7b858f7e962f6e58a6c6f0e62a188624613467c6fe7c9a4983ffc827bea3ee",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "Notas Conversao Kotlin_Rust/Nota T\u00e9cnica - Conceito - Quiz Kotlin.md - Base_Fundamentos.txt",
+    "sha256": "8e52a6de2ef1267ec42cb5cad7cbf5fd5abd373d5ddc666c7848fd232dcbdfae",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": ".github/workflows/deploy.yml",
+    "sha256": "d5f0a7f5ec1380738495dc5bf103decad7f64f3d48fbe07be257f956dc97c886",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": ".github/workflows/emulator-insets.yml",
+    "sha256": "9e7a36e7b501d68d6ca8ed855ac254ed74fa8ba2adf0eb09d461350a4cb32184",
+    "captured_hash_verified": true,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/gradle.properties",
+    "sha256": "f2bf9f04bdead7a9e872234e3f52be6040bea346e408180337b4036aae44c587",
+    "captured_hash_verified": false,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "deploy/nginx-concursoprep.conf",
+    "sha256": "dfe209bf076f154ff129029001b2afd5a6782e8d6bc1a15c526b3fb51aa98d5d",
+    "captured_hash_verified": false,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/app/build.gradle.kts",
+    "sha256": "759caae3b2c14f83d921c818769ab855264fe7da41453a96f5c6432aa76dc508",
+    "captured_hash_verified": false,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "android-app/build-android.ps1",
+    "sha256": "d5389e593ffec49105ff7a7d913161421210914d741d5a6c82465b0cdd86a7db",
+    "captured_hash_verified": false,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "backend-rust/Cargo.toml",
+    "sha256": "c32eb3c5aee1755db35a4512c57377cbac122632659b5042705357504ff88ee7",
+    "captured_hash_verified": false,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "backend-rust/Dockerfile",
+    "sha256": "2854520d448d372c167c4145d29a06785b958be86450c3866ab8deb5ed0c5fef",
+    "captured_hash_verified": false,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  },
+  {
+    "path": "README.md",
+    "sha256": "657d4def713aa23369f5317c2e3773f17f6cfae9cf6d44af6db5bb2e383da068",
+    "captured_hash_verified": false,
+    "baseline_commit": "7fde658135602878b63430ea4913f902d8854c15"
+  }
+]

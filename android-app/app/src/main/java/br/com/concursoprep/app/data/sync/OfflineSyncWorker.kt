@@ -22,16 +22,22 @@ class OfflineSyncWorker(
 
     override suspend fun doWork(): Result {
         return try {
-            val prefs = applicationContext.getSharedPreferences("cogniva_prefs", Context.MODE_PRIVATE)
-            val userId = prefs.getLong("user_id", 1001L)
-            ConcursoApp.instance.repository.syncPendingAttempts(userId)
+            val repository = ConcursoApp.instance.repository
+            repository.syncPendingAttempts(repository.ownerUserId)
             Result.success()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.retry()
         }
     }
 
     companion object {
+        fun enqueueNow(context: Context) {
+            val request=androidx.work.OneTimeWorkRequestBuilder<OfflineSyncWorker>()
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build()
+            WorkManager.getInstance(context).enqueueUniqueWork("CognivaImmediateSync",androidx.work.ExistingWorkPolicy.APPEND_OR_REPLACE,request)
+        }
         private const val UNIQUE_WORK_NAME = "ConcursoPrepOfflineSyncWork"
 
         fun schedulePeriodicSync(context: Context) {

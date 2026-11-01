@@ -28,7 +28,7 @@ fun QuestionSessionPreviewContent() {
             aiTutorTitle = null,
             onRequestAiTutor = { _, _, _, _ -> },
             onDismissAiSheet = {},
-            onSubmitAnswer = { _, _, _, _ -> },
+            onSubmitAnswer = { _, _, _, _ -> true },
             onReportProblem = { _, _ -> },
             onExitSession = {},
             initialSelectedOptionIndex = 0

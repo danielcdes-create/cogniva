@@ -1,5 +1,7 @@
 # 🦀 COGNIVA Backend (`api-rust-core`)
 
+> **Registro histórico de 2026-10-31.** As seções abaixo descrevem a baseline anterior à recuperação. Contratos atuais, API autenticada, CAS/ACK, catálogo compartilhado e runtime estão no [README principal](../README.md), [REMEDIACAO](../docs/REMEDIACAO.md) e [operação](../docs/OPERACAO.md). Tamanho/RAM citados abaixo não são medições da release nova. Nunca compilar na VPS nem substituir seu Compose compartilhado pelo exemplo do repositório.
+
 Microsserviço de alta performance em **Rust (`Axum 0.7` + `Tokio` + `MongoDB 3.1`)** que alimenta o ecossistema **COGNIVA**.
 
 ---

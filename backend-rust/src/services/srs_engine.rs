@@ -65,7 +65,11 @@ pub fn is_mastered(points: f64) -> bool {
 }
 
 /// Calcula o decaimento diário de 1% (`points * 0.99^dias_passados`), portado de `calculate_decay`
-pub fn calculate_decay(points: f64, ultima_sessao: DateTime<Utc>, current_date: DateTime<Utc>) -> f64 {
+pub fn calculate_decay(
+    points: f64,
+    ultima_sessao: DateTime<Utc>,
+    current_date: DateTime<Utc>,
+) -> f64 {
     let dias_passados = (current_date.date_naive() - ultima_sessao.date_naive())
         .num_days()
         .max(0) as i32;
@@ -84,8 +88,7 @@ pub fn calculate_spaced_repetition_score(
     let streak_factor = ((streak_max as f64) / 5.0).min(1.0).max(0.0);
 
     let time_factor = if tempo_medio_resposta > 0.0 {
-        (2.0 - (tempo_gasto_segundos as f64 / tempo_medio_resposta))
-            .clamp(0.0, 1.0)
+        (2.0 - (tempo_gasto_segundos as f64 / tempo_medio_resposta)).clamp(0.0, 1.0)
     } else {
         0.5
     };
@@ -117,7 +120,7 @@ pub fn calculate_spaced_repetition_interval(
         // Nota Técnica Quiz Kotlin §11.1: Intervalos 24h (1d) / 7d / 30d
         let interval = if !is_correct || nivel_confianca <= 1 {
             1
-        } else if streak_max <= 2 || score < 0.65 {
+        } else if streak_max <= 2 {
             7
         } else {
             30
@@ -125,18 +128,13 @@ pub fn calculate_spaced_repetition_interval(
         return (score, interval);
     }
 
-    let min_interval = 3.0_f64;
-    let max_interval = 90.0_f64;
-    let base_interval = 10.0_f64;
-
-    let raw_interval = if score >= 0.9 {
-        base_interval * 2.0_f64.powf(score * 10.0 - 9.0)
-    } else {
-        base_interval * (1.0 + score)
-    };
-
-    let clamped = raw_interval.clamp(min_interval, max_interval).round() as i32;
-    (score, clamped)
+    // Legacy policy v1: continuous, monotone and explicitly sensitive to failure.
+    // New attempts use simplified policy v2; persisted historical intervals are untouched.
+    if !is_correct || nivel_confianca <= 1 {
+        return (score, 3);
+    }
+    let interval = (3.0 + 87.0 * score.powi(2)).round().clamp(3.0, 90.0) as i32;
+    (score, interval)
 }
 
 /// Classifica a tentativa na Matriz Confiança × Acerto (Nota Técnica Concurso App §8.2)
@@ -225,5 +223,28 @@ mod tests {
             classify_confidence_quadrant(true, 3),
             ConfidenceQuadrant::HighConfidenceCorrect
         );
+    }
+}
+
+#[cfg(test)]
+mod policy_contract_tests {
+    use super::*;
+    #[test]
+    fn failed_or_guessed_attempts_have_short_intervals_and_both_policies_are_monotone() {
+        for steps in [true, false] {
+            for streak in 0..=5 {
+                let (_, bad) =
+                    calculate_spaced_repetition_interval(streak, 60.0, 30, 3, false, steps);
+                assert_eq!(bad, if steps { 1 } else { 3 });
+                let mut previous = 0;
+                for confidence in 0..=3 {
+                    let (_, days) = calculate_spaced_repetition_interval(
+                        streak, 60.0, 30, confidence, true, steps,
+                    );
+                    assert!(days >= previous);
+                    previous = days;
+                }
+            }
+        }
     }
 }

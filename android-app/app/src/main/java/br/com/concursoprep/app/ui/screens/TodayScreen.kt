@@ -64,6 +64,7 @@ import br.com.concursoprep.app.ui.theme.LocalExtendedColors
 fun TodayScreen(
     dashboard: TodayDashboardDto,
     pausedDiscipline: String?,
+    onResumeSession: () -> Unit = {},
     apkUpdateState: ApkUpdateUiState = ApkUpdateUiState(),
     onCheckApkUpdate: () -> Unit = {},
     onInstallApkUpdate: () -> Unit = {},
@@ -159,6 +160,10 @@ fun TodayScreen(
                 }
             }
 
+            item {
+                Text(if(dashboard.lastSyncedAt==null) "Dados disponíveis neste aparelho. Ainda sem sincronização confirmada." else "Dados deste aparelho · última sincronização: ${dashboard.lastSyncedAt}",style=MaterialTheme.typography.bodySmall)
+                dashboard.syncMessage?.takeIf { it.isNotBlank() }?.let { Text(it,color=MaterialTheme.colorScheme.error) }
+            }
             // 3. Prioridade Nº 1: Revisão Espaçada (SRS) — Sempre no topo!
             item(key = "srs_action") {
                 PriorityActionCard(
@@ -212,7 +217,7 @@ fun TodayScreen(
                                 tint = MaterialTheme.colorScheme.primary
                             )
                         },
-                        onClick = { onStartQuizMode(QuizMode.STANDARD, pausedDiscipline) }
+                        onClick = onResumeSession
                     )
                 }
             }

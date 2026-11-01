@@ -44,6 +44,8 @@ pub struct ActivityTimes {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PastSessionEntry {
+    #[serde(default)]
+    pub attempt_id: String,
     #[serde(with = "bson::serde_helpers::chrono_datetime_as_bson_datetime")]
     pub data: DateTime<Utc>,
     pub status: bool,

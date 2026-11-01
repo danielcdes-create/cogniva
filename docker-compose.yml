@@ -1,43 +1,22 @@
-# Arquivo para ser copiado para /opt/apps/docker-compose.yml no Droplet DigitalOcean
-# Conforme §5 da Nota Técnica: Arquitetura e Pipeline CI/CD em VPS
+# Standalone Cogniva example. DO NOT replace the shared /opt/apps/docker-compose.yml.
+# Production promotion uses a per-service override against the existing apps project.
 services:
   api-rust-core:
-    image: ghcr.io/danielcdes-create/api-rust-core:latest
+    image: ${COGNIVA_IMAGE:?Set an immutable ghcr.io image@sha256 digest}
     container_name: api-rust-core
     restart: unless-stopped
     env_file: .env.rust
-    ports:
-      - "127.0.0.1:8001:8000"
-    volumes:
-      - ./apk:/app/apk:ro
+    ports: ['127.0.0.1:8001:8000']
+    volumes: ['./apk:/app/apk:ro']
+    read_only: true
+    tmpfs: ['/tmp:size=16m']
+    security_opt: ['no-new-privileges:true']
+    cap_drop: ['ALL']
+    mem_limit: 160m
+    cpus: 0.75
+    pids_limit: 128
     logging:
-      driver: "json-file"
+      driver: json-file
       options:
-        max-size: "10m"
-        max-file: "3"
-
-  api-python-service:
-    image: ghcr.io/${GITHUB_OWNER:-seu_usuario}/api-python-service:latest
-    container_name: api-python-service
-    restart: unless-stopped
-    env_file: .env.python
-    ports:
-      - "127.0.0.1:8002:8000"
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  api-ts-service:
-    image: ghcr.io/${GITHUB_OWNER:-seu_usuario}/api-ts-service:latest
-    container_name: api-ts-service
-    restart: unless-stopped
-    env_file: .env.ts
-    ports:
-      - "127.0.0.1:8003:8000"
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: 10m
+        max-file: '3'

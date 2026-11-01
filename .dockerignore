@@ -1,0 +1,10 @@
+**/target
+**/build
+**/.gradle
+.git
+docs
+Notas Conversao Kotlin_Rust
+android-app
+scripts
+.env*
+*.apk

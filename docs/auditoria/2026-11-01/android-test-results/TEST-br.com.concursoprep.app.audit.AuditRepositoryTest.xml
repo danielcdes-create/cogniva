@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="br.com.concursoprep.app.audit.AuditRepositoryTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-11-01T13:30:21.914Z" hostname="GBP360" time="0.159">
+  <properties/>
+  <testcase name="zeroProcessedAcknowledgementStillDeletesPendingAttempt" classname="br.com.concursoprep.app.audit.AuditRepositoryTest" time="0.074"/>
+  <testcase name="disciplineSubstringInventsACanonicalTopic" classname="br.com.concursoprep.app.audit.AuditRepositoryTest" time="0.0"/>
+  <testcase name="emptyOfflineHistoryDisplaysInventedAchievements" classname="br.com.concursoprep.app.audit.AuditRepositoryTest" time="0.042"/>
+  <testcase name="cacheRoundtripDropsStatsAndSyllabus" classname="br.com.concursoprep.app.audit.AuditRepositoryTest" time="0.003"/>
+  <testcase name="simultaneousSyncsSendTheSameAttemptTwice" classname="br.com.concursoprep.app.audit.AuditRepositoryTest" time="0.022"/>
+  <testcase name="offlineErrorNotebookReturnsOrdinaryQuestionsWhenEmpty" classname="br.com.concursoprep.app.audit.AuditRepositoryTest" time="0.013"/>
+  <testcase name="networkFailureIsConvertedIntoSuccessfulReturnValue" classname="br.com.concursoprep.app.audit.AuditRepositoryTest" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

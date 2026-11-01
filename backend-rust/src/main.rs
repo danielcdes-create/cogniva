@@ -1,7 +1,10 @@
 pub mod config;
+#[cfg(test)]
+mod contract_tests;
 pub mod error;
 pub mod models;
 pub mod routes;
+pub mod security;
 pub mod services;
 
 use axum::{
@@ -11,9 +14,9 @@ use axum::{
 use config::AppConfig;
 use mongodb::{Client, Database};
 use serde_json::json;
-use services::exam_engine::ExamMemory;
 use services::scheduler::spawn_background_daily_scheduler;
-use std::{net::SocketAddr, sync::Arc, sync::Mutex};
+use std::future::IntoFuture;
+use std::{net::SocketAddr, sync::Arc};
 use tower_http::{
     compression::CompressionLayer,
     cors::{Any, CorsLayer},
@@ -23,16 +26,11 @@ use tower_http::{
 pub struct AppState {
     pub db: Database,
     pub config: AppConfig,
-    pub exams: Mutex<ExamMemory>,
 }
 
 impl AppState {
     pub fn new(db: Database, config: AppConfig) -> Self {
-        Self {
-            db,
-            config,
-            exams: Mutex::new(ExamMemory::seeded()),
-        }
+        Self { db, config }
     }
 }
 
@@ -45,7 +43,46 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .init();
 
+    if std::env::args().nth(1).as_deref() == Some("--export-catalog") {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&services::exam_engine::system_catalog())?
+        );
+        return Ok(());
+    }
+    if std::env::args().nth(1).as_deref() == Some("--validate-legacy-export") {
+        let path = std::env::args()
+            .nth(2)
+            .ok_or("Informe o diretório privado de BSON")?;
+        services::legacy_validation::inspect(std::path::Path::new(&path))?;
+        return Ok(());
+    }
     let config = AppConfig::from_env();
+    if std::env::args().nth(1).as_deref() == Some("--health-check") {
+        reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()?
+            .get(format!("http://127.0.0.1:{}/api/v1/ready", config.port))
+            .send()
+            .await?
+            .error_for_status()?;
+        return Ok(());
+    }
+    if config.jwt_secret.len() < 32 {
+        return Err("JWT_SECRET deve ter pelo menos 32 caracteres aleatórios".into());
+    }
+    let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some("--issue-link-code") {
+        let user_id: i64 = args.get(2).ok_or("Informe o ID histórico")?.parse()?;
+        if user_id == 0 {
+            return Err("Informe uma conta não nula; o operador deve comprovar o proprietário antes de emitir".into());
+        }
+        println!(
+            "{}",
+            security::issue(&config.jwt_secret, user_id, "legacy_link", 600)?
+        );
+        return Ok(());
+    }
     tracing::info!(
         "Conectando ao MongoDB Atlas (database: {})...",
         config.mongodb_db
@@ -77,26 +114,8 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .allow_headers(Any);
 
     Router::new()
-        .route(
-            "/api/v1/health",
-            get(|| async {
-                Json(json!({
-                    "status": "ok",
-                    "service": "api-rust-core",
-                    "brand": "COGNIVA",
-                    "stack": "Rust (Axum + Tokio + MongoDB)"
-                }))
-            }),
-        )
-        .route("/api/v1/apk/info", get(routes::apk_ota::get_apk_info))
-        .route("/api/v1/apk/download", get(routes::apk_ota::download_apk))
-        .route("/apk", get(routes::apk_ota::download_apk))
-        .route("/cogniva.apk", get(routes::apk_ota::download_apk))
-        .route("/api/app/latest-apk", get(routes::apk_ota::get_latest_apk))
-        .route(
-            "/api/v1/auth/telegram-link",
-            post(routes::auth::handle_telegram_link_or_login),
-        )
+        .route("/api/v1/admin/canonical-mapping",post(routes::canonical_mapping::apply))
+        .route("/api/v1/auth/profile", get(routes::auth::get_profile))
         .route(
             "/api/v1/auth/onboarding",
             put(routes::auth::handle_save_onboarding),
@@ -105,6 +124,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             "/api/v1/admin/run-daily-maintenance",
             post(routes::auth::handle_trigger_daily_maintenance),
         )
+        .route("/api/v1/learning/state", get(routes::learning::get_state))
         .route("/api/v1/home/today", get(routes::home::get_today_dashboard))
         .route("/api/v1/contests", get(routes::contests::list_contests))
         .route(
@@ -153,10 +173,35 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             "/api/v1/questions/batch/trunk-common",
             post(routes::exams::trunk_common_batch),
         )
+        .route_layer(axum::middleware::from_fn_with_state(state.clone(), security::authenticate))
+        .merge(Router::new()
+            .route("/api/v1/health", get(|| async { Json(json!({"status":"ok","service":"api-rust-core", "version":env!("CARGO_PKG_VERSION"), "revision":option_env!("BUILD_REVISION").unwrap_or("local"), "contract_version":2})) }))
+            .route("/api/v1/ready", get(readiness))
+            .route("/api/v1/auth/native-session", post(routes::auth::handle_native_session))
+            .route("/api/v1/auth/telegram-link", post(routes::auth::handle_telegram_link_or_login))
+            .route("/api/v1/apk/info", get(routes::apk_ota::get_apk_info))
+            .route("/api/v1/apk/download", get(routes::apk_ota::download_apk))
+            .route("/api/app/latest-apk", get(routes::apk_ota::get_latest_apk))
+            .route("/apk", get(routes::apk_ota::download_apk))
+            .route("/cogniva.apk", get(routes::apk_ota::download_apk)))
         .layer(CompressionLayer::new())
         .layer(TraceLayer::new_for_http())
         .layer(cors)
         .with_state(state)
+}
+
+async fn readiness(
+    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+) -> Result<Json<serde_json::Value>, error::AppError> {
+    tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        state.db.run_command(bson::doc! {"ping":1}).into_future(),
+    )
+    .await
+    .map_err(|_| error::AppError::Internal("Banco não respondeu a tempo".into()))??;
+    Ok(Json(
+        json!({"status":"ready","contract_version":2,"revision":option_env!("BUILD_REVISION").unwrap_or("local")}),
+    ))
 }
 
 #[cfg(test)]
@@ -176,10 +221,7 @@ mod latest_apk_tests {
 
     #[tokio::test]
     async fn latest_apk_size_and_sha256_come_from_the_file_and_repeat() {
-        let dir = std::env::temp_dir().join(format!(
-            "cogniva-latest-apk-{}",
-            uuid::Uuid::new_v4()
-        ));
+        let dir = std::env::temp_dir().join(format!("cogniva-latest-apk-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         let apk_path = dir.join("app-debug.apk");
         let meta_path = dir.join("output-metadata.json");
@@ -230,10 +272,7 @@ mod latest_apk_tests {
 
         assert_eq!(bodies[0], bodies[1], "repeat request changed the body");
         let json: serde_json::Value = serde_json::from_str(&bodies[0]).unwrap();
-        assert_eq!(
-            json["size_bytes"].as_u64().unwrap(),
-            apk_bytes.len() as u64
-        );
+        assert_eq!(json["size_bytes"].as_u64().unwrap(), apk_bytes.len() as u64);
         assert_eq!(
             json["sha256_checksum"].as_str().unwrap(),
             sha256_hex(apk_bytes)
@@ -246,3 +285,6 @@ mod latest_apk_tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
+
+#[cfg(test)]
+mod integration_tests;

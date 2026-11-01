@@ -59,7 +59,9 @@ pub enum ExamLifecycleStatus {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ExamDateTarget {
-    ExactDate { iso_date: String },
+    ExactDate {
+        iso_date: String,
+    },
     EstimatedWindow {
         label: String,
         estimated_sort_date: String,
@@ -118,6 +120,10 @@ pub struct EditalDiffSummary {
 pub struct ExamBlueprint {
     #[serde(rename = "_id", alias = "id")]
     pub id: String,
+    #[serde(default)]
+    pub revision: i64,
+    #[serde(default)]
+    pub wrong_answer_penalty: f64,
     pub owner_user_id: Option<String>,
     pub title: String,
     pub short_name: String,
@@ -170,7 +176,10 @@ pub struct EditalPublishResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PublishEditalRequest {
+    #[serde(default)]
+    pub expected_revision: i64,
     pub published_topics: Vec<TopicRef>,
+    #[serde(default)]
     pub practiced_canonical_topic_ids: Vec<String>,
     pub published_at_iso: Option<String>,
 }
@@ -236,10 +245,17 @@ pub struct SubjectQuota {
     pub canonical_subject_id: String,
     pub weight: f64,
     pub question_count: u32,
+    pub allowed_topic_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SubjectOutcome {
+    #[serde(default)]
+    pub canonical_subject_id: String,
+    #[serde(default)]
+    pub wrong: u32,
+    #[serde(default)]
+    pub penalty: f64,
     pub weight: f64,
     pub correct: u32,
     pub drawn: u32,

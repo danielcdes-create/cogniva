@@ -29,7 +29,8 @@ data class CachedQuestionEntity(
     val isMastered: Boolean,
     val userNote: String? = null,
     val canonicalSubjectId: String? = null,
-    val canonicalTopicId: String? = null
+    val canonicalTopicId: String? = null,
+    val payloadJson: String? = null
 )
 
 /**
@@ -52,7 +53,11 @@ data class PendingAttemptEntity(
     val userNote: String?,
     val createdAtEpochMs: Long = System.currentTimeMillis(),
     val canonicalSubjectId: String? = null,
-    val canonicalTopicId: String? = null
+    val canonicalTopicId: String? = null,
+    @androidx.room.ColumnInfo(defaultValue = "0") val ownerUserId: Long = 0,
+    @androidx.room.ColumnInfo(defaultValue = "''") val attemptId: String = java.util.UUID.randomUUID().toString(),
+    @androidx.room.ColumnInfo(defaultValue = "''") val questionRevision: String = "",
+    val syncError: String? = null
 )
 
 @Dao
@@ -95,6 +100,15 @@ interface ConcursoLocalDao {
 
     @Query("DELETE FROM pending_attempts WHERE localId IN (:ids)")
     suspend fun deleteSyncedAttempts(ids: List<Long>)
+    @Query("UPDATE pending_attempts SET ownerUserId=:owner WHERE ownerUserId=0")
+    suspend fun bindLegacyOwner(owner: Long)
+    @Query("DELETE FROM pending_attempts WHERE attemptId=:eventId AND ownerUserId=:owner")
+    suspend fun acknowledgeAttempt(eventId: String, owner: Long)
+    @Query("UPDATE pending_attempts SET syncError=:error WHERE attemptId=:eventId AND ownerUserId=:owner")
+    suspend fun markAttemptError(eventId: String, owner: Long, error: String?)
+    @Query("UPDATE cached_questions SET inErrorNotebook=:error, isMastered=:mastered WHERE id=:id")
+    suspend fun updateLearningFlags(id: String, error: Boolean, mastered: Boolean)
+
 }
 
 @Database(
@@ -105,12 +119,14 @@ interface ConcursoLocalDao {
         UserExamEntity::class,
         ExamSubjectEntity::class,
         ExamTopicEntity::class,
+        LearningRecordEntity::class, PendingReportEntity::class, QuizSessionEntity::class, LocalMetadataEntity::class,
         CanonicalMasteryEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun concursoDao(): ConcursoLocalDao
     abstract fun examDao(): ExamDao
+    abstract fun durableDao(): DurableStateDao
 }

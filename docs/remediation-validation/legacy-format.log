@@ -1,0 +1,34 @@
+   Compiling api-rust-core v1.4.0 (C:\Users\danie\Cogniva\backend-rust)
+warning: variable does not need to be mutable
+   --> src\services\exam_store.rs:153:5
+    |
+153 |     mut exam: ExamBlueprint,
+    |     ----^^^^
+    |     |
+    |     help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: `api-rust-core` (bin "api-rust-core") generated 1 warning (run `cargo fix --bin "api-rust-core" -p api-rust-core` to apply 1 suggestion)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 28s
+     Running `backend-rust\target\debug\api-rust-core.exe --validate-legacy-export C:/Users/danie/AppData/Local/Cogniva/production-backups/20261101T184812Z/validation`
+{
+  "todasQuestoes": {
+    "total": 618,
+    "typed_valid": 618,
+    "answerable": 612,
+    "parse_errors": {}
+  },
+  "userActivityLog": {
+    "total": 15,
+    "typed_valid": 15,
+    "answerable": 0,
+    "parse_errors": {}
+  },
+  "usuarios": {
+    "total": 4,
+    "typed_valid": 4,
+    "answerable": 0,
+    "parse_errors": {}
+  }
+}

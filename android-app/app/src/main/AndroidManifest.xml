@@ -8,12 +8,12 @@
 
     <application
         android:name=".ConcursoApp"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
         android:label="COGNIVA"
         android:supportsRtl="true"
-        android:usesCleartextTraffic="true"
+        android:usesCleartextTraffic="false"
         android:enableOnBackInvokedCallback="true"
         android:theme="@style/Theme.Cogniva">
         <activity

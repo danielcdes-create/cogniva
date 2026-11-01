@@ -2,6 +2,7 @@ package br.com.concursoprep.app
 
 import android.app.Application
 import androidx.room.Room
+import br.com.concursoprep.app.data.AuthStore
 import br.com.concursoprep.app.data.local.AppDatabase
 import br.com.concursoprep.app.data.local.ExamMigrations
 import br.com.concursoprep.app.data.remote.ConcursoApiService
@@ -23,18 +24,35 @@ class ConcursoApp : Application() {
     lateinit var repository: ConcursoRepository
         private set
 
+    lateinit var authStore: AuthStore
+        private set
+
+    fun selectAccount(userId: Long) { authStore.select(userId); openAccount(userId) }
+
     override fun onCreate() {
         super.onCreate()
         instance = this
+        authStore = AuthStore(this)
+        val prefs = getSharedPreferences("cogniva_prefs", MODE_PRIVATE)
+        if (getDatabasePath("concurso_prep.db").exists() && !prefs.contains("legacy_database_owner")) {
+            check(prefs.edit().putLong("legacy_database_owner", prefs.getLong("user_id", 1001L)).commit())
+        }
+        authStore.select(authStore.selectedUserId)
+        openAccount(authStore.selectedUserId)
+        OfflineSyncWorker.schedulePeriodicSync(this)
+    }
+
+    private fun openAccount(ownerUserId: Long) {
+        val prefs = getSharedPreferences("cogniva_prefs", MODE_PRIVATE)
+        val databaseName = if (prefs.getLong("legacy_database_owner",0)==ownerUserId) "concurso_prep.db" else "cogniva-$ownerUserId.db"
 
         // 1. Inicializa o Room DB Offline-First
         database = Room.databaseBuilder(
             applicationContext,
             AppDatabase::class.java,
-            "concurso_prep.db"
+            databaseName
         )
-            .addMigrations(ExamMigrations.MIGRATION_1_2)
-            .fallbackToDestructiveMigration(true)
+            .addMigrations(ExamMigrations.MIGRATION_1_2,ExamMigrations.MIGRATION_2_3)
             .build()
 
         // 2. Configura OkHttp com timeouts generosos para LLMs (Gemini / OpenAI)
@@ -43,6 +61,11 @@ class ConcursoApp : Application() {
         }
 
         val okHttpClient = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val token=authStore.token(ownerUserId)
+                val request=chain.request().newBuilder().apply { if(!token.isNullOrBlank()) header("Authorization","Bearer $token") }.build()
+                chain.proceed(request)
+            }
             .addInterceptor(loggingInterceptor)
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(45, TimeUnit.SECONDS)
@@ -71,11 +94,10 @@ class ConcursoApp : Application() {
             api = apiService,
             dao = database.concursoDao(),
             examDao = database.examDao(),
-            json = json
+            json = json,
+            durable = database.durableDao(), database = database, ownerUserId = ownerUserId, auth = authStore
         )
 
-        // 6. Agenda sincronização periódica de fila offline
-        OfflineSyncWorker.schedulePeriodicSync(this)
     }
 
     companion object {

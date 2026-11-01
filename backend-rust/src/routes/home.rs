@@ -1,15 +1,15 @@
 use crate::{
     error::AppError,
-    models::contest::{ContestDocument, ContestStatus},
+    models::contest::ContestStatus,
     services::exam_engine::{card_from_canonical_activity, load_canonical_slices},
     AppState,
 };
 use axum::{
     extract::{Query, State},
-    Json,
+    Extension, Json,
 };
 use bson::{doc, Document};
-use chrono::{Datelike, TimeZone, Utc};
+use chrono::{TimeZone, Utc};
 use futures::stream::TryStreamExt;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -53,14 +53,19 @@ pub struct TodayDashboardResponse {
 
 pub async fn get_today_dashboard(
     State(state): State<Arc<AppState>>,
-    Query(query): Query<UserQuery>,
+    Extension(user): Extension<crate::security::SessionUser>,
+    Query(_query): Query<UserQuery>,
 ) -> Result<Json<TodayDashboardResponse>, AppError> {
+    let query = UserQuery { user_id: user.0 };
     let db = &state.db;
     let now = Utc::now();
-    let start_of_day = Utc
-        .with_ymd_and_hms(now.year(), now.month(), now.day(), 0, 0, 0)
+    let study_zone = chrono::FixedOffset::west_opt(3 * 3600).unwrap();
+    let local_day = now.with_timezone(&study_zone).date_naive();
+    let start_of_day = study_zone
+        .from_local_datetime(&local_day.and_hms_opt(0, 0, 0).unwrap())
         .single()
-        .unwrap_or(now);
+        .unwrap()
+        .with_timezone(&Utc);
 
     let act_coll = db.collection::<Document>("userActivityLog");
 
@@ -68,7 +73,7 @@ pub async fn get_today_dashboard(
     let pending_srs_reviews_count = act_coll
         .count_documents(doc! {
             "user_id": query.user_id,
-            "revisao_necessaria": true
+            "$or":[{"revisao_necessaria":true},{"$expr":{"$lte":[{"$add":["$datas.ultima_sessao",{"$multiply":[{"$max":[1,{"$ifNull":["$spaced_repetition_interval",1]}]},86400000]}]},bson::DateTime::from_chrono(now)]}}]
         })
         .await?;
 
@@ -118,56 +123,56 @@ pub async fn get_today_dashboard(
         let correct_today = res_doc.get_i32("correct_today").unwrap_or(0);
         if questions_answered_today > 0 {
             accuracy_today_pct =
-                ((correct_today as f64 / questions_answered_today as f64) * 10000.0).round() / 100.0;
+                ((correct_today as f64 / questions_answered_today as f64) * 10000.0).round()
+                    / 100.0;
         }
     }
 
     // 4. Concursos ativos e countdown real (sem urgência falsa para previstos!)
-    let mut contests_cursor = db
-        .collection::<ContestDocument>("concursos")
-        .find(doc! {})
-        .await?;
-    let mut upcoming_exams = Vec::new();
-    while let Some(c) = contests_cursor.try_next().await? {
-        let days_remaining = c
-            .dates
-            .exam_date_official
-            .as_deref()
-            .and_then(|iso| chrono::DateTime::parse_from_rfc3339(iso).ok())
-            .map(|dt| (dt.with_timezone(&Utc).date_naive() - now.date_naive()).num_days().max(0));
+    let blueprints = crate::services::exam_store::list(&state, query.user_id).await?;
+    let upcoming_exams = blueprints
+        .iter()
+        .filter(|e| e.is_active_in_ladder)
+        .map(|exam| {
+            let (days_remaining, estimated_window) = match &exam.target_date {
+                crate::models::exam_hierarchy::ExamDateTarget::ExactDate { iso_date } => (
+                    crate::services::exam_engine::days_until(iso_date, local_day),
+                    None,
+                ),
+                crate::models::exam_hierarchy::ExamDateTarget::EstimatedWindow {
+                    label, ..
+                } => (None, Some(label.clone())),
+                _ => (None, None),
+            };
+            UpcomingExamCard {
+                contest_id: exam.id.clone(),
+                name: exam.title.clone(),
+                status: crate::routes::contest_projection::status(&exam.status),
+                days_remaining,
+                estimated_window,
+                exam_board: exam.exam_boards.join(" / "),
+            }
+        })
+        .collect();
 
-        upcoming_exams.push(UpcomingExamCard {
-            contest_id: c.id,
-            name: c.name,
-            status: c.status,
-            days_remaining,
-            estimated_window: c.dates.estimated_window,
-            exam_board: c.exam_board,
-        });
-    }
-
-    let leverage_inputs = {
-        let guard = state.exams.lock().expect("exam store");
-        guard.leverage_inputs()
-    };
-    let activity = load_canonical_slices(db, query.user_id).await;
-    let common_trunk_suggestion = card_from_canonical_activity(
-        &leverage_inputs,
-        &activity,
-        &[],
-        15,
-        now.date_naive(),
-    )
-    .map(|card| CommonTrunkSuggestion {
-        discipline: card.subject_name,
-        shared_contests: card.contest_names,
-        badge_text: card.sentence,
-    })
-    .unwrap_or(CommonTrunkSuggestion {
-        discipline: String::new(),
-        shared_contests: Vec::new(),
-        badge_text: String::new(),
-    });
+    let leverage_inputs = crate::services::exam_store::list(state.as_ref(), query.user_id)
+        .await?
+        .iter()
+        .map(crate::services::exam_engine::blueprint_to_leverage)
+        .collect::<Vec<_>>();
+    let activity = load_canonical_slices(db, query.user_id).await?;
+    let common_trunk_suggestion =
+        card_from_canonical_activity(&leverage_inputs, &activity, &[], 15, now.date_naive())
+            .map(|card| CommonTrunkSuggestion {
+                discipline: card.subject_name,
+                shared_contests: card.contest_names,
+                badge_text: card.sentence,
+            })
+            .unwrap_or(CommonTrunkSuggestion {
+                discipline: String::new(),
+                shared_contests: Vec::new(),
+                badge_text: String::new(),
+            });
 
     // 5. Meta diária configurada pelo usuário na coleção `usuarios` (default 50)
     let daily_goal_questions = db
@@ -181,7 +186,7 @@ pub async fn get_today_dashboard(
 
     Ok(Json(TodayDashboardResponse {
         user_id: query.user_id,
-        date_iso: now.to_rfc3339(),
+        date_iso: local_day.to_string(),
         daily_goal_questions,
         questions_answered_today,
         accuracy_today_pct,

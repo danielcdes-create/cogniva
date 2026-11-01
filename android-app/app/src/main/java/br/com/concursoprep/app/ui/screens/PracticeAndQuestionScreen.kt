@@ -59,6 +59,10 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import br.com.concursoprep.app.domain.model.SessionSnapshot
+import br.com.concursoprep.app.domain.model.SessionAnswer
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -197,11 +201,7 @@ private fun PracticeModeCard(
 /**
  * Resposta registrada pelo usuário durante a sessão
  */
-data class UserAttemptState(
-    val chosenIndex: Int,
-    val confidenceLevel: Int,
-    val timeSpentSeconds: Int
-)
+typealias UserAttemptState = SessionAnswer
 
 /**
  * Tela de Questão Full-Screen com Suporte Completo ao Modo Simulado,
@@ -213,23 +213,29 @@ fun QuestionSessionScreen(
     questions: List<QuestionDto>,
     initialIndex: Int = 0,
     isSimuladoMode: Boolean,
-    contestName: String = "CPNU · Auditor-Fiscal do Trabalho",
-    historicalCutoffPct: Double = 78.5,
+    contestName: String = "Treino",
+    historicalCutoffPct: Double = 0.0,
     aiTutorMarkdown: String?,
     aiTutorTitle: String?,
     onRequestAiTutor: (questionId: String, kind: String, title: String, hintIndex: Int?) -> Unit,
     onDismissAiSheet: () -> Unit,
-    onSubmitAnswer: (question: QuestionDto, chosenIndex: Int, confidenceLevel: Int, timeSpentSeconds: Int) -> Unit,
+    onSubmitAnswer: suspend (question: QuestionDto, chosenIndex: Int, confidenceLevel: Int, timeSpentSeconds: Int) -> Boolean,
     onReportProblem: (questionId: String, category: String) -> Unit,
     onExitSession: () -> Unit,
-    initialSelectedOptionIndex: Int? = null
+    initialSelectedOptionIndex: Int? = null,
+    snapshot: SessionSnapshot? = null,
+    onUpdateSession: (SessionSnapshot) -> Unit = {},
+    onCompleteSession: () -> Unit = onExitSession,
+    snackbarState: androidx.compose.material3.SnackbarHostState? = null
 ) {
-    var currentIndex by rememberSaveable { mutableIntStateOf(initialIndex) }
-    val userAnswers = remember { mutableStateMapOf<String, UserAttemptState>() }
-    var isSimuladoFinished by rememberSaveable { mutableStateOf(false) }
-    var isSimuladoReviewMode by rememberSaveable { mutableStateOf(false) }
+    var currentIndex by rememberSaveable(snapshot?.sessionId) { mutableIntStateOf(snapshot?.currentIndex ?: initialIndex) }
+    val userAnswers = remember(snapshot?.sessionId) { mutableStateMapOf<String, UserAttemptState>().apply { putAll(snapshot?.answers.orEmpty()) } }
+    val actionScope=rememberCoroutineScope()
+    var saving by remember { mutableStateOf(false) }
+    var isSimuladoFinished by rememberSaveable(snapshot?.sessionId) { mutableStateOf(snapshot?.finished ?: false) }
+    var isSimuladoReviewMode by rememberSaveable(snapshot?.sessionId) { mutableStateOf(snapshot?.reviewing ?: false) }
     var showReportSheet by rememberSaveable { mutableStateOf(false) }
-    var questionStartEpochMs by remember(currentIndex) { mutableStateOf(System.currentTimeMillis()) }
+    var questionStartEpochMs by rememberSaveable(snapshot?.sessionId,currentIndex) { mutableStateOf(if(snapshot?.currentIndex==currentIndex) snapshot.questionStartedAtEpochMs else System.currentTimeMillis()) }
 
     val handleBackNavigation = {
         if (isSimuladoReviewMode) {
@@ -247,19 +253,31 @@ fun QuestionSessionScreen(
         onDismissAiSheet()
     }
 
-    var secondsRemaining by rememberSaveable {
-        mutableIntStateOf(if (isSimuladoMode) questions.size * 180 else 0)
+    val deadline by rememberSaveable(snapshot?.sessionId) { mutableStateOf(snapshot?.deadlineEpochMs ?: (System.currentTimeMillis()+questions.size*180000L)) }
+    var secondsRemaining by remember { mutableIntStateOf(((deadline-System.currentTimeMillis()).coerceAtLeast(0)/1000L).toInt()) }
+    LaunchedEffect(isSimuladoMode,isSimuladoFinished,deadline) {
+        if(isSimuladoMode&&!isSimuladoFinished) {
+            while(true) {
+                secondsRemaining=((deadline-System.currentTimeMillis()).coerceAtLeast(0)/1000L).toInt()
+                if(System.currentTimeMillis()>=deadline){isSimuladoFinished=true;break}
+                delay(250L)
+            }
+        }
     }
-
-    LaunchedEffect(isSimuladoMode, isSimuladoFinished) {
-        if (isSimuladoMode && !isSimuladoFinished) {
-            while (secondsRemaining > 0) {
-                delay(1000L)
-                secondsRemaining -= 1
-            }
-            if (secondsRemaining <= 0) {
-                isSimuladoFinished = true
-            }
+    LaunchedEffect(currentIndex,userAnswers.toMap(),isSimuladoFinished,isSimuladoReviewMode) {
+        snapshot?.let { onUpdateSession(it.copy(currentIndex=currentIndex,answers=userAnswers.toMap(),finished=isSimuladoFinished,reviewing=isSimuladoReviewMode,questionStartedAtEpochMs=questionStartEpochMs)) }
+    }
+    LaunchedEffect(isSimuladoFinished) {
+        if(isSimuladoMode&&isSimuladoFinished) {
+            saving=true
+            try {
+                for((id,answer) in userAnswers.toMap()) {
+                    if(!answer.submitted) {
+                        val q=questions.firstOrNull { it.id==id } ?: continue
+                        if(onSubmitAnswer(q,answer.chosenIndex,answer.confidenceLevel,answer.timeSpentSeconds)) userAnswers[id]=answer.copy(submitted=true)
+                    }
+                }
+            } finally {saving=false}
         }
     }
 
@@ -269,12 +287,13 @@ fun QuestionSessionScreen(
         var wrongCount = 0
         var blankCount = 0
         val disciplineMap = mutableMapOf<String, Pair<Int, Int>>()
-        val hasCebraspeQuestions = questions.any { it.questionType == QuestionType.TRUE_FALSE }
+        val penalty=snapshot?.exam?.wrongAnswerPenalty ?: 0.0
+        val hasCebraspeQuestions = penalty>0.0
 
         questions.forEach { q ->
             val existing = disciplineMap.getOrDefault(q.disciplina, Pair(0, 0))
             val userAttempt = userAnswers[q.id]
-            val correctIndex = q.correctAnswerIndices.firstOrNull() ?: 0
+            val correctIndex = q.correctAnswerIndices.singleOrNull() ?: -1
 
             if (userAttempt == null) {
                 blankCount += 1
@@ -288,12 +307,14 @@ fun QuestionSessionScreen(
             }
         }
 
-        val netScorePct: Double = if (hasCebraspeQuestions) {
-            val netScore = (correctCount - wrongCount).coerceAtLeast(0)
-            (netScore.toDouble() / totalQuestions.coerceAtLeast(1).toDouble()) * 100.0
-        } else {
-            (correctCount.toDouble() / totalQuestions.coerceAtLeast(1).toDouble()) * 100.0
+        fun weight(q:QuestionDto):Double = snapshot?.exam?.subjects?.firstOrNull { it.canonicalSubjectId==q.canonicalSubjectId || it.displayName==q.disciplina }?.weight ?: 1.0
+        val outcomes=questions.groupBy { it.canonicalSubjectId ?: it.disciplina }.values.map { group ->
+            val correct=group.count { q->userAnswers[q.id]?.chosenIndex in q.correctAnswerIndices }
+            val wrong=group.count { q->userAnswers[q.id]!=null&&userAnswers[q.id]?.chosenIndex !in q.correctAnswerIndices }
+            br.com.concursoprep.app.domain.exam.SubjectOutcome(weight(group.first()),correct,group.size,wrong,penalty)
         }
+        val netScorePct=br.com.concursoprep.app.domain.exam.ExamEngine.weightedNetScore(outcomes)
+        if(saving) { androidx.compose.material3.CircularProgressIndicator(); return }
 
         SimuladoResultScreen(
             contestName = contestName,
@@ -306,11 +327,12 @@ fun QuestionSessionScreen(
             historicalCutoffPct = historicalCutoffPct,
             disciplineBreakdown = disciplineMap,
             isCebraspeRuleApplied = hasCebraspeQuestions,
+            snackbarState = snackbarState,
             onReviewQuestions = {
                 currentIndex = 0
                 isSimuladoReviewMode = true
             },
-            onFinishAndExit = onExitSession
+            onFinishAndExit = { if(userAnswers.values.all { it.submitted }) onCompleteSession() else onExitSession() }
         )
         return
     }
@@ -324,7 +346,7 @@ fun QuestionSessionScreen(
         mutableIntStateOf(currentAttempt?.confidenceLevel ?: 2)
     }
     var isAnswerSubmitted by remember(question.id, isSimuladoReviewMode) {
-        mutableStateOf(currentAttempt != null || isSimuladoReviewMode)
+        mutableStateOf(currentAttempt?.submitted == true || isSimuladoReviewMode)
     }
     var hintClickCount by remember(question.id) { mutableIntStateOf(0) }
 
@@ -332,7 +354,7 @@ fun QuestionSessionScreen(
         ((System.currentTimeMillis() - questionStartEpochMs) / 1000L).toInt().coerceIn(1, 3600)
     }
 
-    val correctIndex = question.correctAnswerIndices.firstOrNull() ?: 0
+    val correctIndex = question.correctAnswerIndices.singleOrNull() ?: -1
     val isBlankAnswer = isSimuladoReviewMode && selectedOptionIndex == null
     val isUserCorrect = selectedOptionIndex != null && selectedOptionIndex == correctIndex
     val isHighConfidenceError = isAnswerSubmitted && !isBlankAnswer && !isUserCorrect && selectedConfidence >= 2
@@ -341,6 +363,7 @@ fun QuestionSessionScreen(
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        snackbarHost = { snackbarState?.let { androidx.compose.material3.SnackbarHost(it) } },
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             Surface(
@@ -521,13 +544,18 @@ fun QuestionSessionScreen(
                             Button(
                                 onClick = {
                                     val chosen = selectedOptionIndex ?: return@Button
-                                    isAnswerSubmitted = true
                                     val elapsed = computeElapsedSeconds()
-                                    val attempt = UserAttemptState(chosen, selectedConfidence, elapsed)
-                                    userAnswers[question.id] = attempt
-                                    onSubmitAnswer(question, chosen, selectedConfidence, elapsed)
+                                    actionScope.launch {
+                                        saving=true
+                                        try {
+                                            if(onSubmitAnswer(question,chosen,selectedConfidence,elapsed)) {
+                                                isAnswerSubmitted=true
+                                                userAnswers[question.id]=UserAttemptState(chosen,selectedConfidence,elapsed,true)
+                                            }
+                                        }finally{saving=false}
+                                    }
                                 },
-                                enabled = selectedOptionIndex != null,
+                                enabled = selectedOptionIndex != null && !saving && correctIndex>=0,
                                 modifier = Modifier
                                     .testTag("confirm_answer_cta")
                                     .weight(if (currentIndex > 0) 1.15f else 1f)
@@ -575,7 +603,7 @@ fun QuestionSessionScreen(
                                     } else if (isSimuladoReviewMode) {
                                         isSimuladoReviewMode = false
                                     } else {
-                                        onExitSession()
+                                        onCompleteSession()
                                     }
                                 },
                                 modifier = Modifier
@@ -717,7 +745,7 @@ fun QuestionSessionScreen(
                 if (question.questionType == QuestionType.TRUE_FALSE) {
                     item(key = "cebraspe_warning") {
                         Text(
-                            text = "Padrão Cebraspe: 1 resposta errada anula 1 resposta certa.",
+                            text = if(isSimuladoMode) "Penalidade cadastrada nesta prova: ${snapshot?.exam?.wrongAnswerPenalty ?: 0.0} ponto(s) por erro." else "Formato Certo/Errado · treino com feedback imediato.",
                             style = MaterialTheme.typography.labelMedium,
                             color = ext.warning
                         )
@@ -727,18 +755,17 @@ fun QuestionSessionScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            listOf(0 to "CERTO", 1 to "ERRADO").forEach { (idx, label) ->
+                            question.answers.mapIndexed { index,label->index to label }.forEach { (idx, label) ->
                                 val isSelected = selectedOptionIndex == idx
                                 val showColor = isAnswerSubmitted && !hideFeedback
                                 Button(
                                     onClick = {
                                         if (!isAnswerSubmitted || hideFeedback) {
                                             selectedOptionIndex = idx
-                                            if (hideFeedback) {
+                                            if (!isAnswerSubmitted || hideFeedback) {
                                                 val elapsed = computeElapsedSeconds()
                                                 val attempt = UserAttemptState(idx, selectedConfidence, elapsed)
                                                 userAnswers[question.id] = attempt
-                                                onSubmitAnswer(question, idx, selectedConfidence, elapsed)
                                             }
                                         }
                                     },
@@ -782,11 +809,10 @@ fun QuestionSessionScreen(
                             onClick = {
                                 if (!isAnswerSubmitted || hideFeedback) {
                                     selectedOptionIndex = idx
-                                    if (hideFeedback) {
+                                    if (!isAnswerSubmitted || hideFeedback) {
                                         val elapsed = computeElapsedSeconds()
                                         val attempt = UserAttemptState(idx, selectedConfidence, elapsed)
                                         userAnswers[question.id] = attempt
-                                        onSubmitAnswer(question, idx, selectedConfidence, elapsed)
                                     }
                                 }
                             }
@@ -800,11 +826,10 @@ fun QuestionSessionScreen(
                             selectedConfidence = selectedConfidence,
                             onSelectConfidence = { level ->
                                 selectedConfidence = level
-                                if (hideFeedback && selectedOptionIndex != null) {
+                                if (selectedOptionIndex != null) {
                                     val elapsed = computeElapsedSeconds()
                                     val attempt = UserAttemptState(selectedOptionIndex!!, level, elapsed)
                                     userAnswers[question.id] = attempt
-                                    onSubmitAnswer(question, selectedOptionIndex!!, level, elapsed)
                                 }
                             }
                         )
@@ -1021,13 +1046,16 @@ fun SimuladoResultScreen(
     disciplineBreakdown: Map<String, Pair<Int, Int>>,
     isCebraspeRuleApplied: Boolean,
     onReviewQuestions: () -> Unit,
-    onFinishAndExit: () -> Unit
+    onFinishAndExit: () -> Unit,
+    snackbarState: androidx.compose.material3.SnackbarHostState? = null
 ) {
-    val isApproved = netScorePct >= historicalCutoffPct
+    val hasCutoff=historicalCutoffPct>0
+    val isApproved = hasCutoff && netScorePct >= historicalCutoffPct
     val ext = LocalExtendedColors.current
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        snackbarHost = { snackbarState?.let { androidx.compose.material3.SnackbarHost(it) } },
         contentWindowInsets = WindowInsets.safeDrawing,
         bottomBar = {
             Surface(
@@ -1110,9 +1138,9 @@ fun SimuladoResultScreen(
                     )
                     Text(
                         text = if (isCebraspeRuleApplied) {
-                            "Regra Cebraspe aplicada: cada erro anulou um acerto ($correctCount certos - $wrongCount errados)."
+                            "Desconto por erro aplicado conforme a regra cadastrada, respeitando os pesos das disciplinas."
                         } else {
-                            "Padrão Oficial: $correctCount acertos de $totalQuestions questões."
+                            "Treino sem desconto por erro: $correctCount acertos de $totalQuestions questões, com os pesos cadastrados."
                         },
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -1125,8 +1153,10 @@ fun SimuladoResultScreen(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (isApproved) {
-                                "Na Zona de Aprovação! Corte histórico de referência: ${historicalCutoffPct}%"
+                            text = if (!hasCutoff) {
+                                "Sem nota de corte validada. Este resultado é uma referência de treino."
+                            } else if (isApproved) {
+                                "Acima da referência cadastrada: Corte histórico de referência: ${historicalCutoffPct}%"
                             } else {
                                 val diff = historicalCutoffPct - netScorePct
                                 "Abaixo da Nota de Corte de Referência (${historicalCutoffPct}%). Diferença de ${String.format("%.1f", diff)}%."

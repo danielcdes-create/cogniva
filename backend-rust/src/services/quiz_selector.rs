@@ -28,6 +28,8 @@ pub enum QuizMode {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuizGenerateRequest {
+    #[serde(default)]
+    pub trunk_focus_slugs: Vec<String>,
     pub user_id: i64,
     pub mode: QuizMode,
     pub quantity: usize,
@@ -110,13 +112,15 @@ pub async fn enrich_questions_with_user_stats(
                 accuracy_pct: (act.percentual_acertos * 100.0).round() / 100.0,
                 last_session_iso: Some(act.datas.ultima_sessao.to_rfc3339()),
                 is_mastered: act.dominada,
-                in_error_notebook: act.in_error_notebook || act.quantidade_erros > act.quantidade_acertos,
+                in_error_notebook: act.in_error_notebook
+                    || act.quantidade_erros > act.quantidade_acertos,
             },
         );
     }
 
     Ok(questions
         .into_iter()
+        .filter(|q| q.answer_indices().is_ok())
         .map(|q| {
             let st = stats_map.remove(&q.id);
             q.to_dto(st)
@@ -138,7 +142,9 @@ pub async fn generate_quiz_questions(
         QuizMode::SrsReview => fetch_srs_review_mode(db, req.user_id, quantity).await?,
         QuizMode::ErrorNotebook => fetch_error_notebook_mode(db, req, quantity).await?,
         QuizMode::CommonTrunk => fetch_common_trunk_mode(db, req, quantity).await?,
-        QuizMode::Standard | QuizMode::Shuffle => fetch_standard_or_shuffle_mode(db, req, quantity).await?,
+        QuizMode::Standard | QuizMode::Shuffle => {
+            fetch_standard_or_shuffle_mode(db, req, quantity).await?
+        }
     };
 
     enrich_questions_with_user_stats(db, req.user_id, docs).await
@@ -432,9 +438,15 @@ async fn fetch_simulado_mode(
         HashMap::from([
             ("Segurança e Saúde do Trabalhador".to_string(), 0.225),
             ("Direito do Trabalho".to_string(), 0.225),
-            ("Sociologia e Psicologia Aplicadas ao Trabalho".to_string(), 0.15),
+            (
+                "Sociologia e Psicologia Aplicadas ao Trabalho".to_string(),
+                0.15,
+            ),
             ("Políticas Públicas".to_string(), 0.105),
-            ("Gestão Governamental e Governança Pública".to_string(), 0.075),
+            (
+                "Gestão Governamental e Governança Pública".to_string(),
+                0.075,
+            ),
             ("Desafios do Estado de Direito".to_string(), 0.05),
             ("Ética e Integridade".to_string(), 0.05),
             ("Administração Pública Federal".to_string(), 0.04),

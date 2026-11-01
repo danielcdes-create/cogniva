@@ -36,6 +36,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -100,12 +101,16 @@ private enum class BottomTab(val label: String) {
 @Composable
 fun ConcursoPrepRootApp(viewModel: MainViewModel) {
     val context = LocalContext.current
-    var currentTab by remember { mutableStateOf(BottomTab.HOJE) }
+    var currentTab by rememberSaveable { mutableStateOf(BottomTab.HOJE) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     val isOnboardingCompleted by viewModel.isOnboardingCompleted.collectAsState()
     val activeQuestions by viewModel.activeQuizQuestions.collectAsState()
     val isSimuladoSession by viewModel.isSimuladoSession.collectAsState()
+    val activeSession by viewModel.activeSession.collectAsState()
+    val editingExam by viewModel.editingExam.collectAsState()
+    val pendingReview by viewModel.pendingReview.collectAsState()
+    val showPendingReview by viewModel.showPendingReview.collectAsState()
     val selectedContestId by viewModel.selectedContestId.collectAsState()
     val todayDashboard by viewModel.todayDashboard.collectAsState()
     val syllabusGroups by viewModel.syllabusGroups.collectAsState()
@@ -172,18 +177,33 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
         }
     }
 
+    LaunchedEffect(Unit) {
+        viewModel.accountChanged.collectLatest { id ->
+            ConcursoApp.instance.selectAccount(id)
+            context.startActivity(Intent(context,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+            (context as? android.app.Activity)?.finish()
+        }
+    }
+
+    LaunchedEffect(Unit){viewModel.pendingExport.collectLatest { file ->
+        val uri=FileProvider.getUriForFile(context,"${context.packageName}.fileprovider",file)
+        val intent=Intent(Intent.ACTION_SEND).setType("application/json").putExtra(Intent.EXTRA_STREAM,uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        context.startActivity(Intent.createChooser(intent,"Exportar registros preservados"))
+    }}
     // 1. Rota de Onboarding (para novos usuários ou vínculo inicial com o Bot Telegram)
     if (!isOnboardingCompleted) {
         OnboardingScreen(
             onSkipOnboarding = { viewModel.skipOnboarding() },
-            onCompleteOnboarding = { telegramUserId, telegramUsername, displayName, contests, dailyQ, dailyH ->
+            snackbarState = snackbarHostState,
+            onCompleteOnboarding = { telegramUserId, telegramUsername, displayName, contests, dailyQ, dailyH, linkCode ->
                 viewModel.completeOnboarding(
                     telegramUserId = telegramUserId,
                     telegramUsername = telegramUsername,
                     displayName = displayName,
                     selectedContests = contests,
                     dailyQuestionsTarget = dailyQ,
-                    dailyHoursTarget = dailyH
+                    dailyHoursTarget = dailyH,
+                    linkCode = linkCode
                 )
             }
         )
@@ -192,16 +212,18 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
 
     // 2. Rota Full-Screen Imersiva para Questões e Simulados (esconde a Bottom Bar conforme §3 da Nota Técnica)
     if (activeQuestions != null && activeQuestions!!.isNotEmpty()) {
-        val contestTitle = storedExams.firstOrNull { it.examId == selectedContestId }?.title
-            ?: storedExams.firstOrNull()?.title
-            ?: "Concurso"
+        val contestTitle = activeSession?.exam?.title ?: "Treino"
 
         QuestionSessionScreen(
             questions = activeQuestions!!,
             initialIndex = 0,
             isSimuladoMode = isSimuladoSession,
             contestName = contestTitle,
-            historicalCutoffPct = 78.5,
+            historicalCutoffPct = activeSession?.exam?.historicalCutoffScore ?: 0.0,
+            snapshot = activeSession,
+            onUpdateSession = { viewModel.updateSession(it) },
+            onCompleteSession = { viewModel.exitSession(completed=true) },
+            snackbarState = snackbarHostState,
             aiTutorMarkdown = activeAiSheetMarkdown,
             aiTutorTitle = activeAiSheetTitle,
             onRequestAiTutor = { qId, kind, title, hintIdx ->
@@ -267,6 +289,7 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                     TodayScreen(
                         dashboard = safeDashboard,
                         pausedDiscipline = pausedDiscipline,
+                        onResumeSession = { viewModel.resumeSession() },
                         apkUpdateState = apkUpdateState,
                         onCheckApkUpdate = { viewModel.checkApkUpdate() },
                         onInstallApkUpdate = { viewModel.downloadAndInstallApk(context) },
@@ -348,14 +371,15 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                         onSelectThemeMode = { mode ->
                             viewModel.setThemeMode(mode)
                         },
-                        onSaveUserSettings = { tgId, tgUsername, dispName, contests, dailyQ, dailyH ->
+                        onSaveUserSettings = { tgId, tgUsername, dispName, contests, dailyQ, dailyH, linkCode ->
                             viewModel.updateUserSettings(
                                 telegramUserId = tgId,
                                 telegramUsername = tgUsername,
                                 displayName = dispName,
                                 selectedContests = contests,
                                 dailyQuestionsTarget = dailyQ,
-                                dailyHoursTarget = dailyH
+                                dailyHoursTarget = dailyH,
+                                linkCode = linkCode
                             )
                         },
                         onCheckApkUpdate = { viewModel.checkApkUpdate() },
@@ -365,6 +389,9 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                         ladderExams = storedExams,
                         focusedTrunkSlugs = focusedTrunks,
                         onToggleTrunkFocus = { viewModel.toggleTrunkFocus(it) },
+                        onEditExam = { viewModel.editExam(it) },
+                        onArchiveExam = { viewModel.archiveExam(it) },
+                        onOpenPending = { viewModel.openPendingReview() },
                         onReopenOnboarding = {
                             currentTab = BottomTab.HOJE
                             viewModel.reopenOnboardingWizard()
@@ -375,9 +402,11 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
         }
     }
 
+    if(showPendingReview){br.com.concursoprep.app.ui.screens.PendingReviewSheet(pendingReview,{viewModel.dismissPendingReview()},{viewModel.exportPendingReview()})}
     if (showExamBuilder) {
         ExamFormBottomSheet(
             existingExams = storedExams,
+            editingExam = editingExam,
             onDismiss = { viewModel.dismissExamBuilder() },
             onSave = { draft -> viewModel.saveExamDraft(draft) }
         )
@@ -385,89 +414,8 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
 }
 
 private fun buildOfflineFallbackDashboard() = TodayDashboardDto(
-    userId = 1001L,
-    dateIso = "2026-10-30",
-    dailyGoalQuestions = 50,
-    questionsAnsweredToday = 18,
-    accuracyTodayPct = 78.0,
-    pendingSrsReviewsCount = 14,
-    errorNotebookCount = 23,
-    highConfidenceErrorsCount = 3,
-    upcomingExams = listOf(
-        UpcomingExamCard(
-            contestId = "CPNU",
-            name = "CPNU · Auditor-Fiscal do Trabalho",
-            status = ContestStatus.EDITAL_PUBLICADO,
-            daysRemaining = 44,
-            estimatedWindow = null,
-            examBoard = "Cesgranrio (Confirmada)"
-        ),
-        UpcomingExamCard(
-            contestId = "RFB",
-            name = "Receita Federal · Auditor Fiscal",
-            status = ContestStatus.SOLICITADO_AUTORIZADO,
-            daysRemaining = null,
-            estimatedWindow = "Provável: 1º sem/2027",
-            examBoard = "FGV / Cebraspe (Estimada)"
-        ),
-        UpcomingExamCard(
-            contestId = "BNDES",
-            name = "BNDES · Profissional Básico",
-            status = ContestStatus.PREVISTO,
-            daysRemaining = null,
-            estimatedWindow = "Previsto: 2º sem/2027",
-            examBoard = "Cesgranrio (Provável)"
-        )
-    ),
-    commonTrunkSuggestion = CommonTrunkSuggestion(
-        discipline = "Finanças Públicas",
-        sharedContests = listOf("CPNU", "RFB"),
-        badgeText = "Estudar 15 questões de Finanças Públicas avança CPNU e Receita Federal ao mesmo tempo"
-    )
-)
-
-private fun buildOfflineFallbackAnalytics(exams: List<br.com.concursoprep.app.domain.exam.StoredExam>) = ProgressAnalyticsDto(
-    userId = 1001L,
-    globalAccuracyPct = 76.5,
-    totalQuestionsPracticed = 428,
-    totalMasteredQuestions = 189,
-    readinessIndexScore = ExamEngine.readinessForStoredExams(exams, emptyMap()),
-    historicalCutoffReference = 78.5,
-    disciplinesSortedByWeakness = listOf(
-        DisciplineMasteryBarDto(
-            discipline = "Direito Previdenciário",
-            accuracyPct = 52.0,
-            totalAttempts = 50,
-            masteredQuestions = 12,
-            pointsAccumulated = 42.0
-        ),
-        DisciplineMasteryBarDto(
-            discipline = "Economia do Trabalho",
-            accuracyPct = 68.0,
-            totalAttempts = 85,
-            masteredQuestions = 38,
-            pointsAccumulated = 75.0
-        ),
-        DisciplineMasteryBarDto(
-            discipline = "Segurança e Saúde no Trabalho",
-            accuracyPct = 86.0,
-            totalAttempts = 220,
-            masteredQuestions = 110,
-            pointsAccumulated = 195.0
-        )
-    ),
-    confidenceMatrix = ConfidenceMatrixSummaryDto(
-        highConfidenceCorrect = 142,
-        lowConfidenceCorrect = 88,
-        lowConfidenceError = 41,
-        highConfidenceError = 15 // Ponto Cego
-    ),
-    activityHeatmap = listOf(
-        DailyHeatmapCellDto("2026-10-25", 35, 75.0),
-        DailyHeatmapCellDto("2026-10-26", 45, 80.0),
-        DailyHeatmapCellDto("2026-10-27", 52, 72.0),
-        DailyHeatmapCellDto("2026-10-28", 20, 65.0),
-        DailyHeatmapCellDto("2026-10-29", 58, 85.0),
-        DailyHeatmapCellDto("2026-10-30", 18, 78.0)
-    )
-)
+    userId=0,dateIso=java.time.LocalDate.now().toString(),dailyGoalQuestions=0,questionsAnsweredToday=0,accuracyTodayPct=0.0,
+    pendingSrsReviewsCount=0,errorNotebookCount=0,highConfidenceErrorsCount=0,upcomingExams=emptyList(),commonTrunkSuggestion=CommonTrunkSuggestion("",emptyList(),""),syncMessage="Carregando dados deste aparelho…")
+private fun buildOfflineFallbackAnalytics(exams:List<br.com.concursoprep.app.domain.exam.StoredExam>) = ProgressAnalyticsDto(
+    userId=0,globalAccuracyPct=0.0,totalQuestionsPracticed=0,totalMasteredQuestions=0,readinessIndexScore=0.0,historicalCutoffReference=0.0,
+    disciplinesSortedByWeakness=emptyList(),confidenceMatrix=ConfidenceMatrixSummaryDto(0,0,0,0),activityHeatmap=emptyList())

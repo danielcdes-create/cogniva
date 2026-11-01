@@ -1,0 +1,57 @@
+name: Headless emulator insets (API 35 at S23 Ultra geometry)
+
+# The report names one profile as "Android 17 / API 35". Those are different
+# platform levels: Android 17 is API 37, and API 35 is Android 15. No system
+# image carries both labels. This job boots the report's numeric API
+# (android-35 / google_apis) at the S23 Ultra geometry the inset gate
+# requires: 1440x3088 px, 500 dpi, centered punch-hole. The log prints the
+# real release and sdk. It does not relabel the image as Android 17.
+#
+# Manual only. This job does not build on the droplet and does not run on tags.
+on:
+  workflow_dispatch:
+
+jobs:
+  s23-ultra-insets:
+    name: API 35 1440x3088 500dpi punch-hole
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Boot headless emulator and check question insets
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -no-audio -no-boot-anim -gpu swiftshader_indirect
+          # The runner executes each line in a new shell. Do not share variables across lines.
+          pre-emulator-launch-script: |
+            python3 -c 'from pathlib import Path; p=next(Path.home().joinpath(".android","avd").rglob("config.ini")); keys={"hw.lcd.width","hw.lcd.height","hw.lcd.density","showDeviceFrame"}; lines=[ln for ln in p.read_text().splitlines() if ln.split("=",1)[0] not in keys]; lines += ["hw.lcd.width=1440","hw.lcd.height=3088","hw.lcd.density=500","showDeviceFrame=no"]; p.write_text("\n".join(lines)+"\n"); print("AVD_CONFIG", p)'
+          script: |
+            adb shell wm size 1440x3088
+            adb shell wm density 500
+            adb shell cmd overlay enable com.android.internal.display.cutout.emulation.hole
+            adb shell cmd overlay list | tr -d '\r' | grep -E '\[x\].*com\.android\.internal\.display\.cutout\.emulation\.hole'
+            adb shell wm size | tr -d '\r' | grep 1440x3088
+            adb shell wm density | tr -d '\r' | grep 500
+            echo PROFILE_RESOLUTION report=Android17/API35 booted_release=$(adb shell getprop ro.build.version.release | tr -d '\r') booted_sdk=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
+            echo Android 17 is API 37. API 35 is Android 15. Booting the report numeric API at S23 Ultra geometry.
+            echo EMULATOR_BOOTED $(adb shell getprop ro.build.version.release | tr -d '\r') $(adb shell getprop ro.build.version.sdk | tr -d '\r') $(adb shell wm size | tr -d '\r') $(adb shell wm density | tr -d '\r') punch-hole=hole
+            cd android-app && chmod +x gradlew && ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=br.com.concursoprep.app.QuestionInsetCollisionTest --no-daemon --console=plain
+            sleep 2
+            adb logcat -d -s INSET_CHECK:I
+            adb logcat -d | tr -d '\r' | grep -E 'INSET_CHECK.*success'

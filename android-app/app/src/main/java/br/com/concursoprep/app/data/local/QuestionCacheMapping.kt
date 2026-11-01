@@ -3,8 +3,19 @@ package br.com.concursoprep.app.data.local
 import br.com.concursoprep.app.domain.model.QuestionDto
 import br.com.concursoprep.app.domain.model.QuestionType
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.decodeFromString
 
 object QuestionCacheMapping {
+    fun withRevision(dto: QuestionDto): QuestionDto {
+        if(dto.questionRevision.isNotEmpty()) return dto
+        val hash=java.security.MessageDigest.getInstance("SHA-256")
+        fun number(value:Long){hash.update(java.nio.ByteBuffer.allocate(8).putLong(value).array())}
+        fun text(value:String){val bytes=value.toByteArray(Charsets.UTF_8);number(bytes.size.toLong());hash.update(bytes)}
+        text(dto.question);number(dto.answers.size.toLong());dto.answers.forEach(::text)
+        number(dto.correctAnswerIndices.size.toLong());dto.correctAnswerIndices.forEach{number(it.toLong())}
+        return dto.copy(questionRevision=hash.digest().joinToString(""){"%02x".format(it)})
+    }
     fun toEntity(dto: QuestionDto, json: Json): CachedQuestionEntity {
         return CachedQuestionEntity(
             id = dto.id,
@@ -20,27 +31,23 @@ object QuestionCacheMapping {
             inErrorNotebook = dto.userStats?.inErrorNotebook ?: false,
             isMastered = dto.userStats?.isMastered ?: false,
             userNote = null,
-            canonicalSubjectId = dto.canonicalSubjectId ?: inferCanonical(dto.disciplina)?.first,
-            canonicalTopicId = dto.canonicalTopicId ?: inferCanonical(dto.disciplina)?.second
+            canonicalSubjectId = dto.canonicalSubjectId,
+            canonicalTopicId = dto.canonicalTopicId,
+            payloadJson = json.encodeToString(dto)
         )
     }
 
     fun inferCanonical(disciplina: String): Pair<String, String>? {
-        val name = disciplina.lowercase()
-        return when {
-            name.contains("finan") -> "FIN_PUB" to "FIN_PUB_01"
-            name.contains("tribut") -> "DIR_TRIB" to "DIR_TRIB_01"
-            name.contains("constituc") -> "DIR_CONST" to "DIR_CONST_01"
-            name.contains("administrativo") -> "DIR_ADM" to "DIR_ADM_01"
-            name.contains("portugu") -> "PORT" to "PORT_01"
-            name.contains("penal") && !name.contains("process") -> "DIR_PEN" to "DIR_PEN_01"
-            name.contains("contabil") -> "CONTAB" to "CONTAB_01"
-            else -> null
-        }
+        // A subject label is not evidence of a question's canonical topic.
+        return null
     }
 
     fun toDto(entity: CachedQuestionEntity, json: Json): QuestionDto {
-        return QuestionDto(
+        entity.payloadJson?.let { payload ->
+            val restored=withRevision(json.decodeFromString<QuestionDto>(payload))
+            return restored.copy(userStats=restored.userStats?.copy(isMastered=entity.isMastered,inErrorNotebook=entity.inErrorNotebook))
+        }
+        return withRevision(QuestionDto(
             id = entity.id,
             question = entity.question,
             questionType = runCatching { QuestionType.valueOf(entity.questionType) }
@@ -48,7 +55,7 @@ object QuestionCacheMapping {
             answers = runCatching { json.decodeFromString<List<String>>(entity.answersJson) }
                 .getOrDefault(emptyList()),
             correctAnswerIndices = runCatching { json.decodeFromString<List<Int>>(entity.correctIndicesJson) }
-                .getOrDefault(listOf(0)),
+                .getOrDefault(emptyList()),
             disciplina = entity.disciplina,
             source = entity.source,
             examYear = entity.examYear,
@@ -56,6 +63,6 @@ object QuestionCacheMapping {
             explanation = entity.explanation,
             canonicalSubjectId = entity.canonicalSubjectId,
             canonicalTopicId = entity.canonicalTopicId
-        )
+        ))
     }
 }

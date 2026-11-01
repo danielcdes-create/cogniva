@@ -62,17 +62,20 @@ import br.com.concursoprep.app.ui.theme.CognivaBrandHeader
 @Composable
 fun OnboardingScreen(
     onSkipOnboarding: () -> Unit = {},
+    snackbarState: androidx.compose.material3.SnackbarHostState? = null,
     onCompleteOnboarding: (
         telegramUserId: Long?,
         telegramUsername: String?,
         displayName: String,
         selectedContests: List<String>,
         dailyQuestionsTarget: Int,
-        dailyHoursTarget: Double
+        dailyHoursTarget: Double,
+        linkCode: String?
     ) -> Unit
 ) {
     var currentStep by rememberSaveable { mutableIntStateOf(1) }
     var displayName by rememberSaveable { mutableStateOf("") }
+    var linkCode by rememberSaveable { mutableStateOf("") }
     var telegramInput by rememberSaveable { mutableStateOf("") }
     val selectedContests = remember { mutableStateListOf("CPNU", "RFB") }
     var dailyQuestions by rememberSaveable { mutableIntStateOf(50) }
@@ -83,9 +86,9 @@ fun OnboardingScreen(
     }
 
     val availableContests = listOf(
-        Triple("CPNU", "CPNU · Auditor-Fiscal do Trabalho", "Edital Aberto · Cesgranrio"),
-        Triple("RFB", "Receita Federal · Auditor Fiscal", "Solicitado/Autorizado · FGV/Cebraspe"),
-        Triple("BNDES", "BNDES · Analista", "Previsto · Cesgranrio")
+        Triple("CPNU", "CPNU · Auditor-Fiscal do Trabalho", "Modelo para configurar · confira o edital"),
+        Triple("RFB", "Receita Federal · Auditor Fiscal", "Modelo para configurar · confira a autorização"),
+        Triple("BNDES", "BNDES · Analista", "Modelo para configurar · confira as fontes")
     )
 
     val chipColors = FilterChipDefaults.filterChipColors(
@@ -97,6 +100,7 @@ fun OnboardingScreen(
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        snackbarHost = { snackbarState?.let { androidx.compose.material3.SnackbarHost(it) } },
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             Surface(
@@ -177,7 +181,8 @@ fun OnboardingScreen(
                                         displayName.trim().ifBlank { "Concurseiro" },
                                         selectedContests.toList(),
                                         dailyQuestions,
-                                        dailyHours
+                                        dailyHours,
+                                linkCode.takeIf { it.isNotBlank() }
                                     )
                                 }
                             },
@@ -230,7 +235,8 @@ fun OnboardingScreen(
                         label = { Text("Seu nome de exibição") },
                         modifier = Modifier.fillMaxWidth()
                     )
-                    OutlinedTextField(
+                    OutlinedTextField(value=linkCode,onValueChange={linkCode=it},label={Text("Código de vínculo da conta histórica (opcional)")},supportingText={Text("Sem código, use um perfil local próprio. ID e @username não comprovam identidade.")},visualTransformation=androidx.compose.ui.text.input.PasswordVisualTransformation(),modifier=Modifier.fillMaxWidth(),singleLine=true)
+                        OutlinedTextField(
                         value = telegramInput,
                         onValueChange = { telegramInput = it },
                         label = { Text("ID do Telegram ou @username (Opcional)") },

@@ -86,7 +86,8 @@ fun SettingsScreen(
         displayName: String,
         selectedContests: List<String>,
         dailyQuestionsTarget: Int,
-        dailyHoursTarget: Double
+        dailyHoursTarget: Double,
+        linkCode: String?
     ) -> Unit,
     onCheckApkUpdate: () -> Unit,
     onInstallApkUpdate: () -> Unit,
@@ -95,15 +96,19 @@ fun SettingsScreen(
     onReopenOnboarding: () -> Unit,
     ladderExams: List<StoredExam> = emptyList(),
     focusedTrunkSlugs: Set<String> = emptySet(),
-    onToggleTrunkFocus: (String) -> Unit = {}
+    onToggleTrunkFocus: (String) -> Unit = {},
+    onEditExam: (StoredExam) -> Unit = {},
+    onArchiveExam: (StoredExam) -> Unit = {},
+    onOpenPending: () -> Unit = {}
 ) {
     val ext = LocalExtendedColors.current
 
     var displayName by remember(userProfile.displayName) {
         mutableStateOf(userProfile.displayName ?: "Concurseiro")
     }
+    var linkCode by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
     var telegramUserIdInput by remember(userProfile.userId) {
-        mutableStateOf(userProfile.userId.toString())
+        mutableStateOf(if(userProfile.userId>0)userProfile.userId.toString()else "")
     }
     var telegramUsernameInput by remember(userProfile.username) {
         mutableStateOf(userProfile.username ?: "")
@@ -144,6 +149,14 @@ fun SettingsScreen(
                 subtitle = "Perfil, Aparência, Metas & Atualização OTA"
             )
 
+            if(pendingSyncCount>0)OutlinedButton(onClick=onOpenPending,modifier=Modifier.fillMaxWidth()){Text("Revisar $pendingSyncCount registro(s) pendente(s)")}
+            ladderChips.forEach { exam ->
+                Row(modifier=Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick={onEditExam(exam)},modifier=Modifier.weight(1f)){Text("Editar ${exam.shortName}")}
+                    OutlinedButton(onClick={onArchiveExam(exam)}){Text("Arquivar")}
+                }
+                exam.syncError?.let { Text(it,color=MaterialTheme.colorScheme.error) }
+            }
             // =========================================================================
             // 1. APARÊNCIA (Modo Claro / Escuro / Sistema)
             // =========================================================================
@@ -277,7 +290,8 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        OutlinedTextField(
+                        OutlinedTextField(value=linkCode,onValueChange={linkCode=it},label={Text("Código de vínculo (somente para trocar/vincular conta)")},visualTransformation=androidx.compose.ui.text.input.PasswordVisualTransformation(),modifier=Modifier.fillMaxWidth(),singleLine=true)
+                    OutlinedTextField(
                             value = telegramUserIdInput,
                             onValueChange = { telegramUserIdInput = it.filter { ch -> ch.isDigit() } },
                             label = { Text("Telegram ID (Numérico)") },
@@ -401,7 +415,8 @@ fun SettingsScreen(
                                 displayName.trim().ifBlank { "Concurseiro" },
                                 selectedContests.toList(),
                                 dailyQuestions,
-                                dailyHours
+                                dailyHours,
+                                linkCode.takeIf { it.isNotBlank() }
                             )
                         },
                         modifier = Modifier

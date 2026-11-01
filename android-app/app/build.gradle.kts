@@ -16,11 +16,12 @@ android {
         applicationId = "br.com.concursoprep.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "1.3.0"
+        versionCode = 7
+        versionName = "1.4.0"
 
         val doApiBaseUrl = (project.findProperty("DO_API_BASE_URL") as? String)
-            ?: "http://198.199.65.103/api/v1/"
+            ?: "https://198.199.65.103/api/v1/"
+        require(doApiBaseUrl.startsWith("https://")) { "A API de distribuição deve usar HTTPS" }
         buildConfigField("String", "API_BASE_URL", "\"$doApiBaseUrl\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -58,6 +59,8 @@ android {
         jvmTarget = "17"
     }
 }
+
+android.sourceSets.getByName("main").resources.srcDir(rootProject.file("../shared"))
 
 dependencies {
     implementation("androidx.core:core-ktx:1.15.0")

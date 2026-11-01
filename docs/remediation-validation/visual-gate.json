@@ -1,0 +1,6 @@
+{
+  "second_verify": "executed and passed",
+  "negative_control": "valid 1x1 golden rejected",
+  "golden": "br.com.concursoprep.app_QuestionPreviewMatrixScreenshotTest_matchesApprovedBaseline[3]_font_scale_2_0.png",
+  "restored_sha256": "69fcdf8ed583210bf08be4044e4395029bd7a08fb5c4b0e622677ef2b105109c"
+}

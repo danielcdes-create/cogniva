@@ -1,17 +1,29 @@
 use crate::{
     error::AppError,
     routes::home::UserQuery,
-    services::exam_engine::{load_canonical_slices, mastery_by_canonical_topic, readiness_for_blueprints},
+    services::exam_engine::{
+        load_canonical_slices, mastery_by_canonical_topic, readiness_for_blueprints,
+    },
     AppState,
 };
 use axum::{
     extract::{Query, State},
-    Json,
+    Extension, Json,
 };
 use bson::{doc, Document};
+use chrono::TimeZone;
 use futures::stream::TryStreamExt;
 use serde::Serialize;
 use std::sync::Arc;
+
+fn number(d: &Document, key: &str) -> f64 {
+    match d.get(key) {
+        Some(bson::Bson::Int32(v)) => *v as f64,
+        Some(bson::Bson::Int64(v)) => *v as f64,
+        Some(bson::Bson::Double(v)) if v.is_finite() => *v,
+        _ => 0.0,
+    }
+}
 
 #[derive(Debug, Serialize)]
 pub struct DisciplineMasteryBar {
@@ -55,8 +67,10 @@ pub struct ProgressAnalyticsResponse {
 
 pub async fn get_user_progress_analytics(
     State(state): State<Arc<AppState>>,
-    Query(query): Query<UserQuery>,
+    Extension(user): Extension<crate::security::SessionUser>,
+    Query(_query): Query<UserQuery>,
 ) -> Result<Json<ProgressAnalyticsResponse>, AppError> {
+    let query = UserQuery { user_id: user.0 };
     let act_coll = state.db.collection::<Document>("userActivityLog");
 
     // 1. Agregação por Disciplina (ordenada por pior desempenho para foco tático)
@@ -65,7 +79,7 @@ pub async fn get_user_progress_analytics(
         doc! {
             "$group": {
                 "_id": "$disciplina",
-                "avg_acc": { "$avg": "$percentual_acertos" },
+                "correct_count": { "$sum": "$quantidade_acertos" },
                 "total_attempts": { "$sum": "$quantidade_praticas" },
                 "mastered_count": {
                     "$sum": { "$cond": [{ "$eq": ["$dominada", true] }, 1, 0] }
@@ -84,10 +98,24 @@ pub async fn get_user_progress_analytics(
 
     while let Some(d) = disc_cursor.try_next().await? {
         let discipline = d.get_str("_id").unwrap_or("Geral").to_string();
-        let accuracy_pct = (d.get_f64("avg_acc").unwrap_or(0.0) * 100.0).round() / 100.0;
-        let attempts = d.get_i32("total_attempts").unwrap_or(0);
-        let mastered = d.get_i32("mastered_count").unwrap_or(0);
-        let points = (d.get_f64("points_sum").unwrap_or(0.0) * 100.0).round() / 100.0;
+        let correct = d
+            .get_i32("correct_count")
+            .map(i64::from)
+            .or_else(|_| d.get_i64("correct_count"))
+            .unwrap_or(0);
+        let attempts_for_rate = d
+            .get_i32("total_attempts")
+            .map(i64::from)
+            .or_else(|_| d.get_i64("total_attempts"))
+            .unwrap_or(0);
+        let accuracy_pct = if attempts_for_rate > 0 {
+            100.0 * correct as f64 / attempts_for_rate as f64
+        } else {
+            0.0
+        };
+        let attempts = number(&d, "total_attempts").clamp(0.0, i32::MAX as f64) as i32;
+        let mastered = number(&d, "mastered_count").clamp(0.0, i32::MAX as f64) as i32;
+        let points = (number(&d, "points_sum") * 100.0).round() / 100.0;
 
         total_questions_practiced += attempts;
         total_mastered_questions += mastered;
@@ -102,6 +130,11 @@ pub async fn get_user_progress_analytics(
         });
     }
 
+    disciplines.sort_by(|a, b| {
+        a.accuracy_pct
+            .total_cmp(&b.accuracy_pct)
+            .then(a.discipline.cmp(&b.discipline))
+    });
     let global_accuracy_pct = if total_questions_practiced > 0 {
         ((weighted_acc_sum / (total_questions_practiced as f64)) * 100.0).round() / 100.0
     } else {
@@ -109,13 +142,31 @@ pub async fn get_user_progress_analytics(
     };
 
     // 2. Matriz Confiança × Acerto + Heatmap diário a partir de `pastSessions`
+    let zone = chrono::FixedOffset::west_opt(10800).unwrap();
+    let today = chrono::Utc::now().with_timezone(&zone).date_naive();
+    let since = today - chrono::Duration::days(89);
+    let start = zone
+        .from_local_datetime(&since.and_hms_opt(0, 0, 0).unwrap())
+        .single()
+        .unwrap()
+        .with_timezone(&chrono::Utc);
+    let end = zone
+        .from_local_datetime(
+            &(today + chrono::Duration::days(1))
+                .and_hms_opt(0, 0, 0)
+                .unwrap(),
+        )
+        .single()
+        .unwrap()
+        .with_timezone(&chrono::Utc);
     let sessions_pipeline = vec![
         doc! { "$match": { "user_id": query.user_id } },
         doc! { "$unwind": "$pastSessions" },
+        doc! { "$match":{"pastSessions.data":{"$gte":bson::DateTime::from_chrono(start),"$lt":bson::DateTime::from_chrono(end)}} },
         doc! {
             "$group": {
                 "_id": {
-                    "$dateToString": { "format": "%Y-%m-%d", "date": "$pastSessions.data" }
+                    "$dateToString": { "format": "%Y-%m-%d", "date": "$pastSessions.data", "timezone":"-03:00" }
                 },
                 "count": { "$sum": 1 },
                 "correct": {
@@ -201,13 +252,24 @@ pub async fn get_user_progress_analytics(
             accuracy_pct: acc,
         });
     }
+    let mut by_day: std::collections::HashMap<_, _> = heatmap
+        .into_iter()
+        .map(|cell| (cell.date_ymd.clone(), cell))
+        .collect();
+    let heatmap = (0..90)
+        .map(|offset| {
+            let date = (since + chrono::Duration::days(offset)).to_string();
+            by_day.remove(&date).unwrap_or(DailyHeatmapCell {
+                date_ymd: date,
+                questions_count: 0,
+                accuracy_pct: 0.0,
+            })
+        })
+        .collect();
 
-    let activity = load_canonical_slices(&state.db, query.user_id).await;
+    let activity = load_canonical_slices(&state.db, query.user_id).await?;
     let topic_mastery = mastery_by_canonical_topic(&activity);
-    let blueprints = {
-        let guard = state.exams.lock().expect("exam store");
-        guard.exams.values().cloned().collect::<Vec<_>>()
-    };
+    let blueprints = crate::services::exam_store::list(&state, query.user_id).await?;
     let readiness_index_score = readiness_for_blueprints(&blueprints, &topic_mastery);
 
     Ok(Json(ProgressAnalyticsResponse {
@@ -216,7 +278,12 @@ pub async fn get_user_progress_analytics(
         total_questions_practiced,
         total_mastered_questions,
         readiness_index_score,
-        historical_cutoff_reference: 74.0,
+        historical_cutoff_reference: blueprints
+            .iter()
+            .filter(|e| e.is_active_in_ladder)
+            .min_by_key(|e| e.ladder_priority)
+            .map(|e| e.historical_cutoff_score)
+            .unwrap_or(0.0),
         disciplines_sorted_by_weakness: disciplines,
         confidence_matrix: matrix,
         activity_heatmap: heatmap,

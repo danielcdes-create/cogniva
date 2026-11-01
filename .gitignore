@@ -24,6 +24,10 @@ build/
 *.pem
 *.key
 *.pfx
+*.p12
+*.jks
+__pycache__/
+*.pyc
 
 # Logs
 *.log

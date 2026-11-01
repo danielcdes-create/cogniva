@@ -200,8 +200,8 @@ class ExamEngineTest {
 
         val drawn = ExamEngine.drawWeightedSimulado(
             listOf(
-                SubjectQuota("FIN_PUB", 2.0, 2),
-                SubjectQuota("DIR_TRIB", 1.0, 1)
+                SubjectQuota("FIN_PUB", 2.0, 2, setOf("FIN_PUB_01","FIN_PUB_02")),
+                SubjectQuota("DIR_TRIB", 1.0, 1, setOf("DIR_TRIB_01"))
             ),
             listOf(
                 SimuladoCandidate("q-archived", "FIN_PUB", "OLD", true),
@@ -210,12 +210,12 @@ class ExamEngineTest {
                 SimuladoCandidate("q4", "DIR_TRIB", "DIR_TRIB_01", false)
             )
         )
-        assertEquals(listOf("q1", "q2", "q4"), drawn)
+        assertEquals(setOf("q1", "q2", "q4"), drawn.toSet())
         assertFalse(drawn.contains("q-archived"))
         val score = ExamEngine.weightedNetScore(
             listOf(SubjectOutcome(2.0, 1, 2), SubjectOutcome(1.0, 1, 1))
         )
-        assertEquals(200.0 / 3.0, score, 1e-9)
+        assertEquals(60.0, score, 1e-9) // 3 earned out of 5 possible weighted points.
 
         val diff = ExamEngine.publishEditalDiff(
             previous = listOf(
@@ -353,8 +353,8 @@ class ExamEngineTest {
             dto.copy(canonicalSubjectId = null, canonicalTopicId = null, disciplina = "Finanças Públicas"),
             json
         )
-        assertEquals("FIN_PUB", inferred.canonicalSubjectId)
-        assertEquals("FIN_PUB_01", inferred.canonicalTopicId)
+        assertEquals(null, inferred.canonicalSubjectId)
+        assertEquals(null, inferred.canonicalTopicId)
     }
 
     @Test

@@ -12,14 +12,14 @@ use serde_json::json;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum AiAssistKind {
-    Explanation,      // Gemini 1.5 Flash -> campo `explanation`
-    ContextualHint,   // OpenAI gpt-4o-mini -> array `contextualHint`
-    DrSincero,        // OpenAI gpt-4o-mini -> campo `drSincero`
-    ChildFriendlyPre, // OpenAI gpt-4o-mini -> campo `ajudaInfantil`
-    ChildFriendlyPost,// OpenAI gpt-4o-mini -> campo `explicacaoInfantil`
-    ExtraConcepts,    // OpenAI gpt-4o-mini -> campo `explanationExtra`
-    Mnemonic,         // OpenAI gpt-4o-mini -> campo `mnemonico`
-    Plausibility,     // OpenAI gpt-4o-mini -> objeto `plausibilityAnalysis`
+    Explanation,       // Gemini 1.5 Flash -> campo `explanation`
+    ContextualHint,    // OpenAI gpt-4o-mini -> array `contextualHint`
+    DrSincero,         // OpenAI gpt-4o-mini -> campo `drSincero`
+    ChildFriendlyPre,  // OpenAI gpt-4o-mini -> campo `ajudaInfantil`
+    ChildFriendlyPost, // OpenAI gpt-4o-mini -> campo `explicacaoInfantil`
+    ExtraConcepts,     // OpenAI gpt-4o-mini -> campo `explanationExtra`
+    Mnemonic,          // OpenAI gpt-4o-mini -> campo `mnemonico`
+    Plausibility,      // OpenAI gpt-4o-mini -> objeto `plausibilityAnalysis`
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,6 +46,26 @@ pub async fn get_or_generate_ai_assist(
     kind: AiAssistKind,
     hint_index: Option<usize>,
 ) -> Result<AiAssistResponse, AppError> {
+    use std::collections::HashMap;
+    use std::sync::{Arc, OnceLock, Weak};
+    use tokio::sync::Mutex;
+    static LOCKS: OnceLock<Mutex<HashMap<String, Weak<Mutex<()>>>>> = OnceLock::new();
+    let key = format!("{}:{question_id}:{kind:?}", db.name());
+    let lock = {
+        let mut locks = LOCKS
+            .get_or_init(|| Mutex::new(HashMap::new()))
+            .lock()
+            .await;
+        locks.retain(|_, value| value.strong_count() > 0);
+        if let Some(lock) = locks.get(&key).and_then(Weak::upgrade) {
+            lock
+        } else {
+            let lock = Arc::new(Mutex::new(()));
+            locks.insert(key, Arc::downgrade(&lock));
+            lock
+        }
+    };
+    let _guard = lock.lock().await;
     let oid = ObjectId::parse_str(question_id)?;
     let coll = db.collection::<QuestionDocument>("todasQuestoes");
 
@@ -159,6 +179,15 @@ pub async fn get_or_generate_ai_assist(
             }
         }
         AiAssistKind::Plausibility => {
+            if let Some(markdown) = &questao.plausibility_markdown {
+                return Ok(AiAssistResponse {
+                    question_id: question_id.into(),
+                    kind,
+                    content_markdown: sanitize_ai_content(markdown),
+                    from_cache: true,
+                    plausibility_structured: None,
+                });
+            }
             if let Some(pa) = &questao.plausibility_analysis {
                 let formatted = format_plausibility_markdown(pa);
                 return Ok(AiAssistResponse {
@@ -266,26 +295,31 @@ pub async fn get_or_generate_ai_assist(
 
     let generated_text = match generated_result {
         Ok(t) => t,
-        Err(e) => {
-            // Se a IA externa falhou (offline ou sem chave no servidor), usa a explicação da própria questão
-            if let Some(exp) = &questao.explanation {
-                if !exp.trim().is_empty() {
-                    match &kind {
-                        AiAssistKind::ChildFriendlyPre => format!("🧒 **Simplificando a Pergunta:**\n\n{}\n\n**Gabarito Correto:** {}", questao.question, correct_answer),
-                        AiAssistKind::ChildFriendlyPost => format!("🧒 **Explicação Didática:**\n\n{}", exp),
-                        AiAssistKind::DrSincero => format!("🔥 **Atenção Concurseiro:** O cerne da questão e a fundamentação do gabarito é:\n\n{}", exp),
-                        AiAssistKind::ContextualHint => format!("💡 **Dica Pedagógica:** Atente-se ao gabarito oficial: {}", correct_answer),
-                        AiAssistKind::ExtraConcepts => format!("🎯 **Conceitos Essenciais:**\n\n{}", exp),
-                        AiAssistKind::Mnemonic => format!("🧠 **Fixação:** Guarde o cerne da resposta correta:\n> {}", correct_answer),
-                        AiAssistKind::Plausibility => format!("⚖️ **Análise Pedagógica da Questão:**\n\n{}", exp),
-                        AiAssistKind::Explanation => exp.clone(),
-                    }
-                } else {
-                    return Err(e);
-                }
-            } else {
-                return Err(e);
+        Err(error) => {
+            // Never turn an outage into an answer-revealing pre-answer hint, or cache a contingency as a generated tutor.
+            if matches!(
+                kind,
+                AiAssistKind::ContextualHint | AiAssistKind::ChildFriendlyPre
+            ) {
+                return Err(error);
             }
+            if let Some(explanation) = questao
+                .explanation
+                .as_ref()
+                .filter(|s| !s.trim().is_empty())
+            {
+                return Ok(AiAssistResponse {
+                    question_id: question_id.into(),
+                    kind,
+                    content_markdown: format!(
+                        "Comentário já disponível (tutor indisponível):\n\n{}",
+                        sanitize_ai_content(explanation)
+                    ),
+                    from_cache: true,
+                    plausibility_structured: None,
+                });
+            }
+            return Err(error);
         }
     };
 
@@ -295,10 +329,12 @@ pub async fn get_or_generate_ai_assist(
         AiAssistKind::ContextualHint => doc! { "$push": { "contextualHint": &generated_text } },
         AiAssistKind::DrSincero => doc! { "$set": { "drSincero": &generated_text } },
         AiAssistKind::ChildFriendlyPre => doc! { "$set": { "ajudaInfantil": &generated_text } },
-        AiAssistKind::ChildFriendlyPost => doc! { "$set": { "explicacaoInfantil": &generated_text } },
+        AiAssistKind::ChildFriendlyPost => {
+            doc! { "$set": { "explicacaoInfantil": &generated_text } }
+        }
         AiAssistKind::ExtraConcepts => doc! { "$set": { "explanationExtra": &generated_text } },
         AiAssistKind::Mnemonic => doc! { "$set": { "mnemonico": &generated_text } },
-        AiAssistKind::Plausibility => doc! { "$set": { "explanationExtra": &generated_text } },
+        AiAssistKind::Plausibility => doc! { "$set": { "plausibilityMarkdown": &generated_text } },
     };
 
     let _ = coll.update_one(doc! { "_id": oid }, update_doc).await;
@@ -315,7 +351,9 @@ pub async fn get_or_generate_ai_assist(
 }
 
 pub fn sanitize_ai_content(raw: &str) -> String {
-    let collapsed = regex::Regex::new(r"\n{3,}").unwrap().replace_all(raw.trim(), "\n\n");
+    let collapsed = regex::Regex::new(r"\n{3,}")
+        .unwrap()
+        .replace_all(raw.trim(), "\n\n");
     let cleaned = regex::Regex::new(r"(?i)^\s*(?:🔥\s*)?(?:\*\*Dr\.\s*Sincero:?\*\*:?\s*)")
         .unwrap()
         .replace(&collapsed, "");
@@ -355,7 +393,11 @@ async fn call_openai_chat(
         ));
     };
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|_| AppError::Internal("Cliente de IA indisponível".into()))?;
     let res = client
         .post("https://api.openai.com/v1/chat/completions")
         .bearer_auth(api_key)
@@ -422,7 +464,11 @@ async fn generate_gemini_explanation(
         "correct_answer": correct_answer
     });
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|_| AppError::Internal("Cliente de IA indisponível".into()))?;
     let res = client
         .post(&url)
         .json(&json!({
@@ -474,7 +520,10 @@ mod tests {
         assert_eq!(cleaned, "Esta questão é uma pegadinha evidente da banca.");
 
         let raw_no_emoji = "**Dr. Sincero:** Análise ácida sem emoji.";
-        assert_eq!(sanitize_ai_content(raw_no_emoji), "Análise ácida sem emoji.");
+        assert_eq!(
+            sanitize_ai_content(raw_no_emoji),
+            "Análise ácida sem emoji."
+        );
     }
 
     #[test]

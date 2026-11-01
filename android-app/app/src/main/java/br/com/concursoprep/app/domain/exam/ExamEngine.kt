@@ -1,5 +1,6 @@
 package br.com.concursoprep.app.domain.exam
 
+import kotlinx.serialization.json.*
 import java.time.LocalDate
 import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoUnit
@@ -58,6 +59,7 @@ data class ProjectedTopicCoverage(
     val hiddenFromStudyQueue: Boolean
 )
 
+@kotlinx.serialization.Serializable
 data class StoredTopic(
     val localTopicId: String,
     val canonicalTopicId: String,
@@ -66,6 +68,7 @@ data class StoredTopic(
     val diffStatus: String
 )
 
+@kotlinx.serialization.Serializable
 data class StoredSubject(
     val localSubjectId: String,
     val canonicalSubjectId: String,
@@ -77,6 +80,7 @@ data class StoredSubject(
     val topics: List<StoredTopic>
 )
 
+@kotlinx.serialization.Serializable
 data class StoredExam(
     val examId: String,
     val title: String,
@@ -97,6 +101,9 @@ data class StoredExam(
     val newTopicsCount: Int = 0,
     val archivedTopicsCount: Int = 0,
     val syncStatus: String = "SYNCED",
+    val revision: Long = 0,
+    val wrongAnswerPenalty: Double = 0.0,
+    val syncError: String? = null,
     val subjects: List<StoredSubject> = emptyList()
 )
 
@@ -114,7 +121,8 @@ data class ExamDraft(
     val estimatedSortDateIso: String,
     val historicalCutoffScore: Double,
     val ladderPriority: Int,
-    val subjects: List<StoredSubject>
+    val subjects: List<StoredSubject>,
+    val wrongAnswerPenalty: Double = 0.0
 )
 
 data class LeverageSubject(
@@ -166,10 +174,11 @@ data class SimuladoCandidate(
 data class SubjectQuota(
     val canonicalSubjectId: String,
     val weight: Double,
-    val questionCount: Int
+    val questionCount: Int,
+    val allowedTopicIds: Set<String> = emptySet()
 )
 
-data class SubjectOutcome(val weight: Double, val correct: Int, val drawn: Int)
+data class SubjectOutcome(val weight: Double, val correct: Int, val drawn: Int, val wrong: Int=0, val penalty: Double=0.0)
 
 data class CachedQuestionRef(
     val questionId: String,
@@ -189,7 +198,8 @@ data class TrunkSubjectTemplate(
     val defaultWeight: Double,
     val relevanceTier: String,
     val topicId: String,
-    val topicTitle: String
+    val topicTitle: String,
+    val topics: List<StoredTopic> = emptyList()
 )
 
 data class TrunkTemplate(
@@ -350,7 +360,7 @@ object ExamEngine {
             denominator += subject.weight
         }
         if (denominator == 0.0) return 0.0
-        return 100.0 * numerator / denominator
+        return (100.0 * numerator / denominator).coerceIn(0.0,100.0)
     }
 
     fun publishEditalDiff(
@@ -406,7 +416,7 @@ object ExamEngine {
                 canonicalSubjectId = link.canonicalSubjectId,
                 canonicalTopicId = link.canonicalTopicId,
                 mastery = record?.mastery ?: 0.0,
-                practiced = (record?.mastery ?: 0.0) > 0.0,
+                practiced = record != null,
                 hiddenFromStudyQueue = link.diffStatus == CanonicalTopicStatus.ARQUIVADO
             )
         }
@@ -428,8 +438,9 @@ object ExamEngine {
         val picked = mutableListOf<String>()
         for (quota in quotas) {
             val pool = questions
-                .filter { it.canonicalSubjectId == quota.canonicalSubjectId && !it.archived }
-                .sortedBy { it.questionId }
+                .filter { it.canonicalSubjectId == quota.canonicalSubjectId && !it.archived && it.canonicalTopicId in quota.allowedTopicIds }
+                .distinctBy { it.questionId }
+                .shuffled()
                 .take(quota.questionCount)
             picked += pool.map { it.questionId }
         }
@@ -440,12 +451,14 @@ object ExamEngine {
         var numerator = 0.0
         var denominator = 0.0
         for (outcome in outcomes) {
-            if (outcome.drawn == 0 || outcome.weight <= 0.0) continue
-            numerator += outcome.weight * (outcome.correct.toDouble() / outcome.drawn.toDouble())
-            denominator += outcome.weight
+            if (outcome.drawn <= 0 || outcome.weight <= 0.0 || !outcome.weight.isFinite() || !outcome.penalty.isFinite()) continue
+            val correct=outcome.correct.coerceIn(0,outcome.drawn)
+            val wrong=outcome.wrong.coerceIn(0,outcome.drawn-correct)
+            numerator += outcome.weight * (correct-outcome.penalty.coerceIn(0.0,1.0)*wrong)
+            denominator += outcome.weight*outcome.drawn
         }
         if (denominator == 0.0) return 0.0
-        return 100.0 * numerator / denominator
+        return (100.0 * numerator / denominator).coerceIn(0.0,100.0)
     }
 
     fun toLeverage(exam: StoredExam): LeverageExam {
@@ -474,12 +487,13 @@ object ExamEngine {
         val canonicalTopicId: String,
         val accuracyPct: Double,
         val mastered: Boolean,
-        val highConfidenceError: Boolean
+        val highConfidenceError: Boolean,
+        val confidenceAvg: Int? = null
     )
 
-    fun masteryFraction(accuracyPct: Double, mastered: Boolean, highConfidenceError: Boolean): Double {
+    fun masteryFraction(accuracyPct: Double, mastered: Boolean, highConfidenceError: Boolean,confidenceAvg:Int?=null): Double {
         var value = (accuracyPct / 100.0).coerceIn(0.0, 1.0)
-        if (mastered) value = 1.0
+        if (mastered) value = 1.0 else if(confidenceAvg!=null) value*=confidenceAvg.coerceIn(0,3)/3.0
         if (highConfidenceError) value *= 0.5
         return value.coerceIn(0.0, 1.0)
     }
@@ -489,7 +503,7 @@ object ExamEngine {
             .filter { it.canonicalSubjectId.isNotBlank() }
             .groupBy { it.canonicalSubjectId }
             .mapValues { (_, items) ->
-                items.map { masteryFraction(it.accuracyPct, it.mastered, it.highConfidenceError) }.average()
+                items.map { masteryFraction(it.accuracyPct, it.mastered, it.highConfidenceError,it.confidenceAvg) }.average()
             }
     }
 
@@ -517,7 +531,7 @@ object ExamEngine {
             val topics = subject.topics.map { topic ->
                 ReadinessTopic(
                     archived = topic.diffStatus == CanonicalTopicStatus.ARQUIVADO.name,
-                    practiced = (masteryByTopic[topic.canonicalTopicId] ?: 0.0) > 0.0
+                    practiced = masteryByTopic.containsKey(topic.canonicalTopicId)
                 )
             }
             val live = subject.topics.filter { it.diffStatus != CanonicalTopicStatus.ARQUIVADO.name }
@@ -597,6 +611,11 @@ object OfflineExamQueue {
         draft: ExamDraft,
         newId: () -> String = { UUID.randomUUID().toString() }
     ): StoredExam {
+        require(draft.title.isNotBlank()&&draft.title.length<=300&&draft.ladderPriority in 1..100) { "Revise o nome e a prioridade do concurso." }
+        require(draft.historicalCutoffScore.isFinite()&&draft.historicalCutoffScore in 0.0..100.0&&draft.wrongAnswerPenalty.isFinite()&&draft.wrongAnswerPenalty in 0.0..1.0) { "Corte ou desconto inválido." }
+        if(draft.dateType=="EXACT_DATE") require(runCatching { LocalDate.parse(draft.exactDateIso) }.isSuccess) { "Informe uma data válida no formato AAAA-MM-DD." }
+        if(draft.dateType=="ESTIMATED_WINDOW") require(!draft.estimatedWindowLabel.isNullOrBlank()&&runCatching { LocalDate.parse(draft.estimatedSortDateIso) }.isSuccess) { "Revise a janela estimada." }
+        require(draft.subjects.isNotEmpty()&&draft.subjects.sumOf { it.questionCount?:0 }<=500&&draft.subjects.all { it.weight.isFinite()&&it.weight in 0.01..100.0&&(it.questionCount?:0) in 0..500&&it.topics.isNotEmpty() }) { "Revise a grade: disciplinas, tópicos, pesos e até 500 questões." }
         return StoredExam(
             examId = newId(),
             title = draft.title,
@@ -614,6 +633,7 @@ object OfflineExamQueue {
             isActiveInLadder = true,
             ladderPriority = draft.ladderPriority,
             syncStatus = "PENDING_CREATE",
+            wrongAnswerPenalty = draft.wrongAnswerPenalty,
             subjects = draft.subjects
         )
     }
@@ -674,7 +694,7 @@ object QuizSelection {
             val live = subject.topics.any { it.diffStatus != CanonicalTopicStatus.ARQUIVADO.name }
             val count = subject.questionCount ?: return@mapNotNull null
             if (!live || count <= 0 || subject.weight <= 0.0) null
-            else SubjectQuota(subject.canonicalSubjectId, subject.weight, count)
+            else SubjectQuota(subject.canonicalSubjectId, subject.weight, count, subject.topics.filter { it.diffStatus!="ARQUIVADO" }.map { it.canonicalTopicId }.toSet())
         }
         return ExamEngine.drawWeightedSimulado(quotas, candidates)
     }
@@ -701,7 +721,7 @@ object QuizSelection {
             today = today,
             suggestedQuestions = quantity,
             focusedTrunkSlugs = focusedTrunkSlugs
-        )?.questionIds.orEmpty()
+        )?.questionIds.orEmpty().take(quantity)
     }
 }
 
@@ -712,126 +732,37 @@ data class QuestionRef(
 )
 
 object ExamCatalog {
-    fun trunks(): List<TrunkTemplate> {
-        fun subject(
-            id: String,
-            name: String,
-            weight: Double,
-            tier: String,
-            topicId: String,
-            topicTitle: String
-        ) = TrunkSubjectTemplate(id, name, weight, tier, topicId, topicTitle)
-
-        val finCore = subject("FIN_PUB", "Finanças Públicas", 2.0, "CORE", "FIN_PUB_01", "Orçamento público: PPA, LDO e LOA")
-        val finComp = finCore.copy(relevanceTier = "COMPLEMENTARY", defaultWeight = 1.0)
-        val trib = subject("DIR_TRIB", "Direito Tributário", 3.0, "CORE", "DIR_TRIB_01", "Competência tributária e crédito")
-        val contab = subject("CONTAB", "Contabilidade Geral", 2.0, "CORE", "CONTAB_01", "Demonstrações contábeis")
-        val adm = subject("DIR_ADM", "Direito Administrativo", 1.0, "COMPLEMENTARY", "DIR_ADM_01", "Atos administrativos e licitações")
-        val port = subject("PORT", "Língua Portuguesa", 1.0, "COMPLEMENTARY", "PORT_01", "Interpretação e gramática aplicada")
-        val constComp = subject("DIR_CONST", "Direito Constitucional", 1.5, "COMPLEMENTARY", "DIR_CONST_01", "Direitos fundamentais")
-        val constCore = constComp.copy(relevanceTier = "CORE")
-        val penal = subject("DIR_PEN", "Direito Penal", 3.0, "CORE", "DIR_PEN_01", "Teoria do crime")
-        val procPen = subject("DIR_PROC_PEN", "Direito Processual Penal", 2.0, "CORE", "DIR_PROC_PEN_01", "Inquérito e ação penal")
-        val afo = subject("AFO", "Administração Financeira e Orçamentária", 2.0, "CORE", "AFO_01", "Ciclo orçamentário")
-        val aud = subject("AUDITORIA", "Auditoria Governamental", 2.0, "CORE", "AUD_01", "Controle interno e externo")
-        val eng = subject("ENG_CIVIL", "Estruturas", 3.0, "CORE", "ENG_01", "Concreto armado")
-        val mat = subject("ENG_MAT", "Resistência dos Materiais", 2.0, "CORE", "ENG_02", "Tração, compressão e flexão")
-        val procCiv = subject("DIR_PROC_CIV", "Direito Processual Civil", 2.0, "CORE", "DPC_01", "Processo de conhecimento")
-        val mercado = subject("MFIN", "Mercado Financeiro", 2.0, "CORE", "MFIN_01", "Sistema financeiro nacional")
-        val economia = subject("ECON", "Economia", 2.0, "CORE", "ECON_01", "Política monetária e fiscal")
-
-        return listOf(
-            TrunkTemplate("fiscal", "Área Fiscal", "account_balance", listOf(trib, finCore, contab, adm, port, constComp)),
-            TrunkTemplate("policial", "Carreiras Policiais", "local_police", listOf(penal, procPen, constComp, port)),
-            TrunkTemplate("controle", "Controle", "fact_check", listOf(afo, aud, finCore, adm, constComp, port)),
-            TrunkTemplate("engenharia", "Engenharia", "engineering", listOf(eng, mat, port)),
-            TrunkTemplate("tribunais", "Tribunais", "gavel", listOf(constCore, procCiv, adm, port)),
-            TrunkTemplate("bancaria", "Bancária", "savings", listOf(mercado, economia, finComp, port))
-        )
+    @Volatile private var installed: JsonObject? = null
+    private val bundled: JsonObject by lazy {
+        val stream=checkNotNull(ExamCatalog::class.java.getResourceAsStream("/canonical-catalog.json")) { "Catálogo canônico ausente" }
+        stream.bufferedReader(Charsets.UTF_8).use { Json.parseToJsonElement(it.readText()).jsonObject }
     }
-
-    fun subjectsForTrunk(trunkSlug: String): List<StoredSubject> {
-        val trunk = trunks().firstOrNull { it.slug == trunkSlug } ?: return emptyList()
-        return trunk.subjects.mapIndexed { index, subject ->
-            StoredSubject(
-                localSubjectId = "${subject.canonicalSubjectId}-$index",
-                canonicalSubjectId = subject.canonicalSubjectId,
-                displayName = subject.name,
-                category = if (subject.relevanceTier == "CORE") "CONHECIMENTOS_ESPECIFICOS" else "CONHECIMENTOS_GERAIS",
-                weight = subject.defaultWeight,
-                questionCount = (subject.defaultWeight * 5.0).toInt(),
-                relevanceTier = subject.relevanceTier,
-                topics = listOf(
-                    StoredTopic(
-                        localTopicId = subject.topicId,
-                        canonicalTopicId = subject.topicId,
-                        canonicalSubjectId = subject.canonicalSubjectId,
-                        displayTitle = subject.topicTitle,
-                        diffStatus = CanonicalTopicStatus.PRE_EDITAL_BASE.name
-                    )
-                )
-            )
-        }
+    private val catalog: JsonObject get() = installed ?: bundled
+    fun installCatalog(value: JsonObject) {
+        require((value["trunks"] as? JsonArray)?.isNotEmpty()==true && value["exams"] is JsonArray && value["subjects"] is JsonArray)
+        installed=value
     }
-
-    fun systemExams(): List<StoredExam> {
-        fun exam(
-            id: String,
-            title: String,
-            shortName: String,
-            institution: String,
-            role: String,
-            trunk: String,
-            status: String,
-            boards: List<String>,
-            dateType: String,
-            exact: String?,
-            window: String?,
-            sort: String,
-            cutoff: Double,
-            priority: Int,
-            subjectIds: List<String>
-        ): StoredExam {
-            val subjects = subjectsForTrunk(trunk).filter { subjectIds.contains(it.canonicalSubjectId) }
-            return StoredExam(
-                examId = id,
-                title = title,
-                shortName = shortName,
-                institution = institution,
-                role = role,
-                trunkSlug = trunk,
-                lifecycleStatus = status,
-                examBoards = boards,
-                dateType = dateType,
-                exactDateIso = exact,
-                estimatedWindowLabel = window,
-                estimatedSortDateIso = sort,
-                historicalCutoffScore = cutoff,
-                isActiveInLadder = true,
-                ladderPriority = priority,
-                syncStatus = "SYNCED",
-                subjects = subjects
-            )
+    private fun JsonObject.text(key:String):String = getValue(key).jsonPrimitive.content
+    private fun JsonObject.array(key:String):JsonArray = getValue(key).jsonArray
+    private fun topic(value:JsonObject,subjectId:String)=StoredTopic(value.text("topic_id"),value.text("topic_id"),subjectId,value.text("title"),"PRE_EDITAL_BASE")
+    fun trunks(): List<TrunkTemplate> = catalog.array("trunks").map { element ->
+        val t=element.jsonObject
+        val subjects=(t.array("core_subjects")+t.array("complementary_subjects")).map { raw ->
+            val item=raw.jsonObject;val id=item.text("canonical_subject_id");val topics=item.array("topics").map { topic(it.jsonObject,id) };val first=topics.first()
+            TrunkSubjectTemplate(id,item.text("name"),item.getValue("default_weight").jsonPrimitive.double,item.text("relevance_tier"),first.canonicalTopicId,first.displayTitle,topics)
         }
-        return listOf(
-            exam(
-                "CPNU", "CPNU - AFT", "CPNU - AFT", "MTE", "Auditor-Fiscal do Trabalho",
-                "controle", "EDITAL_PUBLICADO", listOf("Cesgranrio"),
-                "EXACT_DATE", "2026-12-13", null, "2026-12-13", 78.0, 1,
-                listOf("FIN_PUB", "AFO", "DIR_CONST", "PORT")
-            ),
-            exam(
-                "RFB", "Receita Federal", "Receita Federal", "RFB", "Auditor Fiscal",
-                "fiscal", "AUTORIZADO", listOf("FGV", "Cebraspe"),
-                "ESTIMATED_WINDOW", null, "1º sem/2027", "2027-06-30", 75.0, 2,
-                listOf("DIR_TRIB", "FIN_PUB", "CONTAB", "PORT")
-            ),
-            exam(
-                "BNDES", "BNDES", "BNDES", "BNDES", "Analista",
-                "bancaria", "RUMOR_PREVISTO", listOf("Cesgranrio"),
-                "ESTIMATED_WINDOW", null, "2º sem/2027", "2027-12-15", 70.0, 3,
-                listOf("ECON", "MFIN", "FIN_PUB", "PORT")
-            )
-        )
+        TrunkTemplate(t.text("slug"),t.text("name"),t.text("icon_key"),subjects)
+    }
+    fun subjectsForTrunk(trunkSlug:String):List<StoredSubject> = trunks().find { it.slug==trunkSlug }?.subjects.orEmpty().mapIndexed { index,s ->
+        StoredSubject("${s.canonicalSubjectId}-$index",s.canonicalSubjectId,s.name,if(s.relevanceTier=="CORE")"CONHECIMENTOS_ESPECIFICOS"else"CONHECIMENTOS_GERAIS",s.defaultWeight,kotlin.math.round(s.defaultWeight*5).toInt(),s.relevanceTier,s.topics)
+    }
+    fun systemExams():List<StoredExam> = catalog.array("exams").map { element ->
+        val e=element.jsonObject;val date=e.getValue("target_date").jsonObject
+        StoredExam(examId=e.text("_id"),title=e.text("title"),shortName=e.text("short_name"),institution=e.text("institution"),role=e.text("role"),trunkSlug=e.text("trunk_slug"),lifecycleStatus=e.text("status"),examBoards=e.array("exam_boards").map { it.jsonPrimitive.content },
+            dateType=date.text("type"),exactDateIso=date["iso_date"]?.jsonPrimitive?.contentOrNull,estimatedWindowLabel=date["label"]?.jsonPrimitive?.contentOrNull,estimatedSortDateIso=date["estimated_sort_date"]?.jsonPrimitive?.contentOrNull.orEmpty(),historicalCutoffScore=e.getValue("historical_cutoff_score").jsonPrimitive.double,
+            isActiveInLadder=e.getValue("is_active_in_ladder").jsonPrimitive.boolean,ladderPriority=e.getValue("ladder_priority").jsonPrimitive.int,revision=e["revision"]?.jsonPrimitive?.long?:0,wrongAnswerPenalty=e["wrong_answer_penalty"]?.jsonPrimitive?.double?:0.0,
+            subjects=e.array("subjects").map { raw ->val x=raw.jsonObject
+                StoredSubject(x.text("local_subject_id"),x.text("canonical_subject_id"),x.text("display_name"),x.text("category"),x.getValue("weight").jsonPrimitive.double,x["question_count"]?.jsonPrimitive?.intOrNull,x.text("relevance_tier"),x.array("topics").map { rawTopic ->val t=rawTopic.jsonObject;StoredTopic(t.text("local_topic_id"),t.text("canonical_topic_id"),t.text("canonical_subject_id"),t.text("display_title"),t.text("diff_status")) })
+            })
     }
 }

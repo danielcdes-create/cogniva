@@ -12,10 +12,7 @@ pub fn assign_exam_id(requested: Option<String>) -> String {
     }
 }
 
-pub fn upsert_exam_by_client_id(
-    store: &mut HashMap<String, ExamBlueprint>,
-    exam: ExamBlueprint,
-) {
+pub fn upsert_exam_by_client_id(store: &mut HashMap<String, ExamBlueprint>, exam: ExamBlueprint) {
     store.insert(exam.id.clone(), exam);
 }
 
@@ -24,8 +21,8 @@ fn parse_iso_date(raw: &str) -> Option<NaiveDate> {
     if let Ok(date) = NaiveDate::parse_from_str(trimmed, "%Y-%m-%d") {
         return Some(date);
     }
-    if trimmed.len() >= 10 {
-        return NaiveDate::parse_from_str(&trimmed[..10], "%Y-%m-%d").ok();
+    if let Some(prefix) = trimmed.get(..10) {
+        return NaiveDate::parse_from_str(prefix, "%Y-%m-%d").ok();
     }
     None
 }
@@ -106,7 +103,11 @@ fn contest_list(names: &[String]) -> String {
     }
 }
 
-pub fn common_trunk_sentence(suggested_questions: u32, subject_name: &str, contests: &[String]) -> String {
+pub fn common_trunk_sentence(
+    suggested_questions: u32,
+    subject_name: &str,
+    contests: &[String],
+) -> String {
     format!(
         "Estudar {suggested_questions} questões de {subject_name} avança {} ao mesmo tempo",
         contest_list(contests)
@@ -118,6 +119,7 @@ pub struct CanonicalActivitySlice {
     pub canonical_subject_id: String,
     pub canonical_topic_id: String,
     pub accuracy_pct: f64,
+    pub confidence_avg: Option<i32>,
     pub mastered: bool,
     pub high_confidence_error: bool,
 }
@@ -134,14 +136,37 @@ pub fn mastery_fraction(accuracy_pct: f64, mastered: bool, high_confidence_error
     value.clamp(0.0, 1.0)
 }
 
+pub fn mastery_with_confidence(
+    accuracy_pct: f64,
+    mastered: bool,
+    high_confidence_error: bool,
+    confidence_avg: Option<i32>,
+) -> f64 {
+    let base = mastery_fraction(accuracy_pct, mastered, high_confidence_error);
+    if mastered {
+        base
+    } else {
+        base * confidence_avg
+            .map(|v| v.clamp(0, 3) as f64 / 3.0)
+            .unwrap_or(1.0)
+    }
+}
+
 pub fn mastery_by_canonical_subject(rows: &[CanonicalActivitySlice]) -> HashMap<String, f64> {
     let mut sums: HashMap<String, (f64, usize)> = HashMap::new();
     for row in rows {
         if row.canonical_subject_id.is_empty() {
             continue;
         }
-        let value = mastery_fraction(row.accuracy_pct, row.mastered, row.high_confidence_error);
-        let entry = sums.entry(row.canonical_subject_id.clone()).or_insert((0.0, 0));
+        let value = mastery_with_confidence(
+            row.accuracy_pct,
+            row.mastered,
+            row.high_confidence_error,
+            row.confidence_avg,
+        );
+        let entry = sums
+            .entry(row.canonical_subject_id.clone())
+            .or_insert((0.0, 0));
         entry.0 += value;
         entry.1 += 1;
     }
@@ -156,8 +181,15 @@ pub fn mastery_by_canonical_topic(rows: &[CanonicalActivitySlice]) -> HashMap<St
         if row.canonical_topic_id.is_empty() {
             continue;
         }
-        let value = mastery_fraction(row.accuracy_pct, row.mastered, row.high_confidence_error);
-        let entry = sums.entry(row.canonical_topic_id.clone()).or_insert((0.0, 0));
+        let value = mastery_with_confidence(
+            row.accuracy_pct,
+            row.mastered,
+            row.high_confidence_error,
+            row.confidence_avg,
+        );
+        let entry = sums
+            .entry(row.canonical_topic_id.clone())
+            .or_insert((0.0, 0));
         entry.0 += value;
         entry.1 += 1;
     }
@@ -186,7 +218,13 @@ pub fn select_common_trunk_card(
 ) -> Option<CommonTrunkCard> {
     let owned = trunk_focus.cloned();
     let focuses: Vec<TrunkFocus> = owned.into_iter().collect();
-    select_common_trunk_for_focuses(exams, mastery_by_subject, &focuses, suggested_questions, today)
+    select_common_trunk_for_focuses(
+        exams,
+        mastery_by_subject,
+        &focuses,
+        suggested_questions,
+        today,
+    )
 }
 
 pub fn select_common_trunk_for_focuses(
@@ -231,10 +269,7 @@ pub fn select_common_trunk_for_focuses(
         if !eligible {
             continue;
         }
-        let mastery = mastery_by_subject
-            .get(subject_id)
-            .copied()
-            .unwrap_or(0.0);
+        let mastery = mastery_by_subject.get(subject_id).copied().unwrap_or(0.0);
         let score = leverage_score(
             &pool.iter().map(|exam| (*exam).clone()).collect::<Vec<_>>(),
             subject_id,
@@ -286,11 +321,7 @@ pub fn readiness_for_blueprints(
                 .iter()
                 .map(|topic| ReadinessTopic {
                     archived: topic.diff_status == CanonicalTopicStatus::Arquivado,
-                    practiced: mastery_by_topic
-                        .get(&topic.canonical_topic_id)
-                        .copied()
-                        .unwrap_or(0.0)
-                        > 0.0,
+                    practiced: mastery_by_topic.contains_key(&topic.canonical_topic_id),
                 })
                 .collect();
             let live: Vec<_> = subject
@@ -325,7 +356,11 @@ pub fn readiness_index(subjects: &[ReadinessSubject]) -> f64 {
     let mut numerator = 0.0;
     let mut denominator = 0.0;
     for subject in subjects {
-        let live: Vec<&ReadinessTopic> = subject.topics.iter().filter(|topic| !topic.archived).collect();
+        let live: Vec<&ReadinessTopic> = subject
+            .topics
+            .iter()
+            .filter(|topic| !topic.archived)
+            .collect();
         if live.is_empty() || subject.weight <= 0.0 {
             continue;
         }
@@ -338,7 +373,7 @@ pub fn readiness_index(subjects: &[ReadinessSubject]) -> f64 {
     if denominator == 0.0 {
         0.0
     } else {
-        100.0 * numerator / denominator
+        (100.0 * numerator / denominator).clamp(0.0, 100.0)
     }
 }
 
@@ -430,7 +465,7 @@ pub fn project_cross_exam_coverage(
                 canonical_subject_id: link.canonical_subject_id.clone(),
                 canonical_topic_id: link.canonical_topic_id.clone(),
                 mastery,
-                practiced: record.map(|item| item.mastery > 0.0).unwrap_or(false),
+                practiced: record.is_some(),
                 hidden_from_study_queue: link.diff_status == CanonicalTopicStatus::Arquivado,
             }
         })
@@ -466,13 +501,20 @@ pub fn draw_weighted_simulado(
         let mut pool: Vec<&SimuladoCandidate> = questions
             .iter()
             .filter(|question| {
-                question.canonical_subject_id == quota.canonical_subject_id && !question.archived
+                question.canonical_subject_id == quota.canonical_subject_id
+                    && !question.archived
+                    && quota
+                        .allowed_topic_ids
+                        .contains(&question.canonical_topic_id)
             })
             .collect();
-        pool.sort_by(|left, right| left.question_id.cmp(&right.question_id));
+        use rand::seq::SliceRandom;
+        pool.shuffle(&mut rand::thread_rng());
         let take = quota.question_count as usize;
         for question in pool.into_iter().take(take) {
-            picked.push(question.question_id.clone());
+            if !picked.contains(&question.question_id) {
+                picked.push(question.question_id.clone());
+            }
         }
     }
     picked
@@ -482,16 +524,23 @@ pub fn weighted_net_score(outcomes: &[SubjectOutcome]) -> f64 {
     let mut numerator = 0.0;
     let mut denominator = 0.0;
     for outcome in outcomes {
-        if outcome.drawn == 0 || outcome.weight <= 0.0 {
+        if outcome.drawn == 0
+            || outcome.weight <= 0.0
+            || !outcome.weight.is_finite()
+            || !outcome.penalty.is_finite()
+        {
             continue;
         }
-        numerator += outcome.weight * (outcome.correct as f64 / outcome.drawn as f64);
-        denominator += outcome.weight;
+        let correct = outcome.correct.min(outcome.drawn);
+        let wrong = outcome.wrong.min(outcome.drawn - correct);
+        numerator +=
+            outcome.weight * (correct as f64 - outcome.penalty.clamp(0.0, 1.0) * wrong as f64);
+        denominator += outcome.weight * outcome.drawn as f64;
     }
     if denominator == 0.0 {
         0.0
     } else {
-        100.0 * numerator / denominator
+        (100.0 * numerator / denominator).clamp(0.0, 100.0)
     }
 }
 
@@ -513,6 +562,12 @@ pub fn quotas_from_blueprint(exam: &ExamBlueprint) -> Vec<SubjectQuota> {
                     canonical_subject_id: subject.canonical_subject_id.clone(),
                     weight: subject.weight,
                     question_count: count,
+                    allowed_topic_ids: subject
+                        .topics
+                        .iter()
+                        .filter(|t| t.diff_status != CanonicalTopicStatus::Arquivado)
+                        .map(|t| t.canonical_topic_id.clone())
+                        .collect(),
                 })
             }
         })
@@ -550,393 +605,21 @@ pub fn blueprint_to_leverage(exam: &ExamBlueprint) -> LeverageExam {
     }
 }
 
-fn topic(id: &str, title: &str) -> CanonicalTopic {
-    CanonicalTopic {
-        topic_id: id.to_string(),
-        title: title.to_string(),
-        tags: Vec::new(),
-    }
-}
-
-fn trunk_subject(
-    id: &str,
-    name: &str,
-    weight: f64,
-    tier: RelevanceTier,
-    topics: Vec<CanonicalTopic>,
-) -> TrunkSubjectDefault {
-    TrunkSubjectDefault {
-        canonical_subject_id: id.to_string(),
-        name: name.to_string(),
-        default_weight: weight,
-        relevance_tier: tier,
-        topics,
-    }
-}
-
-fn subject_from_default(default: &TrunkSubjectDefault, order: usize) -> ExamSubjectConfig {
-    ExamSubjectConfig {
-        local_subject_id: format!("{}-{order}", default.canonical_subject_id),
-        canonical_subject_id: default.canonical_subject_id.clone(),
-        display_name: default.name.clone(),
-        category: if default.relevance_tier == RelevanceTier::Core {
-            SubjectCategory::ConhecimentosEspecificos
-        } else {
-            SubjectCategory::ConhecimentosGerais
-        },
-        weight: default.default_weight,
-        question_count: Some((default.default_weight * 5.0).round() as u32),
-        relevance_tier: default.relevance_tier.clone(),
-        topics: default
-            .topics
-            .iter()
-            .enumerate()
-            .map(|(index, item)| ExamTopicItem {
-                local_topic_id: format!("{}-{index}", item.topic_id),
-                canonical_topic_id: item.topic_id.clone(),
-                canonical_subject_id: default.canonical_subject_id.clone(),
-                display_title: item.title.clone(),
-                diff_status: CanonicalTopicStatus::PreEditalBase,
-            })
-            .collect(),
-    }
-}
-
 pub fn system_trunks() -> Vec<CareerTrunk> {
-    let fin = trunk_subject(
-        "FIN_PUB",
-        "Finanças Públicas",
-        2.0,
-        RelevanceTier::Core,
-        vec![
-            topic("FIN_PUB_01", "Orçamento público: PPA, LDO e LOA"),
-            topic("FIN_PUB_02", "Receita e despesa públicas"),
-        ],
-    );
-    let trib = trunk_subject(
-        "DIR_TRIB",
-        "Direito Tributário",
-        3.0,
-        RelevanceTier::Core,
-        vec![topic("DIR_TRIB_01", "Competência tributária e crédito")],
-    );
-    let contab = trunk_subject(
-        "CONTAB",
-        "Contabilidade Geral",
-        2.0,
-        RelevanceTier::Core,
-        vec![topic("CONTAB_01", "Demonstrações contábeis")],
-    );
-    let adm = trunk_subject(
-        "DIR_ADM",
-        "Direito Administrativo",
-        1.0,
-        RelevanceTier::Complementary,
-        vec![topic("DIR_ADM_01", "Atos administrativos e licitações")],
-    );
-    let port = trunk_subject(
-        "PORT",
-        "Língua Portuguesa",
-        1.0,
-        RelevanceTier::Complementary,
-        vec![topic("PORT_01", "Interpretação e gramática aplicada")],
-    );
-    let constitucional = trunk_subject(
-        "DIR_CONST",
-        "Direito Constitucional",
-        1.5,
-        RelevanceTier::Complementary,
-        vec![topic("DIR_CONST_01", "Direitos fundamentais e organização do Estado")],
-    );
-    let penal = trunk_subject(
-        "DIR_PEN",
-        "Direito Penal",
-        3.0,
-        RelevanceTier::Core,
-        vec![topic("DIR_PEN_01", "Teoria do crime")],
-    );
-    let proc_pen = trunk_subject(
-        "DIR_PROC_PEN",
-        "Direito Processual Penal",
-        2.0,
-        RelevanceTier::Core,
-        vec![topic("DIR_PROC_PEN_01", "Inquérito e ação penal")],
-    );
-    let afo = trunk_subject(
-        "AFO",
-        "Administração Financeira e Orçamentária",
-        2.0,
-        RelevanceTier::Core,
-        vec![topic("AFO_01", "Ciclo orçamentário")],
-    );
-    let auditoria = trunk_subject(
-        "AUDITORIA",
-        "Auditoria Governamental",
-        2.0,
-        RelevanceTier::Core,
-        vec![topic("AUD_01", "Controle interno e externo")],
-    );
-    let eng = trunk_subject(
-        "ENG_CIVIL",
-        "Estruturas",
-        3.0,
-        RelevanceTier::Core,
-        vec![topic("ENG_01", "Concreto armado")],
-    );
-    let mat = trunk_subject(
-        "ENG_MAT",
-        "Resistência dos Materiais",
-        2.0,
-        RelevanceTier::Core,
-        vec![topic("ENG_02", "Tração, compressão e flexão")],
-    );
-    let proc_civ = trunk_subject(
-        "DIR_PROC_CIV",
-        "Direito Processual Civil",
-        2.0,
-        RelevanceTier::Core,
-        vec![topic("DPC_01", "Processo de conhecimento")],
-    );
-    let mercado = trunk_subject(
-        "MFIN",
-        "Mercado Financeiro",
-        2.0,
-        RelevanceTier::Core,
-        vec![topic("MFIN_01", "Sistema financeiro nacional")],
-    );
-    let economia = trunk_subject(
-        "ECON",
-        "Economia",
-        2.0,
-        RelevanceTier::Core,
-        vec![topic("ECON_01", "Política monetária e fiscal")],
-    );
-
-    let mut fiscal_core = vec![trib.clone(), fin.clone(), contab.clone()];
-    fiscal_core.iter_mut().for_each(|item| item.relevance_tier = RelevanceTier::Core);
-    let fiscal_comp = vec![adm.clone(), port.clone(), constitucional.clone()];
-
-    let policial_core = vec![penal, proc_pen];
-    let policial_comp = {
-        let mut rows = vec![constitucional.clone(), port.clone()];
-        rows.iter_mut()
-            .for_each(|item| item.relevance_tier = RelevanceTier::Complementary);
-        rows
-    };
-
-    let controle_core = vec![afo, auditoria, {
-        let mut row = fin.clone();
-        row.relevance_tier = RelevanceTier::Core;
-        row
-    }];
-    let controle_comp = fiscal_comp.clone();
-
-    let engenharia_core = vec![eng, mat];
-    let engenharia_comp = vec![{
-        let mut row = port.clone();
-        row.relevance_tier = RelevanceTier::Complementary;
-        row
-    }];
-
-    let mut const_core = constitucional.clone();
-    const_core.relevance_tier = RelevanceTier::Core;
-    let tribunais_core = vec![const_core, proc_civ];
-    let tribunais_comp = vec![adm.clone(), port.clone()];
-
-    let bancaria_core = vec![mercado, economia];
-    let bancaria_comp = vec![fin, port];
-
-    vec![
-        CareerTrunk {
-            slug: "fiscal".to_string(),
-            name: "Área Fiscal".to_string(),
-            icon_key: "account_balance".to_string(),
-            core_subjects: fiscal_core,
-            complementary_subjects: fiscal_comp,
-            is_system_default: true,
-        },
-        CareerTrunk {
-            slug: "policial".to_string(),
-            name: "Carreiras Policiais".to_string(),
-            icon_key: "local_police".to_string(),
-            core_subjects: policial_core,
-            complementary_subjects: policial_comp,
-            is_system_default: true,
-        },
-        CareerTrunk {
-            slug: "controle".to_string(),
-            name: "Controle".to_string(),
-            icon_key: "fact_check".to_string(),
-            core_subjects: controle_core,
-            complementary_subjects: controle_comp,
-            is_system_default: true,
-        },
-        CareerTrunk {
-            slug: "engenharia".to_string(),
-            name: "Engenharia".to_string(),
-            icon_key: "engineering".to_string(),
-            core_subjects: engenharia_core,
-            complementary_subjects: engenharia_comp,
-            is_system_default: true,
-        },
-        CareerTrunk {
-            slug: "tribunais".to_string(),
-            name: "Tribunais".to_string(),
-            icon_key: "gavel".to_string(),
-            core_subjects: tribunais_core,
-            complementary_subjects: tribunais_comp,
-            is_system_default: true,
-        },
-        CareerTrunk {
-            slug: "bancaria".to_string(),
-            name: "Bancária".to_string(),
-            icon_key: "savings".to_string(),
-            core_subjects: bancaria_core,
-            complementary_subjects: bancaria_comp,
-            is_system_default: true,
-        },
-    ]
-}
-
-fn exam_from_trunk(
-    id: &str,
-    title: &str,
-    short_name: &str,
-    institution: &str,
-    role: &str,
-    trunk_slug: &str,
-    status: ExamLifecycleStatus,
-    boards: &[&str],
-    target_date: ExamDateTarget,
-    cutoff: f64,
-    priority: i32,
-    subject_ids: &[&str],
-) -> ExamBlueprint {
-    let trunks = system_trunks();
-    let trunk = trunks
-        .iter()
-        .find(|item| item.slug == trunk_slug)
-        .expect("tronco do template");
-    let mut pool = trunk.core_subjects.clone();
-    pool.extend(trunk.complementary_subjects.clone());
-    let subjects = subject_ids
-        .iter()
-        .enumerate()
-        .filter_map(|(index, subject_id)| {
-            pool.iter()
-                .find(|subject| subject.canonical_subject_id == *subject_id)
-                .map(|subject| subject_from_default(subject, index))
-        })
-        .collect();
-    ExamBlueprint {
-        id: id.to_string(),
-        owner_user_id: None,
-        title: title.to_string(),
-        short_name: short_name.to_string(),
-        institution: institution.to_string(),
-        role: role.to_string(),
-        trunk_slug: trunk_slug.to_string(),
-        status,
-        exam_boards: boards.iter().map(|board| (*board).to_string()).collect(),
-        target_date,
-        historical_cutoff_score: cutoff,
-        is_active_in_ladder: true,
-        ladder_priority: priority,
-        subjects,
-        edital_diff_summary: None,
-        sync_status: "SYNCED".to_string(),
-    }
+    system_catalog().trunks
 }
 
 pub fn system_exam_blueprints() -> Vec<ExamBlueprint> {
-    vec![
-        exam_from_trunk(
-            "CPNU",
-            "CPNU - AFT",
-            "CPNU - AFT",
-            "MTE",
-            "Auditor-Fiscal do Trabalho",
-            "controle",
-            ExamLifecycleStatus::EditalPublicado,
-            &["Cesgranrio"],
-            ExamDateTarget::ExactDate {
-                iso_date: "2026-12-13".to_string(),
-            },
-            78.0,
-            1,
-            &["FIN_PUB", "AFO", "DIR_CONST", "PORT"],
-        ),
-        exam_from_trunk(
-            "RFB",
-            "Receita Federal",
-            "Receita Federal",
-            "RFB",
-            "Auditor Fiscal",
-            "fiscal",
-            ExamLifecycleStatus::Autorizado,
-            &["FGV", "Cebraspe"],
-            ExamDateTarget::EstimatedWindow {
-                label: "1º sem/2027".to_string(),
-                estimated_sort_date: "2027-06-30".to_string(),
-            },
-            75.0,
-            2,
-            &["DIR_TRIB", "FIN_PUB", "CONTAB", "PORT"],
-        ),
-        exam_from_trunk(
-            "BNDES",
-            "BNDES",
-            "BNDES",
-            "BNDES",
-            "Analista",
-            "bancaria",
-            ExamLifecycleStatus::RumorPrevisto,
-            &["Cesgranrio"],
-            ExamDateTarget::EstimatedWindow {
-                label: "2º sem/2027".to_string(),
-                estimated_sort_date: "2027-12-15".to_string(),
-            },
-            70.0,
-            3,
-            &["ECON", "MFIN", "FIN_PUB", "PORT"],
-        ),
-    ]
+    system_catalog().exams
 }
 
 pub fn canonical_subjects() -> Vec<CanonicalSubject> {
-    let mut by_id: HashMap<String, CanonicalSubject> = HashMap::new();
-    for trunk in system_trunks() {
-        for subject in trunk
-            .core_subjects
-            .iter()
-            .chain(trunk.complementary_subjects.iter())
-        {
-            let entry = by_id
-                .entry(subject.canonical_subject_id.clone())
-                .or_insert_with(|| CanonicalSubject {
-                    canonical_subject_id: subject.canonical_subject_id.clone(),
-                    code: subject.canonical_subject_id.clone(),
-                    name: subject.name.clone(),
-                    aliases: Vec::new(),
-                    trunk_slugs: Vec::new(),
-                    topics: subject.topics.clone(),
-                });
-            if !entry.trunk_slugs.contains(&trunk.slug) {
-                entry.trunk_slugs.push(trunk.slug.clone());
-            }
-        }
-    }
-    let mut subjects: Vec<_> = by_id.into_values().collect();
-    subjects.sort_by(|left, right| left.canonical_subject_id.cmp(&right.canonical_subject_id));
-    subjects
+    system_catalog().subjects
 }
 
 pub fn system_catalog() -> TrunkCatalog {
-    TrunkCatalog {
-        trunks: system_trunks(),
-        subjects: canonical_subjects(),
-        exams: system_exam_blueprints(),
-    }
+    serde_json::from_str(include_str!("../../../shared/canonical-catalog.json"))
+        .expect("validated catalog")
 }
 
 pub fn core_subject_ids(trunk_slug: &str) -> Vec<String> {
@@ -974,7 +657,10 @@ impl ExamMemory {
     }
 }
 
-pub fn apply_publish(exam: &mut ExamBlueprint, request: &PublishEditalRequest) -> EditalPublishResult {
+pub fn apply_publish(
+    exam: &mut ExamBlueprint,
+    request: &PublishEditalRequest,
+) -> EditalPublishResult {
     let previous: Vec<TopicRef> = exam
         .subjects
         .iter()
@@ -1034,7 +720,7 @@ pub fn apply_publish(exam: &mut ExamBlueprint, request: &PublishEditalRequest) -
         published_at_iso: request
             .published_at_iso
             .clone()
-            .unwrap_or_else(|| "2026-10-31".to_string()),
+            .unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
     });
     if exam.sync_status == "SYNCED" {
         exam.sync_status = "PENDING_UPDATE".to_string();
@@ -1042,7 +728,10 @@ pub fn apply_publish(exam: &mut ExamBlueprint, request: &PublishEditalRequest) -
     result
 }
 
-pub async fn load_canonical_slices(db: &Database, user_id: i64) -> Vec<CanonicalActivitySlice> {
+pub async fn load_canonical_slices(
+    db: &Database,
+    user_id: i64,
+) -> Result<Vec<CanonicalActivitySlice>, crate::error::AppError> {
     let load = async {
         let mut cursor = db
             .collection::<Document>("userActivityLog")
@@ -1064,7 +753,11 @@ pub async fn load_canonical_slices(db: &Database, user_id: i64) -> Vec<Canonical
             rows.push(CanonicalActivitySlice {
                 canonical_subject_id: subject,
                 canonical_topic_id: topic,
-                accuracy_pct: document.get_f64("percentual_acertos").unwrap_or(0.0),
+                accuracy_pct: document
+                    .get_f64("percentual_acertos")
+                    .or_else(|_| document.get_i32("percentual_acertos").map(|n| n as f64))
+                    .unwrap_or(0.0),
+                confidence_avg: document.get_i32("nivel_confianca_med_rec").ok(),
                 mastered: document.get_bool("dominada").unwrap_or(false),
                 high_confidence_error: document
                     .get_bool("high_confidence_error_flag")
@@ -1073,10 +766,7 @@ pub async fn load_canonical_slices(db: &Database, user_id: i64) -> Vec<Canonical
         }
         Ok::<Vec<CanonicalActivitySlice>, mongodb::error::Error>(rows)
     };
-    match load.await {
-        Ok(rows) => rows,
-        Err(_) => Vec::new(),
-    }
+    load.await.map_err(Into::into)
 }
 
 #[cfg(test)]
@@ -1175,7 +865,9 @@ mod tests {
             .unwrap();
         assert!(!inherited.hidden_from_study_queue);
         assert!((inherited.mastery - 0.55).abs() < 1e-12);
-        assert!(history.iter().any(|item| item.canonical_topic_id == "OLD_ONLY"));
+        assert!(history
+            .iter()
+            .any(|item| item.canonical_topic_id == "OLD_ONLY"));
     }
 
     #[test]
@@ -1204,7 +896,10 @@ mod tests {
             .iter()
             .find(|topic| topic.canonical_topic_id == "FIN_PUB_01")
             .unwrap();
-        assert_eq!(confirmed.diff_status, CanonicalTopicStatus::OficialConfirmado);
+        assert_eq!(
+            confirmed.diff_status,
+            CanonicalTopicStatus::OficialConfirmado
+        );
         assert!(confirmed.coverage_already_filled);
         let new_topic = result
             .topics
@@ -1269,7 +964,10 @@ mod tests {
         let focused_card =
             select_common_trunk_card(&exams, &HashMap::new(), Some(&focused), 10, today).unwrap();
         assert_eq!(focused_card.canonical_subject_id, "DIR_TRIB");
-        assert_eq!(focused_card.contest_names, vec!["Receita Federal".to_string()]);
+        assert_eq!(
+            focused_card.contest_names,
+            vec!["Receita Federal".to_string()]
+        );
     }
 
     #[test]
@@ -1346,11 +1044,13 @@ mod tests {
                 canonical_subject_id: "FIN_PUB".to_string(),
                 weight: 2.0,
                 question_count: 2,
+                allowed_topic_ids: vec!["FIN_PUB_01".into(), "FIN_PUB_02".into()],
             },
             SubjectQuota {
                 canonical_subject_id: "DIR_TRIB".to_string(),
                 weight: 1.0,
                 question_count: 1,
+                allowed_topic_ids: vec!["DIR_TRIB_01".into()],
             },
         ];
         let questions = vec![
@@ -1380,21 +1080,33 @@ mod tests {
             },
         ];
         let drawn = draw_weighted_simulado(&quotas, &questions);
-        assert_eq!(drawn, vec!["q1".to_string(), "q2".to_string(), "q4".to_string()]);
+        assert_eq!(
+            drawn
+                .iter()
+                .cloned()
+                .collect::<std::collections::HashSet<_>>(),
+            ["q1", "q2", "q4"].into_iter().map(str::to_string).collect()
+        );
         assert!(!drawn.iter().any(|id| id == "q-archived"));
         let score = weighted_net_score(&[
             SubjectOutcome {
+                canonical_subject_id: String::new(),
+                wrong: 0,
+                penalty: 0.0,
                 weight: 2.0,
                 correct: 1,
                 drawn: 2,
             },
             SubjectOutcome {
+                canonical_subject_id: String::new(),
+                wrong: 0,
+                penalty: 0.0,
                 weight: 1.0,
                 correct: 1,
                 drawn: 1,
             },
         ]);
-        assert!((score - (200.0 / 3.0)).abs() < 1e-9);
+        assert!((score - 60.0).abs() < 1e-9); // 3 earned points out of 5 configured points.
     }
 
     #[test]
@@ -1461,6 +1173,7 @@ mod tests {
             canonical_subject_id: "FIN_PUB".to_string(),
             canonical_topic_id: "FIN_PUB_01".to_string(),
             accuracy_pct: 100.0,
+            confidence_avg: Some(3),
             mastered: true,
             high_confidence_error: false,
         }];
@@ -1501,10 +1214,7 @@ mod tests {
                 },
             ],
         }];
-        let mastery = HashMap::from([
-            ("FIN_PUB_01".to_string(), 0.8),
-            ("OLD".to_string(), 0.0),
-        ]);
+        let mastery = HashMap::from([("FIN_PUB_01".to_string(), 0.8), ("OLD".to_string(), 0.0)]);
         let score = readiness_for_blueprints(&[exam], &mastery);
         assert!((score - 86.0).abs() < 1e-9);
     }
@@ -1542,8 +1252,8 @@ mod tests {
                 core_subject_ids: vec!["DIR_PEN".to_string()],
             },
         ];
-        let card = select_common_trunk_for_focuses(&exams, &HashMap::new(), &focuses, 8, today)
-            .unwrap();
+        let card =
+            select_common_trunk_for_focuses(&exams, &HashMap::new(), &focuses, 8, today).unwrap();
         assert!(card.canonical_subject_id == "DIR_PEN" || card.canonical_subject_id == "DIR_TRIB");
         assert_eq!(card.contest_names.len(), 1);
     }
@@ -1551,8 +1261,19 @@ mod tests {
     #[test]
     fn system_catalog_maps_the_six_trunks_and_the_three_current_contests() {
         let catalog = system_catalog();
-        let slugs: HashSet<_> = catalog.trunks.iter().map(|trunk| trunk.slug.as_str()).collect();
-        for slug in ["fiscal", "policial", "controle", "engenharia", "tribunais", "bancaria"] {
+        let slugs: HashSet<_> = catalog
+            .trunks
+            .iter()
+            .map(|trunk| trunk.slug.as_str())
+            .collect();
+        for slug in [
+            "fiscal",
+            "policial",
+            "controle",
+            "engenharia",
+            "tribunais",
+            "bancaria",
+        ] {
             assert!(slugs.contains(slug), "{slug}");
         }
         let names: HashSet<_> = catalog

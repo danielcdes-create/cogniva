@@ -110,7 +110,9 @@ data class TodayDashboardDto(
     @SerialName("error_notebook_count") val errorNotebookCount: Long,
     @SerialName("high_confidence_errors_count") val highConfidenceErrorsCount: Long,
     @SerialName("upcoming_exams") val upcomingExams: List<UpcomingExamCard>,
-    @SerialName("common_trunk_suggestion") val commonTrunkSuggestion: CommonTrunkSuggestion
+    @SerialName("common_trunk_suggestion") val commonTrunkSuggestion: CommonTrunkSuggestion,
+    val lastSyncedAt: String? = null,
+    val syncMessage: String? = null
 )
 
 @Serializable
@@ -172,6 +174,7 @@ data class UserQuestionBriefStats(
 @Serializable
 data class QuestionDto(
     val id: String,
+    @SerialName("question_revision") val questionRevision: String = "",
     val question: String,
     @SerialName("question_type") val questionType: QuestionType = QuestionType.MULTIPLE_CHOICE,
     val answers: List<String>,
@@ -195,6 +198,9 @@ data class QuestionDto(
 
 @Serializable
 data class AnswerAttemptPayload(
+    @SerialName("attempt_id") val attemptId: String,
+    @SerialName("occurred_at") val occurredAt: String,
+    @SerialName("question_revision") val questionRevision: String,
     @SerialName("question_id") val questionId: String,
     @SerialName("chosen_index") val chosenIndex: Int,
     @SerialName("chosen_text") val chosenText: String,
@@ -219,6 +225,13 @@ data class SubmitBatchPayload(
 
 @Serializable
 data class ProcessedAttemptDto(
+    @SerialName("attempt_id") val attemptId: String,
+    @SerialName("confidence_avg") val confidenceAvg: Int? = null,
+    @SerialName("attempts_total") val attemptsTotal: Int,
+    @SerialName("correct_total") val correctTotal: Int,
+    @SerialName("next_review_at") val nextReviewAt: String,
+    @SerialName("canonical_subject_id") val canonicalSubjectId: String? = null,
+    @SerialName("canonical_topic_id") val canonicalTopicId: String? = null,
     @SerialName("question_id") val questionId: String,
     @SerialName("is_correct") val isCorrect: Boolean,
     @SerialName("confidence_quadrant") val confidenceQuadrant: ConfidenceQuadrant,
@@ -236,7 +249,8 @@ data class ProcessedAttemptDto(
 @Serializable
 data class SubmitBatchResponseDto(
     @SerialName("processed_count") val processedCount: Int,
-    val results: List<ProcessedAttemptDto>
+    val results: List<ProcessedAttemptDto>,
+    val rejected: List<RejectedAttemptDto> = emptyList()
 )
 
 @Serializable
@@ -328,3 +342,6 @@ data class ApkUpdateUiState(
     val hasUpdate: Boolean = false,
     val statusMessage: String = "Toque em 'Verificar Versão' para consultar o servidor COGNIVA."
 )
+
+@Serializable
+data class RejectedAttemptDto(@SerialName("attempt_id") val attemptId: String, @SerialName("question_id") val questionId: String, val message: String, val retryable: Boolean)

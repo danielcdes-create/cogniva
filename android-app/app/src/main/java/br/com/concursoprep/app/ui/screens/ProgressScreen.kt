@@ -87,7 +87,7 @@ fun ProgressScreen(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "No ritmo atual, índice estimado ${analytics.readinessIndexScore.toInt()}/100 · Nota de corte histórica de referência: ${analytics.historicalCutoffReference.toInt()}/100",
+                            text = if(analytics.historicalCutoffReference>0) "Índice de prontidão ${analytics.readinessIndexScore.toInt()}/100 · Corte de referência cadastrado: ${analytics.historicalCutoffReference.toInt()}/100" else "Índice de prontidão ${analytics.readinessIndexScore.toInt()}/100 · Sem corte de referência validado",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -98,7 +98,7 @@ fun ProgressScreen(
                                 .fillMaxWidth()
                                 .height(10.dp)
                                 .clip(RoundedCornerShape(5.dp)),
-                            color = if (analytics.readinessIndexScore >= analytics.historicalCutoffReference) ext.correct else ext.warning
+                            color = if (analytics.historicalCutoffReference>0 && analytics.readinessIndexScore >= analytics.historicalCutoffReference) ext.correct else ext.warning
                         )
                         Spacer(modifier = Modifier.height(10.dp))
                         Row(
