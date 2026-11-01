@@ -297,7 +297,7 @@ fun ExamFormBottomSheet(
                                     role = role.ifBlank { "Cargo" },
                                     trunkSlug = trunkSlug,
                                     lifecycleStatus = status,
-                                    examBoards = selectedBoards.toList(),
+                                    examBoards = selectedBoards.filter { it!="A definir" },
                                     dateType = dateMode,
                                     exactDateIso = if (dateMode == "EXACT_DATE") exactDate else null,
                                     estimatedWindowLabel = if (dateMode == "ESTIMATED_WINDOW") windowLabel else null,

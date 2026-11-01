@@ -99,6 +99,7 @@ fun SettingsScreen(
     onToggleTrunkFocus: (String) -> Unit = {},
     onEditExam: (StoredExam) -> Unit = {},
     onArchiveExam: (StoredExam) -> Unit = {},
+    onUseServerExam: (StoredExam) -> Unit = {},
     onOpenPending: () -> Unit = {}
 ) {
     val ext = LocalExtendedColors.current
@@ -149,13 +150,14 @@ fun SettingsScreen(
                 subtitle = "Perfil, Aparência, Metas & Atualização OTA"
             )
 
-            if(pendingSyncCount>0)OutlinedButton(onClick=onOpenPending,modifier=Modifier.fillMaxWidth()){Text("Revisar $pendingSyncCount registro(s) pendente(s)")}
+            OutlinedButton(onClick=onOpenPending,modifier=Modifier.fillMaxWidth()){Text(if(pendingSyncCount>0)"Revisar $pendingSyncCount registro(s) pendente(s)"else"Ver registros preservados")}
             ladderChips.forEach { exam ->
                 Row(modifier=Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick={onEditExam(exam)},modifier=Modifier.weight(1f)){Text("Editar ${exam.shortName}")}
                     OutlinedButton(onClick={onArchiveExam(exam)}){Text("Arquivar")}
                 }
                 exam.syncError?.let { Text(it,color=MaterialTheme.colorScheme.error) }
+                if(exam.syncError?.startsWith("Conflito de revisão")==true)OutlinedButton(onClick={onUseServerExam(exam)},modifier=Modifier.fillMaxWidth()){Text("Preservar minha edição e usar versão do servidor")}
             }
             // =========================================================================
             // 1. APARÊNCIA (Modo Claro / Escuro / Sistema)

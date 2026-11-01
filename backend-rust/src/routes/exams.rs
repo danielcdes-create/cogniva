@@ -94,7 +94,15 @@ pub async fn update_exam(
         ));
     }
     let command_hash = exam_store::command_hash(user.0, &payload);
-    let mut previous = exam_store::get(&state, user.0, &id).await?;
+    let mut previous = match exam_store::get(&state, user.0, &id).await {
+        Ok(exam) => exam,
+        Err(AppError::NotFound(_)) if payload.revision == 0 => {
+            return exam_store::save_command(&state, user.0, payload, false, Some(command_hash))
+                .await
+                .map(Json)
+        }
+        Err(error) => return Err(error),
+    };
     if payload.status == crate::models::exam_hierarchy::ExamLifecycleStatus::EditalPublicado
         && previous.revision == payload.revision
     {

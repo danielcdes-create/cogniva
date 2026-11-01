@@ -395,19 +395,20 @@ class ExamEngineTest {
                         1.0,
                         5,
                         "CORE",
-                        emptyList()
+                        listOf(StoredTopic("topic",focus.coreSubjectIds.first()+"_01",focus.coreSubjectIds.first(),"Reviewed topic","PRE_EDITAL_BASE"))
                     )
                 )
             )
         }
         val ids = QuizSelection.commonTrunkIds(
             stored,
-            listOf(QuestionRef("q-pen", "DIR_PEN", "DIR_PEN_01"), QuestionRef("q-trib", "DIR_TRIB", "DIR_TRIB_01")),
+            listOf(QuestionRef("q-pen", "DIR_PEN", "DIR_PEN_01"), QuestionRef("q-trib", "DIR_TRIB", "DIR_TRIB_01"),QuestionRef("out-of-grade","DIR_PEN","UNRELATED")),
             setOf("fiscal", "policial"),
             emptyMap(),
             today,
             8
         )
         assertTrue(ids.contains("q-pen") || ids.contains("q-trib"))
+        assertFalse(ids.contains("out-of-grade"))
     }
 }

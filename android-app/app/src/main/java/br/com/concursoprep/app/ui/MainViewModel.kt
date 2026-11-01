@@ -58,6 +58,7 @@ class MainViewModel(private val repository:ConcursoRepository,private val appCon
     private val _pendingExport=MutableSharedFlow<File>();val pendingExport=_pendingExport.asSharedFlow()
     fun openPendingReview(){operation{_pendingReview.value=repository.pendingReview();_showPendingReview.value=true}}
     fun dismissPendingReview(){_showPendingReview.value=false}
+    fun useServerExam(exam:StoredExam){operation {val context=appContext?:return@operation;val file=repository.preserveAndUseServerExam(exam,File(context.cacheDir,"preserved"));refreshAllData();_pendingExport.emit(file);_userFeedbackMessage.emit("Versão do servidor carregada. Sua edição anterior continua preservada e disponível para exportação.")}}
     fun exportPendingReview(){operation{val context=appContext?:return@operation;_pendingExport.emit(repository.exportPending(File(context.cacheDir,"preserved")))}}
     private var refreshJob:Job?=null;private var syllabusJob:Job?=null;private var startJob:Job?=null;private var aiJob:Job?=null;private var aiGeneration=0L
     private fun operation(block:suspend CoroutineScope.()->Unit)=viewModelScope.launch {

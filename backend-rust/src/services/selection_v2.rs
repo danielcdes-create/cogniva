@@ -68,6 +68,13 @@ pub async fn generate(
             AppError::NotFound("Concurso não pertence à escada desta conta".into())
         })?),
     };
+    if req.mode != QuizMode::CommonTrunk
+        && exam.is_some_and(|e| e.status == ExamLifecycleStatus::Arquivado)
+    {
+        return Err(AppError::BadRequest(
+            "Concurso arquivado; revise sua seleção de estudo".into(),
+        ));
+    }
     let mut filter = Document::new();
     if let Some(exam) = exam {
         let topics: Vec<_> = exam
@@ -129,8 +136,13 @@ pub async fn generate(
                     continue;
                 }
                 let mut scope = doc! {"canonical_subject_id":&subject.canonical_subject_id,"canonical_topic_id":{"$in":topics}};
-                if !exam.exam_boards.is_empty() {
-                    let mut boards = exam.exam_boards.clone();
+                let mut boards = exam
+                    .exam_boards
+                    .iter()
+                    .filter(|b| b.as_str() != "A definir" && !b.trim().is_empty())
+                    .cloned()
+                    .collect::<Vec<_>>();
+                if !boards.is_empty() {
                     if boards.iter().any(|b| b == "Cebraspe") {
                         boards.extend(["CESPE".into(), "CEBRASPE".into()]);
                     }

@@ -34,7 +34,9 @@ class ConcursoRepository(
     val ownerUserId: Long = 0,
     private val auth: AuthStore? = null
 ) {
-    fun observeSync(): kotlinx.coroutines.flow.Flow<String?> = durable?.observeMetadata("last_sync") ?: kotlinx.coroutines.flow.flowOf(null)
+    fun observeSync(): kotlinx.coroutines.flow.Flow<String?> = durable?.let { state ->
+        kotlinx.coroutines.flow.combine(state.observeMetadata("last_sync"),state.observeMetadata("sync_error"),dao.observePendingAttemptCount(),examDao.observeAllExams()) { stamp,error,count,exams -> "$stamp|$error|$count|${exams.hashCode()}" }
+    } ?: kotlinx.coroutines.flow.flowOf(null)
     private val syncMutex = Mutex()
     private val mutationMutex = Mutex()
     private suspend fun <T> transaction(block: suspend () -> T): T = if (database!=null) database.withTransaction { block() } else block()
@@ -76,8 +78,10 @@ class ConcursoRepository(
         mutationMutex.withLock {
             metadata("catalog")?.takeIf { it.isNotBlank() }?.let { ExamCatalog.installCatalog(Json.parseToJsonElement(it).jsonObject) }
             dao.bindLegacyOwner(ownerUserId)
+            val trunkIds=examDao.listTrunks().map { it.slug }.toSet()
+            val missingTrunks=ExamCatalog.trunks().filter { it.slug !in trunkIds }
+            if(missingTrunks.isNotEmpty())examDao.upsertTrunks(missingTrunks.map { CareerTrunkEntity(it.slug,it.name,it.iconKey,false) })
             if (examDao.countExams() == 0) {
-                examDao.upsertTrunks(ExamCatalog.trunks().map { CareerTrunkEntity(it.slug,it.name,it.iconKey,false) })
                 val active=auth?.activeContestIds(ownerUserId)?:setOf("CPNU")
                 ExamCatalog.systemExams().forEach { saveExamAggregate(it.copy(isActiveInLadder=it.examId in active)) }
             }
@@ -173,10 +177,10 @@ class ConcursoRepository(
         return questions.map { q->records[q.id]?.let { row->q.copy(userStats=UserQuestionBriefStats(row.attempts,row.accuracyPct,row.events.maxByOrNull { Instant.parse(it.occurredAt) }?.occurredAt,row.isMastered,row.inErrorNotebook)) }?:q }
     }
     suspend fun fetchOrGetOfflineQuiz(userId: Long,mode: QuizMode,quantity: Int,contestId: String?=null,disciplina: String?=null): List<QuestionDto> {
-        owner(userId)
+        owner(userId);val count=quantity.coerceIn(1,120)
         try {
             auth?.ensureSession(api,ownerUserId)
-            val remote=api.generateQuizQuestions(QuizGeneratePayload(userId,mode,quantity,trunkFocusSlugs=focusedTrunkSlugs().toList(),contestId=contestId,disciplina=disciplina)).map(QuestionCacheMapping::withRevision)
+            val remote=api.generateQuizQuestions(QuizGeneratePayload(userId,mode,count,trunkFocusSlugs=focusedTrunkSlugs().toList(),contestId=contestId,disciplina=disciplina)).map(QuestionCacheMapping::withRevision)
             if(remote.isNotEmpty()) dao.insertQuestions(remote.map { QuestionCacheMapping.toEntity(it,json) })
             return decorateQuestions(remote)
         } catch(e: CancellationException){throw e} catch(e: retrofit2.HttpException){
@@ -185,21 +189,24 @@ class ConcursoRepository(
         val rows=projectedLearning().associateBy { it.questionId }
         val all=dao.getCachedQuestions(null,10000).map { QuestionCacheMapping.toDto(it,json) }.filter { it.correctAnswerIndices.size==1&&it.correctAnswerIndices[0] in it.answers.indices }
         val exam=loadStoredExams().firstOrNull { it.examId==contestId }
+        require(mode==QuizMode.COMMON_TRUNK||exam?.lifecycleStatus!="ARQUIVADO"){"Concurso arquivado; revise sua seleção de estudo."}
         val topics=exam?.subjects?.flatMap { it.topics }?.filter { it.diffStatus!="ARQUIVADO" }?.map { it.canonicalTopicId }?.toSet()
-        val pool=all.filter { q -> (disciplina==null||q.disciplina==disciplina) && (exam==null||q.canonicalTopicId in topics.orEmpty()||(q.canonicalTopicId==null&&exam.subjects.any { it.displayName==q.disciplina })) }
+        val commonTopics=if(mode==QuizMode.COMMON_TRUNK)loadStoredExams().filter { it.isActiveInLadder&&it.lifecycleStatus!="ARQUIVADO" }.flatMap { it.subjects }.flatMap { it.topics }.filter { it.diffStatus!="ARQUIVADO" }.map { it.canonicalTopicId }.toSet()else emptySet()
+        val boardFilter=exam?.examBoards.orEmpty().filter { it!="A definir"&&it.isNotBlank() }.flatMap { if(it=="Cebraspe")listOf("Cebraspe","CEBRASPE","CESPE")else listOf(it) }.toSet()
+        val pool=all.filter { mode!=QuizMode.SIMULADO||boardFilter.isEmpty()||it.source in boardFilter }.filter { q -> (disciplina==null||q.disciplina==disciplina) && if(mode==QuizMode.COMMON_TRUNK)q.canonicalTopicId in commonTopics else (exam==null||q.canonicalTopicId in topics.orEmpty()||(q.canonicalTopicId==null&&exam.subjects.any { it.displayName==q.disciplina })) }
         val selected=when(mode){
-            QuizMode.SRS_REVIEW->pool.filter { rows[it.id]?.let { r->Instant.parse(r.nextReviewAt)<=Instant.now() }==true }.sortedBy { rows[it.id]?.nextReviewAt }.take(quantity)
-            QuizMode.ERROR_NOTEBOOK->pool.filter { rows[it.id]?.inErrorNotebook==true }.take(quantity)
-            QuizMode.MOST_BADASS->pool.filter { rows[it.id]?.let { r->!r.isMastered&&r.attempts>0 }==true }.sortedBy { rows[it.id]?.accuracyPct }.take(quantity)
+            QuizMode.SRS_REVIEW->pool.filter { rows[it.id]?.let { r->Instant.parse(r.nextReviewAt)<=Instant.now() }==true }.sortedBy { rows[it.id]?.nextReviewAt }.take(count)
+            QuizMode.ERROR_NOTEBOOK->pool.filter { rows[it.id]?.inErrorNotebook==true }.take(count)
+            QuizMode.MOST_BADASS->pool.filter { rows[it.id]?.let { r->!r.isMastered&&r.attempts>0 }==true }.sortedBy { rows[it.id]?.accuracyPct }.take(count)
             QuizMode.SIMULADO->{if(exam==null) emptyList() else {
                 val ids=QuizSelection.weightedSimuladoIds(exam,pool.map { QuestionRef(it.id,it.canonicalSubjectId,it.canonicalTopicId) })
                 val expected=exam.subjects.filter { it.topics.any { t->t.diffStatus!="ARQUIVADO" } }.sumOf { it.questionCount?:0 }
                 require(expected>0&&ids.size==expected){"Cache insuficiente para o simulado: ${ids.size}/$expected questões. Conecte-se ou ajuste a grade."}
                 ids.mapNotNull { id->pool.find { it.id==id } }
             }}
-            QuizMode.COMMON_TRUNK->{val ids=QuizSelection.commonTrunkIds(loadStoredExams(),pool.map { QuestionRef(it.id,it.canonicalSubjectId,it.canonicalTopicId) },focusedTrunkSlugs(),canonicalMasteryBySubject(),LocalDate.now(LearningProjection.studyZone),quantity);ids.mapNotNull { id->pool.find { it.id==id } }}
+            QuizMode.COMMON_TRUNK->{val ids=QuizSelection.commonTrunkIds(loadStoredExams(),pool.map { QuestionRef(it.id,it.canonicalSubjectId,it.canonicalTopicId) },focusedTrunkSlugs(),canonicalMasteryBySubject(),LocalDate.now(LearningProjection.studyZone),count);ids.mapNotNull { id->pool.find { it.id==id } }}
             QuizMode.SINGLE->emptyList()
-            else->pool.shuffled().take(quantity)
+            else->pool.shuffled().take(count)
         }
         return decorateQuestions(selected)
     }
@@ -224,7 +231,7 @@ class ConcursoRepository(
             val examSyncCount=syncPendingExams()
             (auth?.pendingProfile(userId) ?: metadata("pending_profile"))?.takeIf { it.isNotBlank() }?.let { val profile=json.decodeFromString<OnboardingPayload>(it);require(profile.userId==userId);api.saveOnboardingPreferences(profile);auth?.clearPendingProfile(userId,it);metadata("pending_profile","") }
             var synced=examSyncCount
-            var transient=false
+            var transient=examDao.listPendingExams().any { it.syncStatus in setOf("PENDING_CREATE","PENDING_UPDATE","PENDING_PUBLISH")&&it.syncError==null }
             var batchCount=0
             while (batchCount++ < 20) {
             val pending=dao.getAllPendingAttempts().filter { it.ownerUserId==userId&&it.syncError==null }.take(120)
@@ -294,7 +301,7 @@ class ConcursoRepository(
         var count=0
         for(entity in examDao.listPendingExams()){
             if(entity.syncStatus !in setOf("PENDING_CREATE","PENDING_UPDATE","PENDING_PUBLISH")) continue
-            if(entity.syncError?.startsWith("Conflito de revisão") == true) continue
+            if(entity.syncError?.let { it.startsWith("Conflito de revisão")||it.startsWith("Revisão necessária") } == true) continue
             val snapshot=ExamLocalMapping.assemble(entity,examDao.subjectsFor(entity.examId),examDao.topicsFor(entity.examId))
             try {
                 val result=when(snapshot.syncStatus){
@@ -307,7 +314,12 @@ class ConcursoRepository(
                     if(current==snapshot){saveExamAggregate(result.toStored());count++}
                     else if(current!=null) saveExamAggregate(current.copy(revision=result.revision,syncStatus="PENDING_UPDATE"))
                 }
-            } catch(e: CancellationException){throw e} catch(e: Exception){examDao.setSyncError(snapshot.examId,if(e is retrofit2.HttpException&&e.code()==409) "Conflito de revisão: exporte sua edição e reabra a versão do servidor antes de reaplicar." else "Envio pendente; edição preservada.");throw e}
+            } catch(e: CancellationException){throw e} catch(e: Exception){
+                val permanent=e is retrofit2.HttpException&&e.code() in listOf(400,404,409,422)
+                val reason=if(e is retrofit2.HttpException&&e.code()==409) "Conflito de revisão: preserve sua edição antes de carregar a versão do servidor." else if(permanent) "Revisão necessária: o servidor recusou a grade. Confira seus campos e salve uma nova edição." else "Envio pendente; edição preservada."
+                examDao.setSyncError(snapshot.examId,reason)
+                if(!permanent)throw e
+            }
         }
         return count
     }
@@ -318,7 +330,7 @@ class ConcursoRepository(
             incoming.forEach { remote ->
                 val current=local[remote.id]
                 if(current==null||current.syncStatus=="SYNCED") saveExamAggregate(remote.toStored())
-                else if(current.revision!=remote.revision) examDao.setSyncError(remote.id,"Há uma revisão diferente no servidor. Preserve e revise sua edição local.")
+                else if(current.revision!=remote.revision&&current.syncError==null) examDao.setSyncError(remote.id,"Conflito de revisão: há uma versão diferente no servidor. Preserve sua edição antes de carregá-la.")
             }
         }
         val catalog=api.catalog();ExamCatalog.installCatalog(catalog);metadata("catalog",catalog.toString())
@@ -342,19 +354,36 @@ class ConcursoRepository(
         val attempts=dao.getAllPendingAttempts().filter{it.ownerUserId==ownerUserId}.map { item->
             PendingReviewItem(item.attemptId,dao.findQuestionById(item.questionId)?.question?:"Questão ${item.questionId}","Resposta: ${item.chosenText} · ${Instant.ofEpochMilli(item.createdAtEpochMs)}",item.syncError?:"Aguardando confirmação do servidor")
         }
-        return attempts + durable?.reports(ownerUserId).orEmpty().map { item->PendingReviewItem(item.eventId,"Reporte de questão",item.category,metadata("report_error:${item.eventId}")?:"Aguardando confirmação do servidor") }
+        val exams=loadStoredExams().filter { it.syncStatus!="SYNCED" }.map { PendingReviewItem(it.examId,it.title,"Concurso · revisão ${it.revision}",it.syncError?:"Edição aguardando confirmação") }
+        val backups=durable?.preservedExamEdits().orEmpty().map { item->val exam=json.decodeFromString<StoredExam>(item.value);PendingReviewItem(item.key,exam.title,"Edição preservada antes de usar a versão do servidor","Disponível na exportação; não será reenviada automaticamente") }
+        return attempts + exams + backups + durable?.reports(ownerUserId).orEmpty().map { item->PendingReviewItem(item.eventId,"Reporte de questão",item.category,metadata("report_error:${item.eventId}")?:"Aguardando confirmação do servidor") }
+    }
+    suspend fun preserveAndUseServerExam(expected:StoredExam,directory:File):File {
+        auth?.ensureSession(api,ownerUserId)
+        val remote=api.listExams().find { it.id==expected.examId }?:error("A versão do servidor não está disponível; sua edição foi preservada.")
+        mutationMutex.withLock { transaction {
+            val entity=examDao.listExams().find { it.examId==expected.examId }?:error("O concurso mudou; reabra a revisão.")
+            val current=ExamLocalMapping.assemble(entity,examDao.subjectsFor(entity.examId),examDao.topicsFor(entity.examId))
+            require(current==expected){"A edição mudou enquanto a versão era consultada. Reabra a revisão."}
+            checkNotNull(durable).putMetadata(LocalMetadataEntity("exam_backup:${expected.examId}:${UUID.randomUUID()}",json.encodeToString(current)))
+            saveExamAggregate(remote.toStored())
+        } }
+        return exportPending(directory)
     }
     suspend fun exportPending(directory:File):File=withContext(Dispatchers.IO){
         directory.mkdirs()
         val attempts=dao.getAllPendingAttempts().filter{it.ownerUserId==ownerUserId}
+        val exams=loadStoredExams().filter { it.syncStatus!="SYNCED" }
         val document=buildJsonObject {
             put("schema_version",2);put("owner_user_id",ownerUserId)
+            put("exams",json.encodeToJsonElement(exams))
+            put("preserved_exam_edits",buildJsonArray { durable?.preservedExamEdits().orEmpty().forEach { add(Json.parseToJsonElement(it.value)) } })
             put("attempts",buildJsonArray{attempts.forEach{item->add(buildJsonObject{put("payload",json.encodeToJsonElement(item.payload()));put("review_reason",item.syncError);put("local_created_at_ms",item.createdAtEpochMs)})}})
             put("reports",buildJsonArray{durable?.reports(ownerUserId).orEmpty().forEach{item->add(buildJsonObject{put("event_id",item.eventId);put("question_id",item.questionId);put("category",item.category)})}})
         }
         File(directory,"cogniva-preservados-${System.currentTimeMillis()}.json").also{it.writeText(document.toString(),Charsets.UTF_8)}
     }
-    suspend fun getLocalStorageStats(): Pair<Int,Int> = dao.countCachedQuestions() to (dao.getAllPendingAttempts().count { it.ownerUserId==ownerUserId }+(durable?.reports(ownerUserId)?.size?:0))
+    suspend fun getLocalStorageStats(): Pair<Int,Int> = dao.countCachedQuestions() to (dao.getAllPendingAttempts().count { it.ownerUserId==ownerUserId }+(durable?.reports(ownerUserId)?.size?:0)+examDao.listPendingExams().size)
     suspend fun clearLocalQuestionCache() {
         require(dao.getAllPendingAttempts().isEmpty() && durable?.pausedSession(ownerUserId)==null){"Conclua a sessão e revise as pendências antes de limpar as questões."}
         dao.clearCachedQuestions()

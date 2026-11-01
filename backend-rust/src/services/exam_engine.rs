@@ -241,7 +241,7 @@ pub fn select_common_trunk_for_focuses(
         .collect();
     let pool: Vec<&LeverageExam> = exams
         .iter()
-        .filter(|exam| exam.is_active_in_ladder)
+        .filter(|exam| exam.is_active_in_ladder && exam.status != ExamLifecycleStatus::Arquivado)
         .filter(|exam| slugs.is_empty() || slugs.contains(exam.trunk_slug.as_str()))
         .collect();
 
@@ -307,7 +307,7 @@ pub fn readiness_for_blueprints(
 ) -> f64 {
     let primary = exams
         .iter()
-        .filter(|exam| exam.is_active_in_ladder)
+        .filter(|exam| exam.is_active_in_ladder && exam.status != ExamLifecycleStatus::Arquivado)
         .min_by_key(|exam| exam.ladder_priority);
     let Some(exam) = primary else {
         return 0.0;

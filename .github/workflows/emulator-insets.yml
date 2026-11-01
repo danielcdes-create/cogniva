@@ -7,7 +7,7 @@ name: Headless emulator insets (API 35 at S23 Ultra geometry)
 # requires: 1440x3088 px, 500 dpi, centered punch-hole. The log prints the
 # real release and sdk. It does not relabel the image as Android 17.
 #
-# Manual only. This job does not build on the droplet and does not run on tags.
+# Manual or called by the gated release. Never builds on the droplet.
 on:
   workflow_dispatch:
   workflow_call:
@@ -54,7 +54,7 @@ jobs:
             echo PROFILE_RESOLUTION report=Android17/API35 booted_release=$(adb shell getprop ro.build.version.release | tr -d '\r') booted_sdk=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
             echo Android 17 is API 37. API 35 is Android 15. Booting the report numeric API at S23 Ultra geometry.
             echo EMULATOR_BOOTED $(adb shell getprop ro.build.version.release | tr -d '\r') $(adb shell getprop ro.build.version.sdk | tr -d '\r') $(adb shell wm size | tr -d '\r') $(adb shell wm density | tr -d '\r') punch-hole=hole
-            cd android-app && chmod +x gradlew && ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=br.com.concursoprep.app.QuestionInsetCollisionTest,br.com.concursoprep.app.DurableStorageTest --no-daemon --console=plain
+            cd android-app && chmod +x gradlew && ./gradlew :app:connectedDebugAndroidTest -PDO_API_BASE_URL=https://127.0.0.1:1/api/v1/ -Pandroid.testInstrumentationRunnerArguments.class=br.com.concursoprep.app.QuestionInsetCollisionTest,br.com.concursoprep.app.DurableStorageTest --no-daemon --console=plain
             sleep 2
             adb logcat -d -s INSET_CHECK:I
             adb logcat -d | tr -d '\r' | grep -E 'INSET_CHECK.*success'

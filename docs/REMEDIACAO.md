@@ -39,3 +39,11 @@ Não executar os antigos probes como testes de aceite: eles afirmam o comportame
 - HTTPS real instalado, testado da máquina local e na VPS, com timer horário de renovação. Nginx usa IPs públicos para preservar o listener 443 do Tailscale.
 - Chave privada de release e prova de rotação preservadas fora do repositório, com Secrets de CI configurados. API 26–27 mantém limitação do assinante antigo; API 28+ usa rotação.
 - Pipeline preparado com gates, bundle imutável, imagem por digest/tamanho medido, ensaio de rollback, gate de manutenção durante migração de protocolo e alteração somente do serviço Cogniva. Actionlint passou. CI/emulador/promoção ainda pendentes; não declarar entrega integral.
+
+## Primeiro CI e fechamento dos casos de conflito
+
+- Run `41339873013`, revisão `3be5bfb`: Android/JVM/lint/visuais passaram e o emulador API 35/Android 15 passou três testes reais (insets, migração Room 2→3 e sessão/reabertura). Log: `ci-emulator-first.log`; geometria 1440×3088/500dpi, cutout ativo; top bar 136 ≥ inset 136, CTA 2975 ≤ 3088−75.
+- O gate backend falhou por conectividade ao Mongo sintético do job. Corrigidos bind explícito, cache de memória e espera de ping; nenhuma imagem foi promovida nesse run.
+- Complementos C15/C26/C30: tronco comum offline considera todos os concursos ativos e seus tópicos; grade arquivada não volta à fila; bancas desconhecidas não são tratadas como filtro confirmado. Exportação inclui edições de concurso e cópias de conflito. Há ação explícita para preservar a edição antes de carregar o servidor; ACK atrasado mantém a edição feita durante o envio. Mudanças em fila/erro/concursos atualizam a UI.
+- Suíte local posterior: 27 testes JVM de domínio/repositório e 23 Rust passaram. Emulador de CI agora aponta explicitamente a API para loopback indisponível, para não criar contas nem sincronizar dados contra produção. A assinatura rotacionada conserva somente a capacidade necessária de atualizar dados instalados; privilégios do assinante antigo foram revogados.
+- Novo CI na revisão seguinte ainda precisa passar antes da promoção. Build e promoção continuam bloqueados por qualquer gate vermelho.

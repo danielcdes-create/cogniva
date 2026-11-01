@@ -85,6 +85,8 @@ interface ConcursoLocalDao {
 
     @Query("SELECT COUNT(*) FROM pending_attempts")
     suspend fun countPendingAttempts(): Int
+    @Query("SELECT COUNT(*) FROM pending_attempts")
+    fun observePendingAttemptCount(): Flow<Int>
 
     @Query("SELECT COUNT(*) FROM cached_questions")
     suspend fun countCachedQuestions(): Int

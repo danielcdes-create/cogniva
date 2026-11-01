@@ -34,7 +34,8 @@ pub async fn list(state: &AppState, user_id: i64) -> Result<Vec<ExamBlueprint>, 
     let mut exams: HashMap<_, _> = system_exam_blueprints()
         .into_iter()
         .map(|mut e| {
-            e.is_active_in_ladder = profile.active_contest_ids.contains(&e.id);
+            e.is_active_in_ladder = profile.active_contest_ids.contains(&e.id)
+                && e.status != ExamLifecycleStatus::Arquivado;
             (e.id.clone(), e)
         })
         .collect();
@@ -43,7 +44,8 @@ pub async fn list(state: &AppState, user_id: i64) -> Result<Vec<ExamBlueprint>, 
         .await?;
     while let Some(raw) = cursor.try_next().await? {
         let mut exam = decode(raw)?;
-        exam.is_active_in_ladder = profile.active_contest_ids.contains(&exam.id);
+        exam.is_active_in_ladder = profile.active_contest_ids.contains(&exam.id)
+            && exam.status != ExamLifecycleStatus::Arquivado;
         exams.insert(exam.id.clone(), exam);
     }
     let mut result: Vec<_> = exams.into_values().collect();

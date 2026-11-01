@@ -10,6 +10,7 @@ android-app/app/build/
 android-app/dist/
 android-app/local.properties
 .gradle/
+**/.kotlin/
 build/
 *.apk
 *.aab

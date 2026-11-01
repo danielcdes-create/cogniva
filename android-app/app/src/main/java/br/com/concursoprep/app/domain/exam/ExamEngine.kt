@@ -313,7 +313,7 @@ object ExamEngine {
         val focuses = listOfNotNull(trunkFocus) + additionalFocus
         val slugs = focuses.map { it.slug }.toSet()
         val cores = focuses.flatMap { it.coreSubjectIds }.toSet()
-        val pool = exams.filter { it.isActiveInLadder }.filter { exam ->
+        val pool = exams.filter { it.isActiveInLadder&&it.status!="ARQUIVADO" }.filter { exam ->
             slugs.isEmpty() || slugs.contains(exam.trunkSlug)
         }
         val presence = linkedMapOf<String, MutableList<String>>()
@@ -470,7 +470,7 @@ object ExamEngine {
             exactDateIso = if (exam.dateType == "EXACT_DATE") exam.exactDateIso else null,
             isActiveInLadder = exam.isActiveInLadder,
             subjects = exam.subjects.map { subject ->
-                val archivedOnly = subject.topics.isNotEmpty() &&
+                val archivedOnly = subject.topics.isEmpty() ||
                     subject.topics.all { it.diffStatus == CanonicalTopicStatus.ARQUIVADO.name }
                 LeverageSubject(
                     canonicalSubjectId = subject.canonicalSubjectId,
@@ -526,7 +526,7 @@ object ExamEngine {
     }
 
     fun readinessForStoredExams(exams: List<StoredExam>, masteryByTopic: Map<String, Double>): Double {
-        val primary = exams.filter { it.isActiveInLadder }.minByOrNull { it.ladderPriority } ?: return 0.0
+        val primary = exams.filter { it.isActiveInLadder&&it.lifecycleStatus!="ARQUIVADO" }.minByOrNull { it.ladderPriority } ?: return 0.0
         val subjects = primary.subjects.map { subject ->
             val topics = subject.topics.map { topic ->
                 ReadinessTopic(
@@ -668,8 +668,10 @@ object OfflineExamQueue {
             today,
             focuses.drop(1)
         ) ?: return null
+        val liveTopics=exams.filter { it.isActiveInLadder&&it.lifecycleStatus!="ARQUIVADO" }.flatMap { it.subjects }.flatMap { it.topics }.filter { it.diffStatus!="ARQUIVADO" }.map { it.canonicalTopicId }.toSet()
         val questionIds = cachedQuestions
-            .filter { it.canonicalSubjectId == card.canonicalSubjectId && !it.archived }
+            .filter { it.canonicalSubjectId == card.canonicalSubjectId && !it.archived && it.canonicalTopicId in liveTopics }
+            .distinctBy { it.questionId }
             .map { it.questionId }
         return CommonTrunkBattery(card, questionIds)
     }

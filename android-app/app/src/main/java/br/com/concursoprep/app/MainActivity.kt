@@ -391,6 +391,7 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                         onToggleTrunkFocus = { viewModel.toggleTrunkFocus(it) },
                         onEditExam = { viewModel.editExam(it) },
                         onArchiveExam = { viewModel.archiveExam(it) },
+                        onUseServerExam = { viewModel.useServerExam(it) },
                         onOpenPending = { viewModel.openPendingReview() },
                         onReopenOnboarding = {
                             currentTab = BottomTab.HOJE

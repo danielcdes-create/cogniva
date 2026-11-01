@@ -25,5 +25,6 @@ interface DurableStateDao {
     @Query("SELECT * FROM quiz_sessions WHERE active=1 AND ownerUserId=:owner ORDER BY updatedAt DESC LIMIT 1") suspend fun pausedSession(owner: Long): QuizSessionEntity?
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putMetadata(value: LocalMetadataEntity)
     @Query("SELECT value FROM local_metadata WHERE `key`=:key") suspend fun metadata(key: String): String?
+    @Query("SELECT * FROM local_metadata WHERE `key` LIKE 'exam_backup:%'") suspend fun preservedExamEdits(): List<LocalMetadataEntity>
     @Query("SELECT value FROM local_metadata WHERE `key`=:key") fun observeMetadata(key: String): kotlinx.coroutines.flow.Flow<String?>
 }

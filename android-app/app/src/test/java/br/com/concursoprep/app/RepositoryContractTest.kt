@@ -3,6 +3,8 @@ package br.com.concursoprep.app
 import br.com.concursoprep.app.data.local.*
 import br.com.concursoprep.app.data.remote.*
 import br.com.concursoprep.app.data.repository.ConcursoRepository
+import br.com.concursoprep.app.data.repository.toPayload
+import br.com.concursoprep.app.domain.exam.*
 import br.com.concursoprep.app.domain.model.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.flowOf
@@ -34,6 +36,11 @@ class RepositoryContractTest {
         val learning=ConcurrentHashMap<String,LearningRecordEntity>()
         val reports=ConcurrentHashMap<String,PendingReportEntity>()
         val metadata=ConcurrentHashMap<String,String>()
+        val examRows=ConcurrentHashMap<String,UserExamEntity>()
+        val subjectRows=ConcurrentHashMap<String,List<ExamSubjectEntity>>()
+        val topicRows=ConcurrentHashMap<String,List<ExamTopicEntity>>()
+        var remoteExams:List<ExamBlueprintPayload> = emptyList()
+        fun putExam(exam:StoredExam){examRows[exam.examId]=ExamLocalMapping.toEntity(exam);subjectRows[exam.examId]=ExamLocalMapping.subjectsOf(exam);topicRows[exam.examId]=ExamLocalMapping.topicsOf(exam)}
         val dao=fake<ConcursoLocalDao>{method,args->when(method){
             "getAllPendingAttempts"->pending.values.sortedBy{it.createdAtEpochMs}
             "getCachedQuestions"->questions.values.toList()
@@ -49,15 +56,26 @@ class RepositoryContractTest {
             "updateLearningFlags"->Unit
             else->error("Unexpected DAO operation $method")
         }}
-        val exams=fake<ExamDao>{method,_->when(method){
+        val exams=fake<ExamDao>{method,args->when(method){
             "countExams"->1
-            "listExams","listPendingExams","listTrunks"->emptyList<UserExamEntity>()
+            "listExams"->examRows.values.toList()
+            "listPendingExams"->examRows.values.filter { it.syncStatus!="SYNCED" }
+            "listTrunks"->emptyList<CareerTrunkEntity>()
+            "upsertTrunks"->Unit
+            "subjectsFor"->subjectRows[args[0]].orEmpty()
+            "topicsFor"->topicRows[args[0]].orEmpty()
+            "upsertExam"->{val e=args[0] as UserExamEntity;examRows[e.examId]=e;Unit}
+            "clearSubjects"->{subjectRows.remove(args[0]);Unit}
+            "clearTopics"->{topicRows.remove(args[0]);Unit}
+            "upsertSubjects"->{(args[0] as List<*>).filterIsInstance<ExamSubjectEntity>().groupBy { it.examId }.forEach { (id,rows)->subjectRows[id]=rows };Unit}
+            "upsertTopics"->{(args[0] as List<*>).filterIsInstance<ExamTopicEntity>().groupBy { it.examId }.forEach { (id,rows)->topicRows[id]=rows };Unit}
             else->error("Unexpected exam operation $method")
         }}
         val durable=fake<DurableStateDao>{method,args->when(method){
             "learning"->learning.values.toList()
             "putLearning"->{(args[0] as List<*>).filterIsInstance<LearningRecordEntity>().forEach{learning[it.questionId]=it};Unit}
             "metadata"->metadata[args[0]]
+            "preservedExamEdits"->metadata.filterKeys { it.startsWith("exam_backup:") }.map { LocalMetadataEntity(it.key,it.value) }
             "putMetadata"->{val m=args[0] as LocalMetadataEntity;metadata[m.key]=m.value;Unit}
             "reports"->reports.values.filter{it.ownerUserId==args[0]}
             "enqueueReport"->{val r=args[0] as PendingReportEntity;reports.putIfAbsent(r.eventId,r);Unit}
@@ -65,10 +83,11 @@ class RepositoryContractTest {
             "observeMetadata"->flowOf(null)
             else->error("Unexpected durable operation $method")
         }}
-        fun repository(submit:(SubmitBatchPayload)->SubmitBatchResponseDto={throw IOException("Synthetic outage")},sendReport:()->Unit={}):ConcursoRepository {
+        fun repository(submit:(SubmitBatchPayload)->SubmitBatchResponseDto={throw IOException("Synthetic outage")},sendReport:()->Unit={},updateExam:(ExamBlueprintPayload)->ExamBlueprintPayload={throw IOException("Synthetic outage")}):ConcursoRepository {
             val api=fake<ConcursoApiService>{method,args->when(method){
                 "submitAttemptsBatch"->submit(args[0] as SubmitBatchPayload)
-                "listExams"->emptyList<ExamBlueprintPayload>()
+                "listExams"->remoteExams
+                "updateExam"->updateExam(args[1] as ExamBlueprintPayload)
                 "catalog"->Json.parseToJsonElement(checkNotNull(javaClass.getResourceAsStream("/canonical-catalog.json")).bufferedReader().readText()).jsonObject
                 "learningState"->LearningPage(emptyList())
                 "reportQuestionProblem"->{sendReport();Unit}
@@ -161,5 +180,41 @@ class RepositoryContractTest {
         val base=LearningRecord(q.id,q.disciplina,attempts=10,correct=8,accuracyPct=80.0,isMastered=true,inErrorNotebook=false,highConfidenceError=false,points=2.4,nextReviewAt="2026-11-30T22:00:00Z",events=listOf(event))
         val projected=LearningProjection.project(base,q,listOf(event.copy(attemptId="two",occurredAt="2026-11-01T22:00:00Z")))
         assertEquals(2.4,projected.points,0.0);assertEquals(11,projected.attempts);assertTrue(projected.isMastered)
+    }
+    @Test fun resolvingAnExamConflictPreservesAndExportsTheExactLocalEditBeforeUsingRemote()=runBlocking {
+        val store=Store()
+        val local=ExamCatalog.systemExams().first().copy(title="My conflicting edit",syncStatus="PENDING_UPDATE",revision=2,syncError="Conflito de revisão")
+        val remote=local.copy(title="Other device revision",revision=3,syncStatus="SYNCED",syncError=null)
+        store.putExam(local);store.remoteExams=listOf(remote.toPayload())
+        val directory=java.nio.file.Files.createTempDirectory("cogniva-conflict-test").toFile()
+        try {
+            val repo=store.repository();val exported=repo.preserveAndUseServerExam(local,directory)
+            assertEquals(remote.title,repo.loadStoredExams().single().title)
+            val document=Json.parseToJsonElement(exported.readText()).jsonObject
+            val backup=document.getValue("preserved_exam_edits").jsonArray.single().jsonObject
+            assertEquals(local.title,backup.getValue("title").jsonPrimitive.content)
+            assertEquals(local.revision,backup.getValue("revision").jsonPrimitive.long)
+            assertTrue(repo.pendingReview().any { it.title==local.title })
+        }finally{directory.listFiles()?.forEach { it.delete() };directory.delete()}
+    }
+    @Test fun anExamAckCannotReplaceAnEditMadeWhileTheRequestWasInFlight()=runBlocking {
+        val store=Store();val sent=ExamCatalog.systemExams().first().copy(title="Sent revision",revision=2,syncStatus="PENDING_UPDATE")
+        store.putExam(sent)
+        val repo=store.repository(updateExam={ payload ->store.putExam(sent.copy(title="Edited during send"));payload.copy(revision=3,syncStatus="SYNCED") })
+        assertTrue(runCatching { repo.syncPendingAttempts(123) }.isFailure)
+        val actual=repo.loadStoredExams().single()
+        assertEquals("Edited during send",actual.title);assertEquals(3L,actual.revision);assertEquals("PENDING_UPDATE",actual.syncStatus)
+    }
+    @Test fun offlineCommonTrunkUsesAllActiveGradesInsteadOfOnlyTheOpenedContest()=runBlocking {
+        val store=Store();val template=ExamCatalog.systemExams().find { it.examId=="CPNU" }!!
+        val openedSubject=template.subjects.first { it.canonicalSubjectId!="FIN_PUB" }
+        val finance=template.subjects.find { it.canonicalSubjectId=="FIN_PUB" }!!
+        store.putExam(template.copy(examId="opened",subjects=listOf(openedSubject.copy(weight=1.0)),isActiveInLadder=true))
+        store.putExam(template.copy(examId="other",subjects=listOf(finance.copy(weight=100.0)),isActiveInLadder=true))
+        store.putExam(template.copy(examId="third",subjects=listOf(finance.copy(weight=100.0)),isActiveInLadder=true))
+        val q=question().copy(canonicalSubjectId="FIN_PUB",canonicalTopicId="FIN_PUB_01")
+        store.questions[q.id]=QuestionCacheMapping.toEntity(q,json)
+        val selected=store.repository().fetchOrGetOfflineQuiz(123,QuizMode.COMMON_TRUNK,1,contestId="opened")
+        assertEquals(listOf(q.id),selected.map { it.id })
     }
 }

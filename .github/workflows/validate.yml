@@ -18,7 +18,14 @@ jobs:
         with:
           workspaces: backend-rust
       - name: Dedicated synthetic Mongo (never Atlas)
-        run: docker run -d --name cogniva-test-mongo -p 127.0.0.1:27048:27017 mongo:8.0 --setParameter enableTestCommands=1
+        run: |
+          docker run -d --name cogniva-test-mongo --memory=512m -p 127.0.0.1:27048:27017 mongo:8.0 --bind_ip_all --wiredTigerCacheSizeGB 0.25 --setParameter enableTestCommands=1
+          for attempt in $(seq 1 30); do
+            if docker exec cogniva-test-mongo mongosh --quiet --eval 'db.adminCommand({ping:1})' > /dev/null 2>&1; then exit 0; fi
+            sleep 1
+          done
+          docker logs cogniva-test-mongo
+          exit 1
       - name: Router, durability, concurrency, domain and measured APK metadata
         working-directory: backend-rust
         env:
@@ -26,7 +33,9 @@ jobs:
         run: cargo test --locked -- --include-ignored
       - name: Remove disposable Mongo
         if: always()
-        run: docker rm -f cogniva-test-mongo
+        run: |
+          docker logs --tail 30 cogniva-test-mongo
+          docker rm -f cogniva-test-mongo
   android:
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
     runs-on: ubuntu-latest

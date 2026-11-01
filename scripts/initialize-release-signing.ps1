@@ -1,3 +1,4 @@
+param([switch]$UpdateOldCapabilities)
 $ErrorActionPreference='Stop'
 $signingDir=Join-Path $env:LOCALAPPDATA 'Cogniva\release-signing'
 $repoRoot=Split-Path $PSScriptRoot -Parent
@@ -21,8 +22,9 @@ if(-not(Test-Path -LiteralPath $keyFile)){
 try {
     $signer=Join-Path $env:ANDROID_HOME 'build-tools\35.0.0\apksigner.bat'
     $lineage=Join-Path $signingDir 'cogniva.lineage'
-    if(-not(Test-Path -LiteralPath $lineage)){
-        & $signer rotate --out $lineage --old-signer --ks (Join-Path $repoRoot 'android-app\app\debug.keystore') --ks-key-alias androiddebugkey --ks-pass pass:android --set-installed-data true --set-rollback false --new-signer --ks $keyFile --ks-key-alias cogniva --ks-pass env:COGNIVA_RELEASE_PASSWORD
+    if(-not(Test-Path -LiteralPath $lineage) -or $UpdateOldCapabilities){
+        if(Test-Path -LiteralPath $lineage){Copy-Item -LiteralPath $lineage -Destination ($lineage+'.before-'+(Get-Date -Format 'yyyyMMddTHHmmss'))}
+        & $signer rotate --out $lineage --old-signer --ks (Join-Path $repoRoot 'android-app\app\debug.keystore') --ks-key-alias androiddebugkey --ks-pass pass:android --set-installed-data true --set-permission false --set-auth false --set-shared-uid false --set-rollback false --new-signer --ks $keyFile --ks-key-alias cogniva --ks-pass env:COGNIVA_RELEASE_PASSWORD
         if($LASTEXITCODE -ne 0){throw 'Falha ao gerar prova de rotação'}
     }
     $gh='C:\Program Files\GitHub CLI\gh.exe'
