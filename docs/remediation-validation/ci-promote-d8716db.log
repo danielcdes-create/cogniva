@@ -1,0 +1,177 @@
+﻿2026-11-01T20:03:10.9662231Z Current runner version: '2.338.2'
+2026-11-01T20:03:10.9690932Z ##[group]Runner Image Provisioner
+2026-11-01T20:03:10.9692142Z Hosted Compute Agent
+2026-11-01T20:03:10.9693444Z Version: 20261021.618
+2026-11-01T20:03:10.9694357Z Commit: 21505ad2541d5be6135ed84fc33697146cf75b8e
+2026-11-01T20:03:10.9695399Z Build Date: 2026-10-21T00:45:21Z
+2026-11-01T20:03:10.9696339Z Worker ID: {9945887a-007c-4218-a15e-7f1f577ee6a5}
+2026-11-01T20:03:10.9697287Z Region: westus
+2026-11-01T20:03:10.9698040Z Cloud: Azure
+2026-11-01T20:03:10.9698874Z ##[endgroup]
+2026-11-01T20:03:10.9700847Z ##[group]Operating System
+2026-11-01T20:03:10.9701792Z Ubuntu
+2026-11-01T20:03:10.9702574Z 24.04.5
+2026-11-01T20:03:10.9703692Z LTS
+2026-11-01T20:03:10.9704444Z ##[endgroup]
+2026-11-01T20:03:10.9705228Z ##[group]Runner Image
+2026-11-01T20:03:10.9706087Z Image: ubuntu-24.04
+2026-11-01T20:03:10.9706843Z Version: 20261025.353.1
+2026-11-01T20:03:10.9708402Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261025.353/images/ubuntu/Ubuntu2404-Readme.md
+2026-11-01T20:03:10.9710260Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261025.353
+2026-11-01T20:03:10.9711382Z ##[endgroup]
+2026-11-01T20:03:10.9713303Z ##[group]GITHUB_TOKEN Permissions
+2026-11-01T20:03:10.9715795Z Contents: read
+2026-11-01T20:03:10.9716544Z Metadata: read
+2026-11-01T20:03:10.9717423Z Packages: write
+2026-11-01T20:03:10.9718318Z ##[endgroup]
+2026-11-01T20:03:10.9720983Z Secret source: Actions
+2026-11-01T20:03:10.9722283Z Cache mode: write
+2026-11-01T20:03:10.9723775Z Prepare workflow directory
+2026-11-01T20:03:11.0094568Z Prepare all required actions
+2026-11-01T20:03:11.0146045Z Getting action download info
+2026-11-01T20:03:11.3732725Z Download action repository 'actions/download-artifact@v4' (SHA:d3f86a106a0bac45b974a628896c90dbdf5c8093)
+2026-11-01T20:03:11.8718236Z Complete job name: promote
+2026-11-01T20:03:11.9616269Z ##[group]Run actions/download-artifact@v4
+2026-11-01T20:03:11.9617349Z with:
+2026-11-01T20:03:11.9618084Z   name: cogniva-release-d8716db8c12653a726c9284b9e28e7ba1c30df64
+2026-11-01T20:03:11.9618927Z   path: release-bundle
+2026-11-01T20:03:11.9619531Z   merge-multiple: false
+2026-11-01T20:03:11.9620218Z   repository: danielcdes-create/cogniva
+2026-11-01T20:03:11.9620999Z   run-id: 41343484265
+2026-11-01T20:03:11.9621785Z ##[endgroup]
+2026-11-01T20:03:12.3018541Z Downloading single artifact
+2026-11-01T20:03:12.3209336Z (node:2206) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-01T20:03:12.3212178Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-01T20:03:12.5799303Z Preparing to download the following artifacts:
+2026-11-01T20:03:12.5801232Z - cogniva-release-d8716db8c12653a726c9284b9e28e7ba1c30df64 (ID: 13098866454, Size: 12278967, Expected Digest: sha256:9ef27a7bb98d58382e3a199d1187cf6621a9a96bc4c213359ee59c175ea3df04)
+2026-11-01T20:03:12.8131879Z Redirecting to blob download url: https://productionresultssa2.blob.core.windows.net/actions-results/5ced58a9-9d8b-42bf-a986-799177021129/workflow-job-run-ceae2fdb-2b6c-5e03-b5b5-db109ec45844/artifacts/dcd798991185602834dbf1ea68fcaae0eb72e2e0cda80ad397157d130af80b2a.zip
+2026-11-01T20:03:12.8137674Z Starting download of artifact to: /home/runner/work/cogniva/cogniva/release-bundle
+2026-11-01T20:03:13.1491445Z (node:2206) [DEP0005] DeprecationWarning: Buffer() is deprecated due to security and usability issues. Please use the Buffer.alloc(), Buffer.allocUnsafe(), or Buffer.from() methods instead.
+2026-11-01T20:03:14.4271517Z SHA256 digest of downloaded artifact is 9ef27a7bb98d58382e3a199d1187cf6621a9a96bc4c213359ee59c175ea3df04
+2026-11-01T20:03:14.4273948Z Artifact download completed successfully.
+2026-11-01T20:03:14.4274913Z Total of 1 artifact(s) downloaded
+2026-11-01T20:03:14.4277828Z Download artifact has finished successfully
+2026-11-01T20:03:14.4539835Z ##[group]Run set -euo pipefail
+2026-11-01T20:03:14.4540405Z [36;1mset -euo pipefail[0m
+2026-11-01T20:03:14.4541102Z [36;1mtest -n "$SSH_KEY" && test -n "$KNOWN_HOSTS"[0m
+2026-11-01T20:03:14.4541562Z [36;1mumask 077[0m
+2026-11-01T20:03:14.4541924Z [36;1mmkdir -p ~/.ssh[0m
+2026-11-01T20:03:14.4542365Z [36;1mprintf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519[0m
+2026-11-01T20:03:14.4543171Z [36;1mprintf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts[0m
+2026-11-01T20:03:14.4567374Z shell: /usr/bin/bash -e {0}
+2026-11-01T20:03:14.4567817Z env:
+2026-11-01T20:03:14.4569961Z   SSH_KEY: ***
+2026-11-01T20:03:14.4574631Z   KNOWN_HOSTS: ***
+2026-11-01T20:03:14.4575000Z ##[endgroup]
+2026-11-01T20:03:14.4700884Z ##[group]Run set -euo pipefail
+2026-11-01T20:03:14.4701383Z [36;1mset -euo pipefail[0m
+2026-11-01T20:03:14.4701777Z [36;1mtarget="$DO_USER@$DO_HOST"[0m
+2026-11-01T20:03:14.4702341Z [36;1mincoming="/opt/apps/cogniva-incoming/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"[0m
+2026-11-01T20:03:14.4703405Z [36;1mssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" "mkdir -p $incoming"[0m
+2026-11-01T20:03:14.4704223Z [36;1mscp -o BatchMode=yes -o StrictHostKeyChecking=yes release-bundle/* "$target:$incoming/"[0m
+2026-11-01T20:03:14.4705078Z [36;1mssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" "python3 $incoming/stage_bundle.py"[0m
+2026-11-01T20:03:14.4706428Z [36;1mprintf '%s' "$REGISTRY_TOKEN" | ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" "install -d -m 700 /run/cogniva-registry-$REVISION; docker --config /run/cogniva-registry-$REVISION login ghcr.io -u $REGISTRY_USER --password-stdin"[0m
+2026-11-01T20:03:14.4708298Z [36;1mssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" "DOCKER_CONFIG=/run/cogniva-registry-$REVISION python3 /opt/apps/cogniva-releases/$REVISION/promote.py /opt/apps/cogniva-releases/$REVISION --exercise-rollback"[0m
+2026-11-01T20:03:14.4710308Z [36;1mssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" "trap 'rm -f /run/cogniva-registry-$REVISION/config.json; rmdir /run/cogniva-registry-$REVISION' EXIT; DOCKER_CONFIG=/run/cogniva-registry-$REVISION python3 /opt/apps/cogniva-releases/$REVISION/promote.py /opt/apps/cogniva-releases/$REVISION"[0m
+2026-11-01T20:03:14.4731400Z shell: /usr/bin/bash -e {0}
+2026-11-01T20:03:14.4731820Z env:
+2026-11-01T20:03:14.4732242Z   DO_HOST: ***
+2026-11-01T20:03:14.4732591Z   DO_USER: ***
+2026-11-01T20:03:14.4733234Z   REVISION: d8716db8c12653a726c9284b9e28e7ba1c30df64
+2026-11-01T20:03:14.4736263Z   REGISTRY_TOKEN: ***
+2026-11-01T20:03:14.4736658Z   REGISTRY_USER: danielcdes-create
+2026-11-01T20:03:14.4737182Z ##[endgroup]
+2026-11-01T20:03:22.8458717Z IMMUTABLE_BUNDLE_STAGED d8716db8c12653a726c9284b9e28e7ba1c30df64
+2026-11-01T20:03:24.3029160Z 
+2026-11-01T20:03:24.3030703Z WARNING! Your credentials are stored unencrypted in '/run/cogniva-registry-d8716db8c12653a726c9284b9e28e7ba1c30df64/config.json'.
+2026-11-01T20:03:24.3032559Z Configure a credential helper to remove this warning. See
+2026-11-01T20:03:24.3107618Z https://docs.docker.com/go/credential-store/
+2026-11-01T20:03:24.3108243Z 
+2026-11-01T20:03:24.3108706Z Login Succeeded
+2026-11-01T20:03:53.2981783Z ghcr.io/danielcdes-create/api-rust-core@sha256:66d519fbfddef52a0492f5efe0047829dcf3dc72a78c9b1713e992b824b37a58: Pulling from danielcdes-create/api-rust-core
+2026-11-01T20:03:53.2984194Z f9f9bbfe26fa: Pulling fs layer
+2026-11-01T20:03:53.2984990Z a5789fc40e82: Pulling fs layer
+2026-11-01T20:03:53.2985825Z 990a9c434e5e: Pulling fs layer
+2026-11-01T20:03:53.2986513Z 39dc083afc39: Pulling fs layer
+2026-11-01T20:03:53.2987172Z bf7a4185f015: Pulling fs layer
+2026-11-01T20:03:53.2987884Z 2780920e5dbf: Pulling fs layer
+2026-11-01T20:03:53.2988578Z 7c12895b777b: Pulling fs layer
+2026-11-01T20:03:53.2989256Z 3214acf345c0: Pulling fs layer
+2026-11-01T20:03:53.2989931Z 52630fc75a18: Pulling fs layer
+2026-11-01T20:03:53.2990442Z dd64bf2dd177: Pulling fs layer
+2026-11-01T20:03:53.2990846Z b839dfae01f6: Pulling fs layer
+2026-11-01T20:03:53.2991254Z dcaa5a89b0cc: Pulling fs layer
+2026-11-01T20:03:53.2991654Z 96ed2737ae31: Pulling fs layer
+2026-11-01T20:03:53.2992060Z 259b27696e5f: Pulling fs layer
+2026-11-01T20:03:53.2993246Z f9f9bbfe26fa: Download complete
+2026-11-01T20:03:53.2993692Z a5789fc40e82: Download complete
+2026-11-01T20:03:53.2994101Z 990a9c434e5e: Download complete
+2026-11-01T20:03:53.2994501Z a5789fc40e82: Pull complete
+2026-11-01T20:03:53.2994894Z dcaa5a89b0cc: Download complete
+2026-11-01T20:03:53.2995299Z 39dc083afc39: Download complete
+2026-11-01T20:03:53.2995707Z bf7a4185f015: Download complete
+2026-11-01T20:03:53.2996132Z 2780920e5dbf: Download complete
+2026-11-01T20:03:53.2996499Z 3214acf345c0: Download complete
+2026-11-01T20:03:53.2997055Z 52630fc75a18: Download complete
+2026-11-01T20:03:53.2997428Z 96ed2737ae31: Download complete
+2026-11-01T20:03:53.2997739Z 7c12895b777b: Download complete
+2026-11-01T20:03:53.2998060Z dd64bf2dd177: Download complete
+2026-11-01T20:03:53.2998370Z b839dfae01f6: Download complete
+2026-11-01T20:03:53.2998685Z 990a9c434e5e: Pull complete
+2026-11-01T20:03:53.2998989Z 259b27696e5f: Download complete
+2026-11-01T20:03:53.2999294Z 39dc083afc39: Pull complete
+2026-11-01T20:03:53.2999621Z bf7a4185f015: Pull complete
+2026-11-01T20:03:53.2999925Z 2780920e5dbf: Pull complete
+2026-11-01T20:03:53.3000227Z 7c12895b777b: Pull complete
+2026-11-01T20:03:53.3000519Z 3214acf345c0: Pull complete
+2026-11-01T20:03:53.3000817Z 52630fc75a18: Pull complete
+2026-11-01T20:03:53.3001107Z dd64bf2dd177: Pull complete
+2026-11-01T20:03:53.3001406Z b839dfae01f6: Pull complete
+2026-11-01T20:03:53.3001708Z dcaa5a89b0cc: Pull complete
+2026-11-01T20:03:53.3002011Z 96ed2737ae31: Pull complete
+2026-11-01T20:03:53.3002307Z 259b27696e5f: Pull complete
+2026-11-01T20:03:53.3002608Z f9f9bbfe26fa: Pull complete
+2026-11-01T20:03:53.3003346Z Digest: sha256:66d519fbfddef52a0492f5efe0047829dcf3dc72a78c9b1713e992b824b37a58
+2026-11-01T20:03:53.3004278Z Status: Downloaded newer image for ghcr.io/danielcdes-create/api-rust-core@sha256:66d519fbfddef52a0492f5efe0047829dcf3dc72a78c9b1713e992b824b37a58
+2026-11-01T20:03:53.3005280Z ghcr.io/danielcdes-create/api-rust-core@sha256:66d519fbfddef52a0492f5efe0047829dcf3dc72a78c9b1713e992b824b37a58
+2026-11-01T20:03:53.3005796Z 
+2026-11-01T20:03:53.3005944Z  Container api-rust-core Recreate 
+2026-11-01T20:03:53.3006307Z  Container api-rust-core Recreated 
+2026-11-01T20:03:53.3006656Z  Container api-rust-core Starting 
+2026-11-01T20:03:53.3007003Z  Container api-rust-core Started 
+2026-11-01T20:03:53.3007211Z 
+2026-11-01T20:03:53.3007353Z  Container api-rust-core Recreate 
+2026-11-01T20:03:53.3007684Z  Container api-rust-core Recreated 
+2026-11-01T20:03:53.3008025Z  Container api-rust-core Starting 
+2026-11-01T20:03:53.3008354Z  Container api-rust-core Started 
+2026-11-01T20:03:53.3008565Z 
+2026-11-01T20:03:53.3008686Z ROLLBACK_HEALTHY
+2026-11-01T20:03:53.3008976Z CONTROLLED_ROLLBACK_VERIFIED
+2026-11-01T20:04:07.6330670Z ghcr.io/danielcdes-create/api-rust-core@sha256:66d519fbfddef52a0492f5efe0047829dcf3dc72a78c9b1713e992b824b37a58: Pulling from danielcdes-create/api-rust-core
+2026-11-01T20:04:07.6333193Z Digest: sha256:66d519fbfddef52a0492f5efe0047829dcf3dc72a78c9b1713e992b824b37a58
+2026-11-01T20:04:07.6334922Z Status: Image is up to date for ghcr.io/danielcdes-create/api-rust-core@sha256:66d519fbfddef52a0492f5efe0047829dcf3dc72a78c9b1713e992b824b37a58
+2026-11-01T20:04:07.6336688Z ghcr.io/danielcdes-create/api-rust-core@sha256:66d519fbfddef52a0492f5efe0047829dcf3dc72a78c9b1713e992b824b37a58
+2026-11-01T20:04:07.6337525Z 
+2026-11-01T20:04:07.6337798Z  Container api-rust-core Recreate 
+2026-11-01T20:04:07.6338494Z  Container api-rust-core Recreated 
+2026-11-01T20:04:07.6339203Z  Container api-rust-core Starting 
+2026-11-01T20:04:07.6339904Z  Container api-rust-core Started 
+2026-11-01T20:04:07.6340363Z 
+2026-11-01T20:04:07.6341283Z {"promoted": "d8716db8c12653a726c9284b9e28e7ba1c30df64", "runtime_size_bytes": 25808311, "other_containers_preserved": true}
+2026-11-01T20:04:07.6966813Z ##[group]Run set -euo pipefail
+2026-11-01T20:04:07.6967205Z [36;1mset -euo pipefail[0m
+2026-11-01T20:04:07.6967901Z [36;1mssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$DO_USER@$DO_HOST" 'cat /opt/apps/cogniva-current-release.json' > current-release.json[0m
+2026-11-01T20:04:07.6968893Z [36;1mpython3 release-bundle/cleanup-registry.py current-release.json[0m
+2026-11-01T20:04:07.6990191Z shell: /usr/bin/bash -e {0}
+2026-11-01T20:04:07.6990515Z env:
+2026-11-01T20:04:07.6990904Z   DO_HOST: ***
+2026-11-01T20:04:07.6991184Z   DO_USER: ***
+2026-11-01T20:04:07.6993950Z   GH_TOKEN: ***
+2026-11-01T20:04:07.6994237Z ##[endgroup]
+2026-11-01T20:04:16.7221285Z {"retained_recent": 5, "protected_current_and_rollback": true, "deleted_old_versions": [1480397531, 1480397499, 1480280454, 1480280430, 1480280410, 1479963700, 1479963674, 1479963647, 1477554807, 1477554783, 1477554753, 1477414961, 1477414940, 1477414924, 1477383774, 1477383742, 1477383726, 1477220490, 1477220476, 1477220449]}
+2026-11-01T20:04:16.7368171Z ##[group]Run rm -f ~/.ssh/id_ed25519
+2026-11-01T20:04:16.7368582Z [36;1mrm -f ~/.ssh/id_ed25519[0m
+2026-11-01T20:04:16.7388790Z shell: /usr/bin/bash -e {0}
+2026-11-01T20:04:16.7389114Z ##[endgroup]
+2026-11-01T20:04:16.7532414Z Cleaning up orphan processes
+2026-11-01T20:04:16.7925742Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/download-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

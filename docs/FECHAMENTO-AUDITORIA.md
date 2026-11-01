@@ -1,6 +1,16 @@
 # Tratamento dos 39 achados
 
-Estado: implementação validada localmente; gates finais e promoção em acompanhamento. Este documento deve receber o resultado operacional antes de declarar encerramento da release. O diagnóstico original e seus bytes permanecem em `auditoria/2026-11-01`.
+Estado em 01/11/2026: tratamento de C01–C39 implementado e release 1.4.0/build 7 em produção. Gates, assinatura, rollback controlado, promoção e aceite externo concluídos na revisão `d8716db8c12653a726c9284b9e28e7ba1c30df64`. As fronteiras de dados e de aparelho físico abaixo permanecem explícitas. O diagnóstico original e seus bytes permanecem em `auditoria/2026-11-01`.
+
+## Resultado operacional
+
+- [Run 41343484265](https://github.com/danielcdes-create/cogniva/actions/runs/41343484265): todos os cinco jobs aprovados. Backend com 24 testes; Android/JVM, lint e golden aprovados; três testes reais no emulador API 35/Android 15, 1440×3088/500dpi com cutout.
+- Log de promoção registra `ROLLBACK_HEALTHY`, `CONTROLLED_ROLLBACK_VERIFIED` e promoção efetiva às 20:04:07 UTC. O gate de manutenção está aberto e acesso anônimo a dados retorna 401.
+- HTTPS health/readiness anunciam a revisão esperada e contrato 2; readiness confirma Mongo. Duas leituras públicas de metadados produziram o mesmo resultado e o APK baixado externamente corresponde ao hash e tamanho do bundle assinado.
+- APK: 12.708.853 bytes, versão 1.4.0/build 7, SHA-256 `1abfb764909dd4274e351a2c30e3471ba41ab3b11842adf2dd1dc3389bf35c35`. Assinatura e pacote `br.com.concursoprep.app` verificados localmente; sem `debuggable`.
+- Runtime: 25.808.311 bytes; usuário 65532, filesystem somente leitura, capacidades removidas, limite 160 MiB/0,75 CPU. Amostra às 20:05 UTC: 1,793 MiB e 0,05% CPU, sem carga representativa; não constitui garantia de capacidade.
+- Antes/depois: 15 documentos e 27 eventos; hash protegido idêntico `a34574d29433a312c494026a3c9fc84291bde7fbe05783675caf79a10caf50c7`. Compose compartilhado e IDs de FIN, Asbuildo e Spamshield preservados. Backups BSON/índices/views ficam fora do Git.
+- Renovação TLS ativa e última execução bem-sucedida. Gemini explicitamente configurado para modelo disponível, sem chamada de geração paga. O Mongo sintético local foi encerrado depois de verificar seu executável e porta; nenhum serviço de banco foi instalado.
 
 | Achado | Tratamento implementado | Evidência principal |
 |---|---|---|
@@ -36,7 +46,7 @@ Estado: implementação validada localmente; gates finais e promoção em acompa
 | C30 | Sessão congela proprietário/questões/grade; cancelamento e geração descartam contexto antigo; observação de filas/erros | Snapshot, isolamento, concorrência, ACK atrasado e restauração de sessão |
 | C31 | HTTPS real, hash/tamanho, pacote/versão e assinatura verificados; release sem `debuggable` | Certificado válido e renovação; assinatura rotacionada API 28+; limite API 26–27 registrado abaixo |
 | C32 | Gates antecedem build/promoção, na mesma revisão; falhas bloqueiam publicação | Runs com gate vermelho não executaram build nem promoção |
-| C33 | Imagem por digest, bundle imutável, ponteiro único APK/metadados, prontidão e rollback | Ensaio controlado e promoção efetiva devem constar do resultado operacional |
+| C33 | Imagem por digest, bundle imutável, ponteiro único APK/metadados, prontidão e rollback | Ensaio controlado e promoção efetiva aprovados; log `ci-promote-d8716db.log` |
 | C34 | Build local produz somente artefato local versionado; versão deriva do Gradle | Script sem publicação automática nem nome/versão fixos |
 | C35 | Readiness verifica Mongo e revisão; recursos têm limites e medições, sem promessas históricas | Docker não-root/estático, gate de tamanho, estado HTTP e inventário dos outros serviços |
 | C36 | JVM declara cobertura de fonte/tema em PIXEL; geometria/cutout pertencem ao emulador | Duplo verify, negativo 1×1 restaurado por hash, API 35/Android 15 a 1440×3088/500dpi |
@@ -52,4 +62,4 @@ A rotação adota chave privada em API 28+. API 26–27 conserva o assinante ant
 
 ## Evidências
 
-Logs e hashes em `remediation-validation/`. Testes de banco usam exclusivamente um Mongo sintético dedicado; as cópias e revisões pedagógicas do banco real ficam fora do Git, em diretório privado. A comparação antes/depois protege identidade e conteúdo dos eventos históricos. A emissão do código de vínculo ocorre somente após a atualização estar disponível e não deve entrar em log versionado.
+Logs e hashes em `remediation-validation/`: `ci-*-d8716db.log`, `production-release.json`, `production-pre-promotion.json`, `production-after.json`, `release-signature.log`, `release-badging.log` e `visual-gate.json`. `scripts/verify-production-release.py` repete o aceite somente leitura e baixa o artefato fora do repositório. Testes de banco usam exclusivamente um Mongo sintético dedicado; as cópias e revisões pedagógicas do banco real ficam fora do Git, em diretório privado. A comparação antes/depois protege identidade e conteúdo dos eventos históricos. A emissão do código de vínculo ocorre somente após a atualização estar disponível e não deve entrar em log versionado.

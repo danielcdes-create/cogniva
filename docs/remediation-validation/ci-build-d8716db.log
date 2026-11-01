@@ -1,0 +1,2070 @@
+﻿2026-11-01T19:54:02.0015957Z Current runner version: '2.338.2'
+2026-11-01T19:54:02.0035800Z ##[group]Runner Image Provisioner
+2026-11-01T19:54:02.0036374Z Hosted Compute Agent
+2026-11-01T19:54:02.0036754Z Version: 20261021.618
+2026-11-01T19:54:02.0037259Z Commit: 21505ad2541d5be6135ed84fc33697146cf75b8e
+2026-11-01T19:54:02.0037720Z Build Date: 2026-10-21T00:45:21Z
+2026-11-01T19:54:02.0038174Z Worker ID: {1e0cab0d-2db2-48c4-88d8-7ae45d67bc0d}
+2026-11-01T19:54:02.0038673Z Region: centralus
+2026-11-01T19:54:02.0039024Z Cloud: Azure
+2026-11-01T19:54:02.0039456Z ##[endgroup]
+2026-11-01T19:54:02.0040308Z ##[group]Operating System
+2026-11-01T19:54:02.0040747Z Ubuntu
+2026-11-01T19:54:02.0041093Z 24.04.5
+2026-11-01T19:54:02.0041737Z LTS
+2026-11-01T19:54:02.0042162Z ##[endgroup]
+2026-11-01T19:54:02.0042525Z ##[group]Runner Image
+2026-11-01T19:54:02.0042988Z Image: ubuntu-24.04
+2026-11-01T19:54:02.0043367Z Version: 20261025.353.1
+2026-11-01T19:54:02.0044243Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261025.353/images/ubuntu/Ubuntu2404-Readme.md
+2026-11-01T19:54:02.0045158Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261025.353
+2026-11-01T19:54:02.0045828Z ##[endgroup]
+2026-11-01T19:54:02.0046622Z ##[group]GITHUB_TOKEN Permissions
+2026-11-01T19:54:02.0047886Z Contents: read
+2026-11-01T19:54:02.0048271Z Metadata: read
+2026-11-01T19:54:02.0048706Z Packages: write
+2026-11-01T19:54:02.0049076Z ##[endgroup]
+2026-11-01T19:54:02.0050580Z Secret source: Actions
+2026-11-01T19:54:02.0051176Z Cache mode: write
+2026-11-01T19:54:02.0051915Z Prepare workflow directory
+2026-11-01T19:54:02.0268306Z Prepare all required actions
+2026-11-01T19:54:02.0302842Z Getting action download info
+2026-11-01T19:54:02.2699967Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-11-01T19:54:02.3830839Z Download action repository 'actions/setup-java@v4' (SHA:cf277c60eb25467037889841efdb72551f06f6c3)
+2026-11-01T19:54:02.8832326Z Download action repository 'gradle/actions@v4' (SHA:ed408507eac070d1f99cc633dbcf757c94c7933a)
+2026-11-01T19:54:03.9448157Z Download action repository 'docker/setup-buildx-action@v3' (SHA:8d2750c68a42422c14e847fe6c8ac0403b4cbd6f)
+2026-11-01T19:54:04.3759453Z Download action repository 'docker/login-action@v3' (SHA:c94ce9fb468520275223c153574b00df6fe4bcc9)
+2026-11-01T19:54:04.8330319Z Download action repository 'docker/build-push-action@v6' (SHA:10e90e3645eae34f1e60eeb005ba3a3d33f178e8)
+2026-11-01T19:54:05.3273036Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-11-01T19:54:05.5266932Z Complete job name: build
+2026-11-01T19:54:05.5846501Z ##[group]Run actions/checkout@v4
+2026-11-01T19:54:05.5846797Z with:
+2026-11-01T19:54:05.5846932Z   repository: danielcdes-create/cogniva
+2026-11-01T19:54:05.5848394Z   token: ***
+2026-11-01T19:54:05.5848526Z   ssh-strict: true
+2026-11-01T19:54:05.5848666Z   ssh-user: git
+2026-11-01T19:54:05.5848796Z   persist-credentials: true
+2026-11-01T19:54:05.5848950Z   clean: true
+2026-11-01T19:54:05.5849105Z   sparse-checkout-cone-mode: true
+2026-11-01T19:54:05.5849265Z   fetch-depth: 1
+2026-11-01T19:54:05.5849401Z   fetch-tags: false
+2026-11-01T19:54:05.5849528Z   show-progress: true
+2026-11-01T19:54:05.5849653Z   lfs: false
+2026-11-01T19:54:05.5849765Z   submodules: false
+2026-11-01T19:54:05.5849893Z   set-safe-directory: true
+2026-11-01T19:54:05.5850040Z   allow-unsafe-pr-checkout: false
+2026-11-01T19:54:05.5850267Z ##[endgroup]
+2026-11-01T19:54:05.8211100Z Syncing repository: danielcdes-create/cogniva
+2026-11-01T19:54:05.8212479Z ##[group]Getting Git version info
+2026-11-01T19:54:05.8212795Z Working directory is '/home/runner/work/cogniva/cogniva'
+2026-11-01T19:54:05.8213207Z [command]/usr/bin/git version
+2026-11-01T19:54:05.8284785Z git version 2.56.0
+2026-11-01T19:54:05.8300572Z ##[endgroup]
+2026-11-01T19:54:05.8312886Z Temporarily overriding HOME='/home/runner/work/_temp/476f7bee-a973-4172-b390-ea4a3e1e878f' before making global git config changes
+2026-11-01T19:54:05.8314000Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-01T19:54:05.8317709Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/cogniva/cogniva
+2026-11-01T19:54:05.8373679Z Deleting the contents of '/home/runner/work/cogniva/cogniva'
+2026-11-01T19:54:05.8386377Z ##[group]Initializing the repository
+2026-11-01T19:54:05.8392967Z [command]/usr/bin/git init /home/runner/work/cogniva/cogniva
+2026-11-01T19:54:05.8481853Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-11-01T19:54:05.8482607Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-11-01T19:54:05.8483335Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-11-01T19:54:05.8483854Z hint: call:
+2026-11-01T19:54:05.8484107Z hint:
+2026-11-01T19:54:05.8484561Z hint: 	git config --global init.defaultBranch <name>
+2026-11-01T19:54:05.8484922Z hint:
+2026-11-01T19:54:05.8485314Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-11-01T19:54:05.8486021Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-11-01T19:54:05.8486508Z hint:
+2026-11-01T19:54:05.8486799Z hint: 	git branch -m <name>
+2026-11-01T19:54:05.8487099Z hint:
+2026-11-01T19:54:05.8487409Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-11-01T19:54:05.8489883Z Initialized empty Git repository in /home/runner/work/cogniva/cogniva/.git/
+2026-11-01T19:54:05.8500690Z [command]/usr/bin/git remote add origin https://github.com/danielcdes-create/cogniva
+2026-11-01T19:54:05.8598023Z ##[endgroup]
+2026-11-01T19:54:05.8598647Z ##[group]Disabling automatic garbage collection
+2026-11-01T19:54:05.8602160Z [command]/usr/bin/git config --local gc.auto 0
+2026-11-01T19:54:05.8659528Z ##[endgroup]
+2026-11-01T19:54:05.8659944Z ##[group]Setting up auth
+2026-11-01T19:54:05.8660390Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-01T19:54:05.8695588Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-01T19:54:05.9052982Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-01T19:54:05.9093770Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-01T19:54:05.9305476Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-01T19:54:05.9345492Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-01T19:54:05.9553646Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-11-01T19:54:05.9599446Z ##[endgroup]
+2026-11-01T19:54:05.9599889Z ##[group]Fetching the repository
+2026-11-01T19:54:05.9609846Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +d8716db8c12653a726c9284b9e28e7ba1c30df64:refs/remotes/origin/codex/auditoria-convergencia
+2026-11-01T19:54:06.4635618Z From https://github.com/danielcdes-create/cogniva
+2026-11-01T19:54:06.4636532Z  * [new ref]         d8716db8c12653a726c9284b9e28e7ba1c30df64 -> origin/codex/auditoria-convergencia
+2026-11-01T19:54:06.4640219Z ##[endgroup]
+2026-11-01T19:54:06.4640740Z ##[group]Determining the checkout info
+2026-11-01T19:54:06.4642591Z ##[endgroup]
+2026-11-01T19:54:06.4647520Z [command]/usr/bin/git sparse-checkout disable
+2026-11-01T19:54:06.4702534Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-11-01T19:54:06.4742664Z ##[group]Checking out the ref
+2026-11-01T19:54:06.4745556Z [command]/usr/bin/git checkout --progress --force -B codex/auditoria-convergencia refs/remotes/origin/codex/auditoria-convergencia
+2026-11-01T19:54:06.4988330Z Switched to a new branch 'codex/auditoria-convergencia'
+2026-11-01T19:54:06.4992134Z branch 'codex/auditoria-convergencia' set up to track 'origin/codex/auditoria-convergencia'.
+2026-11-01T19:54:06.5000327Z ##[endgroup]
+2026-11-01T19:54:06.5047975Z [command]/usr/bin/git log -1 --format=%H
+2026-11-01T19:54:06.5079945Z d8716db8c12653a726c9284b9e28e7ba1c30df64
+2026-11-01T19:54:06.5302721Z ##[group]Run actions/setup-java@v4
+2026-11-01T19:54:06.5302909Z with:
+2026-11-01T19:54:06.5303038Z   distribution: temurin
+2026-11-01T19:54:06.5303169Z   java-version: 21
+2026-11-01T19:54:06.5303292Z   java-package: jdk
+2026-11-01T19:54:06.5303414Z   check-latest: false
+2026-11-01T19:54:06.5303537Z   server-id: github
+2026-11-01T19:54:06.5303666Z   server-username: GITHUB_ACTOR
+2026-11-01T19:54:06.5303819Z   server-password: GITHUB_TOKEN
+2026-11-01T19:54:06.5303965Z   overwrite-settings: true
+2026-11-01T19:54:06.5304104Z   job-status: success
+2026-11-01T19:54:06.5305436Z   token: ***
+2026-11-01T19:54:06.5305568Z ##[endgroup]
+2026-11-01T19:54:06.6508190Z ##[warning]setup-java v4 is deprecated and will no longer receive updates. Please migrate to actions/setup-java@v5.
+2026-11-01T19:54:06.6513665Z ##[group]Installed distributions
+2026-11-01T19:54:06.6539574Z Resolved Java 21.0.13+9 from tool-cache
+2026-11-01T19:54:06.6539887Z Setting Java 21.0.13+9 as the default
+2026-11-01T19:54:06.6546768Z (node:2121) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-01T19:54:06.6547417Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-01T19:54:06.6549253Z Creating toolchains.xml for JDK version 21 from temurin
+2026-11-01T19:54:06.6596312Z Writing to /home/runner/.m2/toolchains.xml
+2026-11-01T19:54:06.6596730Z 
+2026-11-01T19:54:06.6596991Z Java configuration:
+2026-11-01T19:54:06.6597353Z   Distribution: temurin
+2026-11-01T19:54:06.6597694Z   Version: 21.0.13+9
+2026-11-01T19:54:06.6598167Z   Path: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21.0.13-9/x64
+2026-11-01T19:54:06.6598580Z 
+2026-11-01T19:54:06.6599062Z ##[endgroup]
+2026-11-01T19:54:06.6614903Z Creating settings.xml with server-id: github
+2026-11-01T19:54:06.6651337Z Writing to /home/runner/.m2/settings.xml
+2026-11-01T19:54:06.6934579Z ##[group]Run gradle/actions/setup-gradle@v4
+2026-11-01T19:54:06.6934781Z with:
+2026-11-01T19:54:06.6934910Z   cache-read-only: false
+2026-11-01T19:54:06.6935050Z   cache-disabled: false
+2026-11-01T19:54:06.6935185Z   cache-write-only: false
+2026-11-01T19:54:06.6935334Z   cache-overwrite-existing: false
+2026-11-01T19:54:06.6935487Z   cache-cleanup: on-success
+2026-11-01T19:54:06.6935660Z   gradle-home-cache-includes: caches
+notifications
+
+2026-11-01T19:54:06.6935849Z   add-job-summary: always
+2026-11-01T19:54:06.6935999Z   add-job-summary-as-pr-comment: never
+2026-11-01T19:54:06.6936162Z   dependency-graph: disabled
+2026-11-01T19:54:06.6936344Z   dependency-graph-report-dir: dependency-graph-reports
+2026-11-01T19:54:06.6936572Z   dependency-graph-continue-on-failure: true
+2026-11-01T19:54:06.6936747Z   build-scan-publish: false
+2026-11-01T19:54:06.6936896Z   validate-wrappers: true
+2026-11-01T19:54:06.6937043Z   allow-snapshot-wrappers: false
+2026-11-01T19:54:06.6937241Z   gradle-home-cache-strict-match: false
+2026-11-01T19:54:06.6937408Z   workflow-job-context: null
+2026-11-01T19:54:06.6938733Z   github-token: ***
+2026-11-01T19:54:06.6938855Z env:
+2026-11-01T19:54:06.6939028Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21.0.13-9/x64
+2026-11-01T19:54:06.6939305Z   JAVA_HOME_21_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21.0.13-9/x64
+2026-11-01T19:54:06.6939520Z ##[endgroup]
+2026-11-01T19:54:07.0532752Z Merged default JDK locations into /home/runner/.m2/toolchains.xml
+2026-11-01T19:54:07.0533896Z Preparing cache for cleanup.
+2026-11-01T19:54:07.0549229Z ##[group]Restore Gradle state from cache
+2026-11-01T19:54:07.1934702Z Cache hit for restore-key: gradle-home-v1|Linux-X64|s23-ultra-insets[0d0d60652b11b112b164b30571ca3e82]-d8716db8c12653a726c9284b9e28e7ba1c30df64
+2026-11-01T19:54:07.8681930Z Received 10246355 of 10246355 (100.0%), 18.8 MBs/sec
+2026-11-01T19:54:07.8688818Z Cache Size: ~10 MB (10246355 B)
+2026-11-01T19:54:07.8701308Z [command]/usr/bin/tar -xf /home/runner/work/_temp/ffaf720e-cd7f-472d-ba6e-c6402ca72b1f/cache.tzst -P -C /home/runner/work/cogniva/cogniva --use-compress-program unzstd
+2026-11-01T19:54:08.0084667Z Cache restored successfully
+2026-11-01T19:54:08.0094648Z Restored cache entry with key gradle-home-v1|Linux-X64|build[0d0d60652b11b112b164b30571ca3e82]-d8716db8c12653a726c9284b9e28e7ba1c30df64 to /home/runner/.gradle/caches,/home/runner/.gradle/notifications,/home/runner/.gradle/.setup-gradle in 956ms
+2026-11-01T19:54:08.1406599Z Cache hit for: gradle-groovy-dsl-v1-216c432c0cf34b75ee1f2638efb38594
+2026-11-01T19:54:08.1433719Z Cache hit for: gradle-generated-gradle-jars-v1-cb4b032a7d08b9bf1e84e9eacaebcc29
+2026-11-01T19:54:08.1545587Z Cache hit for: gradle-dependencies-v1-4089f2988de0e0d596cad73fd442b3f4
+2026-11-01T19:54:08.1592147Z Cache hit for: gradle-transforms-v1-f14b9b60c1cce901e2072b0f5ce0de71
+2026-11-01T19:54:08.1616473Z Cache hit for: gradle-wrapper-zips-v1-8c0de4c6bda6041d6e054bf825a89c98
+2026-11-01T19:54:08.1633498Z Cache hit for: gradle-kotlin-dsl-v1-a9cf6194397e7d267b998bc8454122bb
+2026-11-01T19:54:08.1656450Z Cache hit for: gradle-instrumented-jars-v1-a7d69ea29c813d2316d070e424eccd71
+2026-11-01T19:54:08.4010771Z Received 70388 of 70388 (100.0%), 0.7 MBs/sec
+2026-11-01T19:54:08.4011825Z Cache Size: ~0 MB (70388 B)
+2026-11-01T19:54:08.4035523Z [command]/usr/bin/tar -xf /home/runner/work/_temp/a2461750-f227-4e85-a516-212ba59e2aad/cache.tzst -P -C /home/runner/work/cogniva/cogniva --use-compress-program unzstd
+2026-11-01T19:54:08.4160887Z Cache restored successfully
+2026-11-01T19:54:08.4163954Z Restored cache entry with key gradle-instrumented-jars-v1-a7d69ea29c813d2316d070e424eccd71 to /home/runner/.gradle/caches/jars-*/*/ in 406ms
+2026-11-01T19:54:08.4975031Z Received 109889 of 109889 (100.0%), 0.5 MBs/sec
+2026-11-01T19:54:08.4975406Z Cache Size: ~0 MB (109889 B)
+2026-11-01T19:54:08.5000076Z [command]/usr/bin/tar -xf /home/runner/work/_temp/d3789549-0ccb-4ced-a93b-7fd946230d10/cache.tzst -P -C /home/runner/work/cogniva/cogniva --use-compress-program unzstd
+2026-11-01T19:54:08.5178477Z Cache restored successfully
+2026-11-01T19:54:08.5179327Z Restored cache entry with key gradle-groovy-dsl-v1-216c432c0cf34b75ee1f2638efb38594 to /home/runner/.gradle/caches/*/groovy-dsl/*/ in 506ms
+2026-11-01T19:54:08.5895646Z Received 116178 of 116178 (100.0%), 0.4 MBs/sec
+2026-11-01T19:54:08.5896106Z Cache Size: ~0 MB (116178 B)
+2026-11-01T19:54:08.5906066Z [command]/usr/bin/tar -xf /home/runner/work/_temp/6775f58d-beba-476a-8485-9e3908b77f9c/cache.tzst -P -C /home/runner/work/cogniva/cogniva --use-compress-program unzstd
+2026-11-01T19:54:08.6312030Z Cache restored successfully
+2026-11-01T19:54:08.6333374Z Restored cache entry with key gradle-kotlin-dsl-v1-a9cf6194397e7d267b998bc8454122bb to /home/runner/.gradle/caches/*/kotlin-dsl/accessors/*/,/home/runner/.gradle/caches/*/kotlin-dsl/scripts/*/ in 623ms
+2026-11-01T19:54:08.9296575Z Received 41993403 of 41993403 (100.0%), 61.9 MBs/sec
+2026-11-01T19:54:08.9301038Z Cache Size: ~40 MB (41993403 B)
+2026-11-01T19:54:09.1317516Z [command]/usr/bin/tar -xf /home/runner/work/_temp/2db34de0-cea0-47ab-8028-00e65eaae06f/cache.tzst -P -C /home/runner/work/cogniva/cogniva --use-compress-program unzstd
+2026-11-01T19:54:09.2956413Z Received 100663296 of 367181405 (27.4%), 95.7 MBs/sec
+2026-11-01T19:54:09.3325720Z Received 79691776 of 205833691 (38.7%), 73.2 MBs/sec
+2026-11-01T19:54:09.3330248Z Received 92274688 of 136360638 (67.7%), 85.9 MBs/sec
+2026-11-01T19:54:09.5119972Z Cache restored successfully
+2026-11-01T19:54:09.5191337Z Restored cache entry with key gradle-generated-gradle-jars-v1-cb4b032a7d08b9bf1e84e9eacaebcc29 to /home/runner/.gradle/caches/9.3.1/generated-gradle-jars/gradle-api-9.3.1.jar in 1509ms
+2026-11-01T19:54:09.6661296Z Received 136360638 of 136360638 (100.0%), 95.8 MBs/sec
+2026-11-01T19:54:09.6666940Z Cache Size: ~130 MB (136360638 B)
+2026-11-01T19:54:09.6791696Z [command]/usr/bin/tar -xf /home/runner/work/_temp/40e66a7f-8131-4365-acd6-98dc99a8ce2b/cache.tzst -P -C /home/runner/work/cogniva/cogniva --use-compress-program unzstd
+2026-11-01T19:54:09.9461204Z Cache restored successfully
+2026-11-01T19:54:09.9638713Z Restored cache entry with key gradle-wrapper-zips-v1-8c0de4c6bda6041d6e054bf825a89c98 to /home/runner/.gradle/wrapper/dists/gradle-9.3.1-bin/23ovyewtku6u96viwx3xl3oks in 1951ms
+2026-11-01T19:54:10.0173410Z Received 205833691 of 205833691 (100.0%), 113.9 MBs/sec
+2026-11-01T19:54:10.0173733Z Cache Size: ~196 MB (205833691 B)
+2026-11-01T19:54:10.0213881Z [command]/usr/bin/tar -xf /home/runner/work/_temp/b01c850f-c681-426e-86c9-2e33e31193d8/cache.tzst -P -C /home/runner/work/cogniva/cogniva --use-compress-program unzstd
+2026-11-01T19:54:10.2932589Z Received 268435456 of 367181405 (73.1%), 127.7 MBs/sec
+2026-11-01T19:54:10.6758953Z Received 367181405 of 367181405 (100.0%), 146.8 MBs/sec
+2026-11-01T19:54:10.6763010Z Cache Size: ~350 MB (367181405 B)
+2026-11-01T19:54:10.7006293Z [command]/usr/bin/tar -xf /home/runner/work/_temp/4badf9c2-8a7d-4d17-95ef-e66c91db709d/cache.tzst -P -C /home/runner/work/cogniva/cogniva --use-compress-program unzstd
+2026-11-01T19:54:11.7021578Z Cache restored successfully
+2026-11-01T19:54:11.7247328Z Restored cache entry with key gradle-dependencies-v1-4089f2988de0e0d596cad73fd442b3f4 to /home/runner/.gradle/caches/modules-*/files-*/*/*/*/* in 3714ms
+2026-11-01T19:54:11.8710503Z Cache restored successfully
+2026-11-01T19:54:12.0649788Z Restored cache entry with key gradle-transforms-v1-f14b9b60c1cce901e2072b0f5ce0de71 to /home/runner/.gradle/caches/transforms-4/*/,/home/runner/.gradle/caches/*/transforms/*/ in 4053ms
+2026-11-01T19:54:12.1298522Z ##[endgroup]
+2026-11-01T19:54:12.1373216Z ##[group]All Gradle Wrapper jars are valid
+2026-11-01T19:54:12.1373959Z ✓ Found known Gradle Wrapper JAR files:
+2026-11-01T19:54:12.1374367Z   b3a875ddc1f044746e1b1a55f645584505f4a10438c1afea9f15e92a7c42ec13 android-app/gradle/wrapper/gradle-wrapper.jar
+2026-11-01T19:54:12.1374807Z ##[endgroup]
+2026-11-01T19:54:12.3072650Z ##[group]Run chmod +x gradlew
+2026-11-01T19:54:12.3072919Z [36;1mchmod +x gradlew[0m
+2026-11-01T19:54:12.3073173Z [36;1m./gradlew :app:assembleRelease --no-daemon --console=plain[0m
+2026-11-01T19:54:12.3091982Z shell: /usr/bin/bash -e {0}
+2026-11-01T19:54:12.3092165Z env:
+2026-11-01T19:54:12.3092382Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21.0.13-9/x64
+2026-11-01T19:54:12.3092698Z   JAVA_HOME_21_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21.0.13-9/x64
+2026-11-01T19:54:12.3092969Z   GRADLE_ACTION_ID: gradle/actions/setup-gradle
+2026-11-01T19:54:12.3093199Z   GRADLE_USER_HOME: /home/runner/.gradle
+2026-11-01T19:54:12.3093396Z   GRADLE_BUILD_ACTION_SETUP_COMPLETED: true
+2026-11-01T19:54:12.3093603Z   GRADLE_BUILD_ACTION_CACHE_RESTORED: true
+2026-11-01T19:54:12.3093890Z   DEVELOCITY_INJECTION_INIT_SCRIPT_NAME: gradle-actions.inject-develocity.init.gradle
+2026-11-01T19:54:12.3094210Z   DEVELOCITY_INJECTION_CUSTOM_VALUE: gradle-actions
+2026-11-01T19:54:12.3094467Z   GITHUB_DEPENDENCY_GRAPH_ENABLED: false
+2026-11-01T19:54:12.3094653Z ##[endgroup]
+2026-11-01T19:54:12.9697067Z To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.3.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+2026-11-01T19:54:13.7683139Z Daemon will be stopped at the end of the build 
+2026-11-01T19:54:18.0708515Z > Task :buildSrc:compileJava
+2026-11-01T19:54:18.0732556Z > Task :buildSrc:compileGroovy NO-SOURCE
+2026-11-01T19:54:18.0737308Z > Task :buildSrc:processResources NO-SOURCE
+2026-11-01T19:54:18.0739036Z > Task :buildSrc:classes
+2026-11-01T19:54:18.1683218Z > Task :buildSrc:jar
+2026-11-01T19:54:22.2676049Z > Task :app:preBuild UP-TO-DATE
+2026-11-01T19:54:22.2682009Z > Task :app:preReleaseBuild UP-TO-DATE
+2026-11-01T19:54:22.3703377Z > Task :app:mergeReleaseJniLibFolders
+2026-11-01T19:54:23.4705114Z > Task :app:mergeReleaseNativeLibs
+2026-11-01T19:54:23.6722854Z > Task :app:checkReleaseDuplicateClasses
+2026-11-01T19:54:23.7732171Z 
+2026-11-01T19:54:23.7786492Z > Task :app:stripReleaseDebugSymbols
+2026-11-01T19:54:23.7792699Z Unable to strip the following libraries, packaging them as they are: libandroidx.graphics.path.so, libdatastore_shared_counter.so. Run with --info option to learn more.
+2026-11-01T19:54:23.7802355Z 
+2026-11-01T19:54:23.7802892Z > Task :app:buildKotlinToolingMetadata
+2026-11-01T19:54:23.7803650Z > Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+2026-11-01T19:54:23.7804177Z > Task :app:generateReleaseBuildConfig
+2026-11-01T19:54:23.7804631Z > Task :app:extractReleaseNativeSymbolTables
+2026-11-01T19:54:23.8675971Z > Task :app:mergeReleaseNativeDebugMetadata NO-SOURCE
+2026-11-01T19:54:23.8676835Z > Task :app:checkReleaseAarMetadata
+2026-11-01T19:54:23.8677167Z > Task :app:generateReleaseResValues
+2026-11-01T19:54:23.8677535Z > Task :app:mapReleaseSourceSetPaths
+2026-11-01T19:54:23.8677847Z > Task :app:generateReleaseResources
+2026-11-01T19:54:24.4692788Z > Task :app:packageReleaseResources
+2026-11-01T19:54:24.8675987Z > Task :app:mergeReleaseResources
+2026-11-01T19:54:25.0697277Z > Task :app:createReleaseCompatibleScreenManifests
+2026-11-01T19:54:25.0722728Z > Task :app:extractDeepLinksRelease
+2026-11-01T19:54:25.1682773Z > Task :app:parseReleaseLocalResources
+2026-11-01T19:54:25.2692646Z > Task :app:processReleaseMainManifest
+2026-11-01T19:54:25.3698361Z > Task :app:processReleaseManifest
+2026-11-01T19:54:25.4682841Z > Task :app:desugarReleaseFileDependencies
+2026-11-01T19:54:25.4715875Z > Task :app:javaPreCompileRelease
+2026-11-01T19:54:25.4743432Z > Task :app:mergeReleaseStartupProfile
+2026-11-01T19:54:55.3682964Z > Task :app:processReleaseManifestForPackage
+2026-11-01T19:54:55.4675477Z > Task :app:mergeExtDexRelease
+2026-11-01T19:55:03.0683095Z > Task :app:mergeReleaseArtProfile
+2026-11-01T19:55:03.3682535Z > Task :app:mergeReleaseShaders
+2026-11-01T19:55:03.3712188Z > Task :app:compileReleaseShaders NO-SOURCE
+2026-11-01T19:55:03.3732952Z > Task :app:generateReleaseAssets UP-TO-DATE
+2026-11-01T19:55:03.3769921Z > Task :app:mergeReleaseAssets
+2026-11-01T19:55:03.3795147Z > Task :app:compressReleaseAssets
+2026-11-01T19:55:03.5712708Z > Task :app:extractReleaseVersionControlInfo
+2026-11-01T19:55:03.5762311Z > Task :app:extractProguardFiles
+2026-11-01T19:55:03.6702774Z > Task :app:processReleaseResources
+2026-11-01T19:55:03.7685315Z > Task :app:collectReleaseDependencies
+2026-11-01T19:55:04.4702803Z > Task :app:sdkReleaseDependencyData
+2026-11-01T19:55:04.4727853Z > Task :app:writeReleaseAppMetadata
+2026-11-01T19:55:04.4752096Z > Task :app:writeReleaseSigningConfigVersions
+2026-11-01T19:55:04.5702691Z > Task :app:optimizeReleaseResources
+2026-11-01T19:55:12.2675063Z > Task :app:kspReleaseKotlin
+2026-11-01T19:55:32.8678222Z 
+2026-11-01T19:55:32.8688890Z > Task :app:compileReleaseKotlin
+2026-11-01T19:55:32.8690305Z w: file:///home/runner/work/cogniva/cogniva/android-app/app/src/main/java/br/com/concursoprep/app/ui/MainViewModel.kt:193:150 'static field GET_SIGNATURES: Int' is deprecated. Deprecated in Java.
+2026-11-01T19:55:33.9674099Z 
+2026-11-01T19:55:33.9676527Z > Task :app:compileReleaseJavaWithJavac
+2026-11-01T19:55:37.9709246Z > Task :app:dexBuilderRelease
+2026-11-01T19:55:38.2703280Z > Task :app:mergeReleaseGlobalSynthetics
+2026-11-01T19:55:40.9684804Z > Task :app:generateReleaseLintVitalReportModel
+2026-11-01T19:55:43.9712733Z > Task :app:mergeDexRelease
+2026-11-01T19:55:47.4683347Z > Task :app:processReleaseJavaRes
+2026-11-01T19:55:48.4683456Z > Task :app:compileReleaseArtProfile
+2026-11-01T19:55:48.6682604Z > Task :app:mergeReleaseJavaResource
+2026-11-01T19:56:04.9703339Z > Task :app:lintVitalAnalyzeRelease
+2026-11-01T19:56:04.9732134Z > Task :app:lintVitalReportRelease
+2026-11-01T19:56:04.9752019Z > Task :app:lintVitalRelease
+2026-11-01T19:56:05.8690129Z > Task :app:packageRelease
+2026-11-01T19:56:05.8691699Z > Task :app:createReleaseApkListingFileRedirect
+2026-11-01T19:56:05.8719348Z > Task :app:assembleRelease
+2026-11-01T19:56:05.9569535Z gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__run-1793562855132.json
+2026-11-01T19:56:05.9587894Z 
+2026-11-01T19:56:05.9591810Z [Incubating] Problems report is available at: file:///home/runner/work/cogniva/cogniva/android-app/build/reports/problems/problems-report.html
+2026-11-01T19:56:05.9592556Z 
+2026-11-01T19:56:05.9592966Z Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+2026-11-01T19:56:05.9593453Z 
+2026-11-01T19:56:05.9593985Z You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+2026-11-01T19:56:05.9594605Z 
+2026-11-01T19:56:05.9595198Z For more on this, please refer to https://docs.gradle.org/9.3.1/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+2026-11-01T19:56:05.9595874Z 
+2026-11-01T19:56:05.9596105Z BUILD SUCCESSFUL in 1m 53s
+2026-11-01T19:56:05.9596493Z 52 actionable tasks: 52 executed
+2026-11-01T19:56:05.9597168Z Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.3.1/userguide/configuration_cache_enabling.html
+2026-11-01T19:56:06.2893658Z ##[group]Run set -euo pipefail
+2026-11-01T19:56:06.2893915Z [36;1mset -euo pipefail[0m
+2026-11-01T19:56:06.2894168Z [36;1mtest -n "$KEYSTORE" && test -n "$LINEAGE" && test -n "$RELEASE_PASSWORD"[0m
+2026-11-01T19:56:06.2894433Z [36;1mumask 077[0m
+2026-11-01T19:56:06.2894689Z [36;1mprintf '%s' "$KEYSTORE" | base64 --decode > "$RUNNER_TEMP/cogniva.p12"[0m
+2026-11-01T19:56:06.2895038Z [36;1mprintf '%s' "$LINEAGE" | base64 --decode > "$RUNNER_TEMP/cogniva.lineage"[0m
+2026-11-01T19:56:06.2895298Z [36;1mmkdir -p release-bundle[0m
+2026-11-01T19:56:06.2895525Z [36;1msigner="$ANDROID_HOME/build-tools/35.0.0/apksigner"[0m
+2026-11-01T19:56:06.2896506Z [36;1m"$signer" sign --out release-bundle/cogniva.apk --lineage "$RUNNER_TEMP/cogniva.lineage" --rotation-min-sdk-version 28 --ks android-app/app/debug.keystore --ks-key-alias androiddebugkey --ks-pass pass:android --next-signer --ks "$RUNNER_TEMP/cogniva.p12" --ks-key-alias cogniva --ks-pass env:RELEASE_PASSWORD android-app/app/build/outputs/apk/release/app-release-unsigned.apk[0m
+2026-11-01T19:56:06.2897443Z [36;1m"$signer" verify --verbose --print-certs release-bundle/cogniva.apk > release-bundle/signature.txt[0m
+2026-11-01T19:56:06.2897886Z [36;1m"$signer" verify --min-sdk-version 28 --max-sdk-version 35 release-bundle/cogniva.apk[0m
+2026-11-01T19:56:06.2898369Z [36;1mif "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging release-bundle/cogniva.apk | grep -q application-debuggable; then exit 1; fi[0m
+2026-11-01T19:56:06.2898840Z [36;1mcp android-app/app/build/outputs/apk/release/output-metadata.json release-bundle/[0m
+2026-11-01T19:56:06.2899184Z [36;1mrm -f "$RUNNER_TEMP/cogniva.p12" "$RUNNER_TEMP/cogniva.lineage"[0m
+2026-11-01T19:56:06.2915993Z shell: /usr/bin/bash -e {0}
+2026-11-01T19:56:06.2916172Z env:
+2026-11-01T19:56:06.2916379Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21.0.13-9/x64
+2026-11-01T19:56:06.2916705Z   JAVA_HOME_21_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21.0.13-9/x64
+2026-11-01T19:56:06.2917008Z   GRADLE_ACTION_ID: gradle/actions/setup-gradle
+2026-11-01T19:56:06.2917243Z   GRADLE_USER_HOME: /home/runner/.gradle
+2026-11-01T19:56:06.2917538Z   GRADLE_BUILD_ACTION_SETUP_COMPLETED: true
+2026-11-01T19:56:06.2917748Z   GRADLE_BUILD_ACTION_CACHE_RESTORED: true
+2026-11-01T19:56:06.2918033Z   DEVELOCITY_INJECTION_INIT_SCRIPT_NAME: gradle-actions.inject-develocity.init.gradle
+2026-11-01T19:56:06.2918346Z   DEVELOCITY_INJECTION_CUSTOM_VALUE: gradle-actions
+2026-11-01T19:56:06.2918585Z   GITHUB_DEPENDENCY_GRAPH_ENABLED: false
+2026-11-01T19:56:06.2934007Z   KEYSTORE: ***
+2026-11-01T19:56:06.2942938Z   LINEAGE: ***
+2026-11-01T19:56:06.2943198Z   RELEASE_PASSWORD: ***
+2026-11-01T19:56:06.2943561Z ##[endgroup]
+2026-11-01T19:56:07.7824134Z ##[group]Run docker/setup-buildx-action@v3
+2026-11-01T19:56:07.7824347Z with:
+2026-11-01T19:56:07.7824493Z   driver: docker-container
+2026-11-01T19:56:07.7824659Z   use: true
+2026-11-01T19:56:07.7824797Z   keep-state: false
+2026-11-01T19:56:07.7824948Z   cache-binary: true
+2026-11-01T19:56:07.7825104Z   cleanup: true
+2026-11-01T19:56:07.7825248Z   install: false
+2026-11-01T19:56:07.7825396Z env:
+2026-11-01T19:56:07.7825601Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21.0.13-9/x64
+2026-11-01T19:56:07.7825912Z   JAVA_HOME_21_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21.0.13-9/x64
+2026-11-01T19:56:07.7826174Z   GRADLE_ACTION_ID: gradle/actions/setup-gradle
+2026-11-01T19:56:07.7826379Z   GRADLE_USER_HOME: /home/runner/.gradle
+2026-11-01T19:56:07.7826573Z   GRADLE_BUILD_ACTION_SETUP_COMPLETED: true
+2026-11-01T19:56:07.7826772Z   GRADLE_BUILD_ACTION_CACHE_RESTORED: true
+2026-11-01T19:56:07.7827067Z   DEVELOCITY_INJECTION_INIT_SCRIPT_NAME: gradle-actions.inject-develocity.init.gradle
+2026-11-01T19:56:07.7827368Z   DEVELOCITY_INJECTION_CUSTOM_VALUE: gradle-actions
+2026-11-01T19:56:07.7827581Z   GITHUB_DEPENDENCY_GRAPH_ENABLED: false
+2026-11-01T19:56:07.7827763Z ##[endgroup]
+2026-11-01T19:56:07.9507743Z (node:2592) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-01T19:56:07.9508658Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-01T19:56:07.9551858Z ##[group]Docker info
+2026-11-01T19:56:07.9582006Z [command]/usr/bin/docker version
+2026-11-01T19:56:08.0475125Z Client: Docker Engine - Community
+2026-11-01T19:56:08.0475519Z  Version:           28.0.4
+2026-11-01T19:56:08.0475785Z  API version:       1.48
+2026-11-01T19:56:08.0476034Z  Go version:        go1.23.7
+2026-11-01T19:56:08.0476288Z  Git commit:        b8034c0
+2026-11-01T19:56:08.0476546Z  Built:             Tue Mar 25 15:07:16 2025
+2026-11-01T19:56:08.0476907Z  OS/Arch:           linux/amd64
+2026-11-01T19:56:08.0477333Z  Context:           default
+2026-11-01T19:56:08.0477496Z 
+2026-11-01T19:56:08.0477618Z Server: Docker Engine - Community
+2026-11-01T19:56:08.0478006Z  Engine:
+2026-11-01T19:56:08.0478217Z   Version:          28.0.4
+2026-11-01T19:56:08.0478496Z   API version:      1.48 (minimum version 1.24)
+2026-11-01T19:56:08.0478942Z   Go version:       go1.23.7
+2026-11-01T19:56:08.0479207Z   Git commit:       6430e49
+2026-11-01T19:56:08.0479573Z   Built:            Tue Mar 25 15:07:16 2025
+2026-11-01T19:56:08.0479868Z   OS/Arch:          linux/amd64
+2026-11-01T19:56:08.0480130Z   Experimental:     false
+2026-11-01T19:56:08.0480485Z  containerd:
+2026-11-01T19:56:08.0480704Z   Version:          v2.4.2
+2026-11-01T19:56:08.0481111Z   GitCommit:        b7a25261e029d68978bbf290df0a62fc819b3c51
+2026-11-01T19:56:08.0481602Z  runc:
+2026-11-01T19:56:08.0481815Z   Version:          1.5.2
+2026-11-01T19:56:08.0482069Z   GitCommit:        v1.5.2-0-g29dd3dc2
+2026-11-01T19:56:08.0482345Z  docker-init:
+2026-11-01T19:56:08.0482621Z   Version:          0.19.0
+2026-11-01T19:56:08.0482783Z   GitCommit:        de40ad0
+2026-11-01T19:56:08.0514995Z [command]/usr/bin/docker info
+2026-11-01T19:56:08.2312772Z Client: Docker Engine - Community
+2026-11-01T19:56:08.2313174Z  Version:    28.0.4
+2026-11-01T19:56:08.2313355Z  Context:    default
+2026-11-01T19:56:08.2313512Z  Debug Mode: false
+2026-11-01T19:56:08.2313669Z  Plugins:
+2026-11-01T19:56:08.2313823Z   buildx: Docker Buildx (Docker Inc.)
+2026-11-01T19:56:08.2314014Z     Version:  v0.38.1
+2026-11-01T19:56:08.2314220Z     Path:     /usr/libexec/docker/cli-plugins/docker-buildx
+2026-11-01T19:56:08.2314495Z   compose: Docker Compose (Docker Inc.)
+2026-11-01T19:56:08.2314779Z     Version:  v2.38.2
+2026-11-01T19:56:08.2315026Z     Path:     /usr/libexec/docker/cli-plugins/docker-compose
+2026-11-01T19:56:08.2315181Z 
+2026-11-01T19:56:08.2315243Z Server:
+2026-11-01T19:56:08.2315381Z  Containers: 0
+2026-11-01T19:56:08.2315529Z   Running: 0
+2026-11-01T19:56:08.2316036Z   Paused: 0
+2026-11-01T19:56:08.2316527Z   Stopped: 0
+2026-11-01T19:56:08.2316692Z  Images: 6
+2026-11-01T19:56:08.2316833Z  Server Version: 28.0.4
+2026-11-01T19:56:08.2316996Z  Storage Driver: overlay2
+2026-11-01T19:56:08.2317167Z   Backing Filesystem: extfs
+2026-11-01T19:56:08.2317335Z   Supports d_type: true
+2026-11-01T19:56:08.2317497Z   Using metacopy: false
+2026-11-01T19:56:08.2317656Z   Native Overlay Diff: false
+2026-11-01T19:56:08.2317824Z   userxattr: false
+2026-11-01T19:56:08.2317978Z  Logging Driver: json-file
+2026-11-01T19:56:08.2318146Z  Cgroup Driver: systemd
+2026-11-01T19:56:08.2318298Z  Cgroup Version: 2
+2026-11-01T19:56:08.2318443Z  Plugins:
+2026-11-01T19:56:08.2318580Z   Volume: local
+2026-11-01T19:56:08.2318749Z   Network: bridge host ipvlan macvlan null overlay
+2026-11-01T19:56:08.2319234Z   Log: awslogs fluentd gcplogs gelf journald json-file local splunk syslog
+2026-11-01T19:56:08.2319579Z  Swarm: inactive
+2026-11-01T19:56:08.2319813Z  Runtimes: io.containerd.runc.v2 runc
+2026-11-01T19:56:08.2320104Z  Default Runtime: runc
+2026-11-01T19:56:08.2320347Z  Init Binary: docker-init
+2026-11-01T19:56:08.2320648Z  containerd version: b7a25261e029d68978bbf290df0a62fc819b3c51
+2026-11-01T19:56:08.2320979Z  runc version: v1.5.2-0-g29dd3dc2
+2026-11-01T19:56:08.2321247Z  init version: de40ad0
+2026-11-01T19:56:08.2321624Z  Security Options:
+2026-11-01T19:56:08.2321865Z   apparmor
+2026-11-01T19:56:08.2322061Z   seccomp
+2026-11-01T19:56:08.2322265Z    Profile: builtin
+2026-11-01T19:56:08.2322490Z   cgroupns
+2026-11-01T19:56:08.2322779Z  Kernel Version: 7.0.0-1017-azure
+2026-11-01T19:56:08.2323050Z  Operating System: Ubuntu 24.04.5 LTS
+2026-11-01T19:56:08.2323250Z  OSType: linux
+2026-11-01T19:56:08.2323397Z  Architecture: x86_64
+2026-11-01T19:56:08.2323552Z  CPUs: 4
+2026-11-01T19:56:08.2323689Z  Total Memory: 15.61GiB
+2026-11-01T19:56:08.2323845Z  Name: runnervm48cm3
+2026-11-01T19:56:08.2324014Z  ID: 66e228d3-4823-4830-aecc-3d27b286e9c6
+2026-11-01T19:56:08.2324206Z  Docker Root Dir: /var/lib/docker
+2026-11-01T19:56:08.2324394Z  Debug Mode: false
+2026-11-01T19:56:08.2324546Z  Username: githubactions
+2026-11-01T19:56:08.2324709Z  Experimental: false
+2026-11-01T19:56:08.2324860Z  Insecure Registries:
+2026-11-01T19:56:08.2325047Z   ::1/128
+2026-11-01T19:56:08.2325183Z   127.0.0.0/8
+2026-11-01T19:56:08.2325329Z  Live Restore Enabled: false
+2026-11-01T19:56:08.2325505Z 
+2026-11-01T19:56:08.2325872Z ##[endgroup]
+2026-11-01T19:56:08.2938290Z ##[group]Buildx version
+2026-11-01T19:56:08.2957183Z [command]/usr/bin/docker buildx version
+2026-11-01T19:56:08.3441133Z github.com/docker/buildx v0.38.1 0dbe87f36ed472fe36b6796c3f70b4210a731fc5
+2026-11-01T19:56:08.3496394Z ##[endgroup]
+2026-11-01T19:56:08.3665110Z ##[group]Inspecting default docker context
+2026-11-01T19:56:08.3823546Z [
+2026-11-01T19:56:08.3823834Z   {
+2026-11-01T19:56:08.3824064Z     "Name": "default",
+2026-11-01T19:56:08.3824338Z     "Metadata": {},
+2026-11-01T19:56:08.3824589Z     "Endpoints": {
+2026-11-01T19:56:08.3824829Z       "docker": {
+2026-11-01T19:56:08.3825160Z         "Host": "unix:///var/run/docker.sock",
+2026-11-01T19:56:08.3825489Z         "SkipTLSVerify": false
+2026-11-01T19:56:08.3825761Z       }
+2026-11-01T19:56:08.3825981Z     },
+2026-11-01T19:56:08.3826183Z     "TLSMaterial": {},
+2026-11-01T19:56:08.3826391Z     "Storage": {
+2026-11-01T19:56:08.3826811Z       "MetadataPath": "<IN MEMORY>",
+2026-11-01T19:56:08.3827113Z       "TLSPath": "<IN MEMORY>"
+2026-11-01T19:56:08.3827553Z     }
+2026-11-01T19:56:08.3827841Z   }
+2026-11-01T19:56:08.3828170Z ]
+2026-11-01T19:56:08.3840825Z ##[endgroup]
+2026-11-01T19:56:08.3841501Z ##[group]Creating a new builder instance
+2026-11-01T19:56:08.4959969Z [command]/usr/bin/docker buildx create --name builder-b0a4af38-67d2-414f-92b8-f7359c416907 --driver docker-container --buildkitd-flags --allow-insecure-entitlement security.insecure --allow-insecure-entitlement network.host --use
+2026-11-01T19:56:08.5522192Z builder-b0a4af38-67d2-414f-92b8-f7359c416907
+2026-11-01T19:56:08.5569672Z ##[endgroup]
+2026-11-01T19:56:08.5570447Z ##[group]Booting builder
+2026-11-01T19:56:08.5594255Z [command]/usr/bin/docker buildx inspect --bootstrap --builder builder-b0a4af38-67d2-414f-92b8-f7359c416907
+2026-11-01T19:56:08.6070433Z #1 [internal] booting buildkit
+2026-11-01T19:56:08.7575848Z #1 pulling image moby/buildkit:buildx-stable-1
+2026-11-01T19:56:12.6634407Z #1 pulling image moby/buildkit:buildx-stable-1 4.1s done
+2026-11-01T19:56:12.8147984Z #1 creating container buildx_buildkit_builder-b0a4af38-67d2-414f-92b8-f7359c4169070
+2026-11-01T19:56:12.9136667Z #1 creating container buildx_buildkit_builder-b0a4af38-67d2-414f-92b8-f7359c4169070 0.2s done
+2026-11-01T19:56:12.9415481Z #1 DONE 4.3s
+2026-11-01T19:56:12.9716189Z Name:          builder-b0a4af38-67d2-414f-92b8-f7359c416907
+2026-11-01T19:56:12.9716595Z Driver:        docker-container
+2026-11-01T19:56:12.9716917Z Last Activity: 2026-11-01 19:56:08 +0000 UTC
+2026-11-01T19:56:12.9717148Z 
+2026-11-01T19:56:12.9717260Z Nodes:
+2026-11-01T19:56:12.9717695Z Name:                  builder-b0a4af38-67d2-414f-92b8-f7359c4169070
+2026-11-01T19:56:12.9718137Z Endpoint:              unix:///var/run/docker.sock
+2026-11-01T19:56:12.9718506Z Status:                running
+2026-11-01T19:56:12.9719032Z BuildKit daemon flags: --allow-insecure-entitlement security.insecure --allow-insecure-entitlement network.host
+2026-11-01T19:56:12.9719461Z BuildKit version:      v0.33.1
+2026-11-01T19:56:12.9719873Z Platforms:             linux/amd64, linux/amd64/v2, linux/amd64/v3, linux/amd64/v4, linux/386
+2026-11-01T19:56:12.9720154Z Labels:
+2026-11-01T19:56:12.9720455Z  org.mobyproject.buildkit.worker.executor:         oci
+2026-11-01T19:56:12.9720790Z  org.mobyproject.buildkit.worker.hostname:         822a03dc92e5
+2026-11-01T19:56:12.9721182Z  org.mobyproject.buildkit.worker.network:          host
+2026-11-01T19:56:12.9721789Z  org.mobyproject.buildkit.worker.oci.process-mode: sandbox
+2026-11-01T19:56:12.9722213Z  org.mobyproject.buildkit.worker.selinux.enabled:  false
+2026-11-01T19:56:12.9751740Z  org.mobyproject.buildkit.worker.snapshotter:      overlayfs
+2026-11-01T19:56:12.9752651Z GC Policy rule#0:
+2026-11-01T19:56:12.9752932Z  All:            false
+2026-11-01T19:56:12.9754053Z  Filters:        type==source.local type==exec.cachemount type==source.git.checkout
+2026-11-01T19:56:12.9754491Z  Keep Duration:  48h0m0s
+2026-11-01T19:56:12.9754737Z  Max Used Space: 488.3MiB
+2026-11-01T19:56:12.9754971Z GC Policy rule#1:
+2026-11-01T19:56:12.9755214Z  All:            false
+2026-11-01T19:56:12.9755468Z  Keep Duration:  1440h0m0s
+2026-11-01T19:56:12.9755720Z  Reserved Space: 9.313GiB
+2026-11-01T19:56:12.9755957Z  Max Used Space: 93.13GiB
+2026-11-01T19:56:12.9756203Z  Min Free Space: 27.01GiB
+2026-11-01T19:56:12.9756450Z GC Policy rule#2:
+2026-11-01T19:56:12.9756665Z  All:            false
+2026-11-01T19:56:12.9756897Z  Reserved Space: 9.313GiB
+2026-11-01T19:56:12.9757139Z  Max Used Space: 93.13GiB
+2026-11-01T19:56:12.9757388Z  Min Free Space: 27.01GiB
+2026-11-01T19:56:12.9757618Z GC Policy rule#3:
+2026-11-01T19:56:12.9757843Z  All:            true
+2026-11-01T19:56:12.9758086Z  Reserved Space: 9.313GiB
+2026-11-01T19:56:12.9758319Z  Max Used Space: 93.13GiB
+2026-11-01T19:56:12.9758568Z  Min Free Space: 27.01GiB
+2026-11-01T19:56:12.9787102Z ##[endgroup]
+2026-11-01T19:56:13.0654356Z ##[group]Inspect builder
+2026-11-01T19:56:13.0701002Z {
+2026-11-01T19:56:13.0701273Z   "nodes": [
+2026-11-01T19:56:13.0701825Z     {
+2026-11-01T19:56:13.0702100Z       "name": "builder-b0a4af38-67d2-414f-92b8-f7359c4169070",
+2026-11-01T19:56:13.0702377Z       "endpoint": "unix:///var/run/docker.sock",
+2026-11-01T19:56:13.0702598Z       "status": "running",
+2026-11-01T19:56:13.0702943Z       "buildkitd-flags": "--allow-insecure-entitlement security.insecure --allow-insecure-entitlement network.host",
+2026-11-01T19:56:13.0703286Z       "buildkit": "v0.33.1",
+2026-11-01T19:56:13.0703550Z       "platforms": "linux/amd64,linux/amd64/v2,linux/amd64/v3,linux/amd64/v4,linux/386",
+2026-11-01T19:56:13.0703917Z       "features": {
+2026-11-01T19:56:13.0706765Z         "Automatically load images to the Docker Engine image store": true,
+2026-11-01T19:56:13.0707152Z         "Cache export": true,
+2026-11-01T19:56:13.0707424Z         "Direct push": true,
+2026-11-01T19:56:13.0707688Z         "Docker exporter": true,
+2026-11-01T19:56:13.0707977Z         "Multi-platform build": true,
+2026-11-01T19:56:13.0708266Z         "OCI exporter": true
+2026-11-01T19:56:13.0708519Z       },
+2026-11-01T19:56:13.0708727Z       "labels": {
+2026-11-01T19:56:13.0709023Z         "org.mobyproject.buildkit.worker.executor": "oci",
+2026-11-01T19:56:13.0709441Z         "org.mobyproject.buildkit.worker.hostname": "822a03dc92e5",
+2026-11-01T19:56:13.0709717Z         "org.mobyproject.buildkit.worker.network": "host",
+2026-11-01T19:56:13.0710018Z         "org.mobyproject.buildkit.worker.oci.process-mode": "sandbox",
+2026-11-01T19:56:13.0710324Z         "org.mobyproject.buildkit.worker.selinux.enabled": "false",
+2026-11-01T19:56:13.0710636Z         "org.mobyproject.buildkit.worker.snapshotter": "overlayfs"
+2026-11-01T19:56:13.0710900Z       },
+2026-11-01T19:56:13.0711045Z       "gcPolicy": [
+2026-11-01T19:56:13.0711204Z         {
+2026-11-01T19:56:13.0711341Z           "all": false,
+2026-11-01T19:56:13.0711701Z           "filter": [
+2026-11-01T19:56:13.0711947Z             "type==source.local type==exec.cachemount type==source.git.checkout"
+2026-11-01T19:56:13.0712194Z           ],
+2026-11-01T19:56:13.0712345Z           "keepDuration": "48h0m0s",
+2026-11-01T19:56:13.0712532Z           "maxUsedSpace": "488.3MiB"
+2026-11-01T19:56:13.0712706Z         },
+2026-11-01T19:56:13.0712834Z         {
+2026-11-01T19:56:13.0712969Z           "all": false,
+2026-11-01T19:56:13.0713133Z           "keepDuration": "1440h0m0s",
+2026-11-01T19:56:13.0713339Z           "reservedSpace": "9.313GiB",
+2026-11-01T19:56:13.0713520Z           "maxUsedSpace": "93.13GiB",
+2026-11-01T19:56:13.0713725Z           "minFreeSpace": "27.01GiB"
+2026-11-01T19:56:13.0713910Z         },
+2026-11-01T19:56:13.0714049Z         {
+2026-11-01T19:56:13.0714184Z           "all": false,
+2026-11-01T19:56:13.0714349Z           "reservedSpace": "9.313GiB",
+2026-11-01T19:56:13.0714538Z           "maxUsedSpace": "93.13GiB",
+2026-11-01T19:56:13.0714722Z           "minFreeSpace": "27.01GiB"
+2026-11-01T19:56:13.0714891Z         },
+2026-11-01T19:56:13.0715019Z         {
+2026-11-01T19:56:13.0715153Z           "all": true,
+2026-11-01T19:56:13.0715313Z           "reservedSpace": "9.313GiB",
+2026-11-01T19:56:13.0715514Z           "maxUsedSpace": "93.13GiB",
+2026-11-01T19:56:13.0715710Z           "minFreeSpace": "27.01GiB"
+2026-11-01T19:56:13.0715886Z         }
+2026-11-01T19:56:13.0716030Z       ]
+2026-11-01T19:56:13.0716174Z     }
+2026-11-01T19:56:13.0716303Z   ],
+2026-11-01T19:56:13.0716497Z   "name": "builder-b0a4af38-67d2-414f-92b8-f7359c416907",
+2026-11-01T19:56:13.0716742Z   "driver": "docker-container",
+2026-11-01T19:56:13.0716948Z   "lastActivity": "2026-11-01T19:56:08.000Z"
+2026-11-01T19:56:13.0717152Z }
+2026-11-01T19:56:13.0717535Z ##[endgroup]
+2026-11-01T19:56:13.0717822Z ##[group]BuildKit version
+2026-11-01T19:56:13.0718025Z builder-b0a4af38-67d2-414f-92b8-f7359c4169070: v0.33.1
+2026-11-01T19:56:13.0718346Z ##[endgroup]
+2026-11-01T19:56:13.0856218Z ##[group]Run docker/login-action@v3
+2026-11-01T19:56:13.0856432Z with:
+2026-11-01T19:56:13.0856576Z   registry: ghcr.io
+2026-11-01T19:56:13.0856738Z   username: danielcdes-create
+2026-11-01T19:56:13.0858257Z   password: ***
+2026-11-01T19:56:13.0858410Z   logout: true
+2026-11-01T19:56:13.0858561Z env:
+2026-11-01T19:56:13.0858792Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21.0.13-9/x64
+2026-11-01T19:56:13.0859123Z   JAVA_HOME_21_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21.0.13-9/x64
+2026-11-01T19:56:13.0859388Z   GRADLE_ACTION_ID: gradle/actions/setup-gradle
+2026-11-01T19:56:13.0859600Z   GRADLE_USER_HOME: /home/runner/.gradle
+2026-11-01T19:56:13.0859798Z   GRADLE_BUILD_ACTION_SETUP_COMPLETED: true
+2026-11-01T19:56:13.0860002Z   GRADLE_BUILD_ACTION_CACHE_RESTORED: true
+2026-11-01T19:56:13.0860511Z   DEVELOCITY_INJECTION_INIT_SCRIPT_NAME: gradle-actions.inject-develocity.init.gradle
+2026-11-01T19:56:13.0860857Z   DEVELOCITY_INJECTION_CUSTOM_VALUE: gradle-actions
+2026-11-01T19:56:13.0861072Z   GITHUB_DEPENDENCY_GRAPH_ENABLED: false
+2026-11-01T19:56:13.0861258Z ##[endgroup]
+2026-11-01T19:56:13.3059908Z Logging into ghcr.io...
+2026-11-01T19:56:13.3081651Z (node:3072) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-01T19:56:13.3082429Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-01T19:56:13.7116551Z Login Succeeded!
+2026-11-01T19:56:13.7286418Z ##[group]Run docker/build-push-action@v6
+2026-11-01T19:56:13.7286631Z with:
+2026-11-01T19:56:13.7286773Z   context: .
+2026-11-01T19:56:13.7286921Z   file: backend-rust/Dockerfile
+2026-11-01T19:56:13.7287097Z   load: true
+2026-11-01T19:56:13.7287358Z   tags: ghcr.io/danielcdes-create/api-rust-core:sha-d8716db8c12653a726c9284b9e28e7ba1c30df64
+2026-11-01T19:56:13.7287731Z   build-args: BUILD_REVISION=d8716db8c12653a726c9284b9e28e7ba1c30df64
+2026-11-01T19:56:13.7287970Z   cache-from: type=gha
+2026-11-01T19:56:13.7288147Z   cache-to: type=gha,mode=max
+2026-11-01T19:56:13.7288334Z   no-cache: false
+2026-11-01T19:56:13.7288486Z   pull: false
+2026-11-01T19:56:13.7288629Z   push: false
+2026-11-01T19:56:13.7289975Z   github-token: ***
+2026-11-01T19:56:13.7290132Z env:
+2026-11-01T19:56:13.7290341Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21.0.13-9/x64
+2026-11-01T19:56:13.7290653Z   JAVA_HOME_21_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21.0.13-9/x64
+2026-11-01T19:56:13.7290948Z   GRADLE_ACTION_ID: gradle/actions/setup-gradle
+2026-11-01T19:56:13.7291155Z   GRADLE_USER_HOME: /home/runner/.gradle
+2026-11-01T19:56:13.7291358Z   GRADLE_BUILD_ACTION_SETUP_COMPLETED: true
+2026-11-01T19:56:13.7291813Z   GRADLE_BUILD_ACTION_CACHE_RESTORED: true
+2026-11-01T19:56:13.7292112Z   DEVELOCITY_INJECTION_INIT_SCRIPT_NAME: gradle-actions.inject-develocity.init.gradle
+2026-11-01T19:56:13.7292429Z   DEVELOCITY_INJECTION_CUSTOM_VALUE: gradle-actions
+2026-11-01T19:56:13.7292644Z   GITHUB_DEPENDENCY_GRAPH_ENABLED: false
+2026-11-01T19:56:13.7292831Z ##[endgroup]
+2026-11-01T19:56:13.8903845Z (node:3092) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-01T19:56:13.8904576Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-01T19:56:13.8916376Z ##[group]GitHub Actions runtime token ACs
+2026-11-01T19:56:13.8920548Z refs/heads/codex/auditoria-convergencia: read/write
+2026-11-01T19:56:13.8920915Z refs/heads/main: read
+2026-11-01T19:56:13.8921319Z ##[endgroup]
+2026-11-01T19:56:13.8921901Z ##[group]Docker info
+2026-11-01T19:56:13.8950606Z [command]/usr/bin/docker version
+2026-11-01T19:56:13.9169016Z Client: Docker Engine - Community
+2026-11-01T19:56:13.9169682Z  Version:           28.0.4
+2026-11-01T19:56:13.9170567Z  API version:       1.48
+2026-11-01T19:56:13.9181713Z  Go version:        go1.23.7
+2026-11-01T19:56:13.9182107Z  Git commit:        b8034c0
+2026-11-01T19:56:13.9182379Z  Built:             Tue Mar 25 15:07:16 2025
+2026-11-01T19:56:13.9182683Z  OS/Arch:           linux/amd64
+2026-11-01T19:56:13.9182944Z  Context:           default
+2026-11-01T19:56:13.9183096Z 
+2026-11-01T19:56:13.9183222Z Server: Docker Engine - Community
+2026-11-01T19:56:13.9183467Z  Engine:
+2026-11-01T19:56:13.9183615Z   Version:          28.0.4
+2026-11-01T19:56:13.9183802Z   API version:      1.48 (minimum version 1.24)
+2026-11-01T19:56:13.9184014Z   Go version:       go1.23.7
+2026-11-01T19:56:13.9184194Z   Git commit:       6430e49
+2026-11-01T19:56:13.9184371Z   Built:            Tue Mar 25 15:07:16 2025
+2026-11-01T19:56:13.9184569Z   OS/Arch:          linux/amd64
+2026-11-01T19:56:13.9184746Z   Experimental:     false
+2026-11-01T19:56:13.9184915Z  containerd:
+2026-11-01T19:56:13.9185064Z   Version:          v2.4.2
+2026-11-01T19:56:13.9185276Z   GitCommit:        b7a25261e029d68978bbf290df0a62fc819b3c51
+2026-11-01T19:56:13.9185868Z  runc:
+2026-11-01T19:56:13.9186012Z   Version:          1.5.2
+2026-11-01T19:56:13.9186183Z   GitCommit:        v1.5.2-0-g29dd3dc2
+2026-11-01T19:56:13.9186379Z  docker-init:
+2026-11-01T19:56:13.9186526Z   Version:          0.19.0
+2026-11-01T19:56:13.9186689Z   GitCommit:        de40ad0
+2026-11-01T19:56:13.9230901Z [command]/usr/bin/docker info
+2026-11-01T19:56:13.9859299Z Client: Docker Engine - Community
+2026-11-01T19:56:13.9859674Z  Version:    28.0.4
+2026-11-01T19:56:13.9859919Z  Context:    default
+2026-11-01T19:56:13.9860080Z  Debug Mode: false
+2026-11-01T19:56:13.9860239Z  Plugins:
+2026-11-01T19:56:13.9860815Z   buildx: Docker Buildx (Docker Inc.)
+2026-11-01T19:56:13.9861017Z     Version:  v0.38.1
+2026-11-01T19:56:13.9861231Z     Path:     /usr/libexec/docker/cli-plugins/docker-buildx
+2026-11-01T19:56:13.9861700Z   compose: Docker Compose (Docker Inc.)
+2026-11-01T19:56:13.9861893Z     Version:  v2.38.2
+2026-11-01T19:56:13.9862103Z     Path:     /usr/libexec/docker/cli-plugins/docker-compose
+2026-11-01T19:56:13.9862274Z 
+2026-11-01T19:56:13.9862337Z Server:
+2026-11-01T19:56:13.9862474Z  Containers: 1
+2026-11-01T19:56:13.9862622Z   Running: 1
+2026-11-01T19:56:13.9862761Z   Paused: 0
+2026-11-01T19:56:13.9862902Z   Stopped: 0
+2026-11-01T19:56:13.9863043Z  Images: 7
+2026-11-01T19:56:13.9863181Z  Server Version: 28.0.4
+2026-11-01T19:56:13.9863352Z  Storage Driver: overlay2
+2026-11-01T19:56:13.9863522Z   Backing Filesystem: extfs
+2026-11-01T19:56:13.9863696Z   Supports d_type: true
+2026-11-01T19:56:13.9863858Z   Using metacopy: false
+2026-11-01T19:56:13.9864091Z   Native Overlay Diff: false
+2026-11-01T19:56:13.9864298Z   userxattr: false
+2026-11-01T19:56:13.9864462Z  Logging Driver: json-file
+2026-11-01T19:56:13.9864632Z  Cgroup Driver: systemd
+2026-11-01T19:56:13.9864792Z  Cgroup Version: 2
+2026-11-01T19:56:13.9864940Z  Plugins:
+2026-11-01T19:56:13.9865077Z   Volume: local
+2026-11-01T19:56:13.9865260Z   Network: bridge host ipvlan macvlan null overlay
+2026-11-01T19:56:13.9865535Z   Log: awslogs fluentd gcplogs gelf journald json-file local splunk syslog
+2026-11-01T19:56:13.9865787Z  Swarm: inactive
+2026-11-01T19:56:13.9865956Z  Runtimes: io.containerd.runc.v2 runc
+2026-11-01T19:56:13.9866152Z  Default Runtime: runc
+2026-11-01T19:56:13.9866316Z  Init Binary: docker-init
+2026-11-01T19:56:13.9866535Z  containerd version: b7a25261e029d68978bbf290df0a62fc819b3c51
+2026-11-01T19:56:13.9866767Z  runc version: v1.5.2-0-g29dd3dc2
+2026-11-01T19:56:13.9866949Z  init version: de40ad0
+2026-11-01T19:56:13.9867107Z  Security Options:
+2026-11-01T19:56:13.9867256Z   apparmor
+2026-11-01T19:56:13.9867397Z   seccomp
+2026-11-01T19:56:13.9867538Z    Profile: builtin
+2026-11-01T19:56:13.9867691Z   cgroupns
+2026-11-01T19:56:13.9867837Z  Kernel Version: 7.0.0-1017-azure
+2026-11-01T19:56:13.9868026Z  Operating System: Ubuntu 24.04.5 LTS
+2026-11-01T19:56:13.9868206Z  OSType: linux
+2026-11-01T19:56:13.9868369Z  Architecture: x86_64
+2026-11-01T19:56:13.9868540Z  CPUs: 4
+2026-11-01T19:56:13.9868679Z  Total Memory: 15.61GiB
+2026-11-01T19:56:13.9868850Z  Name: runnervm48cm3
+2026-11-01T19:56:13.9869020Z  ID: 66e228d3-4823-4830-aecc-3d27b286e9c6
+2026-11-01T19:56:13.9869223Z  Docker Root Dir: /var/lib/docker
+2026-11-01T19:56:13.9869398Z  Debug Mode: false
+2026-11-01T19:56:13.9869557Z  Username: githubactions
+2026-11-01T19:56:13.9869722Z  Experimental: false
+2026-11-01T19:56:13.9869882Z  Insecure Registries:
+2026-11-01T19:56:13.9870074Z   ::1/128
+2026-11-01T19:56:13.9870209Z   127.0.0.0/8
+2026-11-01T19:56:13.9870358Z  Live Restore Enabled: false
+2026-11-01T19:56:13.9870468Z 
+2026-11-01T19:56:13.9881106Z ##[endgroup]
+2026-11-01T19:56:13.9881594Z ##[group]Proxy configuration
+2026-11-01T19:56:13.9884981Z No proxy configuration found
+2026-11-01T19:56:13.9885651Z ##[endgroup]
+2026-11-01T19:56:14.0425261Z ##[group]Buildx version
+2026-11-01T19:56:14.0440396Z [command]/usr/bin/docker buildx version
+2026-11-01T19:56:14.0917803Z github.com/docker/buildx v0.38.1 0dbe87f36ed472fe36b6796c3f70b4210a731fc5
+2026-11-01T19:56:14.0963726Z ##[endgroup]
+2026-11-01T19:56:14.0964432Z ##[group]Builder info
+2026-11-01T19:56:14.1820058Z {
+2026-11-01T19:56:14.1820288Z   "nodes": [
+2026-11-01T19:56:14.1820458Z     {
+2026-11-01T19:56:14.1820679Z       "name": "builder-b0a4af38-67d2-414f-92b8-f7359c4169070",
+2026-11-01T19:56:14.1820945Z       "endpoint": "unix:///var/run/docker.sock",
+2026-11-01T19:56:14.1821152Z       "status": "running",
+2026-11-01T19:56:14.1821677Z       "buildkitd-flags": "--allow-insecure-entitlement security.insecure --allow-insecure-entitlement network.host",
+2026-11-01T19:56:14.1822049Z       "buildkit": "v0.33.1",
+2026-11-01T19:56:14.1822657Z       "platforms": "linux/amd64,linux/amd64/v2,linux/amd64/v3,linux/amd64/v4,linux/386",
+2026-11-01T19:56:14.1822974Z       "features": {
+2026-11-01T19:56:14.1823224Z         "Automatically load images to the Docker Engine image store": true,
+2026-11-01T19:56:14.1823507Z         "Cache export": true,
+2026-11-01T19:56:14.1823699Z         "Direct push": true,
+2026-11-01T19:56:14.1823891Z         "Docker exporter": true,
+2026-11-01T19:56:14.1824107Z         "Multi-platform build": true,
+2026-11-01T19:56:14.1824318Z         "OCI exporter": true
+2026-11-01T19:56:14.1824497Z       },
+2026-11-01T19:56:14.1824641Z       "labels": {
+2026-11-01T19:56:14.1824854Z         "org.mobyproject.buildkit.worker.executor": "oci",
+2026-11-01T19:56:14.1825184Z         "org.mobyproject.buildkit.worker.hostname": "822a03dc92e5",
+2026-11-01T19:56:14.1825492Z         "org.mobyproject.buildkit.worker.network": "host",
+2026-11-01T19:56:14.1825815Z         "org.mobyproject.buildkit.worker.oci.process-mode": "sandbox",
+2026-11-01T19:56:14.1826139Z         "org.mobyproject.buildkit.worker.selinux.enabled": "false",
+2026-11-01T19:56:14.1826419Z         "org.mobyproject.buildkit.worker.snapshotter": "overlayfs"
+2026-11-01T19:56:14.1826641Z       },
+2026-11-01T19:56:14.1826773Z       "gcPolicy": [
+2026-11-01T19:56:14.1826953Z         {
+2026-11-01T19:56:14.1827096Z           "all": false,
+2026-11-01T19:56:14.1827252Z           "filter": [
+2026-11-01T19:56:14.1827480Z             "type==source.local type==exec.cachemount type==source.git.checkout"
+2026-11-01T19:56:14.1827720Z           ],
+2026-11-01T19:56:14.1827878Z           "keepDuration": "48h0m0s",
+2026-11-01T19:56:14.1828071Z           "maxUsedSpace": "488.3MiB"
+2026-11-01T19:56:14.1828249Z         },
+2026-11-01T19:56:14.1828397Z         {
+2026-11-01T19:56:14.1828528Z           "all": false,
+2026-11-01T19:56:14.1828696Z           "keepDuration": "1440h0m0s",
+2026-11-01T19:56:14.1828883Z           "reservedSpace": "9.313GiB",
+2026-11-01T19:56:14.1829068Z           "maxUsedSpace": "93.13GiB",
+2026-11-01T19:56:14.1829294Z           "minFreeSpace": "27.01GiB"
+2026-11-01T19:56:14.1829483Z         },
+2026-11-01T19:56:14.1829618Z         {
+2026-11-01T19:56:14.1829750Z           "all": false,
+2026-11-01T19:56:14.1829913Z           "reservedSpace": "9.313GiB",
+2026-11-01T19:56:14.1830092Z           "maxUsedSpace": "93.13GiB",
+2026-11-01T19:56:14.1830289Z           "minFreeSpace": "27.01GiB"
+2026-11-01T19:56:14.1830462Z         },
+2026-11-01T19:56:14.1830594Z         {
+2026-11-01T19:56:14.1830726Z           "all": true,
+2026-11-01T19:56:14.1830900Z           "reservedSpace": "9.313GiB",
+2026-11-01T19:56:14.1831081Z           "maxUsedSpace": "93.13GiB",
+2026-11-01T19:56:14.1831265Z           "minFreeSpace": "27.01GiB"
+2026-11-01T19:56:14.1831930Z         }
+2026-11-01T19:56:14.1832128Z       ]
+2026-11-01T19:56:14.1832262Z     }
+2026-11-01T19:56:14.1832398Z   ],
+2026-11-01T19:56:14.1832578Z   "name": "builder-b0a4af38-67d2-414f-92b8-f7359c416907",
+2026-11-01T19:56:14.1832799Z   "driver": "docker-container",
+2026-11-01T19:56:14.1832998Z   "lastActivity": "2026-11-01T19:56:08.000Z"
+2026-11-01T19:56:14.1833180Z }
+2026-11-01T19:56:14.1833548Z ##[endgroup]
+2026-11-01T19:56:14.3229126Z [command]/usr/bin/docker buildx build --build-arg BUILD_REVISION=d8716db8c12653a726c9284b9e28e7ba1c30df64 --cache-from type=gha --cache-to type=gha,mode=max --file backend-rust/Dockerfile --iidfile /home/runner/work/_temp/docker-actions-toolkit-dyoy0w/build-iidfile-e3fac400cf.txt --tag ghcr.io/danielcdes-create/api-rust-core:sha-d8716db8c12653a726c9284b9e28e7ba1c30df64 --load --metadata-file /home/runner/work/_temp/docker-actions-toolkit-dyoy0w/build-metadata-b58a0aa946.json .
+2026-11-01T19:56:14.5407476Z #0 building with "builder-b0a4af38-67d2-414f-92b8-f7359c416907" instance using docker-container driver
+2026-11-01T19:56:14.5407933Z 
+2026-11-01T19:56:14.5408152Z #1 [internal] load build definition from Dockerfile
+2026-11-01T19:56:14.5408490Z #1 transferring dockerfile: 939B done
+2026-11-01T19:56:14.5408764Z #1 DONE 0.0s
+2026-11-01T19:56:14.5408890Z 
+2026-11-01T19:56:14.5409404Z #2 [auth] docker/dockerfile:pull token for registry-1.docker.io
+2026-11-01T19:56:14.6909376Z #2 DONE 0.0s
+2026-11-01T19:56:14.6909595Z 
+2026-11-01T19:56:14.6909814Z #3 resolve image config for docker-image://docker.io/docker/dockerfile:1
+2026-11-01T19:56:15.0749079Z #3 DONE 0.6s
+2026-11-01T19:56:15.2326622Z 
+2026-11-01T19:56:15.2327602Z #4 docker-image://docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
+2026-11-01T19:56:15.2328476Z #4 resolve docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e done
+2026-11-01T19:56:15.2387152Z #4 sha256:9d2b4f57f9e20f33279375ce25c6ff14f30f64270ed5c7b613b2b30256754f62 13.63MB / 14.28MB 0.2s
+2026-11-01T19:56:15.3878583Z #4 sha256:9d2b4f57f9e20f33279375ce25c6ff14f30f64270ed5c7b613b2b30256754f62 14.28MB / 14.28MB 0.2s done
+2026-11-01T19:56:15.3879284Z #4 extracting sha256:9d2b4f57f9e20f33279375ce25c6ff14f30f64270ed5c7b613b2b30256754f62 0.1s done
+2026-11-01T19:56:15.3879697Z #4 DONE 0.3s
+2026-11-01T19:56:15.6144896Z 
+2026-11-01T19:56:15.6145483Z #5 [auth] library/rust:pull token for registry-1.docker.io
+2026-11-01T19:56:15.6145752Z #5 DONE 0.0s
+2026-11-01T19:56:15.6145839Z 
+2026-11-01T19:56:15.6145973Z #6 [internal] load metadata for docker.io/library/rust:1.93.1-alpine
+2026-11-01T19:56:15.7376807Z #6 ...
+2026-11-01T19:56:15.7377367Z 
+2026-11-01T19:56:15.7377770Z #7 [internal] load metadata for gcr.io/distroless/static-debian12:nonroot
+2026-11-01T19:56:15.7378172Z #7 DONE 0.3s
+2026-11-01T19:56:15.8682127Z 
+2026-11-01T19:56:15.8682877Z #6 [internal] load metadata for docker.io/library/rust:1.93.1-alpine
+2026-11-01T19:56:15.8683355Z #6 DONE 0.4s
+2026-11-01T19:56:16.0243828Z 
+2026-11-01T19:56:16.0244506Z #8 [internal] load .dockerignore
+2026-11-01T19:56:16.0244889Z #8 transferring context: 140B done
+2026-11-01T19:56:16.0245090Z #8 DONE 0.0s
+2026-11-01T19:56:16.0342000Z 
+2026-11-01T19:56:16.0342446Z #9 importing cache manifest from gha:8593302086942680516
+2026-11-01T19:56:16.1474074Z #9 DONE 0.1s
+2026-11-01T19:56:16.1474557Z 
+2026-11-01T19:56:16.1474869Z #10 [internal] load build context
+2026-11-01T19:56:16.1475186Z #10 DONE 0.0s
+2026-11-01T19:56:16.1475292Z 
+2026-11-01T19:56:16.1475684Z #11 [stage-1 1/3] FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
+2026-11-01T19:56:16.1476440Z #11 resolve gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab done
+2026-11-01T19:56:16.1476939Z #11 DONE 0.0s
+2026-11-01T19:56:16.1477053Z 
+2026-11-01T19:56:16.1477288Z #12 [builder 1/7] FROM docker.io/library/rust:1.93.1-alpine@sha256:4fec02de605563c297c78a31064c8335bc004fa2b0bf406b1b99441da64e2d2d
+2026-11-01T19:56:16.1477863Z #12 resolve docker.io/library/rust:1.93.1-alpine@sha256:4fec02de605563c297c78a31064c8335bc004fa2b0bf406b1b99441da64e2d2d done
+2026-11-01T19:56:16.1478190Z #12 DONE 0.0s
+2026-11-01T19:56:16.3199651Z 
+2026-11-01T19:56:16.3202148Z #10 [internal] load build context
+2026-11-01T19:56:16.3202543Z #10 transferring context: 430.39kB done
+2026-11-01T19:56:16.3202861Z #10 DONE 0.0s
+2026-11-01T19:56:16.3202997Z 
+2026-11-01T19:56:16.3203418Z #12 [builder 1/7] FROM docker.io/library/rust:1.93.1-alpine@sha256:4fec02de605563c297c78a31064c8335bc004fa2b0bf406b1b99441da64e2d2d
+2026-11-01T19:56:16.3204192Z #12 sha256:379a1168b9c0d28ee381476b804af38bb2782c614c564e80833dcd9b5d46e214 7.34MB / 267.37MB 0.2s
+2026-11-01T19:56:16.4608649Z #12 sha256:589002ba0eaed121a1dbf42f6648f29e5be55d5c8a6ee0f8eaa0285cc21ac153 3.86MB / 3.86MB 0.2s done
+2026-11-01T19:56:16.4610268Z #12 sha256:b2cf86143deda979ce07685c3f8e323ad60dbc3149f98cf950163fa103599da3 0B / 75.12MB 0.2s
+2026-11-01T19:56:16.4611687Z #12 extracting sha256:589002ba0eaed121a1dbf42f6648f29e5be55d5c8a6ee0f8eaa0285cc21ac153
+2026-11-01T19:56:16.6101116Z #12 sha256:379a1168b9c0d28ee381476b804af38bb2782c614c564e80833dcd9b5d46e214 27.26MB / 267.37MB 0.3s
+2026-11-01T19:56:16.6103924Z #12 sha256:b2cf86143deda979ce07685c3f8e323ad60dbc3149f98cf950163fa103599da3 30.41MB / 75.12MB 0.3s
+2026-11-01T19:56:16.6104591Z #12 extracting sha256:589002ba0eaed121a1dbf42f6648f29e5be55d5c8a6ee0f8eaa0285cc21ac153 0.1s done
+2026-11-01T19:56:16.7600797Z #12 sha256:379a1168b9c0d28ee381476b804af38bb2782c614c564e80833dcd9b5d46e214 95.42MB / 267.37MB 0.5s
+2026-11-01T19:56:16.7601716Z #12 sha256:b2cf86143deda979ce07685c3f8e323ad60dbc3149f98cf950163fa103599da3 75.12MB / 75.12MB 0.5s
+2026-11-01T19:56:16.9101180Z #12 sha256:379a1168b9c0d28ee381476b804af38bb2782c614c564e80833dcd9b5d46e214 159.38MB / 267.37MB 0.6s
+2026-11-01T19:56:17.0703836Z #12 sha256:379a1168b9c0d28ee381476b804af38bb2782c614c564e80833dcd9b5d46e214 266.34MB / 267.37MB 0.9s
+2026-11-01T19:56:17.0704669Z #12 sha256:b2cf86143deda979ce07685c3f8e323ad60dbc3149f98cf950163fa103599da3 75.12MB / 75.12MB 0.8s done
+2026-11-01T19:56:17.0705352Z #12 extracting sha256:b2cf86143deda979ce07685c3f8e323ad60dbc3149f98cf950163fa103599da3
+2026-11-01T19:56:18.3718104Z #12 ...
+2026-11-01T19:56:18.3718287Z 
+2026-11-01T19:56:18.3718835Z #11 [stage-1 1/3] FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
+2026-11-01T19:56:18.3719568Z #11 sha256:96ed2737ae312e0bc637b40783f7c2f23416cb72ca957aa01855f1614278e64b 143.35kB / 143.35kB 0.3s done
+2026-11-01T19:56:18.3720131Z #11 sha256:dcaa5a89b0ccda4b283e16d0b4d0891cd93d5fe05c6798f7806781a6a2d84354 314B / 314B 0.2s done
+2026-11-01T19:56:18.3720605Z #11 sha256:b839dfae01f66e15c6a8b63520557ed315bdfe036342fa7a0c537259f10d7a9a 351B / 351B 0.2s done
+2026-11-01T19:56:18.3721059Z #11 sha256:dd64bf2dd177757451a98fcdc999a339c35dee5d9872d8f4dc69c8f3c4dd0112 80B / 80B 0.2s done
+2026-11-01T19:56:18.3721735Z #11 sha256:52630fc75a18675c530ed9eba5f55eca09b03e91bd5bc15307918bbc1a7e7296 162B / 162B 0.1s done
+2026-11-01T19:56:18.3722142Z #11 sha256:7c12895b777bcaa8ccae0605b4de635b68fc32d60fa08f421dc3818bf55ee212 188B / 188B 0.1s done
+2026-11-01T19:56:18.3722528Z #11 sha256:3214acf345c0cc6bbdb56b698a41ccdefc624a09d6beb0d38b5de0b2303ecaf4 123B / 123B 0.5s done
+2026-11-01T19:56:18.3722926Z #11 sha256:bf7a4185f01524837d19abde915ffde84e64368b250f5b5e9f6f75aea62a11d4 29.00kB / 29.00kB 0.5s done
+2026-11-01T19:56:18.3723316Z #11 sha256:2780920e5dbfbe103d03a583ed75345306e572ec5a48cb10361f046767d9f29a 67B / 67B 0.4s done
+2026-11-01T19:56:18.3723712Z #11 sha256:39dc083afc39bd8dc43d456fe7ff7d39292e593bb2769972c11bb2e5f9119386 445.71kB / 445.71kB 0.4s done
+2026-11-01T19:56:18.3724119Z #11 sha256:990a9c434e5e0f11549a8d4a41a1991e621b04e30cd63269adbc97b1dc38fd7e 12.48kB / 12.48kB 0.6s done
+2026-11-01T19:56:18.3724520Z #11 sha256:a5789fc40e828c4e7467626e3f69ec5dea8e5da22fe660db8ae6d16f777b0bbf 83.90kB / 83.90kB 0.9s done
+2026-11-01T19:56:18.3724806Z #11 DONE 2.2s
+2026-11-01T19:56:18.3724895Z 
+2026-11-01T19:56:18.3725131Z #12 [builder 1/7] FROM docker.io/library/rust:1.93.1-alpine@sha256:4fec02de605563c297c78a31064c8335bc004fa2b0bf406b1b99441da64e2d2d
+2026-11-01T19:56:18.3725579Z #12 extracting sha256:b2cf86143deda979ce07685c3f8e323ad60dbc3149f98cf950163fa103599da3 1.4s done
+2026-11-01T19:56:18.4931333Z #12 ...
+2026-11-01T19:56:18.4931661Z 
+2026-11-01T19:56:18.4932139Z #11 [stage-1 1/3] FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
+2026-11-01T19:56:18.4932894Z #11 extracting sha256:a5789fc40e828c4e7467626e3f69ec5dea8e5da22fe660db8ae6d16f777b0bbf 0.0s done
+2026-11-01T19:56:18.4933848Z #11 extracting sha256:990a9c434e5e0f11549a8d4a41a1991e621b04e30cd63269adbc97b1dc38fd7e done
+2026-11-01T19:56:18.4934475Z #11 extracting sha256:39dc083afc39bd8dc43d456fe7ff7d39292e593bb2769972c11bb2e5f9119386 0.1s done
+2026-11-01T19:56:18.4935007Z #11 DONE 2.3s
+2026-11-01T19:56:18.4935133Z 
+2026-11-01T19:56:18.4935493Z #12 [builder 1/7] FROM docker.io/library/rust:1.93.1-alpine@sha256:4fec02de605563c297c78a31064c8335bc004fa2b0bf406b1b99441da64e2d2d
+2026-11-01T19:56:18.4936209Z #12 sha256:379a1168b9c0d28ee381476b804af38bb2782c614c564e80833dcd9b5d46e214 267.37MB / 267.37MB 2.2s done
+2026-11-01T19:56:18.4936983Z #12 extracting sha256:379a1168b9c0d28ee381476b804af38bb2782c614c564e80833dcd9b5d46e214
+2026-11-01T19:56:18.6822967Z #12 ...
+2026-11-01T19:56:18.6824265Z 
+2026-11-01T19:56:18.6825289Z #11 [stage-1 1/3] FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
+2026-11-01T19:56:18.6826137Z #11 extracting sha256:bf7a4185f01524837d19abde915ffde84e64368b250f5b5e9f6f75aea62a11d4 done
+2026-11-01T19:56:18.6826880Z #11 extracting sha256:2780920e5dbfbe103d03a583ed75345306e572ec5a48cb10361f046767d9f29a done
+2026-11-01T19:56:18.6827551Z #11 extracting sha256:7c12895b777bcaa8ccae0605b4de635b68fc32d60fa08f421dc3818bf55ee212 done
+2026-11-01T19:56:18.6828221Z #11 extracting sha256:3214acf345c0cc6bbdb56b698a41ccdefc624a09d6beb0d38b5de0b2303ecaf4 done
+2026-11-01T19:56:18.6828902Z #11 extracting sha256:52630fc75a18675c530ed9eba5f55eca09b03e91bd5bc15307918bbc1a7e7296 done
+2026-11-01T19:56:18.6829569Z #11 extracting sha256:dd64bf2dd177757451a98fcdc999a339c35dee5d9872d8f4dc69c8f3c4dd0112 done
+2026-11-01T19:56:18.6830229Z #11 extracting sha256:b839dfae01f66e15c6a8b63520557ed315bdfe036342fa7a0c537259f10d7a9a done
+2026-11-01T19:56:18.6830934Z #11 extracting sha256:dcaa5a89b0ccda4b283e16d0b4d0891cd93d5fe05c6798f7806781a6a2d84354 done
+2026-11-01T19:56:18.6831706Z #11 extracting sha256:96ed2737ae312e0bc637b40783f7c2f23416cb72ca957aa01855f1614278e64b done
+2026-11-01T19:56:18.6832225Z #11 DONE 2.4s
+2026-11-01T19:56:18.8324198Z 
+2026-11-01T19:56:18.8325239Z #12 [builder 1/7] FROM docker.io/library/rust:1.93.1-alpine@sha256:4fec02de605563c297c78a31064c8335bc004fa2b0bf406b1b99441da64e2d2d
+2026-11-01T19:56:20.6377514Z #12 extracting sha256:379a1168b9c0d28ee381476b804af38bb2782c614c564e80833dcd9b5d46e214 2.3s done
+2026-11-01T19:56:20.6377960Z #12 DONE 4.5s
+2026-11-01T19:56:20.7883355Z 
+2026-11-01T19:56:20.7883890Z #13 [builder 2/7] RUN apk add --no-cache musl-dev gcc make
+2026-11-01T19:56:21.0533482Z #13 0.415 (1/1) Installing make (4.4.1-r3)
+2026-11-01T19:56:21.2331568Z #13 0.437 Executing busybox-1.37.0-r30.trigger
+2026-11-01T19:56:21.2331909Z #13 0.445 OK: 198.3 MiB in 31 packages
+2026-11-01T19:56:26.3334571Z #13 DONE 5.7s
+2026-11-01T19:56:26.5163270Z 
+2026-11-01T19:56:26.5163935Z #14 [builder 3/7] WORKDIR /app/backend-rust
+2026-11-01T19:56:26.5164338Z #14 DONE 0.0s
+2026-11-01T19:56:26.5164466Z 
+2026-11-01T19:56:26.5164675Z #15 [builder 4/7] COPY backend-rust/Cargo.toml backend-rust/Cargo.lock ./
+2026-11-01T19:56:26.5165090Z #15 DONE 0.0s
+2026-11-01T19:56:26.5165239Z 
+2026-11-01T19:56:26.5165364Z #16 [builder 5/7] COPY backend-rust/src ./src
+2026-11-01T19:56:26.5165674Z #16 DONE 0.0s
+2026-11-01T19:56:26.5165796Z 
+2026-11-01T19:56:26.5165912Z #17 [builder 6/7] COPY shared /app/shared
+2026-11-01T19:56:26.5166195Z #17 DONE 0.0s
+2026-11-01T19:56:26.5166325Z 
+2026-11-01T19:56:26.5166926Z #18 [builder 7/7] RUN --mount=type=cache,target=/usr/local/cargo/registry --mount=type=cache,target=/app/backend-rust/target cargo build --locked --release && cp target/release/api-rust-core /server
+2026-11-01T19:56:26.5215773Z #18 0.156     Updating crates.io index
+2026-11-01T19:56:27.5124922Z #18 1.147  Downloading crates ...
+2026-11-01T19:56:27.6232060Z #18 1.257   Downloaded atomic-waker v1.1.2
+2026-11-01T19:56:27.7238115Z #18 1.270   Downloaded itoa v1.0.18
+2026-11-01T19:56:27.7239314Z #18 1.273   Downloaded crypto-common v0.1.7
+2026-11-01T19:56:27.7239894Z #18 1.276   Downloaded const-random v0.1.18
+2026-11-01T19:56:27.7242288Z #18 1.279   Downloaded compression-core v0.4.34
+2026-11-01T19:56:27.7242901Z #18 1.283   Downloaded block-buffer v0.10.4
+2026-11-01T19:56:27.7243294Z #18 1.286   Downloaded adler2 v2.0.1
+2026-11-01T19:56:27.7243610Z #18 1.288   Downloaded futures-io v0.3.34
+2026-11-01T19:56:27.7243835Z #18 1.289   Downloaded funty v2.0.0
+2026-11-01T19:56:27.7244049Z #18 1.292   Downloaded idna_adapter v1.2.2
+2026-11-01T19:56:27.7244269Z #18 1.293   Downloaded async-trait v0.1.92
+2026-11-01T19:56:27.7244533Z #18 1.297   Downloaded ident_case v1.0.1
+2026-11-01T19:56:27.7244931Z #18 1.299   Downloaded hex v0.4.3
+2026-11-01T19:56:27.7245245Z #18 1.302   Downloaded generic-array v0.14.7
+2026-11-01T19:56:27.7245567Z #18 1.305   Downloaded http-body-util v0.1.5
+2026-11-01T19:56:27.7245922Z #18 1.307   Downloaded displaydoc v0.2.7
+2026-11-01T19:56:27.7246166Z #18 1.310   Downloaded crossbeam-utils v0.8.23
+2026-11-01T19:56:27.7247025Z #18 1.314   Downloaded lock_api v0.4.14
+2026-11-01T19:56:27.7247332Z #18 1.317   Downloaded litemap v0.8.3
+2026-11-01T19:56:27.7247556Z #18 1.320   Downloaded macro_magic_macros v0.5.1
+2026-11-01T19:56:27.7247781Z #18 1.321   Downloaded futures-macro v0.3.34
+2026-11-01T19:56:27.7248023Z #18 1.322   Downloaded jsonwebtoken v9.3.1
+2026-11-01T19:56:27.7248247Z #18 1.328   Downloaded rustc_version v0.4.1
+2026-11-01T19:56:27.7248451Z #18 1.330   Downloaded macro_magic v0.5.1
+2026-11-01T19:56:27.7248660Z #18 1.333   Downloaded rand_pcg v0.10.2
+2026-11-01T19:56:27.7248864Z #18 1.335   Downloaded tagptr v0.2.0
+2026-11-01T19:56:27.7249064Z #18 1.339   Downloaded take_mut v0.2.2
+2026-11-01T19:56:27.7249280Z #18 1.341   Downloaded time-core v0.1.9
+2026-11-01T19:56:27.7249503Z #18 1.345   Downloaded smallvec v1.16.4
+2026-11-01T19:56:27.7249700Z #18 1.347   Downloaded thiserror v2.0.21
+2026-11-01T19:56:27.7250238Z #18 1.358   Downloaded typed-builder-macro v0.22.0
+2026-11-01T19:56:27.8236186Z #18 1.363   Downloaded tokio-rustls v0.26.6
+2026-11-01T19:56:27.8236592Z #18 1.366   Downloaded version_check v0.9.5
+2026-11-01T19:56:27.8236798Z #18 1.369   Downloaded zerofrom v0.1.8
+2026-11-01T19:56:27.8236993Z #18 1.372   Downloaded zmij v1.0.23
+2026-11-01T19:56:27.8237195Z #18 1.377   Downloaded unicode-ident v1.0.27
+2026-11-01T19:56:27.8237397Z #18 1.381   Downloaded writeable v0.6.4
+2026-11-01T19:56:27.8237584Z #18 1.384   Downloaded tower v0.5.3
+2026-11-01T19:56:27.8237770Z #18 1.396   Downloaded yoke-derive v0.8.4
+2026-11-01T19:56:27.8237959Z #18 1.399   Downloaded zeroize v1.9.1
+2026-11-01T19:56:27.8238164Z #18 1.402   Downloaded tracing-subscriber v0.3.23
+2026-11-01T19:56:27.8238385Z #18 1.411   Downloaded rustversion v1.0.23
+2026-11-01T19:56:27.8238589Z #18 1.415   Downloaded zerofrom-derive v0.1.8
+2026-11-01T19:56:27.8238791Z #18 1.417   Downloaded quinn-udp v0.5.16
+2026-11-01T19:56:27.8238986Z #18 1.420   Downloaded serde_core v1.0.229
+2026-11-01T19:56:27.8239178Z #18 1.423   Downloaded zerocopy v0.8.63
+2026-11-01T19:56:27.8239371Z #18 1.447   Downloaded subtle v2.6.1
+2026-11-01T19:56:27.8239572Z #18 1.448   Downloaded webpki-roots v1.0.11
+2026-11-01T19:56:27.8239790Z #18 1.452   Downloaded yoke v0.8.4
+2026-11-01T19:56:27.8240006Z #18 1.454   Downloaded zerovec-derive v0.11.7
+2026-11-01T19:56:27.8240203Z #18 1.456   Downloaded simd-adler32 v0.3.10
+2026-11-01T19:56:27.8240393Z #18 1.458   Downloaded mime v0.3.17
+2026-11-01T19:56:27.9263436Z #18 1.460   Downloaded unicode-xid v0.2.6
+2026-11-01T19:56:27.9264127Z #18 1.461   Downloaded zerovec v0.11.9
+2026-11-01T19:56:27.9264713Z #18 1.467   Downloaded memchr v2.8.3
+2026-11-01T19:56:27.9265004Z #18 1.472   Downloaded typed-builder v0.22.0
+2026-11-01T19:56:27.9265344Z #18 1.474   Downloaded zlib-rs v0.6.8
+2026-11-01T19:56:27.9265614Z #18 1.479   Downloaded ring v0.17.14
+2026-11-01T19:56:27.9265882Z #18 1.513   Downloaded tokio v1.54.1
+2026-11-01T19:56:27.9266165Z #18 1.552   Downloaded matchers v0.2.0
+2026-11-01T19:56:27.9266525Z #18 1.554   Downloaded zerotrie v0.2.5
+2026-11-01T19:56:27.9266804Z #18 1.557   Downloaded rand v0.9.5
+2026-11-01T19:56:27.9267249Z #18 1.561   Downloaded uuid v1.29.0
+2026-11-01T19:56:28.0319178Z #18 1.564   Downloaded sharded-slab v0.1.7
+2026-11-01T19:56:28.0319655Z #18 1.567   Downloaded rustls-pki-types v1.15.1
+2026-11-01T19:56:28.0320007Z #18 1.569   Downloaded utf8_iter v1.1.0
+2026-11-01T19:56:28.0320332Z #18 1.571   Downloaded portable-atomic v1.15.0
+2026-11-01T19:56:28.0320659Z #18 1.577   Downloaded num-traits v0.2.19
+2026-11-01T19:56:28.0320962Z #18 1.580   Downloaded moka v0.12.16
+2026-11-01T19:56:28.0321260Z #18 1.586   Downloaded reqwest v0.12.28
+2026-11-01T19:56:28.0324178Z #18 1.592   Downloaded prefix-trie v0.8.4
+2026-11-01T19:56:28.0324685Z #18 1.595   Downloaded powerfmt v0.2.1
+2026-11-01T19:56:28.0325008Z #18 1.597   Downloaded parking_lot_core v0.9.12
+2026-11-01T19:56:28.0325324Z #18 1.599   Downloaded mio v1.2.4
+2026-11-01T19:56:28.0325621Z #18 1.605   Downloaded sync_wrapper v1.0.2
+2026-11-01T19:56:28.0325919Z #18 1.606   Downloaded sha2 v0.11.1
+2026-11-01T19:56:28.0326226Z #18 1.609   Downloaded serde_bytes v0.11.19
+2026-11-01T19:56:28.0326556Z #18 1.611   Downloaded derive_more-impl v2.1.1
+2026-11-01T19:56:28.0326878Z #18 1.616   Downloaded regex-automata v0.4.18
+2026-11-01T19:56:28.0327196Z #18 1.628   Downloaded regex v1.13.1
+2026-11-01T19:56:28.0327483Z #18 1.633   Downloaded rustls v0.23.46
+2026-11-01T19:56:28.0327780Z #18 1.644   Downloaded num-bigint v0.4.8
+2026-11-01T19:56:28.0328073Z #18 1.648   Downloaded mongodb v3.9.1
+2026-11-01T19:56:28.0328365Z #18 1.666   Downloaded tracing v0.1.44
+2026-11-01T19:56:28.1351256Z #18 1.680   Downloaded socket2 v0.6.5
+2026-11-01T19:56:28.1352013Z #18 1.682   Downloaded rustls-webpki v0.103.16
+2026-11-01T19:56:28.1352275Z #18 1.685   Downloaded rand v0.8.8
+2026-11-01T19:56:28.1352544Z #18 1.689   Downloaded quinn v0.11.12
+2026-11-01T19:56:28.1352818Z #18 1.692   Downloaded unicode-normalization v0.1.26
+2026-11-01T19:56:28.1353074Z #18 1.695   Downloaded unicode-bidi v0.3.18
+2026-11-01T19:56:28.1353332Z #18 1.697   Downloaded typenum v1.20.1
+2026-11-01T19:56:28.1353602Z #18 1.700   Downloaded serde_with v3.24.0
+2026-11-01T19:56:28.1353813Z #18 1.712   Downloaded serde_path_to_error v0.1.20
+2026-11-01T19:56:28.1354105Z #18 1.714   Downloaded scopeguard v1.2.0
+2026-11-01T19:56:28.1354383Z #18 1.715   Downloaded rand_core v0.9.5
+2026-11-01T19:56:28.1354582Z #18 1.717   Downloaded nu-ansi-term v0.50.3
+2026-11-01T19:56:28.1354799Z #18 1.719   Downloaded matchit v0.7.3
+2026-11-01T19:56:28.1355192Z #18 1.721   Downloaded url v2.5.8
+2026-11-01T19:56:28.1355472Z #18 1.723   Downloaded untrusted v0.9.0
+2026-11-01T19:56:28.1355816Z #18 1.725   Downloaded unicode-segmentation v1.13.3
+2026-11-01T19:56:28.1356171Z #18 1.727   Downloaded syn v2.0.119
+2026-11-01T19:56:28.1356445Z #18 1.736   Downloaded slab v0.4.12
+2026-11-01T19:56:28.1356734Z #18 1.738   Downloaded serde_with_macros v3.24.0
+2026-11-01T19:56:28.1357042Z #18 1.739   Downloaded serde_json v1.0.154
+2026-11-01T19:56:28.1357344Z #18 1.746   Downloaded serde v1.0.229
+2026-11-01T19:56:28.1357631Z #18 1.749   Downloaded tokio-util v0.7.20
+2026-11-01T19:56:28.1357914Z #18 1.756   Downloaded want v0.3.2
+2026-11-01T19:56:28.1358187Z #18 1.757   Downloaded time v0.3.55
+2026-11-01T19:56:28.1358462Z #18 1.769   Downloaded rand_chacha v0.3.1
+2026-11-01T19:56:28.2354284Z #18 1.771   Downloaded quote v1.0.47
+2026-11-01T19:56:28.2354741Z #18 1.773   Downloaded pin-project-lite v0.2.17
+2026-11-01T19:56:28.2355053Z #18 1.779   Downloaded pbkdf2 v0.13.0
+2026-11-01T19:56:28.2355261Z #18 1.780   Downloaded num-integer v0.1.47
+2026-11-01T19:56:28.2355591Z #18 1.782   Downloaded mongodb-internal-macros v3.9.1
+2026-11-01T19:56:28.2355975Z #18 1.783   Downloaded mongocrypt-sys v0.1.6+1.18.2
+2026-11-01T19:56:28.2356292Z #18 1.784   Downloaded miniz_oxide v0.9.1
+2026-11-01T19:56:28.2356614Z #18 1.787   Downloaded macro_magic_core_macros v0.5.1
+2026-11-01T19:56:28.2356921Z #18 1.788   Downloaded macro_magic_core v0.5.1
+2026-11-01T19:56:28.2357124Z #18 1.788   Downloaded log v0.4.35
+2026-11-01T19:56:28.2357381Z #18 1.791   Downloaded libc v0.2.191
+2026-11-01T19:56:28.2357931Z #18 1.831   Downloaded tracing-log v0.2.0
+2026-11-01T19:56:28.2358231Z #18 1.832   Downloaded thiserror-impl v2.0.21
+2026-11-01T19:56:28.2358554Z #18 1.834   Downloaded stable_deref_trait v1.2.1
+2026-11-01T19:56:28.2358874Z #18 1.834   Downloaded simple_asn1 v0.6.4
+2026-11-01T19:56:28.2359191Z #18 1.836   Downloaded signal-hook-registry v1.4.8
+2026-11-01T19:56:28.2359505Z #18 1.837   Downloaded sha1 v0.11.0
+2026-11-01T19:56:28.2359787Z #18 1.839   Downloaded rustc-hash v2.1.3
+2026-11-01T19:56:28.2360075Z #18 1.840   Downloaded radium v0.7.0
+2026-11-01T19:56:28.2360529Z #18 1.841   Downloaded quinn-proto v0.11.19
+2026-11-01T19:56:28.2360831Z #18 1.847   Downloaded pem v3.0.6
+2026-11-01T19:56:28.2361109Z #18 1.848   Downloaded once_cell v1.21.4
+2026-11-01T19:56:28.2361694Z #18 1.850   Downloaded icu_normalizer v2.4.0
+2026-11-01T19:56:28.2362000Z #18 1.858   Downloaded wyz v0.5.1
+2026-11-01T19:56:28.2362207Z #18 1.860   Downloaded tower-http v0.6.11
+2026-11-01T19:56:28.2362399Z #18 1.868   Downloaded tinystr v0.8.5
+2026-11-01T19:56:28.2362697Z #18 1.870   Downloaded syn v3.0.9
+2026-11-01T19:56:28.3393926Z #18 1.879   Downloaded rand_core v0.10.1
+2026-11-01T19:56:28.3394636Z #18 1.881   Downloaded hickory-proto v0.26.3
+2026-11-01T19:56:28.3395342Z #18 1.890   Downloaded cpufeatures v0.2.17
+2026-11-01T19:56:28.3395691Z #18 1.891   Downloaded utf_types v1.0.0
+2026-11-01T19:56:28.3396028Z #18 1.893   Downloaded unicode-properties v0.1.4
+2026-11-01T19:56:28.3396355Z #18 1.894   Downloaded tracing-core v0.1.36
+2026-11-01T19:56:28.3396684Z #18 1.897   Downloaded tracing-attributes v0.1.31
+2026-11-01T19:56:28.3397168Z #18 1.899   Downloaded chrono v0.4.45
+2026-11-01T19:56:28.3409070Z #18 1.905   Downloaded bitvec v1.1.1
+2026-11-01T19:56:28.3409360Z #18 1.920   Downloaded autocfg v1.5.1
+2026-11-01T19:56:28.3409635Z #18 1.922   Downloaded try-lock v0.2.5
+2026-11-01T19:56:28.3409947Z #18 1.923   Downloaded tower-service v0.3.3
+2026-11-01T19:56:28.3410260Z #18 1.923   Downloaded tokio-macros v2.7.2
+2026-11-01T19:56:28.3410602Z #18 1.925   Downloaded tiny-keccak v2.0.2
+2026-11-01T19:56:28.3410908Z #18 1.927   Downloaded thiserror-impl v1.0.69
+2026-11-01T19:56:28.3411203Z #18 1.928   Downloaded lru-slab v0.1.3
+2026-11-01T19:56:28.3411715Z #18 1.929   Downloaded icu_properties_data v2.4.0
+2026-11-01T19:56:28.3412015Z #18 1.939   Downloaded hyper v1.12.0
+2026-11-01T19:56:28.3412289Z #18 1.945   Downloaded hickory-net v0.26.3
+2026-11-01T19:56:28.3412575Z #18 1.950   Downloaded futures-util v0.3.34
+2026-11-01T19:56:28.3412857Z #18 1.962   Downloaded aho-corasick v1.1.5
+2026-11-01T19:56:28.3413118Z #18 1.966   Downloaded time-macros v0.2.32
+2026-11-01T19:56:28.3413317Z #18 1.969   Downloaded thiserror v1.0.69
+2026-11-01T19:56:28.3413512Z #18 1.974   Downloaded strsim v0.11.1
+2026-11-01T19:56:28.4414482Z #18 1.975   Downloaded serde_urlencoded v0.7.1
+2026-11-01T19:56:28.4414969Z #18 1.977   Downloaded serde_derive v1.0.229
+2026-11-01T19:56:28.4415302Z #18 1.980   Downloaded ryu v1.0.23
+2026-11-01T19:56:28.4415651Z #18 1.983   Downloaded rustc_version_runtime v0.3.0
+2026-11-01T19:56:28.4415988Z #18 1.984   Downloaded regex-syntax v0.8.11
+2026-11-01T19:56:28.4416294Z #18 1.990   Downloaded rand_chacha v0.9.0
+2026-11-01T19:56:28.4416641Z #18 1.991   Downloaded ppv-lite86 v0.2.21
+2026-11-01T19:56:28.4416946Z #18 1.992   Downloaded potential_utf v0.1.6
+2026-11-01T19:56:28.4417270Z #18 1.994   Downloaded percent-encoding v2.3.2
+2026-11-01T19:56:28.4417588Z #18 1.995   Downloaded parking_lot v0.12.5
+2026-11-01T19:56:28.4417889Z #18 1.997   Downloaded num-conv v0.2.2
+2026-11-01T19:56:28.4418190Z #18 1.998   Downloaded idna v1.1.0
+2026-11-01T19:56:28.4418488Z #18 2.001   Downloaded icu_properties v2.4.0
+2026-11-01T19:56:28.4418816Z #18 2.004   Downloaded hyper-util v0.1.21
+2026-11-01T19:56:28.4419077Z #18 2.010   Downloaded http v1.5.0
+2026-11-01T19:56:28.4419286Z #18 2.014   Downloaded hickory-resolver v0.26.3
+2026-11-01T19:56:28.4419495Z #18 2.018   Downloaded hashbrown v0.17.1
+2026-11-01T19:56:28.4420049Z #18 2.023   Downloaded derive_more v2.1.1
+2026-11-01T19:56:28.4420243Z #18 2.035   Downloaded darling_core v0.24.1
+2026-11-01T19:56:28.4420459Z #18 2.040   Downloaded crossbeam-channel v0.5.17
+2026-11-01T19:56:28.4420668Z #18 2.044   Downloaded const-oid v0.10.2
+2026-11-01T19:56:28.4420866Z #18 2.046   Downloaded cc v1.10.0
+2026-11-01T19:56:28.4421057Z #18 2.050   Downloaded bson v2.15.0
+2026-11-01T19:56:28.4421244Z #18 2.055   Downloaded base64 v0.23.1
+2026-11-01T19:56:28.4421599Z #18 2.058   Downloaded base64 v0.22.1
+2026-11-01T19:56:28.4421784Z #18 2.062   Downloaded axum v0.7.9
+2026-11-01T19:56:28.4422093Z #18 2.068   Downloaded tower-layer v0.3.3
+2026-11-01T19:56:28.4422288Z #18 2.069   Downloaded tinyvec v1.13.3
+2026-11-01T19:56:28.4422478Z #18 2.073   Downloaded rand v0.10.3
+2026-11-01T19:56:28.4422673Z #18 2.076   Downloaded icu_collections v2.4.0
+2026-11-01T19:56:28.5450701Z #18 2.082   Downloaded proc-macro2 v1.0.107
+2026-11-01T19:56:28.5450993Z #18 2.085   Downloaded indexmap v2.14.2
+2026-11-01T19:56:28.5451339Z #18 2.089   Downloaded icu_provider v2.4.0
+2026-11-01T19:56:28.5451773Z #18 2.091   Downloaded icu_locale_core v2.4.0
+2026-11-01T19:56:28.5452104Z #18 2.098   Downloaded either v1.19.0
+2026-11-01T19:56:28.5452398Z #18 2.099   Downloaded darling v0.24.1
+2026-11-01T19:56:28.5452728Z #18 2.105   Downloaded crossbeam-epoch v0.9.21
+2026-11-01T19:56:28.5453002Z #18 2.108   Downloaded crc32fast v1.5.3
+2026-11-01T19:56:28.5453199Z #18 2.110   Downloaded bitflags v2.13.2
+2026-11-01T19:56:28.5453387Z #18 2.114   Downloaded semver v1.0.28
+2026-11-01T19:56:28.5453650Z #18 2.116   Downloaded resolv-conf v0.7.6
+2026-11-01T19:56:28.5453864Z #18 2.118   Downloaded rand_core v0.6.4
+2026-11-01T19:56:28.5454055Z #18 2.119   Downloaded md-5 v0.11.0
+2026-11-01T19:56:28.5454254Z #18 2.121   Downloaded hybrid-array v0.4.15
+2026-11-01T19:56:28.5454524Z #18 2.123   Downloaded getrandom v0.4.3
+2026-11-01T19:56:28.5454716Z #18 2.126   Downloaded futures v0.3.34
+2026-11-01T19:56:28.5454909Z #18 2.131   Downloaded derive-where v1.7.0
+2026-11-01T19:56:28.5455153Z #18 2.134   Downloaded bytes v1.12.1
+2026-11-01T19:56:28.5455387Z #18 2.137   Downloaded thread_local v1.1.10
+2026-11-01T19:56:28.5455587Z #18 2.139   Downloaded tap v1.0.1
+2026-11-01T19:56:28.5455780Z #18 2.140   Downloaded synstructure v0.14.0
+2026-11-01T19:56:28.5456052Z #18 2.141   Downloaded stringprep v0.1.5
+2026-11-01T19:56:28.5456249Z #18 2.142   Downloaded shlex v2.0.1
+2026-11-01T19:56:28.5456448Z #18 2.143   Downloaded hyper-rustls v0.27.10
+2026-11-01T19:56:28.5456652Z #18 2.145   Downloaded httparse v1.10.1
+2026-11-01T19:56:28.5456920Z #18 2.147   Downloaded getrandom v0.3.4
+2026-11-01T19:56:28.5457129Z #18 2.151   Downloaded futures-channel v0.3.34
+2026-11-01T19:56:28.5457333Z #18 2.152   Downloaded flate2 v1.1.10
+2026-11-01T19:56:28.5457605Z #18 2.157   Downloaded data-encoding v2.11.1
+2026-11-01T19:56:28.5457809Z #18 2.158   Downloaded ctutils v0.4.7
+2026-11-01T19:56:28.5458004Z #18 2.160   Downloaded convert_case v0.10.0
+2026-11-01T19:56:28.5458206Z #18 2.162   Downloaded axum-macros v0.4.2
+2026-11-01T19:56:28.5458501Z #18 2.173   Downloaded async-compression v0.4.51
+2026-11-01T19:56:28.5458728Z #18 2.179   Downloaded icu_normalizer_data v2.4.0
+2026-11-01T19:56:28.7148083Z #18 2.181   Downloaded iana-time-zone v0.1.65
+2026-11-01T19:56:28.7148949Z #18 2.184   Downloaded futures-executor v0.3.34
+2026-11-01T19:56:28.7149422Z #18 2.186   Downloaded digest v0.11.3
+2026-11-01T19:56:28.7149808Z #18 2.188   Downloaded deranged v0.5.9
+2026-11-01T19:56:28.7150220Z #18 2.189   Downloaded const-random-macro v0.1.16
+2026-11-01T19:56:28.7150614Z #18 2.190   Downloaded compression-codecs v0.4.46
+2026-11-01T19:56:28.7150939Z #18 2.194   Downloaded sha2 v0.10.9
+2026-11-01T19:56:28.7151225Z #18 2.197   Downloaded mongocrypt v0.4.0
+2026-11-01T19:56:28.7151688Z #18 2.198   Downloaded lazy_static v1.5.1
+2026-11-01T19:56:28.7151989Z #18 2.200   Downloaded httpdate v1.0.3
+2026-11-01T19:56:28.7152203Z #18 2.201   Downloaded foldhash v0.2.0
+2026-11-01T19:56:28.7152500Z #18 2.202   Downloaded derive-syn-parse v0.2.0
+2026-11-01T19:56:28.7152976Z #18 2.204   Downloaded chacha20 v0.10.2
+2026-11-01T19:56:28.7153249Z #18 2.206   Downloaded ipnet v2.12.2
+2026-11-01T19:56:28.7153435Z #18 2.208   Downloaded errno v0.3.14
+2026-11-01T19:56:28.7153623Z #18 2.209   Downloaded getrandom v0.2.17
+2026-11-01T19:56:28.7153810Z #18 2.212   Downloaded hmac v0.13.0
+2026-11-01T19:56:28.7154085Z #18 2.214   Downloaded futures-sink v0.3.34
+2026-11-01T19:56:28.7154292Z #18 2.215   Downloaded form_urlencoded v1.2.2
+2026-11-01T19:56:28.7154492Z #18 2.215   Downloaded ahash v0.8.12
+2026-11-01T19:56:28.7154872Z #18 2.218   Downloaded http-body v1.1.0
+2026-11-01T19:56:28.7155074Z #18 2.219   Downloaded find-msvc-tools v0.1.15
+2026-11-01T19:56:28.7155275Z #18 2.220   Downloaded dotenvy v0.15.7
+2026-11-01T19:56:28.7155532Z #18 2.223   Downloaded digest v0.10.7
+2026-11-01T19:56:28.7155748Z #18 2.225   Downloaded darling_macro v0.24.1
+2026-11-01T19:56:28.7155941Z #18 2.225   Downloaded cfg-if v1.0.5
+2026-11-01T19:56:28.7156127Z #18 2.227   Downloaded axum-core v0.4.5
+2026-11-01T19:56:28.7156399Z #18 2.229   Downloaded crunchy v0.2.4
+2026-11-01T19:56:28.7156583Z #18 2.229   Downloaded cmov v0.5.4
+2026-11-01T19:56:28.7156768Z #18 2.231   Downloaded cfg_aliases v0.2.2
+2026-11-01T19:56:28.7156960Z #18 2.232   Downloaded block-buffer v0.12.1
+2026-11-01T19:56:28.7157243Z #18 2.233   Downloaded critical-section v1.2.0
+2026-11-01T19:56:28.7157443Z #18 2.235   Downloaded futures-task v0.3.34
+2026-11-01T19:56:28.7157638Z #18 2.236   Downloaded futures-core v0.3.34
+2026-11-01T19:56:28.7157875Z #18 2.237   Downloaded equivalent v1.0.3
+2026-11-01T19:56:28.7158104Z #18 2.238   Downloaded crypto-common v0.2.2
+2026-11-01T19:56:28.7158297Z #18 2.239   Downloaded cpufeatures v0.3.1
+2026-11-01T19:56:28.7158488Z #18 2.349    Compiling proc-macro2 v1.0.107
+2026-11-01T19:56:28.7158771Z #18 2.349    Compiling unicode-ident v1.0.27
+2026-11-01T19:56:28.7158963Z #18 2.349    Compiling quote v1.0.47
+2026-11-01T19:56:28.7159148Z #18 2.349    Compiling cfg-if v1.0.5
+2026-11-01T19:56:28.8263283Z #18 2.415    Compiling libc v0.2.191
+2026-11-01T19:56:28.8263899Z #18 2.460    Compiling memchr v2.8.3
+2026-11-01T19:56:29.1902655Z #18 2.673    Compiling serde_core v1.0.229
+2026-11-01T19:56:29.3694999Z #18 3.003    Compiling portable-atomic v1.15.0
+2026-11-01T19:56:30.2118926Z #18 3.695    Compiling smallvec v1.16.4
+2026-11-01T19:56:30.3740216Z #18 3.846    Compiling syn v3.0.9
+2026-11-01T19:56:30.3742961Z #18 3.926    Compiling syn v2.0.119
+2026-11-01T19:56:30.5269586Z #18 4.008    Compiling pin-project-lite v0.2.17
+2026-11-01T19:56:32.3197074Z #18 5.708    Compiling critical-section v1.2.0
+2026-11-01T19:56:32.3197583Z #18 5.802    Compiling once_cell v1.21.4
+2026-11-01T19:56:32.6578184Z #18 6.087    Compiling stable_deref_trait v1.2.1
+2026-11-01T19:56:32.6578865Z #18 6.152    Compiling futures-core v0.3.34
+2026-11-01T19:56:32.8089661Z #18 6.292    Compiling parking_lot_core v0.9.12
+2026-11-01T19:56:33.0611942Z #18 6.544    Compiling bytes v1.12.1
+2026-11-01T19:56:34.3036682Z #18 7.707    Compiling scopeguard v1.2.0
+2026-11-01T19:56:34.3037205Z #18 7.787    Compiling lock_api v0.4.14
+2026-11-01T19:56:34.6254062Z #18 8.108    Compiling log v0.4.35
+2026-11-01T19:56:34.8882809Z #18 8.316    Compiling itoa v1.0.18
+2026-11-01T19:56:34.8883344Z #18 8.371    Compiling serde v1.0.229
+2026-11-01T19:56:35.0813312Z #18 8.563    Compiling parking_lot v0.12.5
+2026-11-01T19:56:35.0986977Z #18 8.732    Compiling errno v0.3.14
+2026-11-01T19:56:35.3607677Z #18 8.895    Compiling futures-sink v0.3.34
+2026-11-01T19:56:35.3608296Z #18 8.995    Compiling typenum v1.20.1
+2026-11-01T19:56:35.8753039Z #18 9.358    Compiling futures-channel v0.3.34
+2026-11-01T19:56:36.2130822Z #18 9.694    Compiling synstructure v0.14.0
+2026-11-01T19:56:36.9543561Z #18 10.41    Compiling signal-hook-registry v1.4.8
+2026-11-01T19:56:36.9544142Z #18 10.44    Compiling tracing-core v0.1.36
+2026-11-01T19:56:37.3455745Z #18 10.84    Compiling socket2 v0.6.5
+2026-11-01T19:56:37.4977165Z #18 10.98    Compiling mio v1.2.4
+2026-11-01T19:56:38.0088644Z #18 11.49    Compiling autocfg v1.5.1
+2026-11-01T19:56:38.3424281Z #18 11.78    Compiling futures-io v0.3.34
+2026-11-01T19:56:38.3424817Z #18 11.79    Compiling zerofrom-derive v0.1.8
+2026-11-01T19:56:38.3425147Z #18 11.87    Compiling yoke-derive v0.8.4
+2026-11-01T19:56:38.5023931Z #18 11.98    Compiling zerovec-derive v0.11.7
+2026-11-01T19:56:38.5024377Z #18 11.98    Compiling displaydoc v0.2.7
+2026-11-01T19:56:39.4226287Z #18 13.06    Compiling serde_derive v1.0.229
+2026-11-01T19:56:39.9175217Z #18 13.41    Compiling futures-macro v0.3.34
+2026-11-01T19:56:40.0403517Z #18 13.55    Compiling zerofrom v0.1.8
+2026-11-01T19:56:40.0404474Z #18 13.59    Compiling tokio-macros v2.7.2
+2026-11-01T19:56:40.1928979Z #18 13.67    Compiling yoke v0.8.4
+2026-11-01T19:56:40.4524947Z #18 13.93    Compiling zerovec v0.11.9
+2026-11-01T19:56:41.0827792Z #18 14.55    Compiling futures-task v0.3.34
+2026-11-01T19:56:41.0830233Z #18 14.57    Compiling slab v0.4.12
+2026-11-01T19:56:41.2676661Z #18 14.73    Compiling tokio v1.54.1
+2026-11-01T19:56:41.2677235Z #18 14.79    Compiling futures-util v0.3.34
+2026-11-01T19:56:41.4196818Z #18 14.90    Compiling tinystr v0.8.5
+2026-11-01T19:56:41.6626228Z #18 15.14    Compiling num-traits v0.2.19
+2026-11-01T19:56:41.8722788Z #18 15.35    Compiling tracing-attributes v0.1.31
+2026-11-01T19:56:43.7423180Z #18 17.22    Compiling litemap v0.8.3
+2026-11-01T19:56:44.0239629Z #18 17.51    Compiling writeable v0.6.4
+2026-11-01T19:56:44.3498973Z #18 17.83    Compiling utf_types v1.0.0
+2026-11-01T19:56:44.7237874Z #18 18.21    Compiling utf8_iter v1.1.0
+2026-11-01T19:56:45.0120292Z #18 18.40    Compiling icu_locale_core v2.4.0
+2026-11-01T19:56:45.0120902Z #18 18.50    Compiling tracing v0.1.44
+2026-11-01T19:56:45.5870792Z #18 19.07    Compiling potential_utf v0.1.6
+2026-11-01T19:56:45.7427097Z #18 19.23    Compiling zerotrie v0.2.5
+2026-11-01T19:56:46.0639954Z #18 19.55    Compiling version_check v0.9.5
+2026-11-01T19:56:46.2406304Z #18 19.72    Compiling icu_normalizer_data v2.4.0
+2026-11-01T19:56:46.4324588Z #18 19.88    Compiling find-msvc-tools v0.1.15
+2026-11-01T19:56:46.4325016Z #18 19.92    Compiling shlex v2.0.1
+2026-11-01T19:56:46.6602506Z #18 20.11    Compiling icu_properties_data v2.4.0
+2026-11-01T19:56:46.6603071Z #18 20.14    Compiling percent-encoding v2.3.2
+2026-11-01T19:56:46.6955997Z #18 20.33    Compiling cc v1.10.0
+2026-11-01T19:56:46.9270507Z #18 20.41    Compiling icu_provider v2.4.0
+2026-11-01T19:56:47.5638601Z #18 21.05    Compiling icu_collections v2.4.0
+2026-11-01T19:56:48.4413442Z #18 21.92    Compiling getrandom v0.2.17
+2026-11-01T19:56:49.3259520Z #18 22.72    Compiling crunchy v0.2.4
+2026-11-01T19:56:49.3260049Z #18 22.81    Compiling ring v0.17.14
+2026-11-01T19:56:49.3623117Z #18 23.00    Compiling zerocopy v0.8.63
+2026-11-01T19:56:49.5360456Z #18 23.02    Compiling tiny-keccak v2.0.2
+2026-11-01T19:56:49.7316397Z #18 23.21    Compiling getrandom v0.4.3
+2026-11-01T19:56:49.9181218Z #18 23.40    Compiling rand_core v0.10.1
+2026-11-01T19:56:50.0898332Z #18 23.56    Compiling icu_properties v2.4.0
+2026-11-01T19:56:50.0900880Z #18 23.57    Compiling icu_normalizer v2.4.0
+2026-11-01T19:56:52.4532148Z #18 25.93    Compiling form_urlencoded v1.2.2
+2026-11-01T19:56:52.6985460Z #18 26.18    Compiling ipnet v2.12.2
+2026-11-01T19:56:52.9181596Z #18 26.40    Compiling hybrid-array v0.4.15
+2026-11-01T19:56:53.6962612Z #18 27.18    Compiling http v1.5.0
+2026-11-01T19:56:53.8809030Z #18 27.51    Compiling equivalent v1.0.3
+2026-11-01T19:56:54.3673040Z #18 27.85    Compiling idna_adapter v1.2.2
+2026-11-01T19:56:55.9970654Z #18 29.48    Compiling http-body v1.1.0
+2026-11-01T19:56:56.0040388Z #18 29.64    Compiling zeroize v1.9.1
+2026-11-01T19:56:56.1547723Z #18 29.73    Compiling cpufeatures v0.3.1
+2026-11-01T19:56:56.3489860Z #18 29.79    Compiling getrandom v0.3.4
+2026-11-01T19:56:56.3492825Z #18 29.83    Compiling zmij v1.0.23
+2026-11-01T19:56:56.6407902Z #18 30.12    Compiling cmov v0.5.4
+2026-11-01T19:56:56.7742796Z #18 30.29    Compiling untrusted v0.9.0
+2026-11-01T19:56:56.9400576Z #18 30.41    Compiling thiserror v2.0.21
+2026-11-01T19:56:56.9403549Z #18 30.42    Compiling ctutils v0.4.7
+2026-11-01T19:56:57.2612471Z #18 30.74    Compiling const-random-macro v0.1.16
+2026-11-01T19:56:57.3402727Z #18 30.97    Compiling rustls-pki-types v1.15.1
+2026-11-01T19:56:57.6003050Z #18 31.08    Compiling idna v1.1.0
+2026-11-01T19:56:58.2529153Z #18 31.89    Compiling block-buffer v0.12.1
+2026-11-01T19:56:58.5953403Z #18 32.08    Compiling crypto-common v0.2.2
+2026-11-01T19:56:59.7136208Z #18 33.20    Compiling thiserror-impl v2.0.21
+2026-11-01T19:57:00.3280503Z #18 33.81    Compiling serde_json v1.0.154
+2026-11-01T19:57:00.5423237Z #18 34.02    Compiling httparse v1.10.1
+2026-11-01T19:57:00.9083035Z #18 34.39    Compiling const-oid v0.10.2
+2026-11-01T19:57:01.2694127Z #18 34.68    Compiling tower-service v0.3.3
+2026-11-01T19:57:01.2694562Z #18 34.75    Compiling crossbeam-utils v0.8.23
+2026-11-01T19:57:01.5757533Z #18 35.03    Compiling crc32fast v1.5.3
+2026-11-01T19:57:01.5758134Z #18 35.06    Compiling hashbrown v0.17.1
+2026-11-01T19:57:01.8698305Z #18 35.28    Compiling ppv-lite86 v0.2.21
+2026-11-01T19:57:01.8698828Z #18 35.35    Compiling digest v0.11.3
+2026-11-01T19:57:02.0442993Z #18 35.68    Compiling url v2.5.8
+2026-11-01T19:57:02.3889929Z #18 35.87    Compiling const-random v0.1.18
+2026-11-01T19:57:02.5132436Z #18 36.15    Compiling indexmap v2.14.2
+2026-11-01T19:57:03.0948052Z #18 36.58    Compiling generic-array v0.14.7
+2026-11-01T19:57:03.3086391Z #18 36.79    Compiling derive-syn-parse v0.2.0
+2026-11-01T19:57:03.6559509Z #18 37.14    Compiling macro_magic_core_macros v0.5.1
+2026-11-01T19:57:03.8592545Z #18 37.49    Compiling rustls v0.23.46
+2026-11-01T19:57:04.0153172Z #18 37.50    Compiling strsim v0.11.1
+2026-11-01T19:57:04.1843145Z #18 37.68    Compiling foldhash v0.2.0
+2026-11-01T19:57:04.2970575Z #18 37.82    Compiling num-conv v0.2.2
+2026-11-01T19:57:04.2971092Z #18 37.84    Compiling adler2 v2.0.1
+2026-11-01T19:57:04.2971550Z #18 37.88    Compiling ident_case v1.0.1
+2026-11-01T19:57:04.4488521Z #18 37.93    Compiling tinyvec v1.13.3
+2026-11-01T19:57:04.4489027Z #18 37.97    Compiling simd-adler32 v0.3.10
+2026-11-01T19:57:04.4489857Z #18 37.99    Compiling try-lock v0.2.5
+2026-11-01T19:57:04.4490147Z #18 38.00    Compiling time-core v0.1.9
+2026-11-01T19:57:04.4490421Z #18 38.08    Compiling want v0.3.2
+2026-11-01T19:57:04.7494774Z #18 38.23    Compiling time-macros v0.2.32
+2026-11-01T19:57:04.7495254Z #18 38.23    Compiling miniz_oxide v0.9.1
+2026-11-01T19:57:05.0718812Z #18 38.55    Compiling darling_core v0.24.1
+2026-11-01T19:57:06.2265743Z #18 39.71    Compiling macro_magic_core v0.5.1
+2026-11-01T19:57:07.1839874Z #18 40.67    Compiling rustls-webpki v0.103.16
+2026-11-01T19:57:07.8575594Z #18 41.34    Compiling chacha20 v0.10.2
+2026-11-01T19:57:08.2663111Z #18 41.73    Compiling async-trait v0.1.92
+2026-11-01T19:57:08.2663692Z #18 41.81    Compiling sync_wrapper v1.0.2
+2026-11-01T19:57:08.4178066Z #18 41.90    Compiling httpdate v1.0.3
+2026-11-01T19:57:08.7802928Z #18 42.26    Compiling semver v1.0.28
+2026-11-01T19:57:09.1649090Z #18 42.65    Compiling crossbeam-epoch v0.9.21
+2026-11-01T19:57:09.5526730Z #18 43.08    Compiling tower-layer v0.3.3
+2026-11-01T19:57:09.5527347Z #18 43.14    Compiling subtle v2.6.1
+2026-11-01T19:57:09.6934399Z #18 43.19    Compiling powerfmt v0.2.1
+2026-11-01T19:57:09.9194564Z #18 43.33    Compiling radium v0.7.0
+2026-11-01T19:57:09.9197091Z #18 43.40    Compiling deranged v0.5.9
+2026-11-01T19:57:10.0823875Z #18 43.56    Compiling base64 v0.22.1
+2026-11-01T19:57:10.0826506Z #18 43.61    Compiling atomic-waker v1.1.2
+2026-11-01T19:57:10.0827238Z #18 43.65    Compiling either v1.19.0
+2026-11-01T19:57:10.2335251Z #18 43.72    Compiling hyper v1.12.0
+2026-11-01T19:57:10.4968521Z #18 43.98    Compiling prefix-trie v0.8.4
+2026-11-01T19:57:11.4999404Z #18 44.98    Compiling darling_macro v0.24.1
+2026-11-01T19:57:11.9272553Z #18 45.41    Compiling time v0.3.55
+2026-11-01T19:57:12.0227563Z #18 45.66    Compiling rustc_version v0.4.1
+2026-11-01T19:57:12.4737168Z #18 45.96    Compiling rand v0.10.3
+2026-11-01T19:57:13.6212048Z #18 47.10    Compiling flate2 v1.1.10
+2026-11-01T19:57:13.8142893Z #18 47.30    Compiling macro_magic_macros v0.5.1
+2026-11-01T19:57:14.6228484Z #18 48.11    Compiling rand_core v0.9.5
+2026-11-01T19:57:14.9096925Z #18 48.39    Compiling uuid v1.29.0
+2026-11-01T19:57:15.2908033Z #18 48.77    Compiling ahash v0.8.12
+2026-11-01T19:57:15.3712085Z #18 49.01    Compiling aho-corasick v1.1.5
+2026-11-01T19:57:15.6409766Z #18 49.16    Compiling tap v1.0.1
+2026-11-01T19:57:15.7946488Z #18 49.28    Compiling rustversion v1.0.23
+2026-11-01T19:57:16.1568179Z #18 49.64    Compiling compression-core v0.4.34
+2026-11-01T19:57:16.1570324Z #18 49.66    Compiling data-encoding v2.11.1
+2026-11-01T19:57:16.3082226Z #18 49.79    Compiling regex-syntax v0.8.11
+2026-11-01T19:57:18.6158577Z #18 52.10    Compiling base64 v0.23.1
+2026-11-01T19:57:19.3073080Z #18 52.79    Compiling unicode-segmentation v1.13.3
+2026-11-01T19:57:19.8885099Z #18 53.37    Compiling convert_case v0.10.0
+2026-11-01T19:57:20.2212636Z #18 53.72    Compiling regex-automata v0.4.18
+2026-11-01T19:57:20.3728931Z #18 53.86    Compiling hyper-util v0.1.21
+2026-11-01T19:57:23.3417183Z #18 56.82    Compiling tokio-rustls v0.26.6
+2026-11-01T19:57:23.7547120Z #18 57.20    Compiling hickory-proto v0.26.3
+2026-11-01T19:57:23.7547552Z #18 57.24    Compiling compression-codecs v0.4.46
+2026-11-01T19:57:23.9962561Z #18 57.63    Compiling wyz v0.5.1
+2026-11-01T19:57:24.4362711Z #18 57.92    Compiling rand_chacha v0.9.0
+2026-11-01T19:57:25.0538183Z #18 58.54    Compiling rustc_version_runtime v0.3.0
+2026-11-01T19:57:25.7883376Z #18 59.27    Compiling darling v0.24.1
+2026-11-01T19:57:26.1484256Z #18 59.63    Compiling tower v0.5.3
+2026-11-01T19:57:26.9277323Z #18 60.41    Compiling crossbeam-channel v0.5.17
+2026-11-01T19:57:27.5012915Z #18 61.03    Compiling webpki-roots v1.0.11
+2026-11-01T19:57:27.5019730Z #18 61.13    Compiling http-body-util v0.1.5
+2026-11-01T19:57:27.8356129Z #18 61.32    Compiling num-integer v0.1.47
+2026-11-01T19:57:28.0577008Z #18 61.54    Compiling tokio-util v0.7.20
+2026-11-01T19:57:28.4505886Z #18 61.93    Compiling ryu v1.0.23
+2026-11-01T19:57:28.7106869Z #18 62.19    Compiling bitflags v2.13.2
+2026-11-01T19:57:29.0752955Z #18 62.56    Compiling tagptr v0.2.0
+2026-11-01T19:57:29.2421665Z #18 62.72    Compiling funty v2.0.0
+2026-11-01T19:57:30.8341731Z #18 64.35    Compiling iana-time-zone v0.1.65
+2026-11-01T19:57:30.9361236Z #18 64.47    Compiling unicode-xid v0.2.6
+2026-11-01T19:57:31.0883405Z #18 64.57    Compiling derive_more-impl v2.1.1
+2026-11-01T19:57:31.3582100Z #18 64.84    Compiling chrono v0.4.45
+2026-11-01T19:57:33.3013074Z #18 66.78    Compiling bitvec v1.1.1
+2026-11-01T19:57:33.8603106Z #18 67.34    Compiling moka v0.12.16
+2026-11-01T19:57:35.3202009Z #18 68.80    Compiling serde_urlencoded v0.7.1
+2026-11-01T19:57:35.5026942Z #18 69.02    Compiling num-bigint v0.4.8
+2026-11-01T19:57:35.6551245Z #18 69.14    Compiling hickory-net v0.26.3
+2026-11-01T19:57:36.1898251Z #18 69.67    Compiling serde_with_macros v3.24.0
+2026-11-01T19:57:37.1012829Z #18 70.58    Compiling rand v0.9.5
+2026-11-01T19:57:38.1583316Z #18 71.67    Compiling async-compression v0.4.51
+2026-11-01T19:57:38.2796438Z #18 71.79    Compiling crypto-common v0.1.7
+2026-11-01T19:57:38.4316290Z #18 71.91    Compiling block-buffer v0.10.4
+2026-11-01T19:57:38.5371100Z #18 72.07    Compiling macro_magic v0.5.1
+2026-11-01T19:57:38.5373743Z #18 72.13    Compiling unicode-normalization v0.1.26
+2026-11-01T19:57:38.7114952Z #18 72.17    Compiling rand_core v0.6.4
+2026-11-01T19:57:38.7117135Z #18 72.19    Compiling typed-builder-macro v0.22.0
+2026-11-01T19:57:38.9655677Z #18 72.45    Compiling serde_bytes v0.11.19
+2026-11-01T19:57:39.2580836Z #18 72.75    Compiling resolv-conf v0.7.6
+2026-11-01T19:57:39.2581491Z #18 72.85    Compiling thiserror v1.0.69
+2026-11-01T19:57:39.4085592Z #18 72.89    Compiling hex v0.4.3
+2026-11-01T19:57:39.7604700Z #18 73.19    Compiling lazy_static v1.5.1
+2026-11-01T19:57:39.7606696Z #18 73.27    Compiling unicode-properties v0.1.4
+2026-11-01T19:57:39.7607636Z #18 73.28    Compiling unicode-bidi v0.3.18
+2026-11-01T19:57:39.8865400Z #18 73.39    Compiling mime v0.3.17
+2026-11-01T19:57:40.0383116Z #18 73.52    Compiling sharded-slab v0.1.7
+2026-11-01T19:57:40.1957673Z #18 73.83    Compiling axum-core v0.4.5
+2026-11-01T19:57:40.7954666Z #18 74.21    Compiling typed-builder v0.22.0
+2026-11-01T19:57:40.7956805Z #18 74.28    Compiling stringprep v0.1.5
+2026-11-01T19:57:40.9567356Z #18 74.44    Compiling bson v2.15.0
+2026-11-01T19:57:41.2310553Z #18 74.71    Compiling hickory-resolver v0.26.3
+2026-11-01T19:57:43.4280960Z #18 76.88    Compiling rand_chacha v0.3.1
+2026-11-01T19:57:43.4281822Z #18 76.91    Compiling mongodb-internal-macros v3.9.1
+2026-11-01T19:57:44.1053168Z #18 77.59    Compiling tower-http v0.6.11
+2026-11-01T19:57:44.6026404Z #18 78.08    Compiling digest v0.10.7
+2026-11-01T19:57:44.8863235Z #18 78.37    Compiling serde_with v3.24.0
+2026-11-01T19:57:46.1219312Z #18 79.61    Compiling simple_asn1 v0.6.4
+2026-11-01T19:57:46.7505677Z #18 80.17    Compiling derive_more v2.1.1
+2026-11-01T19:57:46.7507660Z #18 80.23    Compiling hyper-rustls v0.27.10
+2026-11-01T19:57:47.3722939Z #18 80.85    Compiling matchers v0.2.0
+2026-11-01T19:57:47.5754154Z #18 81.06    Compiling pem v3.0.6
+2026-11-01T19:57:48.1803742Z #18 81.66    Compiling hmac v0.13.0
+2026-11-01T19:57:48.3294282Z #18 81.86    Compiling pbkdf2 v0.13.0
+2026-11-01T19:57:48.4804749Z #18 81.96    Compiling sha2 v0.11.1
+2026-11-01T19:57:48.9773464Z #18 82.46    Compiling md-5 v0.11.0
+2026-11-01T19:57:49.2528927Z #18 82.74    Compiling sha1 v0.11.0
+2026-11-01T19:57:49.4782074Z #18 83.11    Compiling futures-executor v0.3.34
+2026-11-01T19:57:49.6565573Z #18 83.14    Compiling derive-where v1.7.0
+2026-11-01T19:57:50.0742049Z #18 83.56    Compiling tracing-log v0.2.0
+2026-11-01T19:57:50.4341807Z #18 83.92    Compiling axum-macros v0.4.2
+2026-11-01T19:57:50.5897116Z #18 84.07    Compiling thiserror-impl v1.0.69
+2026-11-01T19:57:51.5534022Z #18 85.04    Compiling serde_path_to_error v0.1.20
+2026-11-01T19:57:52.1863179Z #18 85.67    Compiling thread_local v1.1.10
+2026-11-01T19:57:52.4522303Z #18 85.98    Compiling nu-ansi-term v0.50.3
+2026-11-01T19:57:52.4522989Z #18 86.02    Compiling cpufeatures v0.2.17
+2026-11-01T19:57:52.7025808Z #18 86.09    Compiling take_mut v0.2.2
+2026-11-01T19:57:52.7030421Z #18 86.18    Compiling matchit v0.7.3
+2026-11-01T19:57:53.0227691Z #18 86.51    Compiling tracing-subscriber v0.3.23
+2026-11-01T19:57:53.1823950Z #18 86.70    Compiling axum v0.7.9
+2026-11-01T19:57:53.1825083Z #18 86.75    Compiling mongodb v3.9.1
+2026-11-01T19:57:53.3346889Z #18 86.82    Compiling sha2 v0.10.9
+2026-11-01T19:57:54.6710458Z #18 88.08    Compiling futures v0.3.34
+2026-11-01T19:57:54.6711029Z #18 88.15    Compiling jsonwebtoken v9.3.1
+2026-11-01T19:57:58.3273073Z #18 91.81    Compiling reqwest v0.12.28
+2026-11-01T19:57:59.1501954Z #18 92.63    Compiling rand v0.8.8
+2026-11-01T19:58:00.4044406Z #18 93.89    Compiling regex v1.13.1
+2026-11-01T19:58:01.3585126Z #18 94.84    Compiling dotenvy v0.15.7
+2026-11-01T19:59:22.8258867Z #18 176.5    Compiling api-rust-core v1.4.0 (/app/backend-rust)
+2026-11-01T20:02:08.2331104Z #18 341.9     Finished `release` profile [optimized] target(s) in 5m 41s
+2026-11-01T20:02:08.4822819Z #18 DONE 342.1s
+2026-11-01T20:02:08.5850892Z 
+2026-11-01T20:02:08.5854555Z #19 [stage-1 2/3] COPY --from=builder /server /usr/local/bin/app
+2026-11-01T20:02:08.5854966Z #19 DONE 0.1s
+2026-11-01T20:02:08.7427245Z 
+2026-11-01T20:02:08.7428092Z #20 [stage-1 3/3] WORKDIR /app
+2026-11-01T20:02:08.7428545Z #20 DONE 0.0s
+2026-11-01T20:02:08.7428815Z 
+2026-11-01T20:02:08.7429123Z #21 exporting to docker image format
+2026-11-01T20:02:08.7429703Z #21 exporting layers
+2026-11-01T20:02:08.9848827Z #21 exporting layers 0.4s done
+2026-11-01T20:02:09.1698697Z #21 exporting manifest sha256:62a28ce84c3bb334508d47fb2debb07b76f39022840fc3e2f5daecc4a71f6460 done
+2026-11-01T20:02:09.1699169Z #21 exporting config sha256:5d80d9fead116ac2a08cd50c43f3fc3e782bee043f4c497d2a5f07179a5a0d06 done
+2026-11-01T20:02:09.1699719Z #21 sending tarball
+2026-11-01T20:02:09.3482764Z #21 sending tarball 0.2s done
+2026-11-01T20:02:09.3483144Z #21 DONE 0.6s
+2026-11-01T20:02:09.3483284Z 
+2026-11-01T20:02:09.3483402Z #22 importing to docker
+2026-11-01T20:02:09.3483736Z #22 loading layer b8527ca53ee0 6.03MB / 6.03MB 0.2s done
+2026-11-01T20:02:09.3484135Z #22 loading layer 70513fccfcd4 96B / 96B 0.0s done
+2026-11-01T20:02:09.3484449Z #22 DONE 0.2s
+2026-11-01T20:02:09.3484578Z 
+2026-11-01T20:02:09.3484704Z #23 exporting to GitHub Actions Cache
+2026-11-01T20:02:09.3485016Z #23 preparing build cache for export
+2026-11-01T20:02:09.6007723Z #23 preparing build cache for export 0.4s done
+2026-11-01T20:02:09.6008330Z #23 sending cache export
+2026-11-01T20:02:09.7232960Z #23 writing layer sha256:109fdd6e098920833de10aad534ee2e144a2ea6e6b7f967cddce987cfc0c23e1
+2026-11-01T20:02:10.0315537Z #23 writing layer sha256:109fdd6e098920833de10aad534ee2e144a2ea6e6b7f967cddce987cfc0c23e1 0.3s done
+2026-11-01T20:02:10.2243021Z #23 writing layer sha256:24b386a0aefdef15c424cf507b383ffcfc6a8b43c3ebbf9310c75f3d3adfd111
+2026-11-01T20:02:10.8157108Z #23 writing layer sha256:24b386a0aefdef15c424cf507b383ffcfc6a8b43c3ebbf9310c75f3d3adfd111 0.7s done
+2026-11-01T20:02:11.0064536Z #23 writing layer sha256:259b27696e5f6e2589fc88aff13cf34a1de38c209de1729f03d09b2603f0917b
+2026-11-01T20:02:11.9335856Z #23 writing layer sha256:259b27696e5f6e2589fc88aff13cf34a1de38c209de1729f03d09b2603f0917b 1.1s done
+2026-11-01T20:02:12.1246309Z #23 writing layer sha256:2780920e5dbfbe103d03a583ed75345306e572ec5a48cb10361f046767d9f29a
+2026-11-01T20:02:12.2244078Z #23 writing layer sha256:2780920e5dbfbe103d03a583ed75345306e572ec5a48cb10361f046767d9f29a 0.3s done
+2026-11-01T20:02:12.4169509Z #23 writing layer sha256:3214acf345c0cc6bbdb56b698a41ccdefc624a09d6beb0d38b5de0b2303ecaf4
+2026-11-01T20:02:12.5243645Z #23 writing layer sha256:3214acf345c0cc6bbdb56b698a41ccdefc624a09d6beb0d38b5de0b2303ecaf4 0.3s done
+2026-11-01T20:02:12.7163995Z #23 writing layer sha256:379a1168b9c0d28ee381476b804af38bb2782c614c564e80833dcd9b5d46e214
+2026-11-01T20:02:30.5250325Z #23 writing layer sha256:379a1168b9c0d28ee381476b804af38bb2782c614c564e80833dcd9b5d46e214 18.0s done
+2026-11-01T20:02:30.7178154Z #23 writing layer sha256:39dc083afc39bd8dc43d456fe7ff7d39292e593bb2769972c11bb2e5f9119386
+2026-11-01T20:02:31.0755318Z #23 writing layer sha256:39dc083afc39bd8dc43d456fe7ff7d39292e593bb2769972c11bb2e5f9119386 0.5s done
+2026-11-01T20:02:31.2664416Z #23 writing layer sha256:4255c56824cdb4c2700cd3cbc6cd0e4f0dedc7d5633989a75eea40b4e228eb65
+2026-11-01T20:02:31.2808924Z #23 writing layer sha256:4255c56824cdb4c2700cd3cbc6cd0e4f0dedc7d5633989a75eea40b4e228eb65 0.2s done
+2026-11-01T20:02:31.4747048Z #23 writing layer sha256:52630fc75a18675c530ed9eba5f55eca09b03e91bd5bc15307918bbc1a7e7296
+2026-11-01T20:02:31.5950733Z #23 writing layer sha256:52630fc75a18675c530ed9eba5f55eca09b03e91bd5bc15307918bbc1a7e7296 0.3s done
+2026-11-01T20:02:31.7886295Z #23 writing layer sha256:589002ba0eaed121a1dbf42f6648f29e5be55d5c8a6ee0f8eaa0285cc21ac153
+2026-11-01T20:02:32.3358745Z #23 writing layer sha256:589002ba0eaed121a1dbf42f6648f29e5be55d5c8a6ee0f8eaa0285cc21ac153 0.7s done
+2026-11-01T20:02:32.5275440Z #23 writing layer sha256:75fe608dba3ee8de9e9034d5fe0cac3d9175035e89064f1040049e79eaf238d8
+2026-11-01T20:02:32.5439965Z #23 writing layer sha256:75fe608dba3ee8de9e9034d5fe0cac3d9175035e89064f1040049e79eaf238d8 0.2s done
+2026-11-01T20:02:32.7352904Z #23 writing layer sha256:7c12895b777bcaa8ccae0605b4de635b68fc32d60fa08f421dc3818bf55ee212
+2026-11-01T20:02:32.8183434Z #23 writing layer sha256:7c12895b777bcaa8ccae0605b4de635b68fc32d60fa08f421dc3818bf55ee212 0.2s done
+2026-11-01T20:02:33.0152365Z #23 writing layer sha256:96ed2737ae312e0bc637b40783f7c2f23416cb72ca957aa01855f1614278e64b
+2026-11-01T20:02:33.1065435Z #23 writing layer sha256:96ed2737ae312e0bc637b40783f7c2f23416cb72ca957aa01855f1614278e64b 0.2s done
+2026-11-01T20:02:33.2973312Z #23 writing layer sha256:990a9c434e5e0f11549a8d4a41a1991e621b04e30cd63269adbc97b1dc38fd7e
+2026-11-01T20:02:33.4284370Z #23 writing layer sha256:990a9c434e5e0f11549a8d4a41a1991e621b04e30cd63269adbc97b1dc38fd7e 0.3s done
+2026-11-01T20:02:33.6218441Z #23 writing layer sha256:a0b91ee8ab50fe4830fa358da9ce4e68fa3edb6171b830382741b62f0823a6b7
+2026-11-01T20:02:33.8166540Z #23 writing layer sha256:a0b91ee8ab50fe4830fa358da9ce4e68fa3edb6171b830382741b62f0823a6b7 0.3s done
+2026-11-01T20:02:34.0078058Z #23 writing layer sha256:a5789fc40e828c4e7467626e3f69ec5dea8e5da22fe660db8ae6d16f777b0bbf
+2026-11-01T20:02:34.0803670Z #23 writing layer sha256:a5789fc40e828c4e7467626e3f69ec5dea8e5da22fe660db8ae6d16f777b0bbf 0.2s done
+2026-11-01T20:02:34.2739197Z #23 writing layer sha256:b2cf86143deda979ce07685c3f8e323ad60dbc3149f98cf950163fa103599da3
+2026-11-01T20:02:38.6444281Z #23 writing layer sha256:b2cf86143deda979ce07685c3f8e323ad60dbc3149f98cf950163fa103599da3 4.5s done
+2026-11-01T20:02:38.8356483Z #23 writing layer sha256:b839dfae01f66e15c6a8b63520557ed315bdfe036342fa7a0c537259f10d7a9a
+2026-11-01T20:02:38.8444685Z #23 writing layer sha256:b839dfae01f66e15c6a8b63520557ed315bdfe036342fa7a0c537259f10d7a9a 0.2s done
+2026-11-01T20:02:39.0419622Z #23 writing layer sha256:beb175d8e3f0570d2787ee191b07470a57cb5ccb9536f470bf2cc71976ed6d7d
+2026-11-01T20:02:39.0843860Z #23 writing layer sha256:beb175d8e3f0570d2787ee191b07470a57cb5ccb9536f470bf2cc71976ed6d7d 0.2s done
+2026-11-01T20:02:39.2760681Z #23 writing layer sha256:bf7a4185f01524837d19abde915ffde84e64368b250f5b5e9f6f75aea62a11d4
+2026-11-01T20:02:39.3225736Z #23 writing layer sha256:bf7a4185f01524837d19abde915ffde84e64368b250f5b5e9f6f75aea62a11d4 0.2s done
+2026-11-01T20:02:39.5164612Z #23 writing layer sha256:dcaa5a89b0ccda4b283e16d0b4d0891cd93d5fe05c6798f7806781a6a2d84354
+2026-11-01T20:02:39.5380965Z #23 writing layer sha256:dcaa5a89b0ccda4b283e16d0b4d0891cd93d5fe05c6798f7806781a6a2d84354 0.2s done
+2026-11-01T20:02:39.7289140Z #23 writing layer sha256:dd64bf2dd177757451a98fcdc999a339c35dee5d9872d8f4dc69c8f3c4dd0112
+2026-11-01T20:02:39.7385664Z #23 writing layer sha256:dd64bf2dd177757451a98fcdc999a339c35dee5d9872d8f4dc69c8f3c4dd0112 0.2s done
+2026-11-01T20:02:39.9320715Z #23 writing layer sha256:f9f9bbfe26fa24238a1da9485a08d8b6fbb8d1c44dccce8435cc2cebfe046113
+2026-11-01T20:02:39.9396068Z #23 writing layer sha256:f9f9bbfe26fa24238a1da9485a08d8b6fbb8d1c44dccce8435cc2cebfe046113 0.2s done
+2026-11-01T20:02:40.1499304Z #23 sending cache export 30.5s done
+2026-11-01T20:02:40.1499686Z #23 DONE 31.0s
+2026-11-01T20:02:40.1689672Z 
+2026-11-01T20:02:40.1690182Z #24 resolving provenance for metadata file
+2026-11-01T20:02:40.1690556Z #24 DONE 0.0s
+2026-11-01T20:02:40.1776172Z ##[group]ImageID
+2026-11-01T20:02:40.1776663Z sha256:5d80d9fead116ac2a08cd50c43f3fc3e782bee043f4c497d2a5f07179a5a0d06
+2026-11-01T20:02:40.1777244Z ##[endgroup]
+2026-11-01T20:02:40.1777632Z ##[group]Digest
+2026-11-01T20:02:40.1777978Z sha256:62a28ce84c3bb334508d47fb2debb07b76f39022840fc3e2f5daecc4a71f6460
+2026-11-01T20:02:40.1780146Z ##[endgroup]
+2026-11-01T20:02:40.1780554Z ##[group]Metadata
+2026-11-01T20:02:40.1780782Z {
+2026-11-01T20:02:40.1780950Z   "buildx.build.provenance": {
+2026-11-01T20:02:40.1781136Z     "builder": {
+2026-11-01T20:02:40.1781302Z       "id": ""
+2026-11-01T20:02:40.1781630Z     },
+2026-11-01T20:02:40.1781926Z     "buildType": "https://mobyproject.org/buildkit@v1",
+2026-11-01T20:02:40.1782198Z     "materials": [
+2026-11-01T20:02:40.1782344Z       {
+2026-11-01T20:02:40.1782500Z         "uri": "pkg:docker/docker/dockerfile@1",
+2026-11-01T20:02:40.1782690Z         "digest": {
+2026-11-01T20:02:40.1783002Z           "sha256": "4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e"
+2026-11-01T20:02:40.1783266Z         }
+2026-11-01T20:02:40.1783399Z       },
+2026-11-01T20:02:40.1783529Z       {
+2026-11-01T20:02:40.1783754Z         "uri": "pkg:docker/rust@1.93.1-alpine?platform=linux%2Famd64",
+2026-11-01T20:02:40.1783972Z         "digest": {
+2026-11-01T20:02:40.1784195Z           "sha256": "4fec02de605563c297c78a31064c8335bc004fa2b0bf406b1b99441da64e2d2d"
+2026-11-01T20:02:40.1784657Z         }
+2026-11-01T20:02:40.1784787Z       },
+2026-11-01T20:02:40.1784917Z       {
+2026-11-01T20:02:40.1785144Z         "uri": "pkg:docker/gcr.io/distroless/static-debian12@nonroot?platform=linux%2Famd64",
+2026-11-01T20:02:40.1785401Z         "digest": {
+2026-11-01T20:02:40.1785772Z           "sha256": "afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab"
+2026-11-01T20:02:40.1786031Z         }
+2026-11-01T20:02:40.1786161Z       }
+2026-11-01T20:02:40.1786317Z     ],
+2026-11-01T20:02:40.1786520Z     "invocation": {
+2026-11-01T20:02:40.1786752Z       "configSource": {
+2026-11-01T20:02:40.1787196Z         "entryPoint": "Dockerfile"
+2026-11-01T20:02:40.1787379Z       },
+2026-11-01T20:02:40.1787515Z       "parameters": {
+2026-11-01T20:02:40.1787677Z         "frontend": "gateway.v0",
+2026-11-01T20:02:40.1787852Z         "args": {
+2026-11-01T20:02:40.1788086Z           "build-arg:BUILD_REVISION": "d8716db8c12653a726c9284b9e28e7ba1c30df64",
+2026-11-01T20:02:40.1788337Z           "cmdline": "docker/dockerfile:1",
+2026-11-01T20:02:40.1788539Z           "source": "docker/dockerfile:1"
+2026-11-01T20:02:40.1788714Z         },
+2026-11-01T20:02:40.1788847Z         "locals": [
+2026-11-01T20:02:40.1788986Z           {
+2026-11-01T20:02:40.1789124Z             "name": "context"
+2026-11-01T20:02:40.1789285Z           },
+2026-11-01T20:02:40.1789417Z           {
+2026-11-01T20:02:40.1789557Z             "name": "dockerfile"
+2026-11-01T20:02:40.1789722Z           }
+2026-11-01T20:02:40.1789851Z         ],
+2026-11-01T20:02:40.1790010Z         "root": {
+2026-11-01T20:02:40.1790159Z           "configSource": {
+2026-11-01T20:02:40.1790329Z             "path": "Dockerfile"
+2026-11-01T20:02:40.1790493Z           },
+2026-11-01T20:02:40.1790649Z           "request": {
+2026-11-01T20:02:40.1790800Z             "args": {
+2026-11-01T20:02:40.1791031Z               "build-arg:BUILD_REVISION": "d8716db8c12653a726c9284b9e28e7ba1c30df64",
+2026-11-01T20:02:40.1791281Z               "vcs:localdir:context": ".",
+2026-11-01T20:02:40.1791835Z               "vcs:localdir:dockerfile": "backend-rust",
+2026-11-01T20:02:40.1792177Z               "vcs:revision": "d8716db8c12653a726c9284b9e28e7ba1c30df64",
+2026-11-01T20:02:40.1792452Z               "vcs:source": "https://github.com/danielcdes-create/cogniva"
+2026-11-01T20:02:40.1792668Z             }
+2026-11-01T20:02:40.1792806Z           }
+2026-11-01T20:02:40.1792933Z         },
+2026-11-01T20:02:40.1793080Z         "compatibilityVersion": 30
+2026-11-01T20:02:40.1793255Z       },
+2026-11-01T20:02:40.1793387Z       "environment": {
+2026-11-01T20:02:40.1793562Z         "github_actor": "danielcdes-create",
+2026-11-01T20:02:40.1793780Z         "github_actor_id": "246742682",
+2026-11-01T20:02:40.1793982Z         "github_event_name": "workflow_dispatch",
+2026-11-01T20:02:40.1794217Z         "github_event_payload": {
+2026-11-01T20:02:40.1794391Z           "inputs": {
+2026-11-01T20:02:40.1794568Z             "promote": "true"
+2026-11-01T20:02:40.1794732Z           },
+2026-11-01T20:02:40.1794926Z           "ref": "refs/heads/codex/auditoria-convergencia",
+2026-11-01T20:02:40.1795161Z           "repository": {
+2026-11-01T20:02:40.1795327Z             "allow_forking": true,
+2026-11-01T20:02:40.1795657Z             "archive_url": "https://api.github.com/repos/danielcdes-create/cogniva/{archive_format}{/ref}",
+2026-11-01T20:02:40.1795965Z             "archived": false,
+2026-11-01T20:02:40.1796251Z             "assignees_url": "https://api.github.com/repos/danielcdes-create/cogniva/assignees{/user}",
+2026-11-01T20:02:40.1796638Z             "blobs_url": "https://api.github.com/repos/danielcdes-create/cogniva/git/blobs{/sha}",
+2026-11-01T20:02:40.1797036Z             "branches_url": "https://api.github.com/repos/danielcdes-create/cogniva/branches{/branch}",
+2026-11-01T20:02:40.1797386Z             "clone_url": "https://github.com/danielcdes-create/cogniva.git",
+2026-11-01T20:02:40.1797786Z             "collaborators_url": "https://api.github.com/repos/danielcdes-create/cogniva/collaborators{/collaborator}",
+2026-11-01T20:02:40.1798350Z             "comments_url": "https://api.github.com/repos/danielcdes-create/cogniva/comments{/number}",
+2026-11-01T20:02:40.1798728Z             "commits_url": "https://api.github.com/repos/danielcdes-create/cogniva/commits{/sha}",
+2026-11-01T20:02:40.1799121Z             "compare_url": "https://api.github.com/repos/danielcdes-create/cogniva/compare/{base}...{head}",
+2026-11-01T20:02:40.1799495Z             "contents_url": "https://api.github.com/repos/danielcdes-create/cogniva/contents/{+path}",
+2026-11-01T20:02:40.1799948Z             "contributors_url": "https://api.github.com/repos/danielcdes-create/cogniva/contributors",
+2026-11-01T20:02:40.1800233Z             "created_at": "2026-10-31T00:42:02Z",
+2026-11-01T20:02:40.1800429Z             "default_branch": "main",
+2026-11-01T20:02:40.1800704Z             "deployments_url": "https://api.github.com/repos/danielcdes-create/cogniva/deployments",
+2026-11-01T20:02:40.1800976Z             "description": null,
+2026-11-01T20:02:40.1801152Z             "disabled": false,
+2026-11-01T20:02:40.1801719Z             "downloads_url": "https://api.github.com/repos/danielcdes-create/cogniva/downloads",
+2026-11-01T20:02:40.1802061Z             "events_url": "https://api.github.com/repos/danielcdes-create/cogniva/events",
+2026-11-01T20:02:40.1802317Z             "fork": false,
+2026-11-01T20:02:40.1802476Z             "forks": 0,
+2026-11-01T20:02:40.1802639Z             "forks_count": 0,
+2026-11-01T20:02:40.1802877Z             "forks_url": "https://api.github.com/repos/danielcdes-create/cogniva/forks",
+2026-11-01T20:02:40.1803152Z             "full_name": "danielcdes-create/cogniva",
+2026-11-01T20:02:40.1803455Z             "git_commits_url": "https://api.github.com/repos/danielcdes-create/cogniva/git/commits{/sha}",
+2026-11-01T20:02:40.1803827Z             "git_refs_url": "https://api.github.com/repos/danielcdes-create/cogniva/git/refs{/sha}",
+2026-11-01T20:02:40.1804175Z             "git_tags_url": "https://api.github.com/repos/danielcdes-create/cogniva/git/tags{/sha}",
+2026-11-01T20:02:40.1804492Z             "git_url": "git://github.com/danielcdes-create/cogniva.git",
+2026-11-01T20:02:40.1804717Z             "has_discussions": false,
+2026-11-01T20:02:40.1804905Z             "has_downloads": false,
+2026-11-01T20:02:40.1805086Z             "has_issues": true,
+2026-11-01T20:02:40.1805257Z             "has_pages": false,
+2026-11-01T20:02:40.1805432Z             "has_projects": true,
+2026-11-01T20:02:40.1805614Z             "has_pull_requests": true,
+2026-11-01T20:02:40.1805798Z             "has_wiki": true,
+2026-11-01T20:02:40.1805966Z             "homepage": null,
+2026-11-01T20:02:40.1806210Z             "hooks_url": "https://api.github.com/repos/danielcdes-create/cogniva/hooks",
+2026-11-01T20:02:40.1806507Z             "html_url": "https://github.com/danielcdes-create/cogniva",
+2026-11-01T20:02:40.1806727Z             "id": 1440368573,
+2026-11-01T20:02:40.1806892Z             "is_template": false,
+2026-11-01T20:02:40.1807190Z             "issue_comment_url": "https://api.github.com/repos/danielcdes-create/cogniva/issues/comments{/number}",
+2026-11-01T20:02:40.1807669Z             "issue_events_url": "https://api.github.com/repos/danielcdes-create/cogniva/issues/events{/number}",
+2026-11-01T20:02:40.1808097Z             "issues_url": "https://api.github.com/repos/danielcdes-create/cogniva/issues{/number}",
+2026-11-01T20:02:40.1808508Z             "keys_url": "https://api.github.com/repos/danielcdes-create/cogniva/keys{/key_id}",
+2026-11-01T20:02:40.1808913Z             "labels_url": "https://api.github.com/repos/danielcdes-create/cogniva/labels{/name}",
+2026-11-01T20:02:40.1809206Z             "language": "Kotlin",
+2026-11-01T20:02:40.1809471Z             "languages_url": "https://api.github.com/repos/danielcdes-create/cogniva/languages",
+2026-11-01T20:02:40.1809763Z             "license": null,
+2026-11-01T20:02:40.1810026Z             "merges_url": "https://api.github.com/repos/danielcdes-create/cogniva/merges",
+2026-11-01T20:02:40.1810404Z             "milestones_url": "https://api.github.com/repos/danielcdes-create/cogniva/milestones{/number}",
+2026-11-01T20:02:40.1810846Z             "mirror_url": null,
+2026-11-01T20:02:40.1811044Z             "name": "cogniva",
+2026-11-01T20:02:40.1811254Z             "node_id": "R_kgDOVdpHvQ",
+2026-11-01T20:02:40.1812049Z             "notifications_url": "https://api.github.com/repos/danielcdes-create/cogniva/notifications{?since,all,participating}",
+2026-11-01T20:02:40.1812402Z             "open_issues": 0,
+2026-11-01T20:02:40.1812578Z             "open_issues_count": 0,
+2026-11-01T20:02:40.1812765Z             "owner": {
+2026-11-01T20:02:40.1813112Z               "avatar_url": "https://avatars.githubusercontent.com/u/246742682?v=4",
+2026-11-01T20:02:40.1813463Z               "events_url": "https://api.github.com/users/danielcdes-create/events{/privacy}",
+2026-11-01T20:02:40.1813817Z               "followers_url": "https://api.github.com/users/danielcdes-create/followers",
+2026-11-01T20:02:40.1814179Z               "following_url": "https://api.github.com/users/danielcdes-create/following{/other_user}",
+2026-11-01T20:02:40.1814548Z               "gists_url": "https://api.github.com/users/danielcdes-create/gists{/gist_id}",
+2026-11-01T20:02:40.1814817Z               "gravatar_id": "",
+2026-11-01T20:02:40.1815029Z               "html_url": "https://github.com/danielcdes-create",
+2026-11-01T20:02:40.1815258Z               "id": 246742682,
+2026-11-01T20:02:40.1815452Z               "login": "danielcdes-create",
+2026-11-01T20:02:40.1815651Z               "node_id": "U_kgDODrT-mg",
+2026-11-01T20:02:40.1815931Z               "organizations_url": "https://api.github.com/users/danielcdes-create/orgs",
+2026-11-01T20:02:40.1816292Z               "received_events_url": "https://api.github.com/users/danielcdes-create/received_events",
+2026-11-01T20:02:40.1816641Z               "repos_url": "https://api.github.com/users/danielcdes-create/repos",
+2026-11-01T20:02:40.1816895Z               "site_admin": false,
+2026-11-01T20:02:40.1817165Z               "starred_url": "https://api.github.com/users/danielcdes-create/starred{/owner}{/repo}",
+2026-11-01T20:02:40.1817540Z               "subscriptions_url": "https://api.github.com/users/danielcdes-create/subscriptions",
+2026-11-01T20:02:40.1817823Z               "type": "User",
+2026-11-01T20:02:40.1818046Z               "url": "https://api.github.com/users/danielcdes-create",
+2026-11-01T20:02:40.1818277Z               "user_view_type": "public"
+2026-11-01T20:02:40.1818468Z             },
+2026-11-01T20:02:40.1818614Z             "private": false,
+2026-11-01T20:02:40.1818820Z             "pull_request_creation_policy": "all",
+2026-11-01T20:02:40.1819107Z             "pulls_url": "https://api.github.com/repos/danielcdes-create/cogniva/pulls{/number}",
+2026-11-01T20:02:40.1819404Z             "pushed_at": "2026-11-01T19:47:10Z",
+2026-11-01T20:02:40.1819703Z             "releases_url": "https://api.github.com/repos/danielcdes-create/cogniva/releases{/id}",
+2026-11-01T20:02:40.1819988Z             "size": 668,
+2026-11-01T20:02:40.1820212Z             "ssh_url": "git@github.com:danielcdes-create/cogniva.git",
+2026-11-01T20:02:40.1820436Z             "stargazers_count": 0,
+2026-11-01T20:02:40.1820718Z             "stargazers_url": "https://api.github.com/repos/danielcdes-create/cogniva/stargazers",
+2026-11-01T20:02:40.1821091Z             "statuses_url": "https://api.github.com/repos/danielcdes-create/cogniva/statuses/{sha}",
+2026-11-01T20:02:40.1821601Z             "subscribers_url": "https://api.github.com/repos/danielcdes-create/cogniva/subscribers",
+2026-11-01T20:02:40.1821989Z             "subscription_url": "https://api.github.com/repos/danielcdes-create/cogniva/subscription",
+2026-11-01T20:02:40.1822324Z             "svn_url": "https://github.com/danielcdes-create/cogniva",
+2026-11-01T20:02:40.1822630Z             "tags_url": "https://api.github.com/repos/danielcdes-create/cogniva/tags",
+2026-11-01T20:02:40.1822965Z             "teams_url": "https://api.github.com/repos/danielcdes-create/cogniva/teams",
+2026-11-01T20:02:40.1823395Z             "topics": [],
+2026-11-01T20:02:40.1823647Z             "trees_url": "https://api.github.com/repos/danielcdes-create/cogniva/git/trees{/sha}",
+2026-11-01T20:02:40.1823945Z             "updated_at": "2026-11-01T01:23:18Z",
+2026-11-01T20:02:40.1824209Z             "url": "https://api.github.com/repos/danielcdes-create/cogniva",
+2026-11-01T20:02:40.1824466Z             "visibility": "public",
+2026-11-01T20:02:40.1824662Z             "watchers": 0,
+2026-11-01T20:02:40.1824844Z             "watchers_count": 0,
+2026-11-01T20:02:40.1825036Z             "web_commit_signoff_required": false
+2026-11-01T20:02:40.1825326Z           },
+2026-11-01T20:02:40.1825486Z           "sender": {
+2026-11-01T20:02:40.1825726Z             "avatar_url": "https://avatars.githubusercontent.com/u/246742682?v=4",
+2026-11-01T20:02:40.1826072Z             "events_url": "https://api.github.com/users/danielcdes-create/events{/privacy}",
+2026-11-01T20:02:40.1826432Z             "followers_url": "https://api.github.com/users/danielcdes-create/followers",
+2026-11-01T20:02:40.1826804Z             "following_url": "https://api.github.com/users/danielcdes-create/following{/other_user}",
+2026-11-01T20:02:40.1827162Z             "gists_url": "https://api.github.com/users/danielcdes-create/gists{/gist_id}",
+2026-11-01T20:02:40.1827435Z             "gravatar_id": "",
+2026-11-01T20:02:40.1827660Z             "html_url": "https://github.com/danielcdes-create",
+2026-11-01T20:02:40.1827892Z             "id": 246742682,
+2026-11-01T20:02:40.1828068Z             "login": "danielcdes-create",
+2026-11-01T20:02:40.1828280Z             "node_id": "U_kgDODrT-mg",
+2026-11-01T20:02:40.1828556Z             "organizations_url": "https://api.github.com/users/danielcdes-create/orgs",
+2026-11-01T20:02:40.1828921Z             "received_events_url": "https://api.github.com/users/danielcdes-create/received_events",
+2026-11-01T20:02:40.1829275Z             "repos_url": "https://api.github.com/users/danielcdes-create/repos",
+2026-11-01T20:02:40.1829531Z             "site_admin": false,
+2026-11-01T20:02:40.1829810Z             "starred_url": "https://api.github.com/users/danielcdes-create/starred{/owner}{/repo}",
+2026-11-01T20:02:40.1830184Z             "subscriptions_url": "https://api.github.com/users/danielcdes-create/subscriptions",
+2026-11-01T20:02:40.1830465Z             "type": "User",
+2026-11-01T20:02:40.1830697Z             "url": "https://api.github.com/users/danielcdes-create",
+2026-11-01T20:02:40.1830920Z             "user_view_type": "public"
+2026-11-01T20:02:40.1831111Z           },
+2026-11-01T20:02:40.1831292Z           "workflow": ".github/workflows/deploy.yml"
+2026-11-01T20:02:40.1831642Z         },
+2026-11-01T20:02:40.1831804Z         "github_job": "build",
+2026-11-01T20:02:40.1832031Z         "github_ref": "refs/heads/codex/auditoria-convergencia",
+2026-11-01T20:02:40.1832301Z         "github_ref_name": "codex/auditoria-convergencia",
+2026-11-01T20:02:40.1832532Z         "github_ref_protected": "false",
+2026-11-01T20:02:40.1832726Z         "github_ref_type": "branch",
+2026-11-01T20:02:40.1832962Z         "github_repository": "danielcdes-create/cogniva",
+2026-11-01T20:02:40.1833200Z         "github_repository_id": "1440368573",
+2026-11-01T20:02:40.1833432Z         "github_repository_owner": "danielcdes-create",
+2026-11-01T20:02:40.1833674Z         "github_repository_owner_id": "246742682",
+2026-11-01T20:02:40.1833888Z         "github_run_attempt": "1",
+2026-11-01T20:02:40.1834076Z         "github_run_id": "41343484265",
+2026-11-01T20:02:40.1834283Z         "github_run_number": "13",
+2026-11-01T20:02:40.1834479Z         "github_runner_arch": "X64",
+2026-11-01T20:02:40.1834705Z         "github_runner_environment": "github-hosted",
+2026-11-01T20:02:40.1834933Z         "github_runner_image_os": "ubuntu24",
+2026-11-01T20:02:40.1835165Z         "github_runner_image_version": "20261026.354.1",
+2026-11-01T20:02:40.1835404Z         "github_runner_name": "GitHub Actions 1000000140",
+2026-11-01T20:02:40.1835613Z         "github_runner_os": "Linux",
+2026-11-01T20:02:40.1835997Z         "github_runner_tracking_id": "github_34b96089-b514-468c-a1f3-ad41cc8c7e66",
+2026-11-01T20:02:40.1836284Z         "github_server_url": "https://github.com",
+2026-11-01T20:02:40.1836521Z         "github_triggering_actor": "danielcdes-create",
+2026-11-01T20:02:40.1836796Z         "github_workflow": "Gated build and atomic DigitalOcean promotion",
+2026-11-01T20:02:40.1837211Z         "github_workflow_ref": "danielcdes-create/cogniva/.github/workflows/deploy.yml@refs/heads/codex/auditoria-convergencia",
+2026-11-01T20:02:40.1837610Z         "github_workflow_sha": "d8716db8c12653a726c9284b9e28e7ba1c30df64",
+2026-11-01T20:02:40.1837945Z         "platform": "linux/amd64"
+2026-11-01T20:02:40.1838139Z       }
+2026-11-01T20:02:40.1838284Z     }
+2026-11-01T20:02:40.1838416Z   },
+2026-11-01T20:02:40.1838787Z   "buildx.build.ref": "builder-b0a4af38-67d2-414f-92b8-f7359c416907/builder-b0a4af38-67d2-414f-92b8-f7359c4169070/fw3iawxlnagqi9y9e2qbofu3b",
+2026-11-01T20:02:40.1839354Z   "containerimage.config.digest": "sha256:5d80d9fead116ac2a08cd50c43f3fc3e782bee043f4c497d2a5f07179a5a0d06",
+2026-11-01T20:02:40.1839740Z   "containerimage.descriptor": {
+2026-11-01T20:02:40.1839977Z     "mediaType": "application/vnd.oci.image.manifest.v1+json",
+2026-11-01T20:02:40.1840285Z     "digest": "sha256:62a28ce84c3bb334508d47fb2debb07b76f39022840fc3e2f5daecc4a71f6460",
+2026-11-01T20:02:40.1840545Z     "size": 2934,
+2026-11-01T20:02:40.1840717Z     "annotations": {
+2026-11-01T20:02:40.1840923Z       "org.opencontainers.image.created": "2026-11-01T20:02:08Z"
+2026-11-01T20:02:40.1841157Z     },
+2026-11-01T20:02:40.1841308Z     "platform": {
+2026-11-01T20:02:40.1841671Z       "architecture": "amd64",
+2026-11-01T20:02:40.1841840Z       "os": "linux"
+2026-11-01T20:02:40.1842003Z     }
+2026-11-01T20:02:40.1842130Z   },
+2026-11-01T20:02:40.1842394Z   "containerimage.digest": "sha256:62a28ce84c3bb334508d47fb2debb07b76f39022840fc3e2f5daecc4a71f6460",
+2026-11-01T20:02:40.1843019Z   "image.name": "ghcr.io/danielcdes-create/api-rust-core:sha-d8716db8c12653a726c9284b9e28e7ba1c30df64"
+2026-11-01T20:02:40.1843319Z }
+2026-11-01T20:02:40.1843572Z ##[endgroup]
+2026-11-01T20:02:40.1843886Z ##[group]Reference
+2026-11-01T20:02:40.1844432Z builder-b0a4af38-67d2-414f-92b8-f7359c416907/builder-b0a4af38-67d2-414f-92b8-f7359c4169070/fw3iawxlnagqi9y9e2qbofu3b
+2026-11-01T20:02:40.1845154Z ##[endgroup]
+2026-11-01T20:02:40.1845599Z ##[group]Check build summary support
+2026-11-01T20:02:40.1846023Z Build summary supported!
+2026-11-01T20:02:40.1846402Z ##[endgroup]
+2026-11-01T20:02:40.1953320Z ##[group]Run set -euo pipefail
+2026-11-01T20:02:40.1953551Z [36;1mset -euo pipefail[0m
+2026-11-01T20:02:40.1953789Z [36;1mtag="ghcr.io/danielcdes-create/api-rust-core:sha-$REVISION"[0m
+2026-11-01T20:02:40.1954081Z [36;1msize=$(docker image inspect "$tag" --format '{{.Size}}')[0m
+2026-11-01T20:02:40.1954311Z [36;1mtest "$size" -lt 50000000[0m
+2026-11-01T20:02:40.1954500Z [36;1mdocker push "$tag"[0m
+2026-11-01T20:02:40.1954756Z [36;1mreference=$(docker image inspect "$tag" --format '{{index .RepoDigests 0}}')[0m
+2026-11-01T20:02:40.1955075Z [36;1mecho "reference=$reference" >> "$GITHUB_OUTPUT"[0m
+2026-11-01T20:02:40.1955406Z [36;1mpython3 scripts/package-release.py release-bundle --image "$reference" --revision "$REVISION"[0m
+2026-11-01T20:02:40.1955718Z [36;1mcp deploy/promote.py release-bundle/[0m
+2026-11-01T20:02:40.1955941Z [36;1mcp deploy/stage_bundle.py release-bundle/[0m
+2026-11-01T20:02:40.1956204Z [36;1mcp scripts/cleanup-registry.py release-bundle/[0m
+2026-11-01T20:02:40.1973325Z shell: /usr/bin/bash -e {0}
+2026-11-01T20:02:40.1973500Z env:
+2026-11-01T20:02:40.1973710Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21.0.13-9/x64
+2026-11-01T20:02:40.1974013Z   JAVA_HOME_21_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21.0.13-9/x64
+2026-11-01T20:02:40.1974275Z   GRADLE_ACTION_ID: gradle/actions/setup-gradle
+2026-11-01T20:02:40.1974480Z   GRADLE_USER_HOME: /home/runner/.gradle
+2026-11-01T20:02:40.1974672Z   GRADLE_BUILD_ACTION_SETUP_COMPLETED: true
+2026-11-01T20:02:40.1974985Z   GRADLE_BUILD_ACTION_CACHE_RESTORED: true
+2026-11-01T20:02:40.1975263Z   DEVELOCITY_INJECTION_INIT_SCRIPT_NAME: gradle-actions.inject-develocity.init.gradle
+2026-11-01T20:02:40.1975560Z   DEVELOCITY_INJECTION_CUSTOM_VALUE: gradle-actions
+2026-11-01T20:02:40.1975766Z   GITHUB_DEPENDENCY_GRAPH_ENABLED: false
+2026-11-01T20:02:40.1975978Z   REVISION: d8716db8c12653a726c9284b9e28e7ba1c30df64
+2026-11-01T20:02:40.1976175Z ##[endgroup]
+2026-11-01T20:02:40.2480939Z The push refers to repository [ghcr.io/danielcdes-create/api-rust-core]
+2026-11-01T20:02:40.3665308Z 70513fccfcd4: Preparing
+2026-11-01T20:02:40.3665615Z b8527ca53ee0: Preparing
+2026-11-01T20:02:40.3665853Z 5904c32f457c: Preparing
+2026-11-01T20:02:40.3666103Z 6e7fbcf090d0: Preparing
+2026-11-01T20:02:40.3666334Z ad51d0769d16: Preparing
+2026-11-01T20:02:40.3666559Z 4cde6b0bb6f5: Preparing
+2026-11-01T20:02:40.3666716Z bd3cdfae1d3f: Preparing
+2026-11-01T20:02:40.3666873Z 6f1cdceb6a31: Preparing
+2026-11-01T20:02:40.3667044Z af5aa97ebe6c: Preparing
+2026-11-01T20:02:40.3667197Z 4d049f83d9cf: Preparing
+2026-11-01T20:02:40.3667352Z 114dde0fefeb: Preparing
+2026-11-01T20:02:40.3667504Z 35b5ba6e08cd: Preparing
+2026-11-01T20:02:40.3667753Z 8fa10c0194df: Preparing
+2026-11-01T20:02:40.3667925Z 7223ea1323e8: Preparing
+2026-11-01T20:02:40.3668078Z 4cde6b0bb6f5: Waiting
+2026-11-01T20:02:40.3668228Z bd3cdfae1d3f: Waiting
+2026-11-01T20:02:40.3668445Z 6f1cdceb6a31: Waiting
+2026-11-01T20:02:40.3668671Z af5aa97ebe6c: Waiting
+2026-11-01T20:02:40.3668904Z 4d049f83d9cf: Waiting
+2026-11-01T20:02:40.3669127Z 114dde0fefeb: Waiting
+2026-11-01T20:02:40.3669355Z 35b5ba6e08cd: Waiting
+2026-11-01T20:02:40.3669582Z 8fa10c0194df: Waiting
+2026-11-01T20:02:40.3669752Z 7223ea1323e8: Waiting
+2026-11-01T20:02:41.3155228Z 6e7fbcf090d0: Mounted from github/github-mcp-server
+2026-11-01T20:02:41.3895434Z 5904c32f457c: Mounted from github/github-mcp-server
+2026-11-01T20:02:41.5656316Z ad51d0769d16: Mounted from github/github-mcp-server
+2026-11-01T20:02:42.0151203Z 4cde6b0bb6f5: Mounted from github/github-mcp-server
+2026-11-01T20:02:42.2241284Z bd3cdfae1d3f: Mounted from github/github-mcp-server
+2026-11-01T20:02:42.5280843Z 6f1cdceb6a31: Mounted from github/github-mcp-server
+2026-11-01T20:02:42.5369455Z 70513fccfcd4: Pushed
+2026-11-01T20:02:43.0499868Z b8527ca53ee0: Pushed
+2026-11-01T20:02:43.0714773Z af5aa97ebe6c: Mounted from github/github-mcp-server
+2026-11-01T20:02:43.2034523Z 4d049f83d9cf: Mounted from github/github-mcp-server
+2026-11-01T20:02:43.2770823Z 114dde0fefeb: Mounted from github/github-mcp-server
+2026-11-01T20:02:43.6750044Z 35b5ba6e08cd: Mounted from github/github-mcp-server
+2026-11-01T20:02:43.7971712Z 7223ea1323e8: Mounted from github/github-mcp-server
+2026-11-01T20:02:43.9538520Z 8fa10c0194df: Mounted from github/github-mcp-server
+2026-11-01T20:02:46.0324283Z sha-d8716db8c12653a726c9284b9e28e7ba1c30df64: digest: sha256:66d519fbfddef52a0492f5efe0047829dcf3dc72a78c9b1713e992b824b37a58 size: 3228
+2026-11-01T20:02:46.0836063Z {"revision": "d8716db8c12653a726c9284b9e28e7ba1c30df64", "image": "ghcr.io/danielcdes-create/api-rust-core@sha256:66d519fbfddef52a0492f5efe0047829dcf3dc72a78c9b1713e992b824b37a58", "version_code": 7, "version_name": "1.4.0", "apk_sha256": "1abfb764909dd4274e351a2c30e3471ba41ab3b11842adf2dd1dc3389bf35c35", "apk_size_bytes": 12708853, "signing_policy": "Private rotated signer on API 28+; original signer retained only for API 26-27 upgrade compatibility", "contract_version": 2}
+2026-11-01T20:02:46.0967194Z ##[group]Run actions/upload-artifact@v4
+2026-11-01T20:02:46.0967396Z with:
+2026-11-01T20:02:46.0967595Z   name: cogniva-release-d8716db8c12653a726c9284b9e28e7ba1c30df64
+2026-11-01T20:02:46.0967833Z   path: release-bundle/
+2026-11-01T20:02:46.0967999Z   retention-days: 5
+2026-11-01T20:02:46.0968153Z   if-no-files-found: warn
+2026-11-01T20:02:46.0968322Z   compression-level: 6
+2026-11-01T20:02:46.0968475Z   overwrite: false
+2026-11-01T20:02:46.0968626Z   include-hidden-files: false
+2026-11-01T20:02:46.0968797Z env:
+2026-11-01T20:02:46.0969140Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21.0.13-9/x64
+2026-11-01T20:02:46.0969444Z   JAVA_HOME_21_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21.0.13-9/x64
+2026-11-01T20:02:46.0969705Z   GRADLE_ACTION_ID: gradle/actions/setup-gradle
+2026-11-01T20:02:46.0969909Z   GRADLE_USER_HOME: /home/runner/.gradle
+2026-11-01T20:02:46.0970102Z   GRADLE_BUILD_ACTION_SETUP_COMPLETED: true
+2026-11-01T20:02:46.0970321Z   GRADLE_BUILD_ACTION_CACHE_RESTORED: true
+2026-11-01T20:02:46.0970603Z   DEVELOCITY_INJECTION_INIT_SCRIPT_NAME: gradle-actions.inject-develocity.init.gradle
+2026-11-01T20:02:46.0970892Z   DEVELOCITY_INJECTION_CUSTOM_VALUE: gradle-actions
+2026-11-01T20:02:46.0971100Z   GITHUB_DEPENDENCY_GRAPH_ENABLED: false
+2026-11-01T20:02:46.0971282Z ##[endgroup]
+2026-11-01T20:02:46.2080400Z (node:6785) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-01T20:02:46.2081063Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-01T20:02:46.2138172Z With the provided path, there will be 8 files uploaded
+2026-11-01T20:02:46.2141908Z Artifact name is valid!
+2026-11-01T20:02:46.2142435Z Root directory input is valid!
+2026-11-01T20:02:46.4932583Z Beginning upload of artifact content to blob storage
+2026-11-01T20:02:46.6781709Z (node:6785) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-01T20:02:47.2579669Z Uploaded bytes 8388608
+2026-11-01T20:02:47.3817699Z Uploaded bytes 12278967
+2026-11-01T20:02:47.4231361Z Finished uploading artifact content to blob storage!
+2026-11-01T20:02:47.4232321Z SHA256 digest of uploaded artifact zip is 9ef27a7bb98d58382e3a199d1187cf6621a9a96bc4c213359ee59c175ea3df04
+2026-11-01T20:02:47.4233126Z Finalizing artifact upload
+2026-11-01T20:02:47.8475060Z Artifact cogniva-release-d8716db8c12653a726c9284b9e28e7ba1c30df64.zip successfully finalized. Artifact ID 13098866454
+2026-11-01T20:02:47.8475880Z Artifact cogniva-release-d8716db8c12653a726c9284b9e28e7ba1c30df64 has been successfully uploaded! Final size is 12278967 bytes. Artifact ID is 13098866454
+2026-11-01T20:02:47.8479730Z Artifact download URL: https://github.com/danielcdes-create/cogniva/actions/runs/41343484265/artifacts/13098866454
+2026-11-01T20:02:47.8691036Z Post job cleanup.
+2026-11-01T20:02:48.0269089Z ##[group]Generating build summary
+2026-11-01T20:02:48.0271820Z exporting build record to /home/runner/work/_temp/docker-actions-toolkit-uvFAtq/export
+2026-11-01T20:02:48.0281519Z (node:6800) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-01T20:02:48.0282162Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-01T20:02:48.1978149Z [command]/usr/bin/docker buildx history export --builder builder-b0a4af38-67d2-414f-92b8-f7359c416907 --output /home/runner/work/_temp/docker-actions-toolkit-uvFAtq/export/danielcdes-create~cogniva~FW3IAW.dockerbuild fw3iawxlnagqi9y9e2qbofu3b --finalize
+2026-11-01T20:02:48.3686362Z Build record written to /home/runner/work/_temp/docker-actions-toolkit-uvFAtq/export/danielcdes-create~cogniva~FW3IAW.dockerbuild (67.46 KB)
+2026-11-01T20:02:48.3700996Z Uploading danielcdes-create~cogniva~FW3IAW.dockerbuild to blob storage
+2026-11-01T20:02:48.6229659Z Beginning upload of artifact content to blob storage
+2026-11-01T20:02:48.6284605Z (node:6800) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-01T20:02:48.6290923Z Uploaded bytes 65536
+2026-11-01T20:02:48.6292494Z Uploaded bytes 69078
+2026-11-01T20:02:48.8113475Z Finished uploading artifact content to blob storage!
+2026-11-01T20:02:48.8116650Z SHA256 hash of uploaded artifact is 59987c8cda6a9cb3d7af6bccd8d2c61a62df41447f73bb4cdb4367dd3b58f025
+2026-11-01T20:02:48.8117710Z Finalizing artifact upload
+2026-11-01T20:02:49.3358025Z Artifact successfully finalized (13098409954)
+2026-11-01T20:02:49.3359006Z Artifact download URL: https://github.com/danielcdes-create/cogniva/actions/runs/41343484265/artifacts/13098409954
+2026-11-01T20:02:49.3376943Z Writing summary
+2026-11-01T20:02:49.3386253Z ##[endgroup]
+2026-11-01T20:02:49.3386809Z ##[group]Removing temp folder /home/runner/work/_temp/docker-actions-toolkit-dyoy0w
+2026-11-01T20:02:49.3391732Z ##[endgroup]
+2026-11-01T20:02:49.3392109Z ##[group]Post cache
+2026-11-01T20:02:49.3393007Z State not set
+2026-11-01T20:02:49.3393369Z ##[endgroup]
+2026-11-01T20:02:49.3541221Z Post job cleanup.
+2026-11-01T20:02:49.5533454Z ##[group]Logout from ghcr.io
+2026-11-01T20:02:49.5547950Z (node:6953) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-01T20:02:49.5548494Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-01T20:02:49.5570035Z [command]/usr/bin/docker logout ghcr.io
+2026-11-01T20:02:49.5701249Z Removing login credentials for ghcr.io
+2026-11-01T20:02:49.5734670Z ##[endgroup]
+2026-11-01T20:02:49.5735123Z ##[group]Post cache
+2026-11-01T20:02:49.5735377Z State not set
+2026-11-01T20:02:49.5735779Z ##[endgroup]
+2026-11-01T20:02:49.5932582Z Post job cleanup.
+2026-11-01T20:02:49.7537736Z ##[group]Removing builder
+2026-11-01T20:02:49.7541249Z (node:6973) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-01T20:02:49.7542088Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-01T20:02:49.8648019Z [command]/usr/bin/docker buildx rm builder-b0a4af38-67d2-414f-92b8-f7359c416907
+2026-11-01T20:02:52.4544520Z builder-b0a4af38-67d2-414f-92b8-f7359c416907 removed
+2026-11-01T20:02:52.4594155Z ##[endgroup]
+2026-11-01T20:02:52.4594632Z ##[group]Cleaning up certificates
+2026-11-01T20:02:52.4595709Z ##[endgroup]
+2026-11-01T20:02:52.4596356Z ##[group]Post cache
+2026-11-01T20:02:52.4619407Z State not set
+2026-11-01T20:02:52.4619893Z ##[endgroup]
+2026-11-01T20:02:52.4807483Z Post job cleanup.
+2026-11-01T20:02:52.6390642Z In post-action step
+2026-11-01T20:02:52.6398397Z ##[group]Stopping Gradle daemons
+2026-11-01T20:02:52.6399033Z Stopping Gradle daemons for /home/runner/.gradle/wrapper/dists/gradle-9.3.1-bin/23ovyewtku6u96viwx3xl3oks/gradle-9.3.1
+2026-11-01T20:02:52.6408965Z [command]/home/runner/.gradle/wrapper/dists/gradle-9.3.1-bin/23ovyewtku6u96viwx3xl3oks/gradle-9.3.1/bin/gradle --stop
+2026-11-01T20:02:53.0991172Z No Gradle daemons are running.
+2026-11-01T20:02:53.1103980Z ##[endgroup]
+2026-11-01T20:02:53.1127965Z ##[group]Provision Gradle >= 9.3.1
+2026-11-01T20:02:53.7052270Z Gradle version 9.8.2 is available at /usr/bin/gradle and >= 9.3.1. Not installing.
+2026-11-01T20:02:53.7053021Z ##[endgroup]
+2026-11-01T20:02:53.7054922Z ##[group]Executing Gradle to clean up caches
+2026-11-01T20:02:53.7055195Z Cleaning up caches last used before 1793562847051
+2026-11-01T20:02:53.7057654Z [command]/usr/bin/gradle -g /home/runner/.gradle -I init.gradle --info --no-daemon --no-scan --build-cache -DGITHUB_DEPENDENCY_GRAPH_ENABLED=false -DGRADLE_ACTIONS_SKIP_BUILD_RESULT_CAPTURE=true noop
+2026-11-01T20:02:53.9905504Z Initialized native services in: /home/runner/.gradle/native
+2026-11-01T20:02:53.9917775Z Initialized jansi services in: /home/runner/.gradle/native
+2026-11-01T20:02:54.1124698Z The current JVM process isn't compatible with build requirement. The maximum heap size is insufficient.
+2026-11-01T20:02:54.1125720Z 
+2026-11-01T20:02:54.2112320Z To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.8.2/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+2026-11-01T20:02:54.2123873Z Starting process 'Gradle build daemon'. Working directory: /home/runner/.gradle/daemon/9.8.2 Command: /usr/lib/jvm/temurin-21-jdk-amd64/bin/java --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.prefs/java.util.prefs=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED --add-opens=java.base/java.nio.charset=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.xml/javax.xml.namespace=ALL-UNNAMED --add-opens=java.base/java.time=ALL-UNNAMED -XX:MaxMetaspaceSize=384m -XX:+HeapDumpOnOutOfMemoryError -Xms256m -Xmx512m -Dfile.encoding=UTF-8 -Duser.country -Duser.language=en -Duser.variant -cp /usr/share/gradle-9.8.2/lib/gradle-daemon-main-9.8.2.jar -javaagent:/usr/share/gradle-9.8.2/lib/agents/gradle-instrumentation-agent-9.8.2.jar org.gradle.launcher.daemon.bootstrap.GradleDaemon 9.8.2
+2026-11-01T20:02:54.2128137Z Successfully started process 'Gradle build daemon'
+2026-11-01T20:02:54.9138166Z An attempt to start the daemon took 0.752 secs.
+2026-11-01T20:02:55.0113548Z The client will now receive all logging from the daemon (pid: 7229). The daemon log file: /home/runner/.gradle/daemon/9.8.2/daemon-7229.out.log
+2026-11-01T20:02:55.0122674Z Daemon will be stopped at the end of the build 
+2026-11-01T20:02:55.3111676Z Using 4 worker leases.
+2026-11-01T20:02:55.3134140Z Operational build model parameters: {cachingModelBuilding=false, configurationCache=false, configurationCacheDisabledReason=null, configurationCacheParallelLoad=false, configurationCacheParallelStore=false, configureOnDemand=false, invalidateCoupledProjects=false, isolatedProjects=false, isolatedProjectsDiagnostics=false, isolatedProjectsDangerouslyIgnoreProblems=false, modelAsProjectDependency=false, modelBuilding=false, parallelModelBuilding=false, parallelProjectConfiguration=false, parallelProjectExecution=false, vintage=true}
+2026-11-01T20:02:55.6114764Z Received JVM installation metadata from '/usr/lib/jvm/temurin-21-jdk-amd64': {JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64, JAVA_VERSION=21.0.13, JAVA_VENDOR=Eclipse Adoptium, RUNTIME_NAME=OpenJDK Runtime Environment, RUNTIME_VERSION=21.0.13+9-LTS, VM_NAME=OpenJDK 64-Bit Server VM, VM_VERSION=21.0.13+9-LTS, VM_VENDOR=Eclipse Adoptium, OS_ARCH=amd64}
+2026-11-01T20:02:55.8122533Z Watching the file system is configured to be enabled if available
+2026-11-01T20:02:55.8135730Z Now considering [/home/runner/work/_temp/dummy-cleanup-project] as hierarchies to watch
+2026-11-01T20:02:55.8136343Z File system watching is active
+2026-11-01T20:02:56.1114452Z Caching disabled for Groovy DSL script compilation (cp_init) because:
+2026-11-01T20:02:56.1114766Z   Build cache is disabled
+2026-11-01T20:02:56.1114946Z   Not worth caching.
+2026-11-01T20:02:56.1115296Z Compiling initialization script '/home/runner/work/_temp/dummy-cleanup-project/init.gradle' using SubsetScriptTransformer.
+2026-11-01T20:02:56.6109567Z Caching disabled for Groovy DSL script compilation (init) because:
+2026-11-01T20:02:56.6110455Z   Build cache is disabled
+2026-11-01T20:02:56.6110944Z   Not worth caching.
+2026-11-01T20:02:56.6111780Z Compiling initialization script '/home/runner/work/_temp/dummy-cleanup-project/init.gradle' using BuildScriptTransformer.
+2026-11-01T20:02:56.9142776Z gradle/actions: Not capturing build results
+2026-11-01T20:02:57.1110342Z Starting Build
+2026-11-01T20:02:57.1122459Z Settings evaluated using settings file '/home/runner/work/_temp/dummy-cleanup-project/settings.gradle'.
+2026-11-01T20:02:57.1123501Z Using local directory build cache for the root build (location = /home/runner/.gradle/caches/build-cache-1, remove unused entries = older than 2026-11-01 19:54:07 UTC).
+2026-11-01T20:02:57.2127185Z Projects loaded. Root project using build file '/home/runner/work/_temp/dummy-cleanup-project/build.gradle'.
+2026-11-01T20:02:57.2130445Z Included projects: [root project 'dummy-cleanup-project']
+2026-11-01T20:02:57.4115341Z 
+2026-11-01T20:02:57.4121174Z > Configure project :
+2026-11-01T20:02:57.4122488Z Evaluating root project 'dummy-cleanup-project' using build file '/home/runner/work/_temp/dummy-cleanup-project/build.gradle'.
+2026-11-01T20:02:57.4125830Z All projects evaluated.
+2026-11-01T20:02:57.4126103Z Task name matched 'noop'
+2026-11-01T20:02:57.4126384Z Selected primary task 'noop' from project :
+2026-11-01T20:02:57.4126720Z Tasks to be executed: [task ':noop']
+2026-11-01T20:02:57.4127012Z Tasks that were excluded: []
+2026-11-01T20:02:57.4127381Z Resolve mutations for :noop (Thread[#51,Execution worker,5,main]) started.
+2026-11-01T20:02:57.4127693Z :noop (Thread[#51,Execution worker,5,main]) started.
+2026-11-01T20:02:57.4127845Z 
+2026-11-01T20:02:57.4127918Z > Task :noop UP-TO-DATE
+2026-11-01T20:02:57.4128099Z Skipping task ':noop' as it has no actions.
+2026-11-01T20:02:57.4128231Z 
+2026-11-01T20:02:57.4128304Z BUILD SUCCESSFUL in 3s
+2026-11-01T20:02:57.5109152Z Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+2026-11-01T20:02:57.5115408Z Build cache (/home/runner/.gradle/caches/build-cache-1) removing files not accessed on or after Sun Nov 01 19:54:07 UTC 2026.
+2026-11-01T20:02:57.5118950Z Build cache (/home/runner/.gradle/caches/build-cache-1) cleanup deleted 0 files/directories.
+2026-11-01T20:02:57.5119824Z Build cache (/home/runner/.gradle/caches/build-cache-1) cleaned up in 0.001 secs.
+2026-11-01T20:02:57.5123698Z groovy-dsl removing files not accessed on or after Sun Nov 01 19:54:07 UTC 2026.
+2026-11-01T20:02:57.5124323Z groovy-dsl cleanup deleted 0 files/directories.
+2026-11-01T20:02:57.5124796Z groovy-dsl cleaned up in 0.005 secs.
+2026-11-01T20:02:57.5125308Z jars (/home/runner/.gradle/caches/jars-9) cleanup deleted 0 files/directories.
+2026-11-01T20:02:57.5125785Z jars (/home/runner/.gradle/caches/jars-9) removing files not accessed on or after Sun Nov 01 19:54:07 UTC 2026.
+2026-11-01T20:02:57.5126254Z jars (/home/runner/.gradle/caches/jars-9) cleanup deleted 1 files/directories.
+2026-11-01T20:02:57.5126693Z jars (/home/runner/.gradle/caches/jars-9) cleaned up in 0.023 secs.
+2026-11-01T20:02:57.5127350Z artifact cache (/home/runner/.gradle/caches/modules-2) cleanup deleted 0 files/directories.
+2026-11-01T20:02:57.5142799Z artifact cache (/home/runner/.gradle/caches/modules-2) [subdir: /home/runner/.gradle/caches/modules-2/resources-2.1] cleanup deleted 0 files/directories.
+2026-11-01T20:02:57.5143562Z artifact cache (/home/runner/.gradle/caches/modules-2) [subdir: /home/runner/.gradle/caches/modules-2/resources-2.1] removing files not accessed on or after Sun Nov 01 19:54:07 UTC 2026.
+2026-11-01T20:02:57.5144389Z artifact cache (/home/runner/.gradle/caches/modules-2) [subdir: /home/runner/.gradle/caches/modules-2/resources-2.1] cleanup deleted 0 files/directories.
+2026-11-01T20:02:57.5145475Z artifact cache (/home/runner/.gradle/caches/modules-2) [subdir: /home/runner/.gradle/caches/modules-2/files-2.1] cleanup deleted 0 files/directories.
+2026-11-01T20:02:57.5148639Z artifact cache (/home/runner/.gradle/caches/modules-2) [subdir: /home/runner/.gradle/caches/modules-2/files-2.1] removing files not accessed on or after Sun Nov 01 19:54:07 UTC 2026.
+2026-11-01T20:02:57.8387067Z artifact cache (/home/runner/.gradle/caches/modules-2) [subdir: /home/runner/.gradle/caches/modules-2/files-2.1] cleanup deleted 1154 files/directories.
+2026-11-01T20:02:57.8388395Z artifact cache (/home/runner/.gradle/caches/modules-2) [subdir: /home/runner/.gradle/caches/modules-2/metadata-2.107] cleanup deleted 0 files/directories.
+2026-11-01T20:02:57.8389330Z artifact cache (/home/runner/.gradle/caches/modules-2) cleanup deleted 0 files/directories.
+2026-11-01T20:02:57.8390022Z artifact cache (/home/runner/.gradle/caches/modules-2) cleaned up in 0.353 secs.
+2026-11-01T20:02:57.9388957Z ##[endgroup]
+2026-11-01T20:02:57.9389430Z ##[group]Caching Gradle state
+2026-11-01T20:02:58.2677636Z [command]/usr/bin/tar --posix -cf cache.tzst --exclude cache.tzst -P -C /home/runner/work/cogniva/cogniva --files-from manifest.txt --use-compress-program zstdmt
+2026-11-01T20:02:58.2989892Z [command]/usr/bin/tar --posix -cf cache.tzst --exclude cache.tzst -P -C /home/runner/work/cogniva/cogniva --files-from manifest.txt --use-compress-program zstdmt
+2026-11-01T20:02:58.4138431Z [command]/usr/bin/tar --posix -cf cache.tzst --exclude cache.tzst -P -C /home/runner/work/cogniva/cogniva --files-from manifest.txt --use-compress-program zstdmt
+2026-11-01T20:02:58.6216505Z Sent 69126 of 69126 (100.0%), 0.4 MBs/sec
+2026-11-01T20:02:58.6922690Z Sent 109564 of 109564 (100.0%), 0.4 MBs/sec
+2026-11-01T20:02:58.7720038Z Saved cache entry with key gradle-instrumented-jars-v1-f51c0b47b21526b3d40ecd0ef2577f4a from /home/runner/.gradle/caches/jars-*/*/ in 617ms
+2026-11-01T20:02:58.9095571Z Saved cache entry with key gradle-groovy-dsl-v1-fab04404edb6d1e32d891abb7b9482fb from /home/runner/.gradle/caches/*/groovy-dsl/*/ in 581ms
+2026-11-01T20:02:59.2981242Z [command]/usr/bin/tar --posix -cf cache.tzst --exclude cache.tzst -P -C /home/runner/work/cogniva/cogniva --files-from manifest.txt --use-compress-program zstdmt
+2026-11-01T20:03:00.2050639Z Sent 42745908 of 445399092 (9.6%), 40.8 MBs/sec
+2026-11-01T20:03:00.8188041Z Sent 445399092 of 445399092 (100.0%), 263.2 MBs/sec
+2026-11-01T20:03:01.0110607Z Saved cache entry with key gradle-dependencies-v1-479d26605a5d2d128bdb436cb41a2094 from /home/runner/.gradle/caches/modules-*/files-*/*/*/*/* in 2873ms
+2026-11-01T20:03:01.8319232Z Sent 83101133 of 217318861 (38.2%), 79.3 MBs/sec
+2026-11-01T20:03:02.0489368Z Sent 217318861 of 217318861 (100.0%), 170.3 MBs/sec
+2026-11-01T20:03:02.2134478Z Saved cache entry with key gradle-transforms-v1-f53afc6a36342c92873a573dd59e2b04 from /home/runner/.gradle/caches/transforms-4/*/,/home/runner/.gradle/caches/*/transforms/*/ in 3361ms
+2026-11-01T20:03:03.5267351Z [command]/usr/bin/tar --posix -cf cache.tzst --exclude cache.tzst -P -C /home/runner/work/cogniva/cogniva --files-from manifest.txt --use-compress-program zstdmt
+2026-11-01T20:03:04.3698709Z Sent 10464785 of 10464785 (100.0%), 17.5 MBs/sec
+2026-11-01T20:03:04.5410291Z Saved cache entry with key gradle-home-v1|Linux-X64|build[0d0d60652b11b112b164b30571ca3e82]-d8716db8c12653a726c9284b9e28e7ba1c30df64 from /home/runner/.gradle/caches,/home/runner/.gradle/notifications,/home/runner/.gradle/.setup-gradle in 1025ms
+2026-11-01T20:03:04.5411236Z ##[endgroup]
+2026-11-01T20:03:04.5417010Z Generating Job Summary
+2026-11-01T20:03:04.5426159Z Completed post-action step
+2026-11-01T20:03:04.5652381Z Post job cleanup.
+2026-11-01T20:03:04.6651127Z (node:7333) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-01T20:03:04.6652086Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-01T20:03:04.6811959Z Post job cleanup.
+2026-11-01T20:03:04.7432516Z [command]/usr/bin/git version
+2026-11-01T20:03:04.7469306Z git version 2.56.0
+2026-11-01T20:03:04.7496868Z Temporarily overriding HOME='/home/runner/work/_temp/79e2f5b0-2ec7-42a4-8e64-355c9464c259' before making global git config changes
+2026-11-01T20:03:04.7497838Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-01T20:03:04.7503649Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/cogniva/cogniva
+2026-11-01T20:03:04.7547060Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-01T20:03:04.7579440Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-01T20:03:04.7803820Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-01T20:03:04.7837204Z http.https://github.com/.extraheader
+2026-11-01T20:03:04.7846077Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-11-01T20:03:04.7884041Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-01T20:03:04.8129710Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-01T20:03:04.8171341Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-01T20:03:04.8512755Z Evaluate and set job outputs
+2026-11-01T20:03:04.8517853Z Set output 'image'
+2026-11-01T20:03:04.8519079Z Cleaning up orphan processes
+2026-11-01T20:03:04.8784142Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-java@v4, actions/upload-artifact@v4, docker/build-push-action@v6, docker/login-action@v3, docker/setup-buildx-action@v3, gradle/actions/setup-gradle@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

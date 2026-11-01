@@ -5,17 +5,19 @@ As notas renomeadas pelo usuário e o histórico de produção são preservados.
 
 ## Execução
 
-- [ ] Identidade autenticada, isolamento e preservação de filas por proprietário.
-- [ ] Tentativas duráveis, validação autoritativa, idempotência e ACK por evento.
-- [ ] Concurso persistido, versionado e sincronizado nos dois sentidos.
-- [ ] Contratos únicos de domínio, cobertura, métricas, simulado e SRS.
-- [ ] Sessão persistente, operações assíncronas e reporte durável.
-- [ ] TLS/distribuição, CI com gates, promoção/rollback e documentação.
-- [ ] Suítes atuais, cenários adversariais e build Android verificados.
+- [x] Identidade autenticada, isolamento e preservação de filas por proprietário.
+- [x] Tentativas duráveis, validação autoritativa, idempotência e ACK por evento.
+- [x] Concurso persistido, versionado e sincronizado nos dois sentidos.
+- [x] Contratos únicos de domínio, cobertura, métricas, simulado e SRS.
+- [x] Sessão persistente, operações assíncronas e reporte durável.
+- [x] TLS/distribuição, CI com gates, promoção/rollback e documentação.
+- [x] Suítes atuais, cenários adversariais e build Android verificados.
+
+Resultado atual: **1.4.0/build 7 implantado e conferido externamente**, run [41343484265](https://github.com/danielcdes-create/cogniva/actions/runs/41343484265), revisão `d8716db8c12653a726c9284b9e28e7ba1c30df64`. A [matriz de fechamento](FECHAMENTO-AUDITORIA.md) contém o resultado por achado e os limites de aceite. As seções abaixo são o registro cronológico; afirmações de trabalho pendente descrevem aquela etapa, não o estado final.
 
 Não executar os antigos probes como testes de aceite: eles afirmam o comportamento defeituoso. Os cenários serão incorporados à suíte com os resultados corrigidos. Testes de banco usam apenas uma instância isolada/sintética.
 
-## Estado intermediário (trabalho em andamento)
+## Registro histórico: estado intermediário
 
 - Branch de trabalho: `codex/auditoria-convergencia`; sem publicação de código nem escrita no Atlas até este ponto.
 - Backend 1.4.0: sessão verificada, vínculo histórico por código de uso único, identidade nativa própria; escrita de evento/projeção/recibo no mesmo documento, compare-and-swap e preservação de campos legados; concurso persistido e versionado por usuário. A suíte de 22 testes passou, incluindo MongoDB real isolado em loopback 27048, falha de escrita injetada, retry, concorrência e restart.
@@ -59,3 +61,13 @@ No cache anterior ao DTO completo, os vínculos inferidos deixam de alimentar do
 ## Gates completos e alinhamento de calendário
 
 Na revisão `762b31b`, o CI com Mongo 7.0.41 passou o backend (24 testes), Android/JVM/lint/golden e emulador (três testes). Os logs completos dessa revisão estão preservados em `remediation-validation/ci-*-762b31b.log`. A promoção foi cancelada antes de ocorrer para alinhar também o cálculo de urgência do tronco comum ao dia UTC−03:00 já usado pelo cliente. A mesma fixture de limite de dia agora exercita diretamente o helper de produção. Os 24 testes Rust passaram novamente. O código do cliente permaneceu igual nesta correção de calendário; a nova revisão repetirá todos os gates. Caches Gradle têm escrita habilitada nos workflows manuais/de release confiáveis.
+
+## Entrega operacional concluída
+
+A revisão `d8716db` repetiu e aprovou todos os gates. O CI compilou/assinou o APK release, construiu a imagem fora da VPS, mediu 25.808.311 bytes de runtime e promoveu por digest. O ensaio falhou deliberadamente apenas após os smokes e comprovou a recuperação da imagem/ponteiro anteriores antes da promoção efetiva. O Compose global e os outros três containers mantiveram seus hashes/IDs.
+
+O aceite externo verificou HTTPS, versão/revisão/contrato 2, readiness/Mongo, duas leituras iguais de `/api/app/latest-apk`, download completo/hash/tamanho e 401 anônimo na rota protegida. APK de 12.708.853 bytes, SHA-256 `1abfb764909dd4274e351a2c30e3471ba41ab3b11842adf2dd1dc3389bf35c35`; assinatura privada rotacionada verificada em API 28–35 e ausência de `debuggable` confirmada.
+
+O inventário posterior manteve 15 documentos/27 eventos e o mesmo hash protegido das duas capturas anteriores. Os seis gabaritos ambíguos e zero vínculos canônicos confirmados permanecem preservados para revisão humana; não houve remapeamento corretivo por inferência. Nenhum aparelho ADB foi conectado, portanto instalação/uso físico continuam sem prova. API 26–27 conserva a limitação do assinante antigo.
+
+As chaves existentes de IA autenticaram em consultas de modelos. Gemini 1.5 não estava disponível; a configuração privada foi copiada para backup e ajustada explicitamente para `gemini-2.5-flash-lite`, cuja disponibilidade e suporte a geração foram confirmados. O container promovido recebeu essa configuração; não foi enviada geração paga. Renovação TLS ativa e serviço com resultado de sucesso. O Mongo sintético local foi encerrado com conferência de identidade do processo.

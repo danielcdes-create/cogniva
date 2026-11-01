@@ -8,6 +8,8 @@ A promoção usa o override `/opt/apps/cogniva-runtime.override.json`, serviço 
 
 JWT, URI Mongo e chaves de IA ficam no ambiente privado. Não registrar seus valores. A chave Android e senha DPAPI ficam em `%LOCALAPPDATA%/Cogniva/release-signing`, com ACL privada. Preservar essa pasta em backup privado. O CI usa Secrets e apaga credenciais temporárias.
 
+Configurar os modelos explicitamente em `/opt/apps/.env.rust`. Em 01/11/2026, produção usa `GEMINI_MODEL=gemini-2.5-flash-lite`; o fallback histórico Gemini 1.5 do binário não está disponível no provedor. A listagem autenticada confirmou suporte do modelo selecionado, sem testar qualidade/quota por geração. Alterações de ambiente só entram no container após sua recriação controlada.
+
 O operador emite `docker exec api-rust-core /usr/local/bin/app --issue-link-code ID` depois de comprovar o proprietário. O código vale dez minutos e vincula uma instalação comprovada. Repetição serve apenas à mesma instalação para recuperar resposta perdida. Não publicar códigos em issues/logs. ID ou @username não comprovam posse. `ADMIN_USER_IDS` vazio não concede administração.
 
 ## Preservação do banco
@@ -27,6 +29,8 @@ O bundle é movido para `/opt/apps/cogniva-releases/SHA`; bytes diferentes sob u
 Durante a troca e o ensaio de rollback, Nginx bloqueia rotas de dados com 503 e mantém health disponível. Isso impede envio do protocolo novo ao backend antigo. O candidato precisa passar readiness/Mongo, revisão, APK e HTTPS. Ao abrir o gate, uma rota protegida deve rejeitar acesso anônimo com 401.
 
 O pipeline provoca uma falha de smoke controlada, confirma imagem, ponteiro, Compose e saúde anteriores, e depois promove efetivamente. Falhas reais não contam como sucesso do ensaio. Entre protocolos incompatíveis, rollback mantém as rotas de dados fechadas até nova promoção válida; as filas ficam preservadas.
+
+Release operacional de 01/11/2026: `d8716db8c12653a726c9284b9e28e7ba1c30df64`, run `41343484265`, todos os jobs aprovados. Aceite repetível: `python -X utf8 scripts/verify-production-release.py d8716db8c12653a726c9284b9e28e7ba1c30df64`. Faz somente leituras, baixa o APK para `%LOCALAPPDATA%/Cogniva/releases` e grava evidência sanitizada em `docs/remediation-validation/production-release.json`.
 
 ## Recuperação e TLS
 
