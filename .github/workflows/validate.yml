@@ -19,7 +19,10 @@ jobs:
           workspaces: backend-rust
       - name: Dedicated synthetic Mongo (never Atlas)
         run: |
-          docker run -d --name cogniva-test-mongo --memory=512m -p 127.0.0.1:27048:27017 mongo:8.0 --bind_ip_all --wiredTigerCacheSizeGB 0.25 --setParameter enableTestCommands=1
+          # Mongo 8.0.34 rejects the hosted Ubuntu kernel release string:
+          # https://jira.mongodb.org/browse/SERVER-136848
+          # Native Windows validation uses 8.0.34; CI additionally proves 7.0 compatibility.
+          docker run -d --name cogniva-test-mongo --memory=512m -p 127.0.0.1:27048:27017 mongo:7.0.41 --bind_ip_all --wiredTigerCacheSizeGB 0.25 --setParameter enableTestCommands=1
           for attempt in $(seq 1 30); do
             if docker exec cogniva-test-mongo mongosh --quiet --eval 'db.adminCommand({ping:1})' > /dev/null 2>&1; then exit 0; fi
             sleep 1
