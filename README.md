@@ -4,12 +4,12 @@ Aplicativo Android de estudo para concursos, com cliente Kotlin/Compose e API Ru
 
 ## Estado da recuperação de 2026-11-01
 
-Versão em produção: **1.4.2 / Android build 9 / contrato de sincronização 2**, revisão `7d623102e17723e4f2eeff82f1e191f08348b189`, promovida em 01/11/2026 às 21:26 (UTC−03:00). O [pipeline completo](https://github.com/danielcdes-create/cogniva/actions/runs/41365834469) passou gates, assinatura, ensaio de rollback e promoção. HTTPS, prontidão com Mongo, download público e preservação do acervo/histórico foram conferidos externamente. A [correção de questões](docs/CORRECAO-QUESTOES-1.4.2.md) recupera o acesso ao acervo sem herdar concursos arquivados; a [correção de Ajustes](docs/CORRECAO-VINCULO-1.4.1.md) mantém confirmação junto ao código. Consulte [FECHAMENTO-AUDITORIA.md](docs/FECHAMENTO-AUDITORIA.md) para C01–C39 e os limites de aceite; [REMEDIACAO.md](docs/REMEDIACAO.md) preserva o registro da execução.
+Versão em produção: **1.4.3 / Android build 10 / contrato de sincronização 2**, revisão `601cf2c56bf7412191f89d286fe6e3fadf43e770`, promovida em 01/11/2026 às 22:46 (UTC−03:00). O [pipeline completo](https://github.com/danielcdes-create/cogniva/actions/runs/41372861958) passou gates, assinatura, ensaio de rollback e promoção. HTTPS, prontidão com Mongo, download público e preservação do acervo/histórico foram conferidos externamente. A [correção de questões](docs/CORRECAO-QUESTOES-1.4.2.md) recupera o acesso ao acervo sem herdar concursos arquivados; a [correção de Ajustes](docs/CORRECAO-VINCULO-1.4.1.md) mantém confirmação junto ao código. Consulte [FECHAMENTO-AUDITORIA.md](docs/FECHAMENTO-AUDITORIA.md) para C01–C39 e os limites de aceite; [REMEDIACAO.md](docs/REMEDIACAO.md) preserva o registro da execução.
 
 - API: `https://198.199.65.103/api/v1/`.
 - Metadados públicos medidos do APK: `GET /api/app/latest-apk`.
 - APK: `GET /api/v1/apk/download`. O arquivo servido só muda durante promoção validada.
-- [Baixar APK 1.4.2/build 9](https://198.199.65.103/api/v1/apk/download): 12.725.237 bytes; SHA-256 `7f89a88d56d1790bab06274e539b59336c94586fafbdd889520fc4e5c2ff209a`.
+- [Baixar APK 1.4.3/build 10](https://198.199.65.103/api/v1/apk/download): 12.725.237 bytes; SHA-256 `83441ccdf32eff2bf5dcb34bf24d9948deacab3f904ed1b5aec64b6fb26af89f`.
 - Saúde do processo: `/api/v1/health`; prontidão com MongoDB e revisão: `/api/v1/ready` no backend novo.
 - Não se afirma instalação nem validação física no S23 Ultra sem evidência ADB.
 
@@ -63,7 +63,7 @@ O workflow `deploy.yml` executa validação de domínio/router, JVM/golden e emu
 
 Segredos de Actions: `DO_HOST`, `DO_USER`, `DO_SSH_KEY`, `DO_SSH_KNOWN_HOSTS`, `ANDROID_RELEASE_KEYSTORE_BASE64`, `ANDROID_RELEASE_PASSWORD`, `ANDROID_SIGNING_LINEAGE_BASE64`. Chaves privadas não entram no Git. A assinatura usa chave privada rotacionada em API 28+; API 26–27 conserva o assinante antigo para compatibilidade de atualização e mantém essa limitação de segurança.
 
-Produção usa explicitamente `GEMINI_MODEL=gemini-2.5-flash-lite`. As duas chaves de IA autenticaram na listagem de modelos; a configuração Gemini anterior já não estava disponível. Disponibilidade e suporte a geração foram consultados sem enviar geração paga; qualidade e quota de inferência não foram certificadas nessa recuperação.
+Produção usa **xAI / Grok 4.3**, conforme a escolha do proprietário após a conta não disponibilizar Grok 4.7. Os oito recursos consultam o campo próprio no Mongo antes de gerar; os prompts existentes são preservados. Resultado concluído é gravado com majority/journal e reutilizado em solicitações futuras, sem cota de geração para cache hit. Chave somente no ambiente privado da VPS. [Operação e prova real de cache](docs/IA-XAI.md).
 
 Nginx atende HTTPS nos IPs públicos sem disputar a porta de Tailscale Serve. Certificado IP short-lived do Let's Encrypt, renovação verificada por timer horário e reload do Nginx. Inspeção: `systemctl status cogniva-renew-tls.timer`; prontidão: `curl --fail https://198.199.65.103/api/v1/ready`. Detalhes e recuperação: [docs/OPERACAO.md](docs/OPERACAO.md).
 

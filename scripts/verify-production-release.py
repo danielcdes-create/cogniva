@@ -15,6 +15,7 @@ p.add_argument('--version-name', default='1.4.0')
 p.add_argument('--version-code', type=int, default=7)
 p.add_argument('--evidence-dir', type=pathlib.Path)
 p.add_argument('--baseline', type=pathlib.Path)
+p.add_argument('--xai-model')
 a = p.parse_args()
 assert len(a.revision) == 40 and all(c in '0123456789abcdef' for c in a.revision)
 root = pathlib.Path(__file__).resolve().parents[1]
@@ -61,7 +62,8 @@ print(json.dumps({
  'core':{'user':core['Config']['User'],'read_only':core['HostConfig']['ReadonlyRootfs'],
          'memory_bytes':core['HostConfig']['Memory'],'nano_cpus':core['HostConfig']['NanoCpus'],
          'cap_drop':core['HostConfig']['CapDrop'],'health':core['State'].get('Health',{}).get('Status'),
-         'gemini_model':env.get('GEMINI_MODEL')},
+         'gemini_model':env.get('GEMINI_MODEL'), 'xai_model':env.get('XAI_MODEL'),
+         'xai_base_url':env.get('XAI_BASE_URL'), 'xai_key_configured':bool(env.get('XAI_API_KEY'))},
  'gate':pathlib.Path('/etc/nginx/cogniva-gate.conf').read_text().strip(),
  'stats':[json.loads(row) for row in run('docker','stats','--no-stream','--format','{{json .}}').splitlines()],
  'renewal_timer':run('systemctl','show','cogniva-renew-tls.timer','-p','ActiveState','-p','LastTriggerUSec'),
@@ -86,7 +88,11 @@ assert manifest['apk_sha256'] == info['sha256_checksum']
 assert manifest['apk_size_bytes'] == info['size_bytes']
 assert manifest['runtime_size_bytes'] < 50_000_000
 assert server['core']['read_only'] and server['core']['user'] != 'root'
-assert server['core']['gemini_model'] == 'gemini-2.5-flash-lite'
+if a.xai_model:
+    assert server['core']['xai_model'] == a.xai_model and server['core']['xai_key_configured']
+    assert server['core']['xai_base_url'] == 'https://api.x.ai/v1'
+else:
+    assert server['core']['gemini_model'] == 'gemini-2.5-flash-lite'
 assert server['core']['health'] == 'healthy'
 assert server['gate'] == 'set $cogniva_maintenance 0;'
 result = {

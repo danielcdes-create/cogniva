@@ -13,7 +13,7 @@ As notas renomeadas pelo usuário e o histórico de produção são preservados.
 - [x] TLS/distribuição, CI com gates, promoção/rollback e documentação.
 - [x] Suítes atuais, cenários adversariais e build Android verificados.
 
-Resultado atual: **1.4.2/build 9 implantado e conferido externamente**, run [41365834469](https://github.com/danielcdes-create/cogniva/actions/runs/41365834469), revisão `7d623102e17723e4f2eeff82f1e191f08348b189`. A [matriz de fechamento](FECHAMENTO-AUDITORIA.md) contém o resultado por achado e os limites de aceite; as correções posteriores de [Ajustes](CORRECAO-VINCULO-1.4.1.md) e [questões](CORRECAO-QUESTOES-1.4.2.md) registram as reproduções adicionais. As seções abaixo são o registro cronológico; afirmações de trabalho pendente descrevem aquela etapa, não o estado final.
+Resultado atual: **1.4.3/build 10 implantado e conferido externamente**, run [41372861958](https://github.com/danielcdes-create/cogniva/actions/runs/41372861958), revisão `601cf2c56bf7412191f89d286fe6e3fadf43e770`. A [matriz de fechamento](FECHAMENTO-AUDITORIA.md) contém o resultado por achado e os limites de aceite; as correções posteriores de [Ajustes](CORRECAO-VINCULO-1.4.1.md) e [questões](CORRECAO-QUESTOES-1.4.2.md) registram as reproduções adicionais. As seções abaixo são o registro cronológico; afirmações de trabalho pendente descrevem aquela etapa, não o estado final.
 
 Não executar os antigos probes como testes de aceite: eles afirmam o comportamento defeituoso. Os cenários serão incorporados à suíte com os resultados corrigidos. Testes de banco usam apenas uma instância isolada/sintética.
 
@@ -85,3 +85,9 @@ Pedidos reais reproduziram o bloqueio: Android herdava concurso arquivado até n
 25 testes Rust, 47 JVM, lint/nove imagens e seis instrumentados aprovados. O novo teste abre a tela real com uma questão de fixture e grava resposta/fila Room com contexto arquivado inicial. Na API de produção: shuffle 10, SRS 3, erros 3, desafio 4, também recebendo o contexto arquivado antigo. Rollback/promoção, download/hash/assinatura e prontidão aprovados. Acervo de 618 documentos e histórico global de 15 documentos/27 eventos mantiveram seus hashes antes/depois.
 
 Quatro referências históricas sem documento no Mongo foram reconciliadas com IDs dos exemplos locais do código anterior; sete eventos preservados, sem reinserir esses exemplos como acervo de banca. A grade fiscal atual continua sem questões classificadas/vinculadas correspondentes; não se substitui matéria nem se infere tópico para preencher simulado/tronco. Relatório e evidências em `CORRECAO-QUESTOES-1.4.2.md` e `remediation-validation/1.4.2/`.
+
+## Tutores xAI — 1.4.3/build 10
+
+Modelo Grok 4.3 escolhido pelo proprietário após autenticação válida e ausência de acesso ao Grok 4.7 (catálogo e consulta direta 404). Todos os recursos preservam seus prompts e consultam primeiro o campo Mongo; geração ausente usa somente xAI Responses, confirma gravação majority/journal e guarda contra edição concorrente de enunciado/alternativas/gabarito. Cache hit deixa de consumir cota diária de geração.
+
+26 testes Rust, 47 JVM, nove imagens/lint e seis instrumentados aprovados. Prova real: primeira solicitação gerou e gravou um mnemônico; segunda reutilizou conteúdo idêntico do Mongo. Só esse campo mudou entre os backups; todos os eventos históricos foram preservados. Configuração/chave privadas na VPS, com backup; nenhuma chave no Git/APK. Detalhes em [IA-XAI.md](IA-XAI.md).

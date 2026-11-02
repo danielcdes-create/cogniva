@@ -8,7 +8,7 @@ A promoção usa o override `/opt/apps/cogniva-runtime.override.json`, serviço 
 
 JWT, URI Mongo e chaves de IA ficam no ambiente privado. Não registrar seus valores. A chave Android e senha DPAPI ficam em `%LOCALAPPDATA%/Cogniva/release-signing`, com ACL privada. Preservar essa pasta em backup privado. O CI usa Secrets e apaga credenciais temporárias.
 
-Configurar os modelos explicitamente em `/opt/apps/.env.rust`. Em 01/11/2026, produção usa `GEMINI_MODEL=gemini-2.5-flash-lite`; o fallback histórico Gemini 1.5 do binário não está disponível no provedor. A listagem autenticada confirmou suporte do modelo selecionado, sem testar qualidade/quota por geração. Alterações de ambiente só entram no container após sua recriação controlada.
+Configuração atual: `XAI_API_KEY` privada, `XAI_BASE_URL=https://api.x.ai/v1`, `XAI_MODEL=grok-4.3` em `/opt/apps/.env.rust`. Chave autenticada e geração/cache testados. Grok 4.7 não está habilitado nessa conta; o proprietário escolheu 4.3. Variáveis antigas Gemini/OpenAI não são usadas para nova geração. Recriar o container de forma controlada após alterar o ambiente. Cache legado não é regenerado pela troca de provedor.
 
 O operador emite `docker exec api-rust-core /usr/local/bin/app --issue-link-code ID` depois de comprovar o proprietário. O código vale dez minutos e vincula uma instalação comprovada. Repetição serve apenas à mesma instalação para recuperar resposta perdida. Não publicar códigos em issues/logs. ID ou @username não comprovam posse. `ADMIN_USER_IDS` vazio não concede administração.
 
@@ -32,13 +32,13 @@ Durante a troca e o ensaio de rollback, Nginx bloqueia rotas de dados com 503 e 
 
 O pipeline provoca uma falha de smoke controlada, confirma imagem, ponteiro, Compose e saúde anteriores, e depois promove efetivamente. Falhas reais não contam como sucesso do ensaio. Entre protocolos incompatíveis, rollback mantém as rotas de dados fechadas até nova promoção válida; as filas ficam preservadas.
 
-Release operacional atual de 01/11/2026: **1.4.2/build 9**, `7d623102e17723e4f2eeff82f1e191f08348b189`, run `41365834469`, todos os jobs aprovados. Aceite repetível:
+Release operacional atual de 01/11/2026: **1.4.3/build 10**, `601cf2c56bf7412191f89d286fe6e3fadf43e770`, run `41372861958`, todos os jobs aprovados. Aceite repetível:
 
 ```powershell
-python -X utf8 scripts/verify-production-release.py 7d623102e17723e4f2eeff82f1e191f08348b189 --version-name 1.4.2 --version-code 9 --baseline docs/remediation-validation/1.4.2/before/production-release.json --evidence-dir docs/remediation-validation/1.4.2
+python -X utf8 scripts/verify-production-release.py 601cf2c56bf7412191f89d286fe6e3fadf43e770 --version-name 1.4.3 --version-code 10 --xai-model grok-4.3 --baseline docs/remediation-validation/1.4.3/before/production-release.json --evidence-dir docs/remediation-validation/1.4.3
 ```
 
-Faz somente leituras, baixa o APK para `%LOCALAPPDATA%/Cogniva/releases` e grava evidência sanitizada em `docs/remediation-validation/1.4.2/production-release.json`. As evidências das releases anteriores permanecem preservadas.
+Faz somente leituras, baixa o APK para `%LOCALAPPDATA%/Cogniva/releases` e grava evidência sanitizada em `docs/remediation-validation/1.4.3/production-release.json`. As evidências das releases anteriores permanecem preservadas.
 
 Diagnóstico de questões para uma conta cujo proprietário foi comprovado: `python -X utf8 scripts/probe-question-selection.py ID --output caminho-do-relatorio.json`. O operador assina sessão diagnóstica temporária em memória na VPS; o relatório contém somente contagens, disciplinas e estados HTTP. Não envia tentativas, tutores pagos ou comandos de edição. `--assert-fixed` verifica os casos conhecidos da conta investigada nesta recuperação. Referências históricas indisponíveis devem ser revisadas por identidade/proveniência, sem apagá-las nem criar enunciados para preencher IDs. Quatro referências foram identificadas como exemplos locais antigos, com evidência na reconciliação da 1.4.2.
 
@@ -57,3 +57,5 @@ A captura encontrou 618 questões, 612 com gabarito interpretável, zero víncul
 `POST /api/v1/admin/canonical-mapping` recebe vínculos explícitos, justificativa, revisão da questão, revisão do vínculo e `operation_id` UUID. Padrão: `dry_run=true`. O operador revisa assunto/tópico e envia explicitamente `dry_run=false` para aplicar. CAS, proveniência anterior e histórico de operações são preservados. Arrays de aprendizagem não são reescritos. Nenhum vínculo foi aplicado em produção nesta recuperação.
 
 Não remapear por substring ou apenas pelo nome de disciplina. Ausência continua ausência até revisão humana. Templates configuráveis não equivalem a documentos oficiais.
+
+A prova `scripts/verify-xai-cache.py ID` faz **uma geração real paga**, somente se encontrar mnemônico ausente em questão válida; em seguida confirma cache e persistência. Usar apenas com autorização de geração, nunca apagar conteúdo para forçar teste. Evidência existente em `remediation-validation/1.4.3/xai-live-cache.json` dispensa repetir a chamada em verificações rotineiras. [Contratos do cache xAI](IA-XAI.md).
