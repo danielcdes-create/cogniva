@@ -9,6 +9,31 @@ use std::path::PathBuf;
 use tower::ServiceExt;
 use futures::TryStreamExt;
 
+#[tokio::test]
+#[ignore = "Requires dedicated loopback Mongo 27048"]
+async fn xai_generates_missing_resource_once_and_persists_for_reuse() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let uri=std::env::var("COGNIVA_TEST_MONGODB_URI").unwrap();assert!(uri.starts_with("mongodb://127.0.0.1:27048/"));
+    let client=Client::with_uri_str(&uri).await.unwrap();let name=format!("cogniva_test_{}",uuid::Uuid::new_v4().simple());let db=client.database(&name);
+    let hits=Arc::new(AtomicUsize::new(0));let count=hits.clone();
+    let mock=Router::new().route("/responses",axum::routing::post(move |axum::Json(payload):axum::Json<serde_json::Value>|{let count=count.clone();async move{
+        count.fetch_add(1,Ordering::SeqCst);assert_eq!(payload["model"],"synthetic-grok");assert_eq!(payload["store"],false);
+        assert!(payload["input"][1]["content"].as_str().unwrap().contains("mnemônico"));
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        axum::Json(serde_json::json!({"status":"completed","output":[{"type":"reasoning","content":[]},{"type":"message","content":[{"type":"output_text","text":"Memória sintética validada."}]}]}))
+    }}));
+    let listener=tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();let addr=listener.local_addr().unwrap();let server=tokio::spawn(async move{axum::serve(listener,mock).await.unwrap()});
+    let mut cfg=config(&uri);cfg.xai_api_key=Some("synthetic-only-key".into());cfg.xai_base_url=format!("http://{addr}");cfg.xai_model="synthetic-grok".into();
+    let id=ObjectId::new();db.collection::<Document>("todasQuestoes").insert_one(doc!{"_id":id,"question":"Synthetic memory question","answers":["A","B"],"correct_answers":["B"],"explanation":"Existing explanation preserved","unknown_legacy_field":"preserve"}).await.unwrap();
+    use services::ai_tutor::{get_or_generate_ai_assist,AiAssistKind};let key=id.to_hex();
+    let (a,b)=tokio::join!(get_or_generate_ai_assist(&db,&cfg,&key,AiAssistKind::Mnemonic,None),get_or_generate_ai_assist(&db,&cfg,&key,AiAssistKind::Mnemonic,None));
+    let a=a.unwrap();let b=b.unwrap();assert_ne!(a.from_cache,b.from_cache);assert_eq!(a.content_markdown,b.content_markdown);assert_eq!(hits.load(Ordering::SeqCst),1);
+    let reused=get_or_generate_ai_assist(&db,&cfg,&key,AiAssistKind::Mnemonic,None).await.unwrap();assert!(reused.from_cache);assert_eq!(hits.load(Ordering::SeqCst),1);
+    let row=db.collection::<Document>("todasQuestoes").find_one(doc!{"_id":id}).await.unwrap().unwrap();assert_eq!(row.get_str("mnemonico").unwrap(),"Memória sintética validada.");assert_eq!(row.get_str("unknown_legacy_field").unwrap(),"preserve");
+    let cached=get_or_generate_ai_assist(&db,&cfg,&key,AiAssistKind::Explanation,None).await.unwrap();assert!(cached.from_cache);assert_eq!(hits.load(Ordering::SeqCst),1);
+    server.abort();assert!(name.starts_with("cogniva_test_"));db.drop().await.unwrap();
+}
+
 fn config(uri: &str) -> AppConfig {
     AppConfig {
         port: 0,
@@ -18,6 +43,9 @@ fn config(uri: &str) -> AppConfig {
         openai_model: "unused".into(),
         gemini_api_key: None,
         gemini_model: "unused".into(),
+        xai_api_key: None,
+        xai_base_url: "https://api.x.ai/v1".into(),
+        xai_model: "grok-4.7".into(),
         jwt_secret: "synthetic-only-secret-at-least-thirty-two-characters".into(),
         apk_storage_path: PathBuf::from("missing"),
         apk_metadata_path: PathBuf::from("missing"),

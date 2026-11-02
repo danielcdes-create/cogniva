@@ -1,6 +1,6 @@
 use crate::{
     error::AppError,
-    services::ai_tutor::{get_or_generate_ai_assist, AiAssistKind, AiAssistResponse},
+    services::ai_tutor::{get_or_generate_ai_assist_budget as get_or_generate_ai_assist, AiAssistKind, AiAssistResponse},
     AppState,
 };
 use axum::{
@@ -24,13 +24,13 @@ pub async fn handle_question_ai_assist(
     Path((question_id, kind)): Path<(String, AiAssistKind)>,
     Query(query): Query<AiHelpQuery>,
 ) -> Result<Json<AiAssistResponse>, AppError> {
-    crate::services::rate_limit::reserve_tutor(&state.db, user.0).await?;
     let res = get_or_generate_ai_assist(
         &state.db,
         &state.config,
         &question_id,
         kind,
         query.hint_index,
+        Some(user.0),
     )
     .await?;
 

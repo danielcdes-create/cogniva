@@ -12,14 +12,14 @@ use serde_json::json;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum AiAssistKind {
-    Explanation,       // Gemini 1.5 Flash -> campo `explanation`
-    ContextualHint,    // OpenAI gpt-4o-mini -> array `contextualHint`
-    DrSincero,         // OpenAI gpt-4o-mini -> campo `drSincero`
-    ChildFriendlyPre,  // OpenAI gpt-4o-mini -> campo `ajudaInfantil`
-    ChildFriendlyPost, // OpenAI gpt-4o-mini -> campo `explicacaoInfantil`
-    ExtraConcepts,     // OpenAI gpt-4o-mini -> campo `explanationExtra`
-    Mnemonic,          // OpenAI gpt-4o-mini -> campo `mnemonico`
-    Plausibility,      // OpenAI gpt-4o-mini -> objeto `plausibilityAnalysis`
+    Explanation,       // campo `explanation`
+    ContextualHint,    // array `contextualHint`
+    DrSincero,         // campo `drSincero`
+    ChildFriendlyPre,  // campo `ajudaInfantil`
+    ChildFriendlyPost, // campo `explicacaoInfantil`
+    ExtraConcepts,     // campo `explanationExtra`
+    Mnemonic,          // campo `mnemonico`
+    Plausibility,      // objeto `plausibilityAnalysis`
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,7 +31,7 @@ pub struct AiAssistResponse {
     pub plausibility_structured: Option<PlausibilityAnalysis>,
 }
 
-const GEMINI_SYSTEM_INSTRUCTION: &str = r#"Você é um especialista em concursos públicos, com vasta experiência em elaborar materiais didáticos. Sua tarefa é analisar questões de múltipla escolha, fornecendo explicações claras e concisas para cada alternativa em formato Markdown.
+const EXPLANATION_SYSTEM_INSTRUCTION: &str = r#"Você é um especialista em concursos públicos, com vasta experiência em elaborar materiais didáticos. Sua tarefa é analisar questões de múltipla escolha, fornecendo explicações claras e concisas para cada alternativa em formato Markdown.
 Primeiro faça um pequeno overview do cerne do texto da questão.
 Explique cada alternativa individualmente:
 - Comece com "✅:" se a alternativa for a correta.
@@ -46,6 +46,10 @@ pub async fn get_or_generate_ai_assist(
     kind: AiAssistKind,
     hint_index: Option<usize>,
 ) -> Result<AiAssistResponse, AppError> {
+    get_or_generate_ai_assist_budget(db,config,question_id,kind,hint_index,None).await
+}
+
+pub async fn get_or_generate_ai_assist_budget(db:&Database,config:&AppConfig,question_id:&str,kind:AiAssistKind,hint_index:Option<usize>,budget_user:Option<i64>) -> Result<AiAssistResponse,AppError> {
     use std::collections::HashMap;
     use std::sync::{Arc, OnceLock, Weak};
     use tokio::sync::Mutex;
@@ -67,24 +71,14 @@ pub async fn get_or_generate_ai_assist(
     };
     let _guard = lock.lock().await;
     let oid = ObjectId::parse_str(question_id)?;
-    let coll = db.collection::<QuestionDocument>("todasQuestoes");
+    let coll = db.collection_with_options::<QuestionDocument>("todasQuestoes", mongodb::options::CollectionOptions::builder().write_concern(mongodb::options::WriteConcern::builder().w(mongodb::options::Acknowledgment::Majority).journal(true).build()).build());
 
-    let questao = coll
+    let original = db.collection::<bson::Document>("todasQuestoes")
         .find_one(doc! { "_id": oid })
         .await?
         .ok_or_else(|| AppError::NotFound(format!("Questão {} não encontrada", question_id)))?;
 
-    let correct_answer = questao
-        .correct_answers
-        .first()
-        .cloned()
-        .or_else(|| {
-            questao
-                .correct_answer_indices
-                .first()
-                .and_then(|&idx| questao.answers.get(idx).cloned())
-        })
-        .unwrap_or_else(|| "Gabarito oficial".to_string());
+    let questao: QuestionDocument = bson::from_document(original.clone()).map_err(|_| AppError::Conflict("Formato da questão exige revisão".into()))?;
 
     // 1. Verificar se já existe no cache do documento MongoDB
     match &kind {
@@ -103,7 +97,8 @@ pub async fn get_or_generate_ai_assist(
         }
         AiAssistKind::ContextualHint => {
             let idx = hint_index.unwrap_or(0);
-            if idx < questao.contextual_hint.len() {
+            if idx > 2 { return Err(AppError::BadRequest("Há até três dicas progressivas por questão".into())); }
+            if idx < questao.contextual_hint.len() && !questao.contextual_hint[idx].trim().is_empty() {
                 return Ok(AiAssistResponse {
                     question_id: question_id.to_string(),
                     kind,
@@ -188,7 +183,7 @@ pub async fn get_or_generate_ai_assist(
                     plausibility_structured: None,
                 });
             }
-            if let Some(pa) = &questao.plausibility_analysis {
+            if let Some(pa) = questao.plausibility_analysis.as_ref().filter(|pa| !pa.correct_answer_explanation.trim().is_empty() || !pa.incorrect_answers_analysis.is_empty() || !pa.conclusion.trim().is_empty()) {
                 let formatted = format_plausibility_markdown(pa);
                 return Ok(AiAssistResponse {
                     question_id: question_id.to_string(),
@@ -201,10 +196,15 @@ pub async fn get_or_generate_ai_assist(
         }
     }
 
-    // 2. Se não está em cache, gera via Gemini ou OpenAI e grava em `todasQuestoes`
+    let correct_index = questao.answer_indices()?.into_iter().next().ok_or_else(|| AppError::BadRequest("Questão sem gabarito válido".into()))?;
+    let correct_answer = questao.answers[correct_index].clone();
+
+    if let Some(user)=budget_user { crate::services::rate_limit::reserve_tutor(db,user).await?; }
+
+    // 2. Conteúdo ausente: xAI com os prompts existentes.
     let generated_result = match &kind {
         AiAssistKind::Explanation => {
-            generate_gemini_explanation(config, &questao, &correct_answer).await
+            call_xai_text(config, EXPLANATION_SYSTEM_INSTRUCTION, &json!({"question":questao.question,"choices":questao.answers,"correct_answer":correct_answer}).to_string()).await
         }
         AiAssistKind::ContextualHint => {
             let prev = questao.contextual_hint.join("; ");
@@ -212,7 +212,7 @@ pub async fn get_or_generate_ai_assist(
                 "Enunciado: {}\nAlternativas: {:?}\nResposta Correta: {}\nDicas Anteriores: {}\nForneça UMA ÚNICA frase curta (máx 30 palavras) como dica contextual progressiva sem entregar o gabarito.",
                 questao.question, questao.answers, correct_answer, prev
             );
-            call_openai_chat(
+            call_xai_text(
                 config,
                 "Você é um especialista em concursos públicos. Dê uma dica progressiva sem entregar a resposta.",
                 &prompt,
@@ -224,7 +224,7 @@ pub async fn get_or_generate_ai_assist(
                 "Questão: {}\nAlternativas: {:?}\nResposta Correta: {}\nApresente uma análise honesta, ácida, sarcástica e direta sobre as pegadinhas da banca e por que candidatos erram esta questão (máx 250 palavras).",
                 questao.question, questao.answers, correct_answer
             );
-            call_openai_chat(
+            call_xai_text(
                 config,
                 "Você é o Dr. Sincero, um mentor sarcástico, direto e cirúrgico em concursos públicos.",
                 &prompt,
@@ -236,7 +236,7 @@ pub async fn get_or_generate_ai_assist(
                 "Questão: {}\nAlternativas: {:?}\nReformule a pergunta e as alternativas de forma que uma criança de 10 anos consiga entender, mantendo o sentido técnico.",
                 questao.question, questao.answers
             );
-            call_openai_chat(
+            call_xai_text(
                 config,
                 "Você traduz questões complexas de concursos para uma linguagem simples e clara.",
                 &prompt,
@@ -248,7 +248,7 @@ pub async fn get_or_generate_ai_assist(
                 "Questão: {}\nResposta Correta: {}\nExplique os conceitos desta questão como se estivesse falando com uma criança de 10 anos, usando analogias do dia a dia.",
                 questao.question, correct_answer
             );
-            call_openai_chat(
+            call_xai_text(
                 config,
                 "Você explica conceitos difíceis de concursos com analogias simples e didáticas.",
                 &prompt,
@@ -260,7 +260,7 @@ pub async fn get_or_generate_ai_assist(
                 "Questão: {}\nResposta Correta: {}\nExplique os Conceitos-Chave da questão de forma didática e forneça Exemplos Práticos e Reais da Administração Pública/Fiscalização.",
                 questao.question, correct_answer
             );
-            call_openai_chat(
+            call_xai_text(
                 config,
                 "Você é um professor especialista em concursos públicos de alto nível.",
                 &prompt,
@@ -272,7 +272,7 @@ pub async fn get_or_generate_ai_assist(
                 "Questão: {}\nConceito central: {}\nCrie um mnemônico curto, criativo e memorável para fixar os requisitos ou conceitos-chave cobrados nesta questão.",
                 questao.question, correct_answer
             );
-            call_openai_chat(
+            call_xai_text(
                 config,
                 "Você é especialista em técnicas de memorização e mnemônicos para concurseiros.",
                 &prompt,
@@ -284,7 +284,7 @@ pub async fn get_or_generate_ai_assist(
                 "Questão: {}\nResposta Correta: {}\nAlternativas: {:?}\nAnalise a plausibilidade de cada alternativa incorreta (Improvável, Parcialmente plausível, Plausível), prestando atenção especial a termos como NÃO, EXCETO, MENOS.",
                 questao.question, correct_answer, questao.answers
             );
-            call_openai_chat(
+            call_xai_text(
                 config,
                 "Você é um examinador de banca de concurso público analisando distratores.",
                 &prompt,
@@ -293,40 +293,16 @@ pub async fn get_or_generate_ai_assist(
         }
     };
 
-    let generated_text = match generated_result {
-        Ok(t) => t,
-        Err(error) => {
-            // Never turn an outage into an answer-revealing pre-answer hint, or cache a contingency as a generated tutor.
-            if matches!(
-                kind,
-                AiAssistKind::ContextualHint | AiAssistKind::ChildFriendlyPre
-            ) {
-                return Err(error);
-            }
-            if let Some(explanation) = questao
-                .explanation
-                .as_ref()
-                .filter(|s| !s.trim().is_empty())
-            {
-                return Ok(AiAssistResponse {
-                    question_id: question_id.into(),
-                    kind,
-                    content_markdown: format!(
-                        "Comentário já disponível (tutor indisponível):\n\n{}",
-                        sanitize_ai_content(explanation)
-                    ),
-                    from_cache: true,
-                    plausibility_structured: None,
-                });
-            }
-            return Err(error);
-        }
-    };
+    let generated_text = generated_result?;
 
     // 3. Persistir no MongoDB para nunca gastar tokens duas vezes na mesma questão
     let update_doc = match &kind {
         AiAssistKind::Explanation => doc! { "$set": { "explanation": &generated_text } },
-        AiAssistKind::ContextualHint => doc! { "$push": { "contextualHint": &generated_text } },
+        AiAssistKind::ContextualHint => {
+            let index=hint_index.unwrap_or(0);
+            let mut hints=questao.contextual_hint.clone();hints.resize(hints.len().max(index+1),String::new());hints[index]=generated_text.clone();
+            doc!{"$set":{"contextualHint":hints}}
+        },
         AiAssistKind::DrSincero => doc! { "$set": { "drSincero": &generated_text } },
         AiAssistKind::ChildFriendlyPre => doc! { "$set": { "ajudaInfantil": &generated_text } },
         AiAssistKind::ChildFriendlyPost => {
@@ -337,7 +313,12 @@ pub async fn get_or_generate_ai_assist(
         AiAssistKind::Plausibility => doc! { "$set": { "plausibilityMarkdown": &generated_text } },
     };
 
-    let _ = coll.update_one(doc! { "_id": oid }, update_doc).await;
+    let mut guard=doc!{"_id":oid};
+    for field in ["question","answers","correct_answers","correct_answer_indices"] {
+        guard.insert(field,original.get(field).cloned().unwrap_or_else(||bson::Bson::Document(doc!{"$exists":false})));
+    }
+    let result = coll.update_one(guard, update_doc).await?;
+    if result.matched_count != 1 { return Err(AppError::Conflict("Questão alterada ou removida durante a geração; conteúdo não confirmado".into())); }
 
     let final_content = sanitize_ai_content(&generated_text);
 
@@ -382,131 +363,27 @@ fn format_plausibility_markdown(pa: &PlausibilityAnalysis) -> String {
     out
 }
 
-async fn call_openai_chat(
-    config: &AppConfig,
-    system_prompt: &str,
-    user_prompt: &str,
-) -> Result<String, AppError> {
-    let Some(api_key) = &config.openai_api_key else {
-        return Err(AppError::ExternalAiError(
-            "OPENAI_API_KEY não configurada no ambiente".to_string(),
-        ));
-    };
-
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .connect_timeout(std::time::Duration::from_secs(10))
-        .build()
-        .map_err(|_| AppError::Internal("Cliente de IA indisponível".into()))?;
-    let res = client
-        .post("https://api.openai.com/v1/chat/completions")
-        .bearer_auth(api_key)
-        .json(&json!({
-            "model": config.openai_model,
-            "temperature": 0.25,
-            "messages": [
-                { "role": "system", "content": system_prompt },
-                { "role": "user", "content": user_prompt }
-            ]
-        }))
-        .send()
-        .await
-        .map_err(|e| AppError::ExternalAiError(e.to_string()))?;
-
-    let status = res.status();
-    if !status.is_success() {
-        let err_text = res.text().await.unwrap_or_default();
-        return Err(AppError::ExternalAiError(format!(
-            "Erro HTTP {} da OpenAI: {}",
-            status, err_text
-        )));
+async fn call_xai_text(config: &AppConfig, system_prompt: &str, user_prompt: &str) -> Result<String, AppError> {
+    let key = config.xai_api_key.as_ref().ok_or_else(|| AppError::ExternalAiError("xAI não configurada".into()))?;
+    let base = config.xai_base_url.trim_end_matches('/');
+    if !base.starts_with("https://") && !(cfg!(test) && base.starts_with("http://127.0.0.1:")) {
+        return Err(AppError::ExternalAiError("Endpoint xAI deve usar HTTPS".into()));
     }
-
-    let body: serde_json::Value = res
-        .json()
-        .await
-        .map_err(|e| AppError::ExternalAiError(e.to_string()))?;
-
-    body["choices"][0]["message"]["content"]
-        .as_str()
-        .map(|s| s.to_string())
-        .ok_or_else(|| AppError::ExternalAiError("Resposta inválida da OpenAI".to_string()))
-}
-
-async fn generate_gemini_explanation(
-    config: &AppConfig,
-    questao: &QuestionDocument,
-    correct_answer: &str,
-) -> Result<String, AppError> {
-    let Some(api_key) = &config.gemini_api_key else {
-        // Fallback para OpenAI caso Gemini não esteja configurado
-        return call_openai_chat(
-            config,
-            GEMINI_SYSTEM_INSTRUCTION,
-            &json!({
-                "question": questao.question,
-                "choices": questao.answers,
-                "correct_answer": correct_answer
-            })
-            .to_string(),
-        )
-        .await;
-    };
-
-    let url = format!(
-        "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
-        config.gemini_model, api_key
-    );
-
-    let input_payload = json!({
-        "question": questao.question,
-        "choices": questao.answers,
-        "correct_answer": correct_answer
-    });
-
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .connect_timeout(std::time::Duration::from_secs(10))
-        .build()
-        .map_err(|_| AppError::Internal("Cliente de IA indisponível".into()))?;
-    let res = client
-        .post(&url)
-        .json(&json!({
-            "system_instruction": {
-                "parts": [{ "text": GEMINI_SYSTEM_INSTRUCTION }]
-            },
-            "contents": [{
-                "parts": [{ "text": input_payload.to_string() }]
-            }],
-            "generationConfig": {
-                "temperature": 0.2,
-                "topP": 0.7,
-                "topK": 10,
-                "maxOutputTokens": 2048
-            }
-        }))
-        .send()
-        .await
-        .map_err(|e| AppError::ExternalAiError(e.to_string()))?;
-
-    let status = res.status();
-    if !status.is_success() {
-        let err_text = res.text().await.unwrap_or_default();
-        return Err(AppError::ExternalAiError(format!(
-            "Erro HTTP {} do Gemini: {}",
-            status, err_text
-        )));
-    }
-
-    let body: serde_json::Value = res
-        .json()
-        .await
-        .map_err(|e| AppError::ExternalAiError(e.to_string()))?;
-
-    body["candidates"][0]["content"]["parts"][0]["text"]
-        .as_str()
-        .map(|s| s.to_string())
-        .ok_or_else(|| AppError::ExternalAiError("Resposta inválida do Gemini".to_string()))
+    let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(40)).connect_timeout(std::time::Duration::from_secs(10)).build().map_err(|_|AppError::Internal("Cliente xAI indisponível".into()))?;
+    let response = client.post(format!("{base}/responses")).bearer_auth(key).json(&json!({
+        "model":config.xai_model,"store":false,"max_output_tokens":4096,
+        "reasoning":{"effort":"low"},
+        "input":[{"role":"system","content":system_prompt},{"role":"user","content":user_prompt}]
+    })).send().await.map_err(|_|AppError::ExternalAiError("Não foi possível receber a resposta da xAI".into()))?;
+    if !response.status().is_success() { return Err(AppError::ExternalAiError(format!("xAI indisponível (HTTP {})", response.status().as_u16()))); }
+    let body: serde_json::Value = response.json().await.map_err(|_|AppError::ExternalAiError("Resposta xAI inválida".into()))?;
+    if body["status"] != "completed" { return Err(AppError::ExternalAiError("A xAI não concluiu a geração; tente novamente".into())); }
+    let text = body["output"].as_array().into_iter().flatten().filter(|item|item["type"]=="message")
+        .flat_map(|item|item["content"].as_array().into_iter().flatten())
+        .filter(|part|part["type"]=="output_text").filter_map(|part|part["text"].as_str()).collect::<Vec<_>>().join("\n");
+    let text = sanitize_ai_content(&text);
+    if text.is_empty(){return Err(AppError::ExternalAiError("xAI devolveu conteúdo vazio".into()));}
+    Ok(text)
 }
 
 #[cfg(test)]

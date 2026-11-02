@@ -246,7 +246,7 @@ impl QuestionDocument {
             has_mnemonic: self.mnemonico.is_some(),
             has_plausibility: self.plausibility_analysis.is_some()
                 || self.plausibility_markdown.is_some(),
-            hints_count: self.contextual_hint.len(),
+            hints_count: self.contextual_hint.iter().filter(|s|!s.trim().is_empty()).count(),
             user_stats,
         }
     }
