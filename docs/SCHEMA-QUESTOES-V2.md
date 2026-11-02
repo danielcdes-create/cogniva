@@ -110,3 +110,6 @@ python -m unittest discover -s scripts/tests -p 'test_*.py' -v
 ```
 
 Há sete documentos de questão de exemplo, uma sugestão, uma compatibilidade e quatro avaliações, todos sintéticos. Testes positivos e adversariais cobrem formato, ambiguidades, referência ao catálogo, confirmação indevida por IA, validade/obsolescência, contexto histórico, prazo vencido, rubrica, revisão, proveniência, limites de nota e isolamento de proprietário.
+
+
+Validação desta definição: **34 testes aprovados localmente e no [GitHub Actions](https://github.com/danielcdes-create/cogniva/actions/runs/41503303538)**, revisão `ccd40f8ca74f753e2f6b90c30856caa0840893d9`. Evidências sanitizadas em `schema-validation/2026-11-02/`.

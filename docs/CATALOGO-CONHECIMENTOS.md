@@ -52,3 +52,6 @@ Após editar a base, `python scripts/knowledge_catalog.py --export` atualiza a c
 O validador verifica JSON Schema, IDs únicos, referências, nomes alternativos ambíguos após normalização, hierarquia sem ciclos ou pais de outra disciplina, fontes conhecidas, relações simétricas duplicadas, preservação dos IDs legados e integridade do catálogo atual. O hash de compatibilidade é de JSON normalizado, independente de CRLF/LF.
 
 Para acrescentar conhecimento, revisar o escopo e os aliases, reservar IDs, fornecer a proveniência, atualizar a versão do catálogo e regenerar a consulta. Futuras versões em Mongo precisam ser recuperáveis por `catalog_id` e `catalog_version`, pois classificações e avaliações históricas devem continuar referenciando a versão usada.
+
+
+Validação desta definição: **34 testes aprovados localmente e no [GitHub Actions](https://github.com/danielcdes-create/cogniva/actions/runs/41503303538)**, revisão `ccd40f8ca74f753e2f6b90c30856caa0840893d9`. Evidências sanitizadas em `schema-validation/2026-11-02/`.

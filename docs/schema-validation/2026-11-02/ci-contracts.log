@@ -1,0 +1,277 @@
+2026-11-02T18:43:50.4179223Z Current runner version: '2.338.2'
+2026-11-02T18:43:50.4204198Z ##[group]Runner Image Provisioner
+2026-11-02T18:43:50.4205111Z Hosted Compute Agent
+2026-11-02T18:43:50.4205830Z Version: 20261021.618
+2026-11-02T18:43:50.4206541Z Commit: 21505ad2541d5be6135ed84fc33697146cf75b8e
+2026-11-02T18:43:50.4207319Z Build Date: 2026-10-21T00:45:21Z
+2026-11-02T18:43:50.4208083Z Worker ID: {d8726321-973c-4c1f-84e0-b91d16ec4879}
+2026-11-02T18:43:50.4208804Z Region: westus
+2026-11-02T18:43:50.4209413Z Cloud: Azure
+2026-11-02T18:43:50.4209975Z ##[endgroup]
+2026-11-02T18:43:50.4211677Z ##[group]Operating System
+2026-11-02T18:43:50.4212533Z Ubuntu
+2026-11-02T18:43:50.4213111Z 24.04.5
+2026-11-02T18:43:50.4213690Z LTS
+2026-11-02T18:43:50.4214217Z ##[endgroup]
+2026-11-02T18:43:50.4214761Z ##[group]Runner Image
+2026-11-02T18:43:50.4215474Z Image: ubuntu-24.04
+2026-11-02T18:43:50.4216057Z Version: 20261025.353.1
+2026-11-02T18:43:50.4217368Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261025.353/images/ubuntu/Ubuntu2404-Readme.md
+2026-11-02T18:43:50.4218929Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261025.353
+2026-11-02T18:43:50.4220261Z ##[endgroup]
+2026-11-02T18:43:50.4221431Z ##[group]GITHUB_TOKEN Permissions
+2026-11-02T18:43:50.4223709Z Contents: read
+2026-11-02T18:43:50.4224341Z Metadata: read
+2026-11-02T18:43:50.4225278Z ##[endgroup]
+2026-11-02T18:43:50.4227407Z Secret source: Actions
+2026-11-02T18:43:50.4228466Z Cache mode: write
+2026-11-02T18:43:50.4229191Z Prepare workflow directory
+2026-11-02T18:43:50.4564140Z Prepare all required actions
+2026-11-02T18:43:50.4612264Z Getting action download info
+2026-11-02T18:43:50.8459342Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-11-02T18:43:50.9622694Z Download action repository 'actions/setup-python@v5' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+2026-11-02T18:43:51.1381373Z Complete job name: contracts
+2026-11-02T18:43:51.2246134Z ##[group]Run actions/checkout@v4
+2026-11-02T18:43:51.2247054Z with:
+2026-11-02T18:43:51.2247528Z   repository: danielcdes-create/cogniva
+2026-11-02T18:43:51.2251512Z   token: ***
+2026-11-02T18:43:51.2251978Z   ssh-strict: true
+2026-11-02T18:43:51.2252426Z   ssh-user: git
+2026-11-02T18:43:51.2252884Z   persist-credentials: true
+2026-11-02T18:43:51.2253379Z   clean: true
+2026-11-02T18:43:51.2253836Z   sparse-checkout-cone-mode: true
+2026-11-02T18:43:51.2254363Z   fetch-depth: 1
+2026-11-02T18:43:51.2254802Z   fetch-tags: false
+2026-11-02T18:43:51.2255250Z   show-progress: true
+2026-11-02T18:43:51.2255696Z   lfs: false
+2026-11-02T18:43:51.2256114Z   submodules: false
+2026-11-02T18:43:51.2256568Z   set-safe-directory: true
+2026-11-02T18:43:51.2257090Z   allow-unsafe-pr-checkout: false
+2026-11-02T18:43:51.2257869Z ##[endgroup]
+2026-11-02T18:43:51.5026815Z Syncing repository: danielcdes-create/cogniva
+2026-11-02T18:43:51.5028991Z ##[group]Getting Git version info
+2026-11-02T18:43:51.5030766Z Working directory is '/home/runner/work/cogniva/cogniva'
+2026-11-02T18:43:51.5032283Z [command]/usr/bin/git version
+2026-11-02T18:43:51.5146015Z git version 2.56.0
+2026-11-02T18:43:51.5192064Z ##[endgroup]
+2026-11-02T18:43:51.5209038Z Temporarily overriding HOME='/home/runner/work/_temp/30f07f87-30c3-4663-928d-ad7c43e83107' before making global git config changes
+2026-11-02T18:43:51.5211589Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-02T18:43:51.5215532Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/cogniva/cogniva
+2026-11-02T18:43:51.5300579Z Deleting the contents of '/home/runner/work/cogniva/cogniva'
+2026-11-02T18:43:51.5303489Z ##[group]Initializing the repository
+2026-11-02T18:43:51.5309822Z [command]/usr/bin/git init /home/runner/work/cogniva/cogniva
+2026-11-02T18:43:51.5444280Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-11-02T18:43:51.5446055Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-11-02T18:43:51.5449046Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-11-02T18:43:51.5450483Z hint: call:
+2026-11-02T18:43:51.5451190Z hint:
+2026-11-02T18:43:51.5452110Z hint: 	git config --global init.defaultBranch <name>
+2026-11-02T18:43:51.5453094Z hint:
+2026-11-02T18:43:51.5454006Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-11-02T18:43:51.5455612Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-11-02T18:43:51.5456844Z hint:
+2026-11-02T18:43:51.5457492Z hint: 	git branch -m <name>
+2026-11-02T18:43:51.5458228Z hint:
+2026-11-02T18:43:51.5459260Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-11-02T18:43:51.5461228Z Initialized empty Git repository in /home/runner/work/cogniva/cogniva/.git/
+2026-11-02T18:43:51.5475327Z [command]/usr/bin/git remote add origin https://github.com/danielcdes-create/cogniva
+2026-11-02T18:43:51.5542524Z ##[endgroup]
+2026-11-02T18:43:51.5544248Z ##[group]Disabling automatic garbage collection
+2026-11-02T18:43:51.5547832Z [command]/usr/bin/git config --local gc.auto 0
+2026-11-02T18:43:51.5603889Z ##[endgroup]
+2026-11-02T18:43:51.5605121Z ##[group]Setting up auth
+2026-11-02T18:43:51.5611785Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-02T18:43:51.5655766Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-02T18:43:51.6054307Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-02T18:43:51.6097637Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-02T18:43:51.6338382Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-02T18:43:51.6382452Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-02T18:43:51.6629163Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-11-02T18:43:51.6679433Z ##[endgroup]
+2026-11-02T18:43:51.6680655Z ##[group]Fetching the repository
+2026-11-02T18:43:51.6693363Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +ccd40f8ca74f753e2f6b90c30856caa0840893d9:refs/remotes/origin/codex/auditoria-convergencia
+2026-11-02T18:43:52.3715851Z From https://github.com/danielcdes-create/cogniva
+2026-11-02T18:43:52.3719208Z  * [new ref]         ccd40f8ca74f753e2f6b90c30856caa0840893d9 -> origin/codex/auditoria-convergencia
+2026-11-02T18:43:52.3726695Z ##[endgroup]
+2026-11-02T18:43:52.3729285Z ##[group]Determining the checkout info
+2026-11-02T18:43:52.3732734Z ##[endgroup]
+2026-11-02T18:43:52.3734734Z [command]/usr/bin/git sparse-checkout disable
+2026-11-02T18:43:52.3793469Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-11-02T18:43:52.3834223Z ##[group]Checking out the ref
+2026-11-02T18:43:52.3845499Z [command]/usr/bin/git checkout --progress --force -B codex/auditoria-convergencia refs/remotes/origin/codex/auditoria-convergencia
+2026-11-02T18:43:52.4289076Z Switched to a new branch 'codex/auditoria-convergencia'
+2026-11-02T18:43:52.4295677Z branch 'codex/auditoria-convergencia' set up to track 'origin/codex/auditoria-convergencia'.
+2026-11-02T18:43:52.4304151Z ##[endgroup]
+2026-11-02T18:43:52.4351979Z [command]/usr/bin/git log -1 --format=%H
+2026-11-02T18:43:52.4386328Z ccd40f8ca74f753e2f6b90c30856caa0840893d9
+2026-11-02T18:43:52.4791160Z ##[group]Run actions/setup-python@v5
+2026-11-02T18:43:52.4792503Z with:
+2026-11-02T18:43:52.4793420Z   python-version: 3.12
+2026-11-02T18:43:52.4794462Z   cache: pip
+2026-11-02T18:43:52.4795749Z   cache-dependency-path: scripts/requirements-contracts.txt
+2026-11-02T18:43:52.4797573Z   check-latest: false
+2026-11-02T18:43:52.4807819Z   token: ***
+2026-11-02T18:43:52.4808812Z   update-environment: true
+2026-11-02T18:43:52.4810087Z   allow-prereleases: false
+2026-11-02T18:43:52.4811231Z   freethreaded: false
+2026-11-02T18:43:52.4812253Z ##[endgroup]
+2026-11-02T18:43:52.6204429Z ##[group]Installed versions
+2026-11-02T18:43:52.6294631Z (node:2317) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-02T18:43:52.6299211Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-02T18:43:52.6301567Z Successfully set up CPython (3.12.15)
+2026-11-02T18:43:52.6304257Z ##[endgroup]
+2026-11-02T18:43:52.6776001Z [command]/opt/hostedtoolcache/Python/3.12.15/x64/bin/pip cache dir
+2026-11-02T18:43:53.6253931Z /home/runner/.cache/pip
+2026-11-02T18:43:53.9185585Z pip cache is not found
+2026-11-02T18:43:53.9428348Z ##[group]Run python -m pip install -r scripts/requirements-contracts.txt
+2026-11-02T18:43:53.9429046Z python -m pip install -r scripts/requirements-contracts.txt
+2026-11-02T18:43:53.9456394Z shell: /usr/bin/bash -e {0}
+2026-11-02T18:43:53.9456725Z env:
+2026-11-02T18:43:53.9457056Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-11-02T18:43:53.9457560Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+2026-11-02T18:43:53.9458049Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-11-02T18:43:53.9458503Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-11-02T18:43:53.9458948Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-11-02T18:43:53.9459396Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+2026-11-02T18:43:53.9459771Z ##[endgroup]
+2026-11-02T18:43:55.4233834Z Collecting jsonschema==4.26.0 (from -r scripts/requirements-contracts.txt (line 2))
+2026-11-02T18:43:55.5239100Z   Downloading jsonschema-4.26.0-py3-none-any.whl.metadata (7.6 kB)
+2026-11-02T18:43:55.5456585Z Collecting rfc8785==0.1.4 (from -r scripts/requirements-contracts.txt (line 3))
+2026-11-02T18:43:55.5663676Z   Downloading rfc8785-0.1.4-py3-none-any.whl.metadata (3.4 kB)
+2026-11-02T18:43:55.5896461Z Collecting attrs>=22.2.0 (from jsonschema==4.26.0->-r scripts/requirements-contracts.txt (line 2))
+2026-11-02T18:43:55.6107720Z   Downloading attrs-26.1.0-py3-none-any.whl.metadata (8.8 kB)
+2026-11-02T18:43:55.6347307Z Collecting jsonschema-specifications>=2023.03.6 (from jsonschema==4.26.0->-r scripts/requirements-contracts.txt (line 2))
+2026-11-02T18:43:55.6554091Z   Downloading jsonschema_specifications-2025.9.1-py3-none-any.whl.metadata (2.9 kB)
+2026-11-02T18:43:55.6902775Z Collecting referencing>=0.28.4 (from jsonschema==4.26.0->-r scripts/requirements-contracts.txt (line 2))
+2026-11-02T18:43:55.7108388Z   Downloading referencing-0.37.0-py3-none-any.whl.metadata (2.8 kB)
+2026-11-02T18:43:56.0055823Z Collecting rpds-py>=0.25.0 (from jsonschema==4.26.0->-r scripts/requirements-contracts.txt (line 2))
+2026-11-02T18:43:56.0267208Z   Downloading rpds_py-2026.9.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.1 kB)
+2026-11-02T18:43:56.0543142Z Collecting typing-extensions>=4.4.0 (from referencing>=0.28.4->jsonschema==4.26.0->-r scripts/requirements-contracts.txt (line 2))
+2026-11-02T18:43:56.0749965Z   Downloading typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+2026-11-02T18:43:56.0993593Z Downloading jsonschema-4.26.0-py3-none-any.whl (90 kB)
+2026-11-02T18:43:56.1483376Z Downloading rfc8785-0.1.4-py3-none-any.whl (9.2 kB)
+2026-11-02T18:43:56.1709882Z Downloading attrs-26.1.0-py3-none-any.whl (67 kB)
+2026-11-02T18:43:56.1978827Z Downloading jsonschema_specifications-2025.9.1-py3-none-any.whl (18 kB)
+2026-11-02T18:43:56.2209429Z Downloading referencing-0.37.0-py3-none-any.whl (26 kB)
+2026-11-02T18:43:56.2438108Z Downloading rpds_py-2026.9.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (371 kB)
+2026-11-02T18:43:56.2954043Z Downloading typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+2026-11-02T18:43:56.4660215Z Installing collected packages: typing-extensions, rpds-py, rfc8785, attrs, referencing, jsonschema-specifications, jsonschema
+2026-11-02T18:43:56.6626164Z
+2026-11-02T18:43:56.6651703Z Successfully installed attrs-26.1.0 jsonschema-4.26.0 jsonschema-specifications-2025.9.1 referencing-0.37.0 rfc8785-0.1.4 rpds-py-2026.9.1 typing-extensions-4.16.0
+2026-11-02T18:43:56.7143505Z ##[group]Run python scripts/knowledge_catalog.py --check
+2026-11-02T18:43:56.7143958Z python scripts/knowledge_catalog.py --check
+2026-11-02T18:43:56.7165756Z shell: /usr/bin/bash -e {0}
+2026-11-02T18:43:56.7166000Z env:
+2026-11-02T18:43:56.7166274Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-11-02T18:43:56.7166724Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+2026-11-02T18:43:56.7167163Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-11-02T18:43:56.7167546Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-11-02T18:43:56.7167947Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-11-02T18:43:56.7168330Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+2026-11-02T18:43:56.7168649Z ##[endgroup]
+2026-11-02T18:43:57.0141584Z {
+2026-11-02T18:43:57.0142196Z   "catalog_version": 1,
+2026-11-02T18:43:57.0142549Z   "trunks": 7,
+2026-11-02T18:43:57.0142922Z   "subjects": 35,
+2026-11-02T18:43:57.0143227Z   "topics": 49,
+2026-11-02T18:43:57.0143576Z   "subtopics": 174,
+2026-11-02T18:43:57.0143897Z   "subject_aliases": 41,
+2026-11-02T18:43:57.0144258Z   "legacy_subjects_preserved": 24,
+2026-11-02T18:43:57.0144671Z   "legacy_topics_preserved": 26,
+2026-11-02T18:43:57.0145383Z   "runtime_catalog_sha256": "d9258c4921b0233dbd2abadf1b2f23605a0dfef9a5d069664e7336ee4648343e",
+2026-11-02T18:43:57.0146335Z   "catalog_sha256": "f941cae8cafd51cb49492e1843a300d34c3a6b90c445a616670dc9a0dd2881bb",
+2026-11-02T18:43:57.0147011Z   "runtime_transition": "NOT_APPLIED"
+2026-11-02T18:43:57.0147385Z }
+2026-11-02T18:43:57.0317288Z ##[group]Run python scripts/question_contracts.py --examples
+2026-11-02T18:43:57.0317756Z python scripts/question_contracts.py --examples
+2026-11-02T18:43:57.0338930Z shell: /usr/bin/bash -e {0}
+2026-11-02T18:43:57.0339170Z env:
+2026-11-02T18:43:57.0339431Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-11-02T18:43:57.0339868Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+2026-11-02T18:43:57.0340562Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-11-02T18:43:57.0340950Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-11-02T18:43:57.0341328Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-11-02T18:43:57.0341707Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+2026-11-02T18:43:57.0342028Z ##[endgroup]
+2026-11-02T18:43:57.7715617Z {
+2026-11-02T18:43:57.7716104Z   "contract": "STAGED_NOT_DEPLOYED",
+2026-11-02T18:43:57.7716501Z   "examples_validated": {
+2026-11-02T18:43:57.7716918Z     "questions": 7,
+2026-11-02T18:43:57.7717390Z     "suggestion": 1,
+2026-11-02T18:43:57.7717854Z     "compatibility": 1,
+2026-11-02T18:43:57.7718338Z     "evaluation": 4
+2026-11-02T18:43:57.7718795Z   }
+2026-11-02T18:43:57.7719161Z }
+2026-11-02T18:43:57.7893550Z ##[group]Run python -m unittest discover -s scripts/tests -p 'test_*.py' -v
+2026-11-02T18:43:57.7894123Z python -m unittest discover -s scripts/tests -p 'test_*.py' -v
+2026-11-02T18:43:57.7914981Z shell: /usr/bin/bash -e {0}
+2026-11-02T18:43:57.7915227Z env:
+2026-11-02T18:43:57.7915500Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-11-02T18:43:57.7915946Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+2026-11-02T18:43:57.7916385Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-11-02T18:43:57.7916764Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-11-02T18:43:57.7917151Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+2026-11-02T18:43:57.7917714Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+2026-11-02T18:43:57.7918037Z ##[endgroup]
+2026-11-02T18:43:58.1477336Z test_alias_collision_ignores_case_accents_and_punctuation (test_knowledge_catalog.KnowledgeCatalogTest.test_alias_collision_ignores_case_accents_and_punctuation) ... ok
+2026-11-02T18:43:58.2765338Z test_duplicate_identity_is_rejected_even_with_different_content (test_knowledge_catalog.KnowledgeCatalogTest.test_duplicate_identity_is_rejected_even_with_different_content) ... ok
+2026-11-02T18:43:58.5331583Z test_invalid_shape_and_changed_runtime_are_rejected (test_knowledge_catalog.KnowledgeCatalogTest.test_invalid_shape_and_changed_runtime_are_rejected) ... ok
+2026-11-02T18:43:58.7861730Z test_no_silent_equivalence_or_reverse_duplicate_relation (test_knowledge_catalog.KnowledgeCatalogTest.test_no_silent_equivalence_or_reverse_duplicate_relation) ... ok
+2026-11-02T18:43:59.0452160Z test_original_name_may_change_only_if_preserved_as_alias (test_knowledge_catalog.KnowledgeCatalogTest.test_original_name_may_change_only_if_preserved_as_alias) ... ok
+2026-11-02T18:43:59.1760615Z test_preserves_every_legacy_subject_topic_and_trunk_link (test_knowledge_catalog.KnowledgeCatalogTest.test_preserves_every_legacy_subject_topic_and_trunk_link) ... ok
+2026-11-02T18:43:59.1804585Z test_readable_export_matches_the_machine_catalog (test_knowledge_catalog.KnowledgeCatalogTest.test_readable_export_matches_the_machine_catalog) ... ok
+2026-11-02T18:43:59.3089363Z test_same_subject_reparenting_cannot_repurpose_registered_id (test_knowledge_catalog.KnowledgeCatalogTest.test_same_subject_reparenting_cannot_repurpose_registered_id) ... ok
+2026-11-02T18:43:59.5628839Z test_self_parent_and_cycle_are_rejected (test_knowledge_catalog.KnowledgeCatalogTest.test_self_parent_and_cycle_are_rejected) ... ok
+2026-11-02T18:43:59.9428747Z test_unknown_subject_parent_and_cross_subject_parent_are_rejected (test_knowledge_catalog.KnowledgeCatalogTest.test_unknown_subject_parent_and_cross_subject_parent_are_rejected) ... ok
+2026-11-02T18:44:00.3263849Z test_unregistered_ids_unknown_sources_and_removed_legacy_links_fail (test_knowledge_catalog.KnowledgeCatalogTest.test_unregistered_ids_unknown_sources_and_removed_legacy_links_fail) ... ok
+2026-11-02T18:44:00.4718150Z test_acceptance_requires_human_revision_increment_and_proposal_trace (test_question_contracts.QuestionContractsTest.test_acceptance_requires_human_revision_increment_and_proposal_trace) ... ok
+2026-11-02T18:44:00.6156980Z test_ai_provisional_result_cannot_be_a_confirmed_hit (test_question_contracts.QuestionContractsTest.test_ai_provisional_result_cannot_be_a_confirmed_hit) ... ok
+2026-11-02T18:44:00.7765696Z test_all_question_formats_and_obsolete_unknown_examples (test_question_contracts.QuestionContractsTest.test_all_question_formats_and_obsolete_unknown_examples) ... ok
+2026-11-02T18:44:00.7829827Z test_ambiguous_options_and_contradictory_answer_keys_fail (test_question_contracts.QuestionContractsTest.test_ambiguous_options_and_contradictory_answer_keys_fail) ... ok
+2026-11-02T18:44:00.7875308Z test_content_hash_ignores_classification_and_ai_but_includes_rubric (test_question_contracts.QuestionContractsTest.test_content_hash_ignores_classification_and_ai_but_includes_rubric) ... ok
+2026-11-02T18:44:00.7906315Z test_essential_criterion_cannot_be_bypassed_by_total_score (test_question_contracts.QuestionContractsTest.test_essential_criterion_cannot_be_bypassed_by_total_score) ... ok
+2026-11-02T18:44:00.7920682Z test_evaluation_cannot_change_the_owner_or_submitted_text (test_question_contracts.QuestionContractsTest.test_evaluation_cannot_change_the_owner_or_submitted_text) ... ok
+2026-11-02T18:44:00.7970541Z test_evaluation_examples_cover_exact_manual_semantic_and_ai (test_question_contracts.QuestionContractsTest.test_evaluation_examples_cover_exact_manual_semantic_and_ai) ... ok
+2026-11-02T18:44:00.8030780Z test_five_options_and_one_correct_option_are_required (test_question_contracts.QuestionContractsTest.test_five_options_and_one_correct_option_are_required) ... ok
+2026-11-02T18:44:00.8070487Z test_historical_context_is_distinct_from_current_legislation (test_question_contracts.QuestionContractsTest.test_historical_context_is_distinct_from_current_legislation) ... ok
+2026-11-02T18:44:00.8126815Z test_incomplete_evaluation_is_not_an_incorrect_answer_and_counters_cannot_overflow (test_question_contracts.QuestionContractsTest.test_incomplete_evaluation_is_not_an_incorrect_answer_and_counters_cannot_overflow) ... ok
+2026-11-02T18:44:00.8190660Z test_normative_review_needs_evidence_and_expires_without_erasing_history (test_question_contracts.QuestionContractsTest.test_normative_review_needs_evidence_and_expires_without_erasing_history) ... ok
+2026-11-02T18:44:00.8205472Z test_obsolete_and_review_pending_stay_out_of_current_practice (test_question_contracts.QuestionContractsTest.test_obsolete_and_review_pending_stay_out_of_current_practice) ... ok
+2026-11-02T18:44:00.8309784Z test_open_rubric_totals_and_engine_contracts_are_enforced (test_question_contracts.QuestionContractsTest.test_open_rubric_totals_and_engine_contracts_are_enforced) ... ok
+2026-11-02T18:44:00.9739100Z test_origin_does_not_establish_exam_compatibility_or_bypass_owner (test_question_contracts.QuestionContractsTest.test_origin_does_not_establish_exam_compatibility_or_bypass_owner) ... ok
+2026-11-02T18:44:00.9864821Z test_primary_secondary_links_need_review_and_consistent_taxonomy (test_question_contracts.QuestionContractsTest.test_primary_secondary_links_need_review_and_consistent_taxonomy) ... ok
+2026-11-02T18:44:00.9879715Z test_regrading_appends_a_result_for_the_same_attempt (test_question_contracts.QuestionContractsTest.test_regrading_appends_a_result_for_the_same_attempt) ... ok
+2026-11-02T18:44:00.9912720Z test_scores_cannot_exceed_rubric_or_omit_a_criterion (test_question_contracts.QuestionContractsTest.test_scores_cannot_exceed_rubric_or_omit_a_criterion) ... ok
+2026-11-02T18:44:00.9930539Z test_secondary_content_cannot_be_promoted_to_direct_compatibility (test_question_contracts.QuestionContractsTest.test_secondary_content_cannot_be_promoted_to_direct_compatibility) ... ok
+2026-11-02T18:44:00.9970619Z test_stale_rubric_model_provenance_and_objective_spoofing_fail (test_question_contracts.QuestionContractsTest.test_stale_rubric_model_provenance_and_objective_spoofing_fail) ... ok
+2026-11-02T18:44:01.0025287Z test_stale_validity_and_unknown_without_review_cannot_claim_current (test_question_contracts.QuestionContractsTest.test_stale_validity_and_unknown_without_review_cannot_claim_current) ... ok
+2026-11-02T18:44:01.0052420Z test_suggestion_is_pending_not_confirmed_and_cannot_target_stale_revision (test_question_contracts.QuestionContractsTest.test_suggestion_is_pending_not_confirmed_and_cannot_target_stale_revision) ... ok
+2026-11-02T18:44:01.0116325Z test_true_false_uses_explicit_order_and_open_has_no_fake_options (test_question_contracts.QuestionContractsTest.test_true_false_uses_explicit_order_and_open_has_no_fake_options) ... ok
+2026-11-02T18:44:01.0117682Z
+2026-11-02T18:44:01.0117982Z ----------------------------------------------------------------------
+2026-11-02T18:44:01.0118645Z Ran 34 tests in 2.991s
+2026-11-02T18:44:01.0118899Z
+2026-11-02T18:44:01.0119035Z OK
+2026-11-02T18:44:01.0390951Z Post job cleanup.
+2026-11-02T18:44:01.1653656Z (node:2377) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-02T18:44:01.1654586Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-02T18:44:01.1879766Z [command]/usr/bin/tar --posix -cf cache.tzst --exclude cache.tzst -P -C /home/runner/work/cogniva/cogniva --files-from manifest.txt --use-compress-program zstdmt
+2026-11-02T18:44:01.4746410Z (node:2377) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-02T18:44:02.1378020Z Sent 1365373 of 1365373 (100.0%), 1.9 MBs/sec
+2026-11-02T18:44:02.4425550Z Cache saved with the key: setup-python-Linux-x64-24.04-Ubuntu-python-3.12.15-pip-be461ac1725de8eb621f17b72fa388a3d46b3e51431c975e9530904809d859bf
+2026-11-02T18:44:02.4604268Z Post job cleanup.
+2026-11-02T18:44:02.5483001Z [command]/usr/bin/git version
+2026-11-02T18:44:02.5531973Z git version 2.56.0
+2026-11-02T18:44:02.5578205Z Temporarily overriding HOME='/home/runner/work/_temp/665bdd10-b871-4461-9458-dca5abce5714' before making global git config changes
+2026-11-02T18:44:02.5579281Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-02T18:44:02.5585058Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/cogniva/cogniva
+2026-11-02T18:44:02.5633008Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-02T18:44:02.5673916Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-02T18:44:02.5981309Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-02T18:44:02.6022417Z http.https://github.com/.extraheader
+2026-11-02T18:44:02.6036687Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-11-02T18:44:02.6090374Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-02T18:44:02.6374408Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-02T18:44:02.6430576Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-02T18:44:02.6870471Z Cleaning up orphan processes
+2026-11-02T18:44:02.7231553Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-python@v5. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
