@@ -149,7 +149,8 @@ data class DisciplineSyllabusGroupDto(
     @SerialName("block_name") val blockName: String,
     val discipline: String,
     @SerialName("discipline_mastery_pct") val disciplineMasteryPct: Double,
-    val topics: List<SyllabusTopicNodeDto>
+    val topics: List<SyllabusTopicNodeDto>,
+    @SerialName("component_id") val componentId: String? = null
 )
 
 @Serializable
@@ -193,7 +194,8 @@ data class QuestionDto(
     @SerialName("has_mnemonic") val hasMnemonic: Boolean = false,
     @SerialName("has_plausibility") val hasPlausibility: Boolean = false,
     @SerialName("hints_count") val hintsCount: Int = 0,
-    @SerialName("user_stats") val userStats: UserQuestionBriefStats? = null
+    @SerialName("user_stats") val userStats: UserQuestionBriefStats? = null,
+    @SerialName("exam_component_id") val examComponentId: String? = null
 )
 
 @Serializable

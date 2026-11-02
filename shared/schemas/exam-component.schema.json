@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cogniva.local/schemas/exam-component-v1.json",
+  "title": "Componente de edital Cogniva, contrato 1",
+  "description": "local_subject_id identifica a ocorrência no edital; canonical_subject_id identifica conhecimento reutilizável. IDs custom-UUID representam componentes aguardando associação. Não inferir associação pelo nome. Unicidade de IDs locais é verificada pelo backend no agregado do concurso; a disciplina canônica pode repetir.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["local_subject_id", "canonical_subject_id", "display_name", "category", "weight", "relevance_tier", "topics"],
+  "properties": {
+    "local_subject_id": {"type": "string", "minLength": 1},
+    "canonical_subject_id": {"$ref": "#/$defs/knowledgeId"},
+    "display_name": {"type": "string", "minLength": 1, "maxLength": 300},
+    "stage": {"type": "string", "maxLength": 120, "default": ""},
+    "category": {"enum": ["CONHECIMENTOS_GERAIS", "CONHECIMENTOS_ESPECIFICOS", "DISCURSIVA_ESTUDO_DE_CASO", "OUTROS"]},
+    "weight": {"type": "number", "minimum": 0.01, "maximum": 100},
+    "question_count": {"type": ["integer", "null"], "minimum": 0, "maximum": 500},
+    "relevance_tier": {"enum": ["CORE", "COMPLEMENTARY", "SPECIFIC"]},
+    "topics": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/topic"}}
+  },
+  "$defs": {
+    "knowledgeId": {"type": "string", "pattern": "^(?:[A-Z][A-Z0-9_]*|custom-[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$"},
+    "topic": {
+      "type": "object", "additionalProperties": false,
+      "required": ["local_topic_id", "canonical_topic_id", "canonical_subject_id", "display_title", "diff_status"],
+      "properties": {
+        "local_topic_id": {"type": "string", "minLength": 1},
+        "canonical_topic_id": {"$ref": "#/$defs/knowledgeId"},
+        "canonical_subject_id": {"$ref": "#/$defs/knowledgeId"},
+        "display_title": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "diff_status": {"enum": ["PRE_EDITAL_BASE", "OFICIAL_CONFIRMADO", "OFICIAL_NOVO", "ARQUIVADO"]}
+      }
+    }
+  }
+}

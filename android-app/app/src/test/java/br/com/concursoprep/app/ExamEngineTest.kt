@@ -37,6 +37,31 @@ import java.time.LocalDate
 import java.util.UUID
 
 class ExamEngineTest {
+    @Test fun catalogAssociationPreservesLocalIdentityAndCustomContent() {
+        val catalog=br.com.concursoprep.app.domain.exam.ExamCatalog
+        assertEquals(35,catalog.allSubjects().size)
+        assertEquals(7,catalog.trunks().size)
+        val target=catalog.allSubjects().first()
+        val first=catalog.newComponent(target)
+        val second=catalog.newComponent(target).copy(stage="2ª etapa")
+        assertNotEquals(first.localSubjectId,second.localSubjectId)
+        val custom=StoredSubject("component","custom-${UUID.randomUUID()}","Meu conteúdo","OUTROS",2.0,3,"SPECIFIC",listOf(StoredTopic("local-topic","custom-${UUID.randomUUID()}","pending","Texto preservado","PRE_EDITAL_BASE")),"1ª etapa")
+        val linked=catalog.associateSubject(custom,target)
+        assertEquals(custom.localSubjectId,linked.localSubjectId)
+        assertEquals(custom.topics.single().localTopicId,linked.topics.single().localTopicId)
+        assertEquals("Texto preservado",linked.topics.single().displayTitle)
+        assertTrue(linked.topics.single().canonicalTopicId.startsWith("custom-"))
+        assertEquals(target.canonicalSubjectId,linked.topics.single().canonicalSubjectId)
+        assertEquals("1ª etapa",linked.stage)
+        assertTrue(catalog.catalogTopics(target.canonicalSubjectId).isNotEmpty())
+    }
+
+    @Test fun repeatedDisciplineDrawUsesDistinctQuestionsAndAllQuotas() {
+        val quotas=listOf(SubjectQuota("PORT",1.0,2,setOf("PORT_01")),SubjectQuota("PORT",3.0,2,setOf("PORT_01")))
+        val questions=(1..4).map { SimuladoCandidate("q$it","PORT","PORT_01",false) }
+        val ids=ExamEngine.drawWeightedSimulado(quotas,questions)
+        assertEquals(4,ids.size);assertEquals(4,ids.toSet().size)
+    }
     private val today: LocalDate = LocalDate.of(2026, 10, 31)
 
     @Test

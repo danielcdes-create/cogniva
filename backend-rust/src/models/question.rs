@@ -121,6 +121,8 @@ pub struct QuestionDocument {
 /// DTO enxuto e tipado enviado para o cliente Android (Jetpack Compose / Room)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuestionDto {
+    /// Session-only exam component; never a classification of the bank document.
+    pub exam_component_id: Option<String>,
     pub id: String,
     pub question_revision: String,
     pub question: String,
@@ -220,6 +222,7 @@ impl QuestionDocument {
 
     pub fn to_dto(&self, user_stats: Option<UserQuestionBriefStats>) -> QuestionDto {
         QuestionDto {
+            exam_component_id: None,
             id: self.id.to_hex(),
             question_revision: self.revision().unwrap_or_default(),
             question: self.question.clone(),

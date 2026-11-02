@@ -35,7 +35,9 @@ jobs:
         working-directory: backend-rust
         env:
           COGNIVA_TEST_MONGODB_URI: mongodb://127.0.0.1:27048/
-        run: cargo test --locked -- --include-ignored
+        # failCommand is server-wide; serialize tests so a durability fault
+        # cannot be consumed by another test's database/client.
+        run: cargo test --locked -- --include-ignored --test-threads=1
       - name: Remove disposable Mongo
         if: always()
         run: |

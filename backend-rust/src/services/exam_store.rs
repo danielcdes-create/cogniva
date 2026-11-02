@@ -119,19 +119,17 @@ pub fn validate(exam: &ExamBlueprint) -> Result<(), AppError> {
         return Err(invalid("A grade aceita no máximo 500 questões"));
     }
     let catalog = canonical_subjects();
-    let mut subject_ids = HashSet::new();
     let mut local_subject_ids = HashSet::new();
     let mut local_topic_ids = HashSet::new();
-    let mut topic_ids = HashSet::new();
     for subject in &exam.subjects {
+        let mut topic_ids = HashSet::new();
         let known = catalog.iter().find(|s| s.canonical_subject_id == subject.canonical_subject_id);
         let custom = subject.canonical_subject_id.strip_prefix("custom-").is_some_and(|id| uuid::Uuid::parse_str(id).is_ok());
         if known.is_none() && !custom { return Err(invalid("Disciplina fora do catálogo ou sem identidade personalizada válida")); }
         if subject.display_name.trim().is_empty() || subject.display_name.len()>300 || subject.stage.len()>120 {
             return Err(invalid("Nome ou etapa da disciplina inválido"));
         }
-        if !subject_ids.insert(&subject.canonical_subject_id)
-            || subject.local_subject_id.trim().is_empty() || !local_subject_ids.insert(&subject.local_subject_id)
+        if subject.local_subject_id.trim().is_empty() || !local_subject_ids.insert(&subject.local_subject_id)
             || !subject.weight.is_finite()
             || !(0.01..=100.0).contains(&subject.weight)
             || subject.question_count.is_some_and(|n| n > 500)
@@ -256,6 +254,29 @@ pub async fn save_command(
 #[cfg(test)]
 mod validation_tests {
     use super::*;
+    #[test]
+    fn shared_discipline_in_distinct_components_and_pending_custom_are_valid() {
+        let mut exam=system_exam_blueprints().remove(0);
+        let mut second=exam.subjects[0].clone();
+        second.local_subject_id="second-stage".into();second.stage="2ª etapa".into();
+        for t in &mut second.topics { t.local_topic_id=format!("second-{}",t.local_topic_id); }
+        exam.subjects.push(second);
+        assert!(validate(&exam).is_ok());
+        let last=exam.subjects.len()-1;
+        exam.subjects[last].local_subject_id=exam.subjects[0].local_subject_id.clone();
+        assert!(validate(&exam).is_err());
+        exam.subjects[last].local_subject_id="second-stage".into();
+        let catalog=canonical_subjects();let full=catalog.iter().find(|s|s.topics.len()>2).unwrap();
+        let topic=&full.topics[2];
+        exam.subjects[last].canonical_subject_id=full.canonical_subject_id.clone();
+        exam.subjects[last].topics=vec![ExamTopicItem {local_topic_id:"new-leaf".into(),canonical_topic_id:topic.topic_id.clone(),canonical_subject_id:full.canonical_subject_id.clone(),display_title:topic.title.clone(),diff_status:CanonicalTopicStatus::PreEditalBase}];
+        assert!(validate(&exam).is_ok());
+        exam.subjects[last].topics[0].canonical_subject_id="INVALID".into();assert!(validate(&exam).is_err());
+        let custom=format!("custom-{}",uuid::Uuid::new_v4());exam.subjects[last].canonical_subject_id=custom.clone();
+        exam.subjects[last].topics[0].canonical_subject_id=custom;
+        exam.subjects[last].topics[0].canonical_topic_id=format!("custom-{}",uuid::Uuid::new_v4());
+        exam.trunk_slug="fiscalizacao_trabalho".into();assert!(validate(&exam).is_ok());
+    }
     #[test]
     fn invalid_revision_quantity_weight_and_utf8_date_fail_without_panicking() {
         let template = system_exam_blueprints().remove(0);

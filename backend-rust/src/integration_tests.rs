@@ -11,6 +11,28 @@ use futures::TryStreamExt;
 
 #[tokio::test]
 #[ignore = "Requires dedicated loopback Mongo 27048"]
+async fn repeated_discipline_simulado_preserves_component_quotas_and_identity() {
+    let uri=std::env::var("COGNIVA_TEST_MONGODB_URI").unwrap();assert!(uri.starts_with("mongodb://127.0.0.1:27048/"));
+    let client=Client::with_uri_str(&uri).await.unwrap();let name=format!("cogniva_test_{}",uuid::Uuid::new_v4().simple());let db=client.database(&name);
+    let cfg=config(&uri);let secret=cfg.jwt_secret.clone();let state=Arc::new(AppState::new(db.clone(),cfg));let app=build_router(state.clone());
+    db.collection::<Document>("usuarios").insert_one(doc!{"user_id":123_i64,"active_contest_ids":[]}).await.unwrap();
+    let mut exam=services::exam_engine::system_exam_blueprints().remove(0);exam.id=uuid::Uuid::new_v4().to_string();exam.exam_boards.clear();
+    let mut first=exam.subjects[0].clone();first.local_subject_id="objective".into();first.stage="1ª etapa".into();first.weight=1.0;first.question_count=Some(2);first.topics.truncate(1);
+    let mut second=first.clone();second.local_subject_id="technical".into();second.stage="2ª etapa".into();second.weight=3.0;second.topics[0].local_topic_id="second-topic".into();
+    for n in 0..4 { db.collection::<Document>("todasQuestoes").insert_one(doc!{"question":format!("Synthetic component question {n}"),"answers":["A","B","C","D","E"],"correct_answers":["B"],"canonical_subject_id":&first.canonical_subject_id,"canonical_topic_id":&first.topics[0].canonical_topic_id}).await.unwrap(); }
+    exam.subjects=vec![first,second];
+    let (status,created)=request(&app,&secret,Some(123),"POST","/api/v1/exams",serde_json::to_value(&exam).unwrap()).await;assert_eq!(status,StatusCode::OK,"{created}");
+    let (status,quiz)=request(&app,&secret,Some(123),"POST","/api/v1/quiz/generate",serde_json::json!({"user_id":123,"mode":"SIMULADO","quantity":120,"contest_id":exam.id})).await;
+    assert_eq!(status,StatusCode::OK,"{quiz}");let questions=quiz.as_array().unwrap();assert_eq!(questions.len(),4);
+    assert_eq!(questions.iter().map(|q|q["id"].as_str().unwrap()).collect::<std::collections::HashSet<_>>().len(),4);
+    for component in ["objective","technical"] { assert_eq!(questions.iter().filter(|q|q["exam_component_id"]==component).count(),2); }
+    let reopened=Arc::new(AppState::new(db.clone(),config(&uri)));let persisted=services::exam_store::get(&reopened,123,&exam.id).await.unwrap();assert_eq!(persisted.subjects,exam.subjects);
+    assert_eq!(db.collection::<Document>("userActivityLog").count_documents(doc!{}).await.unwrap(),0);
+    assert!(name.starts_with("cogniva_test_"));db.drop().await.unwrap();
+}
+
+#[tokio::test]
+#[ignore = "Requires dedicated loopback Mongo 27048"]
 async fn xai_generates_missing_resource_once_and_persists_for_reuse() {
     use std::sync::atomic::{AtomicUsize, Ordering};
     let uri=std::env::var("COGNIVA_TEST_MONGODB_URI").unwrap();assert!(uri.starts_with("mongodb://127.0.0.1:27048/"));
@@ -45,8 +67,13 @@ async fn editable_exam_components_and_deletion_survive_sync_without_touching_his
     db.collection::<Document>("userActivityLog").insert_one(doc!{"user_id":123_i64,"marker":"history unchanged"}).await.unwrap();
     let mut exam=services::exam_engine::system_exam_blueprints().remove(0);exam.id=uuid::Uuid::new_v4().to_string();
     let custom=format!("custom-{}",uuid::Uuid::new_v4());
+    let mut second=exam.subjects[0].clone();second.local_subject_id="second-stage".into();second.stage="2ª etapa".into();
+    for topic in &mut second.topics {topic.local_topic_id=format!("second-{}",topic.local_topic_id);}
+    exam.subjects.push(second);
     exam.subjects.push(ExamSubjectConfig{stage:"2ª etapa · Prova técnica".into(),local_subject_id:custom.clone(),canonical_subject_id:custom.clone(),display_name:"Engenharia de Túneis".into(),category:SubjectCategory::ConhecimentosGerais,weight:2.75,question_count:Some(7),relevance_tier:RelevanceTier::Specific,topics:vec![ExamTopicItem{local_topic_id:"local-topic".into(),canonical_topic_id:format!("custom-{}",uuid::Uuid::new_v4()),canonical_subject_id:custom.clone(),display_title:"Escavação".into(),diff_status:CanonicalTopicStatus::PreEditalBase}]});
     let (status,created)=request(&app,&secret,Some(123),"POST","/api/v1/exams",serde_json::to_value(&exam).unwrap()).await;assert_eq!(status,StatusCode::OK,"{created}");
+    assert_eq!(created["subjects"].as_array().unwrap().iter().filter(|s|s["canonical_subject_id"]==created["subjects"][0]["canonical_subject_id"]).count(),2);
+    assert_eq!(created["subjects"].as_array().unwrap().iter().find(|s|s["local_subject_id"]=="second-stage").unwrap()["stage"],"2ª etapa");
     let path=format!("/api/v1/exams/{}",exam.id);let mut edit:ExamBlueprint=serde_json::from_value(created).unwrap();
     edit.subjects.retain(|s| s.canonical_subject_id==custom);edit.subjects[0].topics.clear();edit.subjects[0].display_name="Túneis revisados".into();
     let command=serde_json::to_value(&edit).unwrap();let (status,updated)=request(&app,&secret,Some(123),"PUT",&path,command.clone()).await;assert_eq!(status,StatusCode::OK,"{updated}");

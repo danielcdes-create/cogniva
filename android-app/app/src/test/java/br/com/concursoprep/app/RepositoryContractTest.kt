@@ -101,6 +101,7 @@ class RepositoryContractTest {
                 "listExams"->remoteExams
                 "updateExam"->updateExam(args[1] as ExamBlueprintPayload)
                 "catalog"->Json.parseToJsonElement(checkNotNull(javaClass.getResourceAsStream("/canonical-catalog.json")).bufferedReader().readText()).jsonObject
+                "knowledgeCatalog"->Json.parseToJsonElement(checkNotNull(javaClass.getResourceAsStream("/knowledge-catalog.json")).bufferedReader().readText()).jsonObject
                 "learningState"->LearningPage(emptyList())
                 "reportQuestionProblem"->{sendReport();Unit}
                 "generateQuizQuestions"->generate(args[0] as QuizGeneratePayload)

@@ -255,6 +255,8 @@ pub struct SubjectQuota {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SubjectOutcome {
     #[serde(default)]
+    pub local_subject_id: Option<String>,
+    #[serde(default)]
     pub canonical_subject_id: String,
     #[serde(default)]
     pub wrong: u32,

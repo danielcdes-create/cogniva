@@ -307,8 +307,8 @@ fun QuestionSessionScreen(
             }
         }
 
-        fun weight(q:QuestionDto):Double = snapshot?.exam?.subjects?.firstOrNull { it.canonicalSubjectId==q.canonicalSubjectId || it.displayName==q.disciplina }?.weight ?: 1.0
-        val outcomes=questions.groupBy { it.canonicalSubjectId ?: it.disciplina }.values.map { group ->
+        fun weight(q:QuestionDto):Double = snapshot?.exam?.subjects?.firstOrNull { if(q.examComponentId!=null)it.localSubjectId==q.examComponentId else it.canonicalSubjectId==q.canonicalSubjectId || it.displayName==q.disciplina }?.weight ?: 1.0
+        val outcomes=questions.groupBy { it.examComponentId ?: it.canonicalSubjectId ?: it.disciplina }.values.map { group ->
             val correct=group.count { q->userAnswers[q.id]?.chosenIndex in q.correctAnswerIndices }
             val wrong=group.count { q->userAnswers[q.id]!=null&&userAnswers[q.id]?.chosenIndex !in q.correctAnswerIndices }
             br.com.concursoprep.app.domain.exam.SubjectOutcome(weight(group.first()),correct,group.size,wrong,penalty)

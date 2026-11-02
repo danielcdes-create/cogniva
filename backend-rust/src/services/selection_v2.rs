@@ -143,6 +143,7 @@ pub async fn generate(
     if let Some(topic) = req.syllabus_topic_id.as_ref() {
         filter.insert("canonical_topic_id", topic);
     }
+    let mut components = HashMap::new();
     let questions = match req.mode {
         QuizMode::Simulado => {
             let exam =
@@ -163,6 +164,7 @@ pub async fn generate(
                     continue;
                 }
                 let mut scope = doc! {"canonical_subject_id":&subject.canonical_subject_id,"canonical_topic_id":{"$in":topics}};
+                scope.insert("_id", doc! {"$nin": selected.iter().map(|q: &QuestionDocument| q.id).collect::<Vec<_>>()});
                 let mut boards = exam
                     .exam_boards
                     .iter()
@@ -179,6 +181,7 @@ pub async fn generate(
                 if drawn.len() != count {
                     return Err(AppError::BadRequest(format!("Questões canônicas válidas insuficientes em {}: {}/{}. Revise a grade ou o mapeamento do banco.",subject.display_name,drawn.len(),count)));
                 }
+                for q in &drawn { components.insert(q.id.to_hex(), subject.local_subject_id.clone()); }
                 selected.append(&mut drawn);
             }
             if selected.is_empty() {
@@ -261,5 +264,7 @@ pub async fn generate(
         }
         _ => pool(state, filter, quantity).await?,
     };
-    enrich_questions_with_user_stats(&state.db, req.user_id, questions).await
+    let mut result = enrich_questions_with_user_stats(&state.db, req.user_id, questions).await?;
+    for q in &mut result { q.exam_component_id = components.get(&q.id).cloned(); }
+    Ok(result)
 }

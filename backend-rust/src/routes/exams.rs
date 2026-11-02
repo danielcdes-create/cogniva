@@ -163,6 +163,10 @@ pub async fn publish_edital(
         return Ok(Json(confirmed));
     }
     let mut exam = exam_store::get(&state, user.0, &id).await?;
+    let mut disciplines = std::collections::HashSet::new();
+    if exam.subjects.iter().any(|s| !disciplines.insert(&s.canonical_subject_id)) {
+        return Err(AppError::BadRequest("Grade com disciplina em várias etapas: publique pela atualização completa dos componentes".into()));
+    }
     if exam.revision != request.expected_revision {
         return Err(AppError::Conflict(
             "O edital mudou; sincronize a revisão antes de publicar".into(),
@@ -204,13 +208,15 @@ pub async fn weighted_simulado(
         let mut seen = std::collections::HashSet::new();
         let mut normalized = Vec::new();
         for outcome in request.outcomes {
-            let subject = exam
+            let candidates: Vec<_> = exam
                 .subjects
                 .iter()
-                .find(|s| s.canonical_subject_id == outcome.canonical_subject_id)
-                .ok_or_else(|| AppError::BadRequest("Resultado fora da grade".into()))?;
+                .filter(|s| s.canonical_subject_id == outcome.canonical_subject_id && outcome.local_subject_id.as_ref().is_none_or(|id| id == &s.local_subject_id))
+                .collect();
+            if candidates.len() != 1 { return Err(AppError::BadRequest("Resultado ambíguo: informe local_subject_id do componente".into())); }
+            let subject = candidates[0];
             let count = subject.question_count.unwrap_or(0);
-            if !seen.insert(outcome.canonical_subject_id.clone())
+            if !seen.insert(subject.local_subject_id.clone())
                 || outcome.drawn != count
                 || outcome.correct.saturating_add(outcome.wrong) > count
             {

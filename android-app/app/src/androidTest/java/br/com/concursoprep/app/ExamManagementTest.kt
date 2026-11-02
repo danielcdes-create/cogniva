@@ -17,6 +17,23 @@ import org.junit.runner.RunWith
 class ExamManagementTest {
     @get:Rule val rule=createAndroidComposeRule<ComponentActivity>()
 
+    @Test fun sameCatalogDisciplineCanBeAddedTwiceWithIndependentComponents() {
+        var saved: ExamDraft?=null
+        rule.setContent { ConcursoPrepTheme { ExamFormBottomSheet(emptyList(),onDismiss={},onSave={saved=it}) } }
+        rule.onNodeWithText("Criar do zero").performScrollTo().performClick()
+        rule.onNodeWithText("Continuar").performScrollTo().performClick()
+        rule.onNodeWithText("Continuar").performScrollTo().performClick()
+        rule.onNodeWithText("Buscar em todo o catálogo").performScrollTo().performTextInput("Língua Portuguesa")
+        repeat(2) { rule.onNodeWithText("+ Língua Portuguesa").performScrollTo().performClick() }
+        rule.onNodeWithText("Salvar na escada").performScrollTo().performClick()
+        rule.runOnIdle {
+            val subjects=checkNotNull(saved).subjects
+            assertEquals(2,subjects.size)
+            assertEquals(subjects[0].canonicalSubjectId,subjects[1].canonicalSubjectId)
+            assertNotEquals(subjects[0].localSubjectId,subjects[1].localSubjectId)
+        }
+    }
+
     @Test fun createsACustomDisciplineWithStageAndGroupBeyondTheTrunkCatalog() {
         var saved: ExamDraft?=null
         rule.setContent {

@@ -77,6 +77,7 @@ class ConcursoRepository(
     suspend fun ensureExamSeed() {
         mutationMutex.withLock {
             metadata("catalog")?.takeIf { it.isNotBlank() }?.let { ExamCatalog.installCatalog(Json.parseToJsonElement(it).jsonObject) }
+            metadata("knowledge_catalog")?.takeIf { it.isNotBlank() }?.let { ExamCatalog.installKnowledge(Json.parseToJsonElement(it).jsonObject) }
             dao.bindLegacyOwner(ownerUserId)
             val trunkIds=examDao.listTrunks().map { it.slug }.toSet()
             val missingTrunks=ExamCatalog.trunks().filter { it.slug !in trunkIds }
@@ -133,7 +134,7 @@ class ConcursoRepository(
                     diffStatus=when(topic.diffStatus){"OFICIAL_NOVO"->TopicDiffStatus.NEW_IN_EDITAL;"ARQUIVADO"->TopicDiffStatus.REMOVED_ARCHIVED;else->TopicDiffStatus.CONFIRMED}),value,related.sumOf { it.attempts },
                     if(related.isEmpty()) "NAO_INICIADO" else if(related.all { it.isMastered }) "DOMINADO" else if(related.any { it.practiceAvailable!=false&&(it.reviewRequired||Instant.parse(it.nextReviewAt)<=Instant.now()) }) "REVISAO" else "QUESTOES")
             }
-            DisciplineSyllabusGroupDto(subject.groupLabel(),subject.displayName,nodes.map { it.userMasteryPct }.average(),nodes)
+            DisciplineSyllabusGroupDto(subject.groupLabel(),subject.displayName,nodes.map { it.userMasteryPct }.average(),nodes,subject.localSubjectId)
         }
     }
     suspend fun getContestDiff(contestId: String): ContestDiffScreenDto? {
@@ -204,7 +205,10 @@ class ConcursoRepository(
                 val ids=QuizSelection.weightedSimuladoIds(exam,pool.map { QuestionRef(it.id,it.canonicalSubjectId,it.canonicalTopicId) })
                 val expected=exam.subjects.filter { it.topics.any { t->t.diffStatus!="ARQUIVADO" } }.sumOf { it.questionCount?:0 }
                 require(expected>0&&ids.size==expected){"Cache insuficiente para o simulado: ${ids.size}/$expected questões. Conecte-se ou ajuste a grade."}
-                ids.mapNotNull { id->pool.find { it.id==id } }
+                var offset=0
+                exam.subjects.filter { it.topics.any { t->t.diffStatus!="ARQUIVADO" } && (it.questionCount?:0)>0 }.flatMap { subject ->
+                    ids.drop(offset).take(subject.questionCount?:0).mapNotNull { id->pool.find { it.id==id }?.copy(examComponentId=subject.localSubjectId) }.also { offset+=subject.questionCount?:0 }
+                }
             }}
             QuizMode.COMMON_TRUNK->{val ids=QuizSelection.commonTrunkIds(loadStoredExams(),pool.map { QuestionRef(it.id,it.canonicalSubjectId,it.canonicalTopicId) },focusedTrunkSlugs(),canonicalMasteryBySubject(),LocalDate.now(LearningProjection.studyZone),count);ids.mapNotNull { id->pool.find { it.id==id } }}
             QuizMode.SINGLE->emptyList()
@@ -340,6 +344,7 @@ class ConcursoRepository(
             }
         }
         val catalog=api.catalog();ExamCatalog.installCatalog(catalog);metadata("catalog",catalog.toString())
+        val knowledge=api.knowledgeCatalog();ExamCatalog.installKnowledge(knowledge);metadata("knowledge_catalog",knowledge.toString())
     }
 
     suspend fun reportQuestionProblem(userId: Long,questionId: String,category: String): Boolean {

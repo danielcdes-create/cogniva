@@ -2,7 +2,9 @@
 
 Etapa 1 concluída como definição versionada: `shared/knowledge-catalog.json`, versão 1, com 35 disciplinas, 49 assuntos, 174 subassuntos e sete troncos. A consulta completa está em [catalogo/CONHECIMENTOS.md](catalogo/CONHECIMENTOS.md). Há 41 nomes alternativos de disciplinas, além de abreviações pontuais de subassuntos.
 
-Esta base editorial organiza conteúdo reutilizável; não certifica cobertura de editais nem classifica questões automaticamente. O catálogo em execução permanece `shared/canonical-catalog.json`. A integração de leitura/gravação e a persistência em Mongo pertencem à etapa 3. Nenhum APK, documento de questão ou histórico foi alterado nesta definição.
+Esta base editorial organiza conteúdo reutilizável; não certifica cobertura de editais nem classifica questões automaticamente. As etapas [3](ETAPA-3-BACKEND-MONGO.md) e [4](ETAPA-4-CADASTRO-CATALOGO.md), implementadas para 1.4.5/build 12, integram a leitura, a persistência versionada em Mongo e a associação explícita de componentes no Android. `shared/canonical-catalog.json` preserva os templates originais; a API de catálogo legado passa a projetar o catálogo de conhecimentos ampliado sem reescrever esse arquivo. Estado de publicação e aceite: `remediation-validation/1.4.5/`.
+
+O marcador `compatibility.runtime_transition=NOT_APPLIED` pertence ao snapshot imutável da definição inicial, em que o arquivo de templates não foi substituído. Não é telemetria do deploy nem significa que a API atual desconheça o catálogo. O acervo de questões e os eventos de aprendizagem não são reclassificados por essa integração.
 
 ## Entidades e identidade
 

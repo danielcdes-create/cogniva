@@ -77,7 +77,7 @@ fn normalized_weights(exam: &LeverageExam) -> HashMap<String, f64> {
         return weights;
     }
     for subject in live {
-        weights.insert(subject.canonical_subject_id.clone(), subject.weight / sum);
+        *weights.entry(subject.canonical_subject_id.clone()).or_insert(0.0) += subject.weight / sum;
     }
     weights
 }
@@ -256,11 +256,13 @@ pub fn select_common_trunk_for_focuses(
     let mut presence: HashMap<String, Vec<String>> = HashMap::new();
     let mut names: HashMap<String, String> = HashMap::new();
     for exam in &pool {
+        let mut seen_subjects = HashSet::new();
         for subject in exam
             .subjects
             .iter()
             .filter(|subject| !subject.archived_only)
         {
+            if !seen_subjects.insert(&subject.canonical_subject_id) { continue; }
             presence
                 .entry(subject.canonical_subject_id.clone())
                 .or_default()
@@ -510,6 +512,7 @@ pub fn draw_weighted_simulado(
             .iter()
             .filter(|question| {
                 question.canonical_subject_id == quota.canonical_subject_id
+                    && !picked.contains(&question.question_id)
                     && !question.archived
                     && quota
                         .allowed_topic_ids
@@ -626,8 +629,25 @@ pub fn canonical_subjects() -> Vec<CanonicalSubject> {
 }
 
 pub fn system_catalog() -> TrunkCatalog {
-    serde_json::from_str(include_str!("../../../shared/canonical-catalog.json"))
-        .expect("validated catalog")
+    let mut catalog: TrunkCatalog = serde_json::from_str(include_str!("../../../shared/canonical-catalog.json"))
+        .expect("validated catalog");
+    let knowledge = crate::services::question_contracts::catalog_ref();
+    catalog.subjects = knowledge["subjects"].as_array().unwrap().iter().filter(|s| s["status"] == "ACTIVE").map(|s| {
+        let id = s["subject_id"].as_str().unwrap();
+        CanonicalSubject {
+            canonical_subject_id: id.into(), code: id.into(), name: s["label"].as_str().unwrap().into(),
+            aliases: s["aliases"].as_array().unwrap().iter().map(|v|v.as_str().unwrap().into()).collect(),
+            trunk_slugs: s["trunk_links"].as_array().unwrap().iter().map(|v|v["trunk_id"].as_str().unwrap().into()).collect(),
+            topics: knowledge["topics"].as_array().unwrap().iter().filter(|t|t["subject_id"]==id && t["status"]=="ACTIVE").map(|t|CanonicalTopic {topic_id:t["topic_id"].as_str().unwrap().into(),title:t["label"].as_str().unwrap().into(),tags:vec![]}).collect(),
+        }
+    }).collect();
+    for t in knowledge["trunks"].as_array().unwrap().iter().filter(|t|t["status"]=="ACTIVE") {
+        let slug=t["trunk_id"].as_str().unwrap();
+        if !catalog.trunks.iter().any(|old|old.slug==slug) {
+            catalog.trunks.push(CareerTrunk {slug:slug.into(),name:t["label"].as_str().unwrap().into(),icon_key:"work".into(),core_subjects:vec![],complementary_subjects:vec![],is_system_default:true});
+        }
+    }
+    catalog
 }
 
 pub fn core_subject_ids(trunk_slug: &str) -> Vec<String> {
@@ -1101,6 +1121,7 @@ mod tests {
         assert!(!drawn.iter().any(|id| id == "q-archived"));
         let score = weighted_net_score(&[
             SubjectOutcome {
+                local_subject_id: None,
                 canonical_subject_id: String::new(),
                 wrong: 0,
                 penalty: 0.0,
@@ -1109,6 +1130,7 @@ mod tests {
                 drawn: 2,
             },
             SubjectOutcome {
+                local_subject_id: None,
                 canonical_subject_id: String::new(),
                 wrong: 0,
                 penalty: 0.0,

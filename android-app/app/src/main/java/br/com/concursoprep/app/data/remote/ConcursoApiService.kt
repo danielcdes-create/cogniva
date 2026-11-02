@@ -123,6 +123,7 @@ data class ExamBlueprintPayload(
 )
 
 interface ConcursoApiService {
+    @GET("catalog/knowledge") suspend fun knowledgeCatalog(): JsonObject
     @GET("auth/profile")
     suspend fun profile(): UserProfileDto
 

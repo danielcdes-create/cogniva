@@ -28,6 +28,7 @@ pub struct SyllabusTopicNodeDto {
 }
 #[derive(Serialize)]
 pub struct DisciplineSyllabusGroupDto {
+    pub component_id: String,
     pub block_name: String,
     pub discipline: String,
     pub discipline_mastery_pct: f64,
@@ -164,6 +165,7 @@ pub async fn get_contest_syllabus(
                     return None;
                 }
                 Some(DisciplineSyllabusGroupDto {
+                    component_id: subject.local_subject_id.clone(),
                     block_name: subject_group(subject),
                     discipline: subject.display_name.clone(),
                     discipline_mastery_pct: nodes.iter().map(|n| n.user_mastery_pct).sum::<f64>()

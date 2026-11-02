@@ -1,0 +1,29 @@
+{
+  "captured_at": "2026-11-02T19:42:12.782018+00:00",
+  "access": "read-only",
+  "server": {
+    "compose_sha256": "ae0f543998b6bb3972e32a7942a73e8c269a4ac16af773c5c01e3fcfe531dcc2",
+    "containers": [
+      {
+        "name": "/financial-twin-server",
+        "id": "ff32c5849f62c6d5b32b8c7bdd62a11d9351fc689e0d5c84bef8f93b5d627703",
+        "image_id": "sha256:7e72faaca6f3ac843c08265af79c2f9469de238308a3a4e03da5895ad50bb482"
+      },
+      {
+        "name": "/api-rust-core",
+        "id": "d823b237e42f98919807598290a1946e582f2db979234961289b3a505e44a504",
+        "image_id": "sha256:7c6a72486046054f00b7b2ef7ea35503c5bec620de41558662e24402f662c8cc"
+      },
+      {
+        "name": "/asbuildo-server",
+        "id": "ba879ad18169909c528d85aee1494a276a1013eea196eb6cdce5d5ad61f152f4",
+        "image_id": "sha256:367a4f0c518ad77c42e21be187d1d4c4fd0b3284268bd9ff02a850ffac119bf6"
+      },
+      {
+        "name": "/spamshield-server",
+        "id": "edda480723c75f16a10e9a27a7a3e7512e06056c29fbb5baaf19131a474bc37c",
+        "image_id": "sha256:9fdd460f985fe6793867e8dda9a7f7e760c3084b6c768a3da5421d235c3e7190"
+      }
+    ]
+  }
+}

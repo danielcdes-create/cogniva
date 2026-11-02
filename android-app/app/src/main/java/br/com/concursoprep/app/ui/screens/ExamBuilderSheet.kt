@@ -268,8 +268,9 @@ fun ExamFormBottomSheet(
                     }
                     Text("Adicionar disciplina", fontWeight = FontWeight.Bold)
                     OutlinedTextField(subjectSearch,{subjectSearch=it},label={Text("Buscar em todo o catálogo")},modifier=Modifier.fillMaxWidth())
-                    ExamCatalog.allSubjects().filter { candidate -> subjects.none { it.canonicalSubjectId==candidate.canonicalSubjectId } && candidate.displayName.contains(subjectSearch,true) }.forEach { candidate ->
-                        OutlinedButton(onClick={subjects=subjects+candidate},modifier=Modifier.fillMaxWidth()) { Text("+ ${candidate.displayName}") }
+                    Text("Você pode adicionar a mesma disciplina em etapas diferentes. Selecione os assuntos cobrados em cada componente.")
+                    ExamCatalog.allSubjects().filter { ExamCatalog.matchesSubject(it,subjectSearch) }.forEach { candidate ->
+                        OutlinedButton(onClick={subjects=subjects+ExamCatalog.newComponent(candidate)},modifier=Modifier.fillMaxWidth()) { Text("+ ${candidate.displayName}") }
                     }
                     OutlinedTextField(customName,{customName=it.take(150)},label={Text("Nome de outra disciplina")},modifier=Modifier.fillMaxWidth())
                     OutlinedButton(enabled=customName.isNotBlank(),onClick={
@@ -336,6 +337,11 @@ private fun SubjectEditor(subject: StoredSubject, onChange: (StoredSubject)->Uni
     var topicName by rememberSaveable(subject.localSubjectId) { mutableStateOf("") }
     var weight by rememberSaveable(subject.localSubjectId) { mutableStateOf(subject.weight.toString()) }
     var count by rememberSaveable(subject.localSubjectId) { mutableStateOf(subject.questionCount?.toString().orEmpty()) }
+    var chooseSubject by rememberSaveable(subject.localSubjectId) { mutableStateOf(false) }
+    var subjectQuery by rememberSaveable(subject.localSubjectId) { mutableStateOf("") }
+    var chooseTopic by rememberSaveable(subject.localSubjectId) { mutableStateOf(false) }
+    var topicQuery by rememberSaveable(subject.localSubjectId) { mutableStateOf("") }
+    var linkingTopic by rememberSaveable(subject.localSubjectId) { mutableStateOf<String?>(null) }
     val validWeight=weight.replace(',','.').toDoubleOrNull()?.let { it.isFinite() && it in 0.01..100.0 }==true
     val validCount=count.isBlank() || count.toIntOrNull()?.let { it in 0..500 }==true
     androidx.compose.runtime.LaunchedEffect(validWeight,validCount,subject.displayName,subject.topics) { onValidity(validWeight && validCount && subject.displayName.isNotBlank() && subject.topics.all { it.displayTitle.isNotBlank() }) }
@@ -343,10 +349,19 @@ private fun SubjectEditor(subject: StoredSubject, onChange: (StoredSubject)->Uni
         Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
             Text(subject.displayName, fontWeight=FontWeight.Bold)
             Text(listOf(subject.stage.ifBlank { "Etapa não definida" }, categoryLabel(subject.category), "${subject.topics.count { it.diffStatus!="ARQUIVADO" }} tópicos ativos").joinToString(" · "))
+            Text(if(subject.canonicalSubjectId.startsWith("custom-")) "Disciplina personalizada · aguardando associação" else "Catálogo compartilhado · ${ExamCatalog.allSubjects().find { it.canonicalSubjectId==subject.canonicalSubjectId }?.displayName ?: subject.canonicalSubjectId}")
             OutlinedButton(onClick={expanded=!expanded},modifier=Modifier.fillMaxWidth()) { Text(if(expanded) "Recolher disciplina" else "Editar disciplina e tópicos") }
             if(expanded) {
                 OutlinedTextField(subject.displayName,{onChange(subject.copy(displayName=it.take(150)))},label={Text("Nome da disciplina")},modifier=Modifier.fillMaxWidth())
                 OutlinedTextField(subject.stage,{onChange(subject.copy(stage=it.take(120)))},label={Text("Etapa (ex.: 1ª etapa · Prova objetiva)")},modifier=Modifier.fillMaxWidth())
+                OutlinedButton(onClick={chooseSubject=!chooseSubject},modifier=Modifier.fillMaxWidth()) { Text("Associar disciplina ao catálogo") }
+                if(chooseSubject) {
+                    Text("O nome e os componentes locais serão preservados. Tópicos sem vínculo na disciplina escolhida ficarão aguardando associação.")
+                    OutlinedTextField(subjectQuery,{subjectQuery=it},label={Text("Buscar disciplina ou nome alternativo")},modifier=Modifier.fillMaxWidth())
+                    ExamCatalog.allSubjects().filter { ExamCatalog.matchesSubject(it,subjectQuery) }.forEach { target ->
+                        OutlinedButton(onClick={onChange(ExamCatalog.associateSubject(subject,target));chooseSubject=false},modifier=Modifier.fillMaxWidth()) { Text("Vincular a ${target.displayName}") }
+                    }
+                }
                 Text("Grupo de conhecimentos")
                 FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     listOf("CONHECIMENTOS_GERAIS","CONHECIMENTOS_ESPECIFICOS","DISCURSIVA_ESTUDO_DE_CASO","OUTROS").forEach { group ->
@@ -359,9 +374,24 @@ private fun SubjectEditor(subject: StoredSubject, onChange: (StoredSubject)->Uni
                 subject.topics.forEach { topic ->
                     key(topic.localTopicId) {
                         OutlinedTextField(topic.displayTitle,{ value->onChange(subject.copy(topics=subject.topics.map { if(it.localTopicId==topic.localTopicId)it.copy(displayTitle=value.take(500))else it })) },label={Text(if(topic.diffStatus=="ARQUIVADO")"Tópico arquivado"else"Tópico")},modifier=Modifier.fillMaxWidth())
+                        Text(ExamCatalog.topicLabel(topic))
                         FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                            if(!subject.canonicalSubjectId.startsWith("custom-")) OutlinedButton(onClick={linkingTopic=topic.localTopicId;chooseTopic=true}) { Text("Associar tópico") }
                             OutlinedButton(onClick={onChange(subject.copy(topics=subject.topics.map { if(it.localTopicId==topic.localTopicId)it.copy(diffStatus=if(it.diffStatus=="ARQUIVADO")"PRE_EDITAL_BASE"else"ARQUIVADO")else it }))}) { Text(if(topic.diffStatus=="ARQUIVADO")"Restaurar tópico"else"Arquivar tópico") }
                             OutlinedButton(onClick={onChange(subject.copy(topics=subject.topics.filterNot { it.localTopicId==topic.localTopicId }))}) { Text("Excluir tópico") }
+                        }
+                    }
+                }
+                if(!subject.canonicalSubjectId.startsWith("custom-")) {
+                    OutlinedButton(onClick={linkingTopic=null;chooseTopic=!chooseTopic},modifier=Modifier.fillMaxWidth()) { Text("Adicionar assunto ou subassunto do catálogo") }
+                    if(chooseTopic) {
+                        OutlinedTextField(topicQuery,{topicQuery=it},label={Text("Buscar assunto ou subassunto")},modifier=Modifier.fillMaxWidth())
+                        ExamCatalog.catalogTopics(subject.canonicalSubjectId).filter { target -> subject.topics.none { it.canonicalTopicId==target.canonicalTopicId && it.localTopicId!=linkingTopic } && ExamCatalog.topicLabel(target).contains(topicQuery,true) }.forEach { target ->
+                            OutlinedButton(onClick={
+                                val local=linkingTopic
+                                onChange(subject.copy(topics=if(local==null)subject.topics+target.copy(localTopicId=UUID.randomUUID().toString()) else subject.topics.map { if(it.localTopicId==local)it.copy(canonicalTopicId=target.canonicalTopicId)else it }))
+                                chooseTopic=false;linkingTopic=null
+                            },modifier=Modifier.fillMaxWidth()) { Text(ExamCatalog.topicLabel(target)) }
                         }
                     }
                 }

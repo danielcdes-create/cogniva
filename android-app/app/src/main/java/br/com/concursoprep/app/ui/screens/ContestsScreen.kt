@@ -285,7 +285,7 @@ fun ContestsScreen(
                 }
                 items(
                     items = if (syllabusViewMode == SyllabusViewMode.TRUNK) emptyList() else syllabusGroups,
-                    key = { group -> group.discipline }
+                    key = { group -> group.componentId ?: "${group.blockName}:${group.discipline}" }
                 ) { group ->
                     Card(
                         shape = RoundedCornerShape(14.dp),

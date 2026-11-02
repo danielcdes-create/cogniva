@@ -25,7 +25,7 @@ Versão em produção: **1.4.4 / Android build 11 / contrato de sincronização 
 
 **Acesso ao acervo.** Shuffle geral e filas pessoais de SRS/erros/desafio independem da aba aberta no planner. Treino explicitamente filtrado e simulado respeitam a grade. Concursos arquivados saem das abas de treino e continuam preservados em Ajustes. O pull conserva referências históricas indisponíveis, mas informa quais questões podem entrar nas ações; contadores e seleção usam a mesma marcação de revisão pendente. O acervo atual não contém questões classificadas nos quatro componentes da grade fiscal investigada. Quatro referências antigas foram reconciliadas com exemplos locais do código anterior; não foram inseridas no Mongo nem apresentadas como acervo recuperado.
 
-**Concurso e catálogo.** `shared/canonical-catalog.json` é o catálogo comum aos dois runtimes. Templates são configuráveis pelo usuário e não constituem edital oficial: datas indefinidas, corte zero e banca não confirmada não são preenchidos por adivinhação. Concursos do usuário são persistidos por proprietário e revisão, com pull/push e conflito explícito. Omissões de tópicos arquivam suas identidades; histórico e revisões anteriores continuam preservados. Nome de disciplina não é prova de tópico canônico.
+**Concurso e catálogo.** `shared/knowledge-catalog.json` define conhecimentos compartilhados; `shared/canonical-catalog.json` preserva os templates originais. Templates são configuráveis pelo usuário e não constituem edital oficial: datas indefinidas, corte zero e banca não confirmada não são preenchidos por adivinhação. Concursos são persistidos por proprietário e revisão, com pull/push e conflito explícito. Componentes têm IDs locais próprios e podem referenciar a mesma disciplina em etapas diferentes; assuntos/subassuntos são associados explicitamente. Itens personalizados permanecem pendentes até associação. Arquivamento e exclusão da grade atual preservam histórico e revisões anteriores. Nome de disciplina não é prova de tópico canônico. Implementação e contratos da entrega 1.4.5: [etapa 3](docs/ETAPA-3-BACKEND-MONGO.md), [etapa 4](docs/ETAPA-4-CADASTRO-CATALOGO.md). A [nota para Grok Build — passo 5](docs/NOTA-TECNICA-GROK-BUILD-PASSO-5.md) define a classificação assistida seguinte.
 
 **Estudo e métricas.** Simulado respeita tópicos ativos, quantidades e pesos da grade, e falha explicitamente quando faltam questões válidas. SRS, caderno de erros e desafio usam seus conjuntos elegíveis, inclusive no cache. Prática inclui registros com domínio zero. Acurácia é calculada por soma de acertos / soma de tentativas. O dia de estudo usa UTC−03:00; heatmap e matriz usam os últimos 90 dias civis. Novos eventos usam SRS 1/7/30 dias; intervalos históricos permanecem armazenados. Pontuação de simulado: `100 × Σ[peso × (acertos − desconto × erros)] / Σ[peso × quantidade]`, limitada a 0–100. Desconto pertence à regra configurada da prova; corte ausente não produz aprovação simulada. Domínio considera acurácia, confiança e evidência SRS; confiança histórica desconhecida não é inventada.
 
@@ -42,7 +42,7 @@ cd backend-rust
 cargo test --locked
 # Integração: exclusivamente o Mongo sintético em loopback 27048, enableTestCommands=1.
 $env:COGNIVA_TEST_MONGODB_URI='mongodb://127.0.0.1:27048/'
-cargo test --locked -- --include-ignored
+cargo test --locked -- --include-ignored --test-threads=1
 ```
 
 ```powershell

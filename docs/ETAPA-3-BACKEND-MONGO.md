@@ -43,7 +43,7 @@ Questões abertas ficam fora do protocolo objetivo atual. Seu gabarito não rece
 
 ## Limites de escopo
 
-Não há classificação automática nem migração em massa de questões. Aprovar sugestões de IA exige o fluxo de revisão da etapa de classificação; o endpoint genérico não simula essa aprovação. Cadastros Android e execução de correção de abertas pertencem às próximas etapas. A versão de catálogo fica em snapshot imutável; os templates do endpoint legado não são substituídos pela taxonomia editorial nesta etapa.
+Não há classificação automática nem migração em massa de questões. Aprovar sugestões de IA exige o fluxo de revisão da etapa de classificação; o endpoint genérico não simula essa aprovação. O cadastro Android associado é tratado na [etapa 4](ETAPA-4-CADASTRO-CATALOGO.md); execução de correção de abertas continua posterior. A versão de catálogo fica em snapshot imutável. Os templates originais são preservados; a etapa 4 amplia a projeção de disciplinas/tópicos do endpoint legado usando o catálogo normalizado.
 
 ## Validação
 

@@ -1,6 +1,6 @@
 # Contratos de questões, classificação, validade e correção
 
-Etapa 2 formalizada em `shared/schemas/question-contracts.schema.json`, com exemplos em `shared/examples/question-contracts/` e regras executáveis em `scripts/question_contracts.py`. Estes contratos ainda não estão instalados no Mongo nem habilitados na API/Android 1.4.4. Não houve migração do acervo nem chamada paga de IA.
+Etapa 2 formalizada em `shared/schemas/question-contracts.schema.json`, com exemplos em `shared/examples/question-contracts/` e regras executáveis em `scripts/question_contracts.py`. As etapas [3](ETAPA-3-BACKEND-MONGO.md) e [4](ETAPA-4-CADASTRO-CATALOGO.md), implementadas para 1.4.5/build 12, acrescentam validação e escrita no backend, preparação aditiva do Mongo e cadastro associado no Android. Estado de publicação e aceite: `remediation-validation/1.4.5/`. Não há reclassificação automática do acervo nem chamada paga de IA nesta adaptação.
 
 O arquivo usa JSON Schema draft 2020-12 e Extended JSON para `_id: {"$oid":"..."}`. Ele não pode ser aplicado diretamente como `collMod`: a etapa 3 precisa adaptar tipos BSON e o subconjunto de validação do Mongo, além de implementar no Rust as regras entre documentos e a autenticação. [Validação no MongoDB](https://www.mongodb.com/docs/manual/core/schema-validation/), [condicionais em JSON Schema](https://json-schema.org/understanding-json-schema/reference/conditionals).
 
@@ -15,7 +15,7 @@ O arquivo usa JSON Schema draft 2020-12 e Extended JSON para `_id: {"$oid":"..."
 
 `origins` registra de onde a questão veio, não onde ela pode ser utilizada. `classification` registra o conteúdo cobrado, não o concurso de origem. A compatibilidade resulta da interseção com o edital e, quando registrada explicitamente, pertence ao proprietário e à revisão do concurso. Etapa, grupo de conhecimentos, peso e quantidade continuam no componente do edital.
 
-Cada ocorrência de disciplina no edital precisa de `component_id` próprio. A mesma disciplina canônica poderá aparecer em várias etapas. O atual bloqueio de disciplina canônica repetida deverá ser adaptado na etapa 3; esta definição não afirma que essa mudança já foi publicada.
+Cada ocorrência de disciplina no edital tem identidade própria: `local_subject_id`, referenciada como `component_id` na compatibilidade. A etapa 4 permite a mesma disciplina canônica em várias etapas, com IDs locais distintos e tópicos, grupos, pesos e quotas independentes. O contrato de componente está em `shared/schemas/exam-component.schema.json`. Itens `custom-UUID` continuam disponíveis enquanto aguardam associação explícita.
 
 ## Tipos e gabarito
 
@@ -98,7 +98,7 @@ Os campos existentes de IA permanecem no documento, com seus nomes atuais. Metad
 
 Campos legados desconhecidos são preservados. O schema permite propriedades adicionais na raiz para isso e valida estritamente os novos blocos conhecidos. A migração deve usar atualizações seletivas e manter inventários/backups; não substituir todo o documento a partir de um DTO que ignora campos extras.
 
-`legal_validity` legado não é uma segunda autoridade no contrato novo: ausência de evidência não vira `CURRENT`. A etapa 3 deve definir sua projeção para clientes antigos, preservando o original. Também não se deduplicam questões apenas por texto parecido nem se reconstroem eventos de aprendizagem para adaptar a taxonomia.
+`legal_validity` legado não é uma segunda autoridade no contrato novo: ausência de evidência não vira `CURRENT`. A etapa 3 preserva o original e mantém restrições legadas quando a validade nova é desconhecida; uma revisão explícita com evidência pode substituí-las. Também não se deduplicam questões apenas por texto parecido nem se reconstroem eventos de aprendizagem para adaptar a taxonomia.
 
 ## Verificação
 

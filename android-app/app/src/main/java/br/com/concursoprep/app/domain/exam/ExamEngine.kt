@@ -274,7 +274,7 @@ object ExamEngine {
         val live = exam.subjects.filter { !it.archivedOnly && it.weight > 0.0 }
         val sum = live.sumOf { it.weight }
         if (sum <= 0.0) return emptyMap()
-        return live.associate { it.canonicalSubjectId to (it.weight / sum) }
+        return live.groupBy { it.canonicalSubjectId }.mapValues { (_, components) -> components.sumOf { it.weight } / sum }
     }
 
     fun leverageScore(
@@ -320,7 +320,7 @@ object ExamEngine {
         val presence = linkedMapOf<String, MutableList<String>>()
         val names = linkedMapOf<String, String>()
         for (exam in pool) {
-            for (subject in exam.subjects.filter { !it.archivedOnly }) {
+            for (subject in exam.subjects.filter { !it.archivedOnly }.distinctBy { it.canonicalSubjectId }) {
                 presence.getOrPut(subject.canonicalSubjectId) { mutableListOf() }.add(exam.shortName)
                 names.putIfAbsent(subject.canonicalSubjectId, subject.name)
             }
@@ -439,7 +439,7 @@ object ExamEngine {
         val picked = mutableListOf<String>()
         for (quota in quotas) {
             val pool = questions
-                .filter { it.canonicalSubjectId == quota.canonicalSubjectId && !it.archived && it.canonicalTopicId in quota.allowedTopicIds }
+                .filter { it.questionId !in picked && it.canonicalSubjectId == quota.canonicalSubjectId && !it.archived && it.canonicalTopicId in quota.allowedTopicIds }
                 .distinctBy { it.questionId }
                 .shuffled()
                 .take(quota.questionCount)
@@ -554,25 +554,13 @@ object ExamEngine {
     )
 
     fun projectSyllabus(exam: StoredExam, history: List<CanonicalMasteryRecord>): List<ProjectedSyllabusGroup> {
-        val links = exam.subjects.flatMap { subject ->
-            subject.topics.map { topic ->
-                ExamTopicLink(
-                    examId = exam.examId,
-                    canonicalSubjectId = subject.canonicalSubjectId,
-                    canonicalTopicId = topic.canonicalTopicId,
-                    diffStatus = runCatching { CanonicalTopicStatus.valueOf(topic.diffStatus) }
-                        .getOrDefault(CanonicalTopicStatus.PRE_EDITAL_BASE)
-                )
-            }
-        }
-        val projected = projectCrossExamCoverage(history, links)
         return exam.subjects.mapNotNull { subject ->
             val visible = subject.topics.filter { it.diffStatus != CanonicalTopicStatus.ARQUIVADO.name }
             if (visible.isEmpty()) return@mapNotNull null
             ProjectedSyllabusGroup(
                 discipline = subject.displayName,
                 canonicalSubjectId = subject.canonicalSubjectId,
-                masteryPct = subjectMasteryPercentage(projected, exam.examId, subject.canonicalSubjectId) * 100.0,
+                masteryPct = history.filter { it.canonicalTopicId in visible.map { t -> t.canonicalTopicId } }.distinctBy { it.canonicalTopicId }.sumOf { it.mastery } / visible.map { it.canonicalTopicId }.distinct().size * 100.0,
                 topicTitles = visible.map { it.displayTitle }
             )
         }
@@ -680,11 +668,12 @@ object OfflineExamQueue {
 
 object QuizSelection {
     fun weightedSimuladoIds(exam: StoredExam, questions: List<QuestionRef>): List<String> {
+        val activeTopics = exam.subjects.flatMap { it.topics }.filter { it.diffStatus!="ARQUIVADO" }.map { it.canonicalTopicId }.toSet()
         val archivedTopics = exam.subjects
             .flatMap { it.topics }
             .filter { it.diffStatus == CanonicalTopicStatus.ARQUIVADO.name }
             .map { it.canonicalTopicId }
-            .toSet()
+            .toSet() - activeTopics
         val candidates = questions.map { question ->
             SimuladoCandidate(
                 questionId = question.id,
@@ -735,8 +724,30 @@ data class QuestionRef(
 )
 
 object ExamCatalog {
-    fun equivalentLabels(label:String):Set<String> = catalog.array("subjects").map { it.jsonObject }.find { it.text("name")==label||it.array("aliases").any { alias->alias.jsonPrimitive.content==label } }?.let { legacyLabels(it.text("canonical_subject_id")) }?:setOf(label)
-    fun legacyLabels(subjectId:String):Set<String> = catalog.array("subjects").map { it.jsonObject }.find { it.text("canonical_subject_id")==subjectId }?.let { setOf(it.text("name"))+it.array("aliases").map { alias->alias.jsonPrimitive.content } }?:emptySet()
+    @Volatile private var installedKnowledge: JsonObject? = null
+    private val bundledKnowledge: JsonObject by lazy {
+        checkNotNull(ExamCatalog::class.java.getResourceAsStream("/knowledge-catalog.json")).bufferedReader(Charsets.UTF_8).use { Json.parseToJsonElement(it.readText()).jsonObject }
+    }
+    private val knowledge: JsonObject get() = installedKnowledge ?: bundledKnowledge
+    fun installKnowledge(value: JsonObject) {
+        require(value["catalog_id"] == bundledKnowledge["catalog_id"] && value["subjects"] is JsonArray && value["topics"] is JsonArray)
+        installedKnowledge = value
+    }
+    fun matchesSubject(subject: StoredSubject, search: String): Boolean = knowledge.array("subjects").map { it.jsonObject }.find { it.text("subject_id") == subject.canonicalSubjectId }?.let { it.text("label").contains(search,true) || it.array("aliases").any { alias -> alias.jsonPrimitive.content.contains(search,true) } } ?: subject.displayName.contains(search,true)
+    fun newComponent(subject: StoredSubject): StoredSubject = subject.copy(localSubjectId=UUID.randomUUID().toString(),topics=subject.topics.map { it.copy(localTopicId=UUID.randomUUID().toString()) })
+    fun associateSubject(subject: StoredSubject, target: StoredSubject): StoredSubject = subject.copy(canonicalSubjectId=target.canonicalSubjectId,topics=subject.topics.map { old ->
+        old.copy(canonicalSubjectId=target.canonicalSubjectId,canonicalTopicId=if(catalogTopics(target.canonicalSubjectId).any { it.canonicalTopicId==old.canonicalTopicId } || old.canonicalTopicId.startsWith("custom-"))old.canonicalTopicId else "custom-${UUID.randomUUID()}")
+    })
+    fun catalogTopics(subjectId: String): List<StoredTopic> = knowledge.array("topics").map { it.jsonObject }.filter { it.text("subject_id")==subjectId && it.text("status")=="ACTIVE" }.map { t ->
+        StoredTopic(t.text("topic_id"),t.text("topic_id"),subjectId,t.text("label"),"PRE_EDITAL_BASE")
+    }
+    fun topicLabel(topic: StoredTopic): String {
+        val t=knowledge.array("topics").map { it.jsonObject }.find { it.text("topic_id")==topic.canonicalTopicId } ?: return "Aguardando associação"
+        val parent=t["parent_topic_id"]?.jsonPrimitive?.contentOrNull?.let { id -> knowledge.array("topics").map { it.jsonObject }.find { it.text("topic_id")==id }?.text("label") }
+        return if(parent==null) "Assunto · ${t.text("label")}" else "Subassunto · $parent › ${t.text("label")}"
+    }
+    fun equivalentLabels(label:String):Set<String> = knowledge.array("subjects").map { it.jsonObject }.find { it.text("label")==label||it.array("aliases").any { alias->alias.jsonPrimitive.content==label } }?.let { legacyLabels(it.text("subject_id")) }?:setOf(label)
+    fun legacyLabels(subjectId:String):Set<String> = knowledge.array("subjects").map { it.jsonObject }.find { it.text("subject_id")==subjectId }?.let { setOf(it.text("label"))+it.array("aliases").map { alias->alias.jsonPrimitive.content } }?:emptySet()
     @Volatile private var installed: JsonObject? = null
     private val bundled: JsonObject by lazy {
         val stream=checkNotNull(ExamCatalog::class.java.getResourceAsStream("/canonical-catalog.json")) { "Catálogo canônico ausente" }
@@ -757,13 +768,13 @@ object ExamCatalog {
             TrunkSubjectTemplate(id,item.text("name"),item.getValue("default_weight").jsonPrimitive.double,item.text("relevance_tier"),first.canonicalTopicId,first.displayTitle,topics)
         }
         TrunkTemplate(t.text("slug"),t.text("name"),t.text("icon_key"),subjects)
-    }
+    } + knowledge.array("trunks").map { it.jsonObject }.filter { t -> catalog.array("trunks").none { it.jsonObject.text("slug")==t.text("trunk_id") } }.map { TrunkTemplate(it.text("trunk_id"),it.text("label"),"work",emptyList()) }
     fun subjectsForTrunk(trunkSlug:String):List<StoredSubject> = trunks().find { it.slug==trunkSlug }?.subjects.orEmpty().mapIndexed { index,s ->
         StoredSubject("${s.canonicalSubjectId}-$index",s.canonicalSubjectId,s.name,if(s.relevanceTier=="CORE")"CONHECIMENTOS_ESPECIFICOS"else"CONHECIMENTOS_GERAIS",s.defaultWeight,kotlin.math.round(s.defaultWeight*5).toInt(),s.relevanceTier,s.topics)
     }
-    fun allSubjects():List<StoredSubject> = catalog.array("subjects").map { raw ->
-        val s=raw.jsonObject; val id=s.text("canonical_subject_id")
-        StoredSubject(id,id,s.text("name"),"CONHECIMENTOS_ESPECIFICOS",1.0,0,"SPECIFIC",s.array("topics").map { topic(it.jsonObject,id) })
+    fun allSubjects():List<StoredSubject> = knowledge.array("subjects").map { it.jsonObject }.filter { it.text("status")=="ACTIVE" }.map { s ->
+        val id=s.text("subject_id")
+        StoredSubject(id,id,s.text("label"),"CONHECIMENTOS_ESPECIFICOS",1.0,0,"SPECIFIC",emptyList())
     }
     fun systemExams():List<StoredExam> = catalog.array("exams").map { element ->
         val e=element.jsonObject;val date=e.getValue("target_date").jsonObject

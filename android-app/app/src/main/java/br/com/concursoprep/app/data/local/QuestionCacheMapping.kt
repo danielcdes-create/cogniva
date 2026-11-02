@@ -33,7 +33,7 @@ object QuestionCacheMapping {
             userNote = null,
             canonicalSubjectId = dto.canonicalSubjectId,
             canonicalTopicId = dto.canonicalTopicId,
-            payloadJson = json.encodeToString(dto)
+            payloadJson = json.encodeToString(dto.copy(examComponentId=null))
         )
     }
 
