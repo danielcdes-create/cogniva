@@ -13,7 +13,7 @@ As notas renomeadas pelo usuário e o histórico de produção são preservados.
 - [x] TLS/distribuição, CI com gates, promoção/rollback e documentação.
 - [x] Suítes atuais, cenários adversariais e build Android verificados.
 
-Resultado atual: **1.4.3/build 10 implantado e conferido externamente**, run [41372861958](https://github.com/danielcdes-create/cogniva/actions/runs/41372861958), revisão `601cf2c56bf7412191f89d286fe6e3fadf43e770`. A [matriz de fechamento](FECHAMENTO-AUDITORIA.md) contém o resultado por achado e os limites de aceite; as correções posteriores de [Ajustes](CORRECAO-VINCULO-1.4.1.md) e [questões](CORRECAO-QUESTOES-1.4.2.md) registram as reproduções adicionais. As seções abaixo são o registro cronológico; afirmações de trabalho pendente descrevem aquela etapa, não o estado final.
+Resultado atual: **1.4.4/build 11 implantado e conferido externamente**, run [41472251563](https://github.com/danielcdes-create/cogniva/actions/runs/41472251563), revisão `dfbcd0fd22c50b89229274b0d73e0bd24b9b695a`. A [matriz de fechamento](FECHAMENTO-AUDITORIA.md) contém o resultado por achado e os limites de aceite; as correções posteriores de [Ajustes](CORRECAO-VINCULO-1.4.1.md) e [questões](CORRECAO-QUESTOES-1.4.2.md) registram as reproduções adicionais. As seções abaixo são o registro cronológico; afirmações de trabalho pendente descrevem aquela etapa, não o estado final.
 
 Não executar os antigos probes como testes de aceite: eles afirmam o comportamento defeituoso. Os cenários serão incorporados à suíte com os resultados corrigidos. Testes de banco usam apenas uma instância isolada/sintética.
 
@@ -91,3 +91,10 @@ Quatro referências históricas sem documento no Mongo foram reconciliadas com I
 Modelo Grok 4.3 escolhido pelo proprietário após autenticação válida e ausência de acesso ao Grok 4.7 (catálogo e consulta direta 404). Todos os recursos preservam seus prompts e consultam primeiro o campo Mongo; geração ausente usa somente xAI Responses, confirma gravação majority/journal e guarda contra edição concorrente de enunciado/alternativas/gabarito. Cache hit deixa de consumir cota diária de geração.
 
 26 testes Rust, 47 JVM, nove imagens/lint e seis instrumentados aprovados. Prova real: primeira solicitação gerou e gravou um mnemônico; segunda reutilizou conteúdo idêntico do Mongo. Só esse campo mudou entre os backups; todos os eventos históricos foram preservados. Configuração/chave privadas na VPS, com backup; nenhuma chave no Git/APK. Detalhes em [IA-XAI.md](IA-XAI.md).
+
+
+## Gestão de concursos e componentes — 1.4.4/build 11
+
+Disciplinas de todo o catálogo e personalizadas, etapa/grupo de conhecimentos, edição de nomes, pesos, quantidades e tópicos. Remoções deixam de ser reinseridas na grade pelo merge local/servidor; revisões anteriores já sincronizadas continuam preservadas. Em Ajustes, gestão própria com arquivados, restauração, exclusão confirmada e revisão de pedidos pendentes. Marcadores sincronizados impedem reaparecimento de concursos excluídos. Migração Room 3→4 sem descarte de dados.
+
+27 Rust, 48 JVM, lint/nove imagens e nove instrumentados aprovados. Promoção em 02/11/2026 às 12:52 (UTC−03:00), rollback ensaiado, download/hash/assinatura e prontidão conferidos. Backups mantiveram 618 questões, quatro cadastros de concursos e todos os 20 documentos/32 eventos históricos iguais. [Detalhes e limites](GESTAO-CONCURSOS-1.4.4.md).

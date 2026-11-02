@@ -1,0 +1,43 @@
+{
+  "tests": 9,
+  "failures": 0,
+  "errors": 0,
+  "cases": [
+    {
+      "class": "br.com.concursoprep.app.QuestionInsetCollisionTest",
+      "name": "topBarClearsCutoutAndCtaClearsNavigation"
+    },
+    {
+      "class": "br.com.concursoprep.app.DurableStorageTest",
+      "name": "versionTwoPreservesLegacyBytesAndQuarantinesAmbiguousDelivery"
+    },
+    {
+      "class": "br.com.concursoprep.app.DurableStorageTest",
+      "name": "sessionAndDeadlineSurviveReopenAndLateSavesCannotResurrectCompletion"
+    },
+    {
+      "class": "br.com.concursoprep.app.DurableStorageTest",
+      "name": "editedComponentsAndDeletionRemainAfterAcknowledgementAndInterruptedPull"
+    },
+    {
+      "class": "br.com.concursoprep.app.AccountLinkSettingsTest",
+      "name": "confirmsBesideTheCodeWithoutSavingPreferences"
+    },
+    {
+      "class": "br.com.concursoprep.app.AccountLinkSettingsTest",
+      "name": "largeFontKeepsAllFieldsAndConfirmationReachable"
+    },
+    {
+      "class": "br.com.concursoprep.app.QuestionPracticeTest",
+      "name": "shuffleOpensALegacyQuestionAndSavesAnAnswerDespiteArchivedPlannerContext"
+    },
+    {
+      "class": "br.com.concursoprep.app.ExamManagementTest",
+      "name": "createsACustomDisciplineWithStageAndGroupBeyondTheTrunkCatalog"
+    },
+    {
+      "class": "br.com.concursoprep.app.ExamManagementTest",
+      "name": "archiveRestoreAndConfirmedDeleteAreReachableInTheManagementArea"
+    }
+  ]
+}

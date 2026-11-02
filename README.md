@@ -4,12 +4,12 @@ Aplicativo Android de estudo para concursos, com cliente Kotlin/Compose e API Ru
 
 ## Estado da recuperação de 2026-11-01
 
-Versão em produção: **1.4.3 / Android build 10 / contrato de sincronização 2**, revisão `601cf2c56bf7412191f89d286fe6e3fadf43e770`, promovida em 01/11/2026 às 22:46 (UTC−03:00). O [pipeline completo](https://github.com/danielcdes-create/cogniva/actions/runs/41372861958) passou gates, assinatura, ensaio de rollback e promoção. HTTPS, prontidão com Mongo, download público e preservação do acervo/histórico foram conferidos externamente. A [correção de questões](docs/CORRECAO-QUESTOES-1.4.2.md) recupera o acesso ao acervo sem herdar concursos arquivados; a [correção de Ajustes](docs/CORRECAO-VINCULO-1.4.1.md) mantém confirmação junto ao código. Consulte [FECHAMENTO-AUDITORIA.md](docs/FECHAMENTO-AUDITORIA.md) para C01–C39 e os limites de aceite; [REMEDIACAO.md](docs/REMEDIACAO.md) preserva o registro da execução.
+Versão em produção: **1.4.4 / Android build 11 / contrato de sincronização 2**, revisão `dfbcd0fd22c50b89229274b0d73e0bd24b9b695a`, promovida em 02/11/2026 às 12:52 (UTC−03:00). O [pipeline completo](https://github.com/danielcdes-create/cogniva/actions/runs/41472251563) passou gates, assinatura, ensaio de rollback e promoção. HTTPS, prontidão com Mongo, download público e preservação do acervo/histórico foram conferidos externamente. A [gestão de concursos](docs/GESTAO-CONCURSOS-1.4.4.md) permite disciplinas de todo o catálogo ou personalizadas, etapa/grupo, edição e exclusão de componentes e gestão de arquivados numa área própria de Ajustes. A [correção de questões](docs/CORRECAO-QUESTOES-1.4.2.md) recupera o acesso ao acervo sem herdar concursos arquivados; a [correção de Ajustes](docs/CORRECAO-VINCULO-1.4.1.md) mantém confirmação junto ao código. Consulte [FECHAMENTO-AUDITORIA.md](docs/FECHAMENTO-AUDITORIA.md) para C01–C39 e os limites de aceite; [REMEDIACAO.md](docs/REMEDIACAO.md) preserva o registro da execução.
 
 - API: `https://198.199.65.103/api/v1/`.
 - Metadados públicos medidos do APK: `GET /api/app/latest-apk`.
 - APK: `GET /api/v1/apk/download`. O arquivo servido só muda durante promoção validada.
-- [Baixar APK 1.4.3/build 10](https://198.199.65.103/api/v1/apk/download): 12.725.237 bytes; SHA-256 `83441ccdf32eff2bf5dcb34bf24d9948deacab3f904ed1b5aec64b6fb26af89f`.
+- [Baixar APK 1.4.4/build 11](https://198.199.65.103/api/v1/apk/download): 12.741.621 bytes; SHA-256 `7c96fc6e3c79d3bb4f9b353e00337ed3e97aca3d0b25f92f2be7d4a6d8686f25`.
 - Saúde do processo: `/api/v1/health`; prontidão com MongoDB e revisão: `/api/v1/ready` no backend novo.
 - Não se afirma instalação nem validação física no S23 Ultra sem evidência ADB.
 

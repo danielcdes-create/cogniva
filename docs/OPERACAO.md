@@ -32,10 +32,10 @@ Durante a troca e o ensaio de rollback, Nginx bloqueia rotas de dados com 503 e 
 
 O pipeline provoca uma falha de smoke controlada, confirma imagem, ponteiro, Compose e saúde anteriores, e depois promove efetivamente. Falhas reais não contam como sucesso do ensaio. Entre protocolos incompatíveis, rollback mantém as rotas de dados fechadas até nova promoção válida; as filas ficam preservadas.
 
-Release operacional atual de 01/11/2026: **1.4.3/build 10**, `601cf2c56bf7412191f89d286fe6e3fadf43e770`, run `41372861958`, todos os jobs aprovados. Aceite repetível:
+Release operacional atual de 02/11/2026: **1.4.4/build 11**, `dfbcd0fd22c50b89229274b0d73e0bd24b9b695a`, run `41472251563`, todos os jobs aprovados. Aceite repetível:
 
 ```powershell
-python -X utf8 scripts/verify-production-release.py 601cf2c56bf7412191f89d286fe6e3fadf43e770 --version-name 1.4.3 --version-code 10 --xai-model grok-4.3 --baseline docs/remediation-validation/1.4.3/before/production-release.json --evidence-dir docs/remediation-validation/1.4.3
+python -X utf8 scripts/verify-production-release.py dfbcd0fd22c50b89229274b0d73e0bd24b9b695a --version-name 1.4.4 --version-code 11 --xai-model grok-4.3 --baseline docs/remediation-validation/1.4.4/before/production-release.json --evidence-dir docs/remediation-validation/1.4.4
 ```
 
 Faz somente leituras, baixa o APK para `%LOCALAPPDATA%/Cogniva/releases` e grava evidência sanitizada em `docs/remediation-validation/1.4.3/production-release.json`. As evidências das releases anteriores permanecem preservadas.
@@ -59,3 +59,8 @@ A captura encontrou 618 questões, 612 com gabarito interpretável, zero víncul
 Não remapear por substring ou apenas pelo nome de disciplina. Ausência continua ausência até revisão humana. Templates configuráveis não equivalem a documentos oficiais.
 
 A prova `scripts/verify-xai-cache.py ID` faz **uma geração real paga**, somente se encontrar mnemônico ausente em questão válida; em seguida confirma cache e persistência. Usar apenas com autorização de geração, nunca apagar conteúdo para forçar teste. Evidência existente em `remediation-validation/1.4.3/xai-live-cache.json` dispensa repetir a chamada em verificações rotineiras. [Contratos do cache xAI](IA-XAI.md).
+
+
+## Gestão de concursos
+
+A partir de 1.4.4/build 11, Ajustes → Gerenciar concursos e registros reúne edição, arquivamento, restauração, exclusão e registros preservados. `EXCLUIDO` é um marcador por proprietário, sincronizado e oculto da prática; não executar `deleteMany` para reproduzir a ação. Remover componentes altera a grade atual sem reintroduzi-los no pull; `revision_history` guarda revisões anteriores já sincronizadas. A migração Room 3→4 adiciona somente a etapa da disciplina. Provas e preservação: [GESTAO-CONCURSOS-1.4.4.md](GESTAO-CONCURSOS-1.4.4.md).
