@@ -50,7 +50,7 @@ pub fn status(value: &ExamLifecycleStatus) -> ContestStatus {
             ContestStatus::SolicitadoAutorizado
         }
         ExamLifecycleStatus::ProvaRealizada => ContestStatus::EmAndamento,
-        ExamLifecycleStatus::Arquivado => ContestStatus::Encerrado,
+        ExamLifecycleStatus::Arquivado | ExamLifecycleStatus::Excluido => ContestStatus::Encerrado,
         _ => ContestStatus::Previsto,
     }
 }
@@ -60,7 +60,7 @@ pub fn topic(
     value: &ExamTopicItem,
     index: usize,
 ) -> SyllabusTopicDocument {
-    SyllabusTopicDocument{id:value.local_topic_id.clone(),contest_id:exam.id.clone(),block_name:format!("{:?}",subject.category),discipline:subject.display_name.clone(),title:value.display_title.clone(),order:index as i32,common_trunk_id:Some(value.canonical_topic_id.clone()),
+    SyllabusTopicDocument{id:value.local_topic_id.clone(),contest_id:exam.id.clone(),block_name:subject_group(subject),discipline:subject.display_name.clone(),title:value.display_title.clone(),order:index as i32,common_trunk_id:Some(value.canonical_topic_id.clone()),
         estimation:EstimationMetadata{is_estimated:value.diff_status==CanonicalTopicStatus::PreEditalBase,confidence_badge:ConfidenceBadge::Low,rationale:"Modelo configurável ou publicação informada pelo usuário. Confira a fonte do edital.".into(),reference_exams:vec![]},
         diff_status:match value.diff_status{CanonicalTopicStatus::OficialNovo=>TopicDiffStatus::NewInEdital,CanonicalTopicStatus::Arquivado=>TopicDiffStatus::RemovedArchived,_=>TopicDiffStatus::Confirmed}}
 }
@@ -72,6 +72,7 @@ pub async fn list_contests(
     Ok(Json(
         exams
             .iter()
+            .filter(|exam| exam.status != ExamLifecycleStatus::Excluido)
             .map(|exam| ContestDocument {
                 id: exam.id.clone(),
                 code: exam.id.clone(),
@@ -163,7 +164,7 @@ pub async fn get_contest_syllabus(
                     return None;
                 }
                 Some(DisciplineSyllabusGroupDto {
-                    block_name: format!("{:?}", subject.category),
+                    block_name: subject_group(subject),
                     discipline: subject.display_name.clone(),
                     discipline_mastery_pct: nodes.iter().map(|n| n.user_mastery_pct).sum::<f64>()
                         / nodes.len() as f64,
@@ -201,4 +202,10 @@ pub async fn get_contest_edital_diff(
         new_topics,
         removed_topics,
     }))
+}
+
+fn subject_group(subject: &ExamSubjectConfig) -> String {
+    use crate::models::exam_hierarchy::SubjectCategory;
+    let category=match subject.category { SubjectCategory::ConhecimentosGerais=>"Conhecimentos gerais", SubjectCategory::ConhecimentosEspecificos=>"Conhecimentos específicos", SubjectCategory::DiscursivaEstudoDeCaso=>"Discursiva / estudo de caso", SubjectCategory::Outros=>"Outros" };
+    if subject.stage.trim().is_empty() { category.into() } else { format!("{} · {}",subject.stage,category) }
 }

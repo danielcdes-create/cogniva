@@ -23,7 +23,7 @@ import java.util.UUID
 class DurableStorageTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
     private fun open(name: String) = Room.databaseBuilder(context,AppDatabase::class.java,name)
-        .addMigrations(ExamMigrations.MIGRATION_1_2,ExamMigrations.MIGRATION_2_3).build()
+        .addMigrations(ExamMigrations.MIGRATION_1_2,ExamMigrations.MIGRATION_2_3,ExamMigrations.MIGRATION_3_4).build()
 
     @Test fun versionTwoPreservesLegacyBytesAndQuarantinesAmbiguousDelivery() = runBlocking {
         val name="cogniva-test-migration-${UUID.randomUUID()}.db"
@@ -41,8 +41,11 @@ class DurableStorageTest {
             val legacy=helper.writableDatabase
             legacy.execSQL("INSERT INTO cached_questions VALUES ('q','Questão com acentuação ç','MULTIPLE_CHOICE','[\"A\",\"B\"]','[1]','Finanças Públicas','Fixture',2026,'Médio','Explicação',1,0,'nota preservada',NULL,NULL)")
             legacy.execSQL("INSERT INTO pending_attempts VALUES (1,'q',1,'B',1,42,3,'old-session','STANDARD',NULL,'CPNU','nota preservada',1793480400000,NULL,NULL)")
+            legacy.execSQL("INSERT INTO exam_subjects VALUES ('fixture','subject','canonical','Disciplina preservada','CONHECIMENTOS_GERAIS',1.0,10,0,'CORE')")
             helper.close()
             var db=open(name)
+            assertEquals("",db.examDao().subjectsFor("fixture").single().stage)
+            assertEquals("Disciplina preservada",db.examDao().subjectsFor("fixture").single().displayName)
             val question=db.concursoDao().findQuestionById("q")!!
             val attempt=db.concursoDao().getAllPendingAttempts().single()
             assertEquals("Questão com acentuação ç",question.question)
@@ -84,4 +87,38 @@ class DurableStorageTest {
             db.close()
         } finally { context.deleteDatabase(name) }
     }
+    @Test fun editedComponentsAndDeletionRemainAfterAcknowledgementAndInterruptedPull()=runBlocking {
+        val name="cogniva-test-exam-${UUID.randomUUID()}.db"
+        val api=java.lang.reflect.Proxy.newProxyInstance(br.com.concursoprep.app.data.remote.ConcursoApiService::class.java.classLoader,arrayOf(br.com.concursoprep.app.data.remote.ConcursoApiService::class.java)) { _,method,args ->
+            if(method.name=="updateExam") (args!![1] as br.com.concursoprep.app.data.remote.ExamBlueprintPayload).let { it.copy(revision=it.revision+1) }
+            else throw java.io.IOException("Synthetic offline API")
+        } as br.com.concursoprep.app.data.remote.ConcursoApiService
+        fun repository(db:AppDatabase)=br.com.concursoprep.app.data.repository.ConcursoRepository(api,db.concursoDao(),db.examDao(),durable=db.durableDao(),database=db,ownerUserId=123)
+        try {
+            var db=open(name)
+            val base=br.com.concursoprep.app.domain.exam.ExamCatalog.systemExams().first().copy(revision=1)
+            val first=base.subjects.first().copy(stage="2ª etapa",category="CONHECIMENTOS_GERAIS",topics=emptyList())
+            var repo=repository(db)
+            repo.saveExamLocal(base)
+            repo.editExamOffline(base.copy(subjects=listOf(first)))
+            assertTrue(runCatching { repo.syncPendingAttempts(123) }.isFailure)
+            assertEquals("SYNCED",db.examDao().listExams().single().syncStatus)
+            db.close();db=open(name);repo=repository(db)
+            val restored=repo.loadStoredExams().single()
+            assertEquals(2L,restored.revision)
+            assertEquals(1,restored.subjects.size)
+            assertEquals("2ª etapa",restored.subjects.single().stage)
+            assertEquals("CONHECIMENTOS_GERAIS",restored.subjects.single().category)
+            assertTrue(restored.subjects.single().topics.isEmpty())
+            repo.editExamOffline(restored.copy(lifecycleStatus="EXCLUIDO",isActiveInLadder=false))
+            assertTrue(runCatching { repo.syncPendingAttempts(123) }.isFailure)
+            assertEquals("SYNCED",db.examDao().listExams().single().syncStatus)
+            db.close();db=open(name);repo=repository(db)
+            assertTrue(repo.loadStoredExams().isEmpty())
+            assertEquals("EXCLUIDO",db.examDao().listExams().single().lifecycleStatus)
+            assertEquals("SYNCED",db.examDao().listExams().single().syncStatus)
+            db.close()
+        } finally { context.deleteDatabase(name) }
+    }
+
 }

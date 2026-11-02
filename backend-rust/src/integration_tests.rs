@@ -34,6 +34,33 @@ async fn xai_generates_missing_resource_once_and_persists_for_reuse() {
     server.abort();assert!(name.starts_with("cogniva_test_"));db.drop().await.unwrap();
 }
 
+#[tokio::test]
+#[ignore = "Requires dedicated loopback Mongo 27048"]
+async fn editable_exam_components_and_deletion_survive_sync_without_touching_history() {
+    use models::exam_hierarchy::*;
+    let uri=std::env::var("COGNIVA_TEST_MONGODB_URI").unwrap();assert!(uri.starts_with("mongodb://127.0.0.1:27048/"));
+    let client=Client::with_uri_str(&uri).await.unwrap();let name=format!("cogniva_test_{}",uuid::Uuid::new_v4().simple());let db=client.database(&name);
+    let cfg=config(&uri);let secret=cfg.jwt_secret.clone();let state=Arc::new(AppState::new(db.clone(),cfg));let app=build_router(state.clone());
+    for owner in [123_i64,456_i64]{db.collection::<Document>("usuarios").insert_one(doc!{"user_id":owner,"active_contest_ids":[]}).await.unwrap();}
+    db.collection::<Document>("userActivityLog").insert_one(doc!{"user_id":123_i64,"marker":"history unchanged"}).await.unwrap();
+    let mut exam=services::exam_engine::system_exam_blueprints().remove(0);exam.id=uuid::Uuid::new_v4().to_string();
+    let custom=format!("custom-{}",uuid::Uuid::new_v4());
+    exam.subjects.push(ExamSubjectConfig{stage:"2ª etapa · Prova técnica".into(),local_subject_id:custom.clone(),canonical_subject_id:custom.clone(),display_name:"Engenharia de Túneis".into(),category:SubjectCategory::ConhecimentosGerais,weight:2.75,question_count:Some(7),relevance_tier:RelevanceTier::Specific,topics:vec![ExamTopicItem{local_topic_id:"local-topic".into(),canonical_topic_id:format!("custom-{}",uuid::Uuid::new_v4()),canonical_subject_id:custom.clone(),display_title:"Escavação".into(),diff_status:CanonicalTopicStatus::PreEditalBase}]});
+    let (status,created)=request(&app,&secret,Some(123),"POST","/api/v1/exams",serde_json::to_value(&exam).unwrap()).await;assert_eq!(status,StatusCode::OK,"{created}");
+    let path=format!("/api/v1/exams/{}",exam.id);let mut edit:ExamBlueprint=serde_json::from_value(created).unwrap();
+    edit.subjects.retain(|s| s.canonical_subject_id==custom);edit.subjects[0].topics.clear();edit.subjects[0].display_name="Túneis revisados".into();
+    let command=serde_json::to_value(&edit).unwrap();let (status,updated)=request(&app,&secret,Some(123),"PUT",&path,command.clone()).await;assert_eq!(status,StatusCode::OK,"{updated}");
+    assert_eq!(updated["subjects"].as_array().unwrap().len(),1);assert_eq!(updated["subjects"][0]["stage"],"2ª etapa · Prova técnica");assert!(updated["subjects"][0]["topics"].as_array().unwrap().is_empty());
+    assert_eq!(request(&app,&secret,Some(123),"PUT",&path,command).await.1,updated);
+    let mut removed:ExamBlueprint=serde_json::from_value(updated).unwrap();removed.status=ExamLifecycleStatus::Excluido;removed.is_active_in_ladder=false;removed.subjects.clear();
+    let (status,deleted)=request(&app,&secret,Some(123),"PUT",&path,serde_json::to_value(removed).unwrap()).await;assert_eq!(status,StatusCode::OK,"{deleted}");
+    let listed=services::exam_store::list(&state,123).await.unwrap();let tombstone=listed.iter().find(|e| e.id==exam.id).unwrap();assert_eq!(tombstone.status,ExamLifecycleStatus::Excluido);assert!(!tombstone.is_active_in_ladder);assert!(tombstone.subjects.is_empty());
+    assert!(!services::exam_store::list(&state,456).await.unwrap().iter().any(|e| e.id==exam.id));
+    let raw=db.collection::<Document>("user_exams").find_one(doc!{"exam_id":&exam.id}).await.unwrap().unwrap();assert_eq!(raw.get_array("revision_history").unwrap().len(),2);
+    assert_eq!(db.collection::<Document>("userActivityLog").find_one(doc!{"user_id":123_i64}).await.unwrap().unwrap().get_str("marker").unwrap(),"history unchanged");
+    assert!(name.starts_with("cogniva_test_"));db.drop().await.unwrap();
+}
+
 fn config(uri: &str) -> AppConfig {
     AppConfig {
         port: 0,

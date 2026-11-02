@@ -87,9 +87,9 @@ class ConcursoRepository(
             }
         }
     }
-    suspend fun loadStoredExams(): List<StoredExam> {
+    suspend fun loadStoredExams(includeDeleted: Boolean = false): List<StoredExam> {
         ensureExamSeed()
-        return examDao.listExams().map { ExamLocalMapping.assemble(it,examDao.subjectsFor(it.examId),examDao.topicsFor(it.examId)) }
+        return examDao.listExams().map { ExamLocalMapping.assemble(it,examDao.subjectsFor(it.examId),examDao.topicsFor(it.examId)) }.filter { includeDeleted || it.lifecycleStatus!="EXCLUIDO" }
     }
     private suspend fun saveExamAggregate(exam: StoredExam) = transaction {
         examDao.upsertExam(ExamLocalMapping.toEntity(exam))
@@ -101,15 +101,7 @@ class ConcursoRepository(
     suspend fun editExamOffline(exam: StoredExam) {
         mutationMutex.withLock {
             val previous=examDao.listExams().find { it.examId==exam.examId }?.let { ExamLocalMapping.assemble(it,examDao.subjectsFor(it.examId),examDao.topicsFor(it.examId)) }
-            val subjects=exam.subjects.toMutableList()
-            previous?.subjects?.forEach { old ->
-                val index=subjects.indexOfFirst { it.canonicalSubjectId==old.canonicalSubjectId }
-                if(index>=0){
-                    val current=subjects[index]
-                    subjects[index]=current.copy(topics=current.topics+old.topics.filter { t->current.topics.none { it.canonicalTopicId==t.canonicalTopicId } }.map { it.copy(diffStatus="ARQUIVADO") })
-                }else subjects+=old.copy(topics=old.topics.map { it.copy(diffStatus="ARQUIVADO") })
-            }
-            saveExamAggregate(exam.copy(subjects=subjects,syncStatus=if(exam.revision==0L && exam.syncStatus=="PENDING_CREATE") "PENDING_CREATE" else "PENDING_UPDATE",syncError=null))
+            saveExamAggregate(exam.copy(syncStatus=if(exam.revision==0L && exam.syncStatus=="PENDING_CREATE") "PENDING_CREATE" else "PENDING_UPDATE",syncError=null))
         }
     }
     suspend fun setTrunkFocus(slug: String, focused: Boolean) { ensureExamSeed();examDao.setTrunkFocus(slug,focused) }
@@ -136,19 +128,19 @@ class ConcursoRepository(
             val nodes=visible.mapIndexed { index,topic ->
                 val related=rows.filter { it.canonicalTopicId==topic.canonicalTopicId }
                 val value=(mastery[topic.canonicalTopicId]?:0.0)*100
-                SyllabusTopicNodeDto(SyllabusTopicDto(topic.localTopicId,exam.examId,subject.category,subject.displayName,topic.displayTitle,index,
+                SyllabusTopicNodeDto(SyllabusTopicDto(topic.localTopicId,exam.examId,subject.groupLabel(),subject.displayName,topic.displayTitle,index,
                     estimation=EstimationMetadata(topic.diffStatus=="PRE_EDITAL_BASE",ConfidenceBadge.LOW,"Modelo/manual. Valide o conteúdo no edital e registre a fonte.",emptyList()),
                     diffStatus=when(topic.diffStatus){"OFICIAL_NOVO"->TopicDiffStatus.NEW_IN_EDITAL;"ARQUIVADO"->TopicDiffStatus.REMOVED_ARCHIVED;else->TopicDiffStatus.CONFIRMED}),value,related.sumOf { it.attempts },
                     if(related.isEmpty()) "NAO_INICIADO" else if(related.all { it.isMastered }) "DOMINADO" else if(related.any { it.practiceAvailable!=false&&(it.reviewRequired||Instant.parse(it.nextReviewAt)<=Instant.now()) }) "REVISAO" else "QUESTOES")
             }
-            DisciplineSyllabusGroupDto(subject.category,subject.displayName,nodes.map { it.userMasteryPct }.average(),nodes)
+            DisciplineSyllabusGroupDto(subject.groupLabel(),subject.displayName,nodes.map { it.userMasteryPct }.average(),nodes)
         }
     }
     suspend fun getContestDiff(contestId: String): ContestDiffScreenDto? {
         val exam=loadStoredExams().firstOrNull { it.examId==contestId } ?: return null
         if(exam.newTopicsCount+exam.archivedTopicsCount+exam.confirmedTopicsCount==0) return null
         fun nodes(status:String)=exam.subjects.flatMap { subject ->subject.topics.filter { it.diffStatus==status }.mapIndexed { index,topic ->
-            SyllabusTopicDto(topic.localTopicId,exam.examId,subject.category,subject.displayName,topic.displayTitle,index,estimation=EstimationMetadata(false,ConfidenceBadge.LOW,"Publicação cadastrada pelo usuário; confira a fonte do edital."),diffStatus=when(status){"ARQUIVADO"->TopicDiffStatus.REMOVED_ARCHIVED;"OFICIAL_NOVO"->TopicDiffStatus.NEW_IN_EDITAL;else->TopicDiffStatus.CONFIRMED})
+            SyllabusTopicDto(topic.localTopicId,exam.examId,subject.groupLabel(),subject.displayName,topic.displayTitle,index,estimation=EstimationMetadata(false,ConfidenceBadge.LOW,"Publicação cadastrada pelo usuário; confira a fonte do edital."),diffStatus=when(status){"ARQUIVADO"->TopicDiffStatus.REMOVED_ARCHIVED;"OFICIAL_NOVO"->TopicDiffStatus.NEW_IN_EDITAL;else->TopicDiffStatus.CONFIRMED})
         } }
         return ContestDiffScreenDto(exam.examId,exam.shortName,exam.examBoards.joinToString(),nodes("OFICIAL_CONFIRMADO"),nodes("OFICIAL_NOVO"),nodes("ARQUIVADO"))
     }
@@ -368,7 +360,7 @@ class ConcursoRepository(
         val attempts=dao.getAllPendingAttempts().filter{it.ownerUserId==ownerUserId}.map { item->
             PendingReviewItem(item.attemptId,dao.findQuestionById(item.questionId)?.question?:"Questão ${item.questionId}","Resposta: ${item.chosenText} · ${Instant.ofEpochMilli(item.createdAtEpochMs)}",item.syncError?:"Aguardando confirmação do servidor")
         }
-        val exams=loadStoredExams().filter { it.syncStatus!="SYNCED" }.map { PendingReviewItem(it.examId,it.title,"Concurso · revisão ${it.revision}",it.syncError?:"Edição aguardando confirmação") }
+        val exams=loadStoredExams(includeDeleted=true).filter { it.syncStatus!="SYNCED" }.map { PendingReviewItem(it.examId,it.title,"Concurso · revisão ${it.revision}",it.syncError?:"Edição aguardando confirmação") }
         val backups=durable?.preservedExamEdits().orEmpty().map { item->val exam=json.decodeFromString<StoredExam>(item.value);PendingReviewItem(item.key,exam.title,"Edição preservada antes de usar a versão do servidor","Disponível na exportação; não será reenviada automaticamente") }
         return attempts + exams + backups + durable?.reports(ownerUserId).orEmpty().map { item->PendingReviewItem(item.eventId,"Reporte de questão",item.category,metadata("report_error:${item.eventId}")?:"Aguardando confirmação do servidor") }
     }
@@ -387,7 +379,7 @@ class ConcursoRepository(
     suspend fun exportPending(directory:File):File=withContext(Dispatchers.IO){
         directory.mkdirs()
         val attempts=dao.getAllPendingAttempts().filter{it.ownerUserId==ownerUserId}
-        val exams=loadStoredExams().filter { it.syncStatus!="SYNCED" }
+        val exams=loadStoredExams(includeDeleted=true).filter { it.syncStatus!="SYNCED" }
         val document=buildJsonObject {
             put("schema_version",2);put("owner_user_id",ownerUserId)
             put("exams",json.encodeToJsonElement(exams))
@@ -430,7 +422,14 @@ class ConcursoRepository(
 
 fun StoredExam.toPayload():ExamBlueprintPayload=ExamBlueprintPayload(id=examId,revision=revision,wrongAnswerPenalty=wrongAnswerPenalty,title=title,shortName=shortName,institution=institution,role=role,trunkSlug=trunkSlug,status=lifecycleStatus,examBoards=examBoards,
     targetDate=when(dateType){"EXACT_DATE"->buildJsonObject{put("type","EXACT_DATE");put("iso_date",exactDateIso.orEmpty())};"ESTIMATED_WINDOW"->buildJsonObject{put("type","ESTIMATED_WINDOW");put("label",estimatedWindowLabel.orEmpty());put("estimated_sort_date",estimatedSortDateIso)};else->buildJsonObject{put("type","UNDEFINED")}},
-    historicalCutoffScore=historicalCutoffScore,isActiveInLadder=isActiveInLadder,ladderPriority=ladderPriority,syncStatus=syncStatus,subjects=subjects.map { s->ExamSubjectPayload(s.localSubjectId,s.canonicalSubjectId,s.displayName,s.category,s.weight,s.questionCount,s.relevanceTier,s.topics.map { ExamTopicPayload(it.localTopicId,it.canonicalTopicId,it.canonicalSubjectId,it.displayTitle,it.diffStatus) }) })
+    historicalCutoffScore=historicalCutoffScore,isActiveInLadder=isActiveInLadder,ladderPriority=ladderPriority,syncStatus=syncStatus,subjects=subjects.map { s->ExamSubjectPayload(s.localSubjectId,s.canonicalSubjectId,s.displayName,s.category,s.weight,s.questionCount,s.relevanceTier,s.topics.map { ExamTopicPayload(it.localTopicId,it.canonicalTopicId,it.canonicalSubjectId,it.displayTitle,it.diffStatus) },s.stage) })
 fun ExamBlueprintPayload.toStored():StoredExam=StoredExam(examId=id,title=title,shortName=shortName,institution=institution,role=role,trunkSlug=trunkSlug,lifecycleStatus=status,examBoards=examBoards,dateType=targetDate["type"]?.jsonPrimitive?.content?:"UNDEFINED",exactDateIso=targetDate["iso_date"]?.jsonPrimitive?.contentOrNull,estimatedWindowLabel=targetDate["label"]?.jsonPrimitive?.contentOrNull,estimatedSortDateIso=targetDate["estimated_sort_date"]?.jsonPrimitive?.contentOrNull?:targetDate["iso_date"]?.jsonPrimitive?.contentOrNull.orEmpty(),historicalCutoffScore=historicalCutoffScore,isActiveInLadder=isActiveInLadder,ladderPriority=ladderPriority,syncStatus="SYNCED",revision=revision,wrongAnswerPenalty=wrongAnswerPenalty,
     confirmedTopicsCount=subjects.sumOf { it.topics.count { t->t.diffStatus=="OFICIAL_CONFIRMADO" } },newTopicsCount=subjects.sumOf { it.topics.count { t->t.diffStatus=="OFICIAL_NOVO" } },archivedTopicsCount=subjects.sumOf { it.topics.count { t->t.diffStatus=="ARQUIVADO" } },
-    subjects=subjects.map { s->StoredSubject(s.localSubjectId,s.canonicalSubjectId,s.displayName,s.category,s.weight,s.questionCount,s.relevanceTier,s.topics.map { StoredTopic(it.localTopicId,it.canonicalTopicId,it.canonicalSubjectId,it.displayTitle,it.diffStatus) }) })
+    subjects=subjects.map { s->StoredSubject(s.localSubjectId,s.canonicalSubjectId,s.displayName,s.category,s.weight,s.questionCount,s.relevanceTier,s.topics.map { StoredTopic(it.localTopicId,it.canonicalTopicId,it.canonicalSubjectId,it.displayTitle,it.diffStatus) },s.stage) })
+
+private fun StoredSubject.groupLabel():String = listOf(stage.takeIf { it.isNotBlank() }, when(category) {
+    "CONHECIMENTOS_GERAIS" -> "Conhecimentos gerais"
+    "CONHECIMENTOS_ESPECIFICOS" -> "Conhecimentos específicos"
+    "DISCURSIVA_ESTUDO_DE_CASO" -> "Discursiva / estudo de caso"
+    else -> "Outros"
+}).filterNotNull().joinToString(" · ")

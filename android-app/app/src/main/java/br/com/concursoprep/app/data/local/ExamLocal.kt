@@ -65,7 +65,8 @@ data class ExamSubjectEntity(
     val weight: Float,
     val questionCount: Int?,
     val sortOrder: Int,
-    val relevanceTier: String
+    val relevanceTier: String,
+    @androidx.room.ColumnInfo(defaultValue = "''") val stage: String = ""
 )
 
 @Entity(
@@ -180,6 +181,7 @@ object ExamLocalMapping {
             canonicalSubjectId = subject.canonicalSubjectId,
             displayName = subject.displayName,
             category = subject.category,
+            stage = subject.stage,
             weight = subject.weight.toFloat(),
             questionCount = subject.questionCount,
             sortOrder = index,
@@ -236,6 +238,7 @@ object ExamLocalMapping {
                     canonicalSubjectId = subject.canonicalSubjectId,
                     displayName = subject.displayName,
                     category = subject.category,
+                    stage = subject.stage,
                     weight = subject.weight.toDouble(),
                     questionCount = subject.questionCount,
                     relevanceTier = subject.relevanceTier,
@@ -255,6 +258,11 @@ object ExamLocalMapping {
 }
 
 object ExamMigrations {
+    val MIGRATION_3_4 = object : Migration(3,4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE exam_subjects ADD COLUMN stage TEXT NOT NULL DEFAULT ''")
+        }
+    }
     val MIGRATION_2_3 = object : Migration(2,3) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE cached_questions ADD COLUMN payloadJson TEXT")

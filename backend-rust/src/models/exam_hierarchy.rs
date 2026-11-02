@@ -54,6 +54,7 @@ pub enum ExamLifecycleStatus {
     EditalPublicado,
     ProvaRealizada,
     Arquivado,
+    Excluido,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -75,6 +76,7 @@ pub enum SubjectCategory {
     ConhecimentosGerais,
     ConhecimentosEspecificos,
     DiscursivaEstudoDeCaso,
+    Outros,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -97,6 +99,8 @@ pub struct ExamTopicItem {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ExamSubjectConfig {
+    #[serde(default)]
+    pub stage: String,
     pub local_subject_id: String,
     pub canonical_subject_id: String,
     pub display_name: String,

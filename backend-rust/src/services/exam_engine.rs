@@ -249,7 +249,7 @@ pub fn select_common_trunk_for_focuses(
         .collect();
     let pool: Vec<&LeverageExam> = exams
         .iter()
-        .filter(|exam| exam.is_active_in_ladder && exam.status != ExamLifecycleStatus::Arquivado)
+        .filter(|exam| exam.is_active_in_ladder && !matches!(exam.status, ExamLifecycleStatus::Arquivado | ExamLifecycleStatus::Excluido))
         .filter(|exam| slugs.is_empty() || slugs.contains(exam.trunk_slug.as_str()))
         .collect();
 
@@ -315,7 +315,7 @@ pub fn readiness_for_blueprints(
 ) -> f64 {
     let primary = exams
         .iter()
-        .filter(|exam| exam.is_active_in_ladder && exam.status != ExamLifecycleStatus::Arquivado)
+        .filter(|exam| exam.is_active_in_ladder && !matches!(exam.status, ExamLifecycleStatus::Arquivado | ExamLifecycleStatus::Excluido))
         .min_by_key(|exam| exam.ladder_priority);
     let Some(exam) = primary else {
         return 0.0;
@@ -712,6 +712,7 @@ pub fn apply_publish(
             .map(|s| s.name)
             .unwrap_or_else(|| subject_id.clone());
         exam.subjects.push(ExamSubjectConfig {
+            stage: String::new(),
             local_subject_id: subject_id.clone(),
             canonical_subject_id: subject_id,
             display_name,
@@ -1200,6 +1201,7 @@ mod tests {
         exam.ladder_priority = 1;
         exam.is_active_in_ladder = true;
         exam.subjects = vec![ExamSubjectConfig {
+            stage: String::new(),
             local_subject_id: "fin".to_string(),
             canonical_subject_id: "FIN_PUB".to_string(),
             display_name: "Finanças Públicas".to_string(),

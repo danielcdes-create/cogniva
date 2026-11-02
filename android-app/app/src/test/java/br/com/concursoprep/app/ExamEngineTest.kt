@@ -1,5 +1,7 @@
 package br.com.concursoprep.app
 
+import br.com.concursoprep.app.data.repository.toPayload
+import br.com.concursoprep.app.data.repository.toStored
 import br.com.concursoprep.app.data.local.QuestionCacheMapping
 import br.com.concursoprep.app.domain.exam.CachedQuestionRef
 import br.com.concursoprep.app.domain.exam.CanonicalMasteryRecord
@@ -411,4 +413,14 @@ class ExamEngineTest {
         assertTrue(ids.contains("q-pen") || ids.contains("q-trib"))
         assertFalse(ids.contains("out-of-grade"))
     }
+    @org.junit.Test fun stageGroupAndCustomComponentsSurviveLocalAndWireMappings() {
+        val id="custom-${java.util.UUID.randomUUID()}"
+        val subject=StoredSubject(id,id,"Engenharia de Túneis","CONHECIMENTOS_GERAIS",2.75,7,"SPECIFIC",emptyList(),"2ª etapa")
+        val exam=br.com.concursoprep.app.domain.exam.ExamCatalog.systemExams().first().copy(subjects=listOf(subject))
+        val restored=br.com.concursoprep.app.data.local.ExamLocalMapping.assemble(br.com.concursoprep.app.data.local.ExamLocalMapping.toEntity(exam),br.com.concursoprep.app.data.local.ExamLocalMapping.subjectsOf(exam),emptyList())
+        assertEquals(subject,restored.subjects.single())
+        assertEquals(subject,exam.toPayload().toStored().subjects.single())
+        assertTrue(br.com.concursoprep.app.domain.exam.ExamCatalog.allSubjects().size > br.com.concursoprep.app.domain.exam.ExamCatalog.subjectsForTrunk("engenharia").size)
+    }
+
 }

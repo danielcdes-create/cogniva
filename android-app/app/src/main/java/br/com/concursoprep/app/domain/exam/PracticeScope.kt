@@ -10,7 +10,7 @@ object PracticeScope {
         else -> requested?.takeIf { it.isNotBlank() && it != "Geral" }
     }
     fun selected(exams: List<StoredExam>, current: String): String =
-        exams.firstOrNull { it.examId == current && it.lifecycleStatus != "ARQUIVADO" }?.examId
-            ?: exams.firstOrNull { it.isActiveInLadder && it.lifecycleStatus != "ARQUIVADO" }?.examId
-            ?: exams.firstOrNull { it.lifecycleStatus != "ARQUIVADO" }?.examId.orEmpty()
+        exams.firstOrNull { it.examId == current && it.lifecycleStatus !in setOf("ARQUIVADO","EXCLUIDO") }?.examId
+            ?: exams.firstOrNull { it.isActiveInLadder && it.lifecycleStatus !in setOf("ARQUIVADO","EXCLUIDO") }?.examId
+            ?: exams.firstOrNull { it.lifecycleStatus !in setOf("ARQUIVADO","EXCLUIDO") }?.examId.orEmpty()
 }

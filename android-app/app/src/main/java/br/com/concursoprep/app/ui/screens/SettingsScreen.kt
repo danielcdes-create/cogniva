@@ -96,15 +96,20 @@ fun SettingsScreen(
     onClearOfflineCache: () -> Unit,
     onReopenOnboarding: () -> Unit,
     ladderExams: List<StoredExam> = emptyList(),
+    pendingExamDeletions: List<StoredExam> = emptyList(),
     focusedTrunkSlugs: Set<String> = emptySet(),
     onToggleTrunkFocus: (String) -> Unit = {},
     onEditExam: (StoredExam) -> Unit = {},
     onArchiveExam: (StoredExam) -> Unit = {},
+    onRestoreExam: (StoredExam) -> Unit = {},
+    onDeleteExam: (StoredExam) -> Unit = {},
+    onCreateExam: () -> Unit = {},
     onUseServerExam: (StoredExam) -> Unit = {},
     onOpenPending: () -> Unit = {},
     accountLinkState: AccountLinkUiState = AccountLinkUiState(),
     onConfirmAccountLink: (Long, String?, String) -> Unit = { _, _, _ -> }
 ) {
+    var managementOpen by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     val ext = LocalExtendedColors.current
 
     var displayName by remember(userProfile.displayName) {
@@ -128,16 +133,21 @@ fun SettingsScreen(
     }
     val selectedContests = remember {
         mutableStateListOf<String>().apply {
-            addAll(userProfile.activeContestIds.ifEmpty { listOf("CPNU", "RFB") })
+            addAll(userProfile.activeContestIds)
         }
     }
 
     LaunchedEffect(userProfile.activeContestIds) {
         selectedContests.clear()
-        selectedContests.addAll(userProfile.activeContestIds.ifEmpty { listOf("CPNU", "RFB") })
+        selectedContests.addAll(userProfile.activeContestIds)
     }
 
     val ladderChips = ladderExams.filter { it.lifecycleStatus != "ARQUIVADO" }
+    if(managementOpen) {
+        ExamManagementScreen(ladderExams+pendingExamDeletions,pendingSyncCount,onBack={managementOpen=false},onCreate=onCreateExam,onEdit=onEditExam,onArchive=onArchiveExam,onRestore=onRestoreExam,onDelete=onDeleteExam,onPending=onOpenPending,onUseServer=onUseServerExam)
+        return
+    }
+
 
     Surface(
         color = MaterialTheme.colorScheme.background,
@@ -156,15 +166,7 @@ fun SettingsScreen(
                 subtitle = "Perfil, Aparência, Metas & Atualização OTA"
             )
 
-            OutlinedButton(onClick=onOpenPending,modifier=Modifier.fillMaxWidth()){Text(if(pendingSyncCount>0)"Revisar $pendingSyncCount registro(s) pendente(s)"else"Ver registros preservados")}
-            ladderExams.forEach { exam ->
-                Row(modifier=Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick={onEditExam(exam)},modifier=Modifier.weight(1f)){Text("Editar ${exam.shortName}")}
-                    OutlinedButton(onClick={onArchiveExam(exam)}){Text("Arquivar")}
-                }
-                exam.syncError?.let { Text(it,color=MaterialTheme.colorScheme.error) }
-                if(exam.syncError?.startsWith("Conflito de revisão")==true)OutlinedButton(onClick={onUseServerExam(exam)},modifier=Modifier.fillMaxWidth()){Text("Preservar minha edição e usar versão do servidor")}
-            }
+            OutlinedButton(onClick={managementOpen=true},modifier=Modifier.fillMaxWidth()) { Text("Gerenciar concursos e registros") }
             // =========================================================================
             // 1. APARÊNCIA (Modo Claro / Escuro / Sistema)
             // =========================================================================

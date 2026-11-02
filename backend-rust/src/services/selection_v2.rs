@@ -72,7 +72,7 @@ pub async fn generate(
         })?),
     };
     if req.mode != QuizMode::CommonTrunk
-        && exam.is_some_and(|e| e.status == ExamLifecycleStatus::Arquivado)
+        && exam.is_some_and(|e| matches!(e.status, ExamLifecycleStatus::Arquivado | ExamLifecycleStatus::Excluido))
     {
         return Err(AppError::BadRequest(
             "Concurso arquivado; revise sua seleção de estudo".into(),

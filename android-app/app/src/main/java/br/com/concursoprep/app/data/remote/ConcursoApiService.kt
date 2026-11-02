@@ -98,7 +98,8 @@ data class ExamSubjectPayload(
     val weight: Double,
     @SerialName("question_count") val questionCount: Int? = null,
     @SerialName("relevance_tier") val relevanceTier: String,
-    val topics: List<ExamTopicPayload>
+    val topics: List<ExamTopicPayload>,
+    val stage: String = ""
 )
 
 @Serializable

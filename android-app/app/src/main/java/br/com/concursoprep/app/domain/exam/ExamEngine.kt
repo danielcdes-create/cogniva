@@ -77,7 +77,8 @@ data class StoredSubject(
     val weight: Double,
     val questionCount: Int?,
     val relevanceTier: String,
-    val topics: List<StoredTopic>
+    val topics: List<StoredTopic>,
+    val stage: String = ""
 )
 
 @kotlinx.serialization.Serializable
@@ -526,7 +527,7 @@ object ExamEngine {
     }
 
     fun readinessForStoredExams(exams: List<StoredExam>, masteryByTopic: Map<String, Double>): Double {
-        val primary = exams.filter { it.isActiveInLadder&&it.lifecycleStatus!="ARQUIVADO" }.minByOrNull { it.ladderPriority } ?: return 0.0
+        val primary = exams.filter { it.isActiveInLadder&&it.lifecycleStatus !in setOf("ARQUIVADO","EXCLUIDO") }.minByOrNull { it.ladderPriority } ?: return 0.0
         val subjects = primary.subjects.map { subject ->
             val topics = subject.topics.map { topic ->
                 ReadinessTopic(
@@ -615,7 +616,7 @@ object OfflineExamQueue {
         require(draft.historicalCutoffScore.isFinite()&&draft.historicalCutoffScore in 0.0..100.0&&draft.wrongAnswerPenalty.isFinite()&&draft.wrongAnswerPenalty in 0.0..1.0) { "Corte ou desconto inválido." }
         if(draft.dateType=="EXACT_DATE") require(runCatching { LocalDate.parse(draft.exactDateIso) }.isSuccess) { "Informe uma data válida no formato AAAA-MM-DD." }
         if(draft.dateType=="ESTIMATED_WINDOW") require(!draft.estimatedWindowLabel.isNullOrBlank()&&runCatching { LocalDate.parse(draft.estimatedSortDateIso) }.isSuccess) { "Revise a janela estimada." }
-        require(draft.subjects.isNotEmpty()&&draft.subjects.sumOf { it.questionCount?:0 }<=500&&draft.subjects.all { it.weight.isFinite()&&it.weight in 0.01..100.0&&(it.questionCount?:0) in 0..500&&it.topics.isNotEmpty() }) { "Revise a grade: disciplinas, tópicos, pesos e até 500 questões." }
+        require(draft.subjects.size<=100&&draft.subjects.sumOf { it.questionCount?:0 }<=500&&draft.subjects.all { it.weight.isFinite()&&it.weight in 0.01..100.0&&(it.questionCount?:0) in 0..500&&it.displayName.isNotBlank()&&it.topics.all { t->t.displayTitle.isNotBlank() } }) { "Revise a grade: disciplinas, tópicos, pesos e até 500 questões." }
         return StoredExam(
             examId = newId(),
             title = draft.title,
@@ -668,7 +669,7 @@ object OfflineExamQueue {
             today,
             focuses.drop(1)
         ) ?: return null
-        val liveTopics=exams.filter { it.isActiveInLadder&&it.lifecycleStatus!="ARQUIVADO" }.flatMap { it.subjects }.flatMap { it.topics }.filter { it.diffStatus!="ARQUIVADO" }.map { it.canonicalTopicId }.toSet()
+        val liveTopics=exams.filter { it.isActiveInLadder&&it.lifecycleStatus !in setOf("ARQUIVADO","EXCLUIDO") }.flatMap { it.subjects }.flatMap { it.topics }.filter { it.diffStatus!="ARQUIVADO" }.map { it.canonicalTopicId }.toSet()
         val questionIds = cachedQuestions
             .filter { it.canonicalSubjectId == card.canonicalSubjectId && !it.archived && it.canonicalTopicId in liveTopics }
             .distinctBy { it.questionId }
@@ -759,6 +760,10 @@ object ExamCatalog {
     }
     fun subjectsForTrunk(trunkSlug:String):List<StoredSubject> = trunks().find { it.slug==trunkSlug }?.subjects.orEmpty().mapIndexed { index,s ->
         StoredSubject("${s.canonicalSubjectId}-$index",s.canonicalSubjectId,s.name,if(s.relevanceTier=="CORE")"CONHECIMENTOS_ESPECIFICOS"else"CONHECIMENTOS_GERAIS",s.defaultWeight,kotlin.math.round(s.defaultWeight*5).toInt(),s.relevanceTier,s.topics)
+    }
+    fun allSubjects():List<StoredSubject> = catalog.array("subjects").map { raw ->
+        val s=raw.jsonObject; val id=s.text("canonical_subject_id")
+        StoredSubject(id,id,s.text("name"),"CONHECIMENTOS_ESPECIFICOS",1.0,0,"SPECIFIC",s.array("topics").map { topic(it.jsonObject,id) })
     }
     fun systemExams():List<StoredExam> = catalog.array("exams").map { element ->
         val e=element.jsonObject;val date=e.getValue("target_date").jsonObject

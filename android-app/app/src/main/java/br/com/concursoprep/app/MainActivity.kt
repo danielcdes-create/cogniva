@@ -126,6 +126,7 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
     val pendingSyncCount by viewModel.pendingSyncCount.collectAsState()
     val pausedDiscipline by viewModel.pausedDiscipline.collectAsState()
     val storedExams by viewModel.storedExams.collectAsState()
+    val pendingExamDeletions by viewModel.pendingExamDeletions.collectAsState()
     val focusedTrunks by viewModel.focusedTrunks.collectAsState()
     val syllabusViewMode by viewModel.syllabusViewMode.collectAsState()
     val showExamBuilder by viewModel.showExamBuilder.collectAsState()
@@ -390,10 +391,14 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                         onSyncNow = { viewModel.syncNow() },
                         onClearOfflineCache = { viewModel.clearOfflineQuestionCache() },
                         ladderExams = storedExams,
+                        pendingExamDeletions = pendingExamDeletions,
                         focusedTrunkSlugs = focusedTrunks,
                         onToggleTrunkFocus = { viewModel.toggleTrunkFocus(it) },
                         onEditExam = { viewModel.editExam(it) },
                         onArchiveExam = { viewModel.archiveExam(it) },
+                        onRestoreExam = { viewModel.restoreExam(it) },
+                        onDeleteExam = { viewModel.deleteExam(it) },
+                        onCreateExam = { viewModel.openExamBuilder() },
                         onUseServerExam = { viewModel.useServerExam(it) },
                         onOpenPending = { viewModel.openPendingReview() },
                         onReopenOnboarding = {

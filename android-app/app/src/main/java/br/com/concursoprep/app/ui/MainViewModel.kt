@@ -126,12 +126,14 @@ class MainViewModel(private val repository:ConcursoRepository,private val appCon
     private suspend fun localStats(){val stats=repository.getLocalStorageStats();_cachedQuestionsCount.value=stats.first;_pendingSyncCount.value=stats.second}
     fun syncNow(){operation {try{val count=repository.syncPendingAttempts(repository.ownerUserId);_userFeedbackMessage.emit("$count registro(s) confirmado(s). Confira as pendências restantes.")}finally{refreshAllData()}}}
     fun clearOfflineQuestionCache(){operation {repository.clearLocalQuestionCache();localStats();_userFeedbackMessage.emit("Questões em cache removidas. Histórico e pendências preservados.")}}
+    private val _pendingExamDeletions=MutableStateFlow<List<StoredExam>>(emptyList())
+    val pendingExamDeletions:StateFlow<List<StoredExam>> = _pendingExamDeletions
     fun refreshAllData(){
         refreshJob?.cancel();refreshJob=operation {
             val uid=repository.ownerUserId
             val profile=_userProfile.value.copy(displayName=prefs?.getString("display_name",_userProfile.value.displayName),dailyQuestionsTarget=prefs?.getInt("daily_questions_target",50)?:50,dailyStudyHoursTarget=(prefs?.getFloat("daily_study_hours_target",2f)?:2f).toDouble(),activeContestIds=(prefs?.getString("active_contests","CPNU")?:"CPNU").split(',').filter { it.isNotBlank() })
             _userProfile.value=profile
-            val stored=repository.loadStoredExams();_storedExams.value=stored
+            val allStored=repository.loadStoredExams(includeDeleted=true);_pendingExamDeletions.value=allStored.filter { it.lifecycleStatus=="EXCLUIDO" && it.syncStatus!="SYNCED" };val stored=allStored.filter { it.lifecycleStatus!="EXCLUIDO" };_storedExams.value=stored
             val selected=PracticeScope.selected(stored,_selectedContestId.value)
             if(selected!=_selectedContestId.value){_selectedContestId.value=selected;prefs?.edit()?.putString("selected_contest_id",selected)?.apply()}
             _focusedTrunks.value=repository.focusedTrunkSlugs()
@@ -161,15 +163,18 @@ class MainViewModel(private val repository:ConcursoRepository,private val appCon
     fun saveExamDraft(draft:ExamDraft){operation {
         val previous=_editingExam.value
         val created=if(previous==null)repository.createExamOffline(draft)else{
-            val next=OfflineExamQueue.createPendingExam(draft).copy(examId=previous.examId,revision=previous.revision,wrongAnswerPenalty=draft.wrongAnswerPenalty,syncStatus=if(previous.syncStatus=="PENDING_CREATE")"PENDING_CREATE"else if(draft.lifecycleStatus=="EDITAL_PUBLICADO"&&previous.lifecycleStatus!="EDITAL_PUBLICADO")"PENDING_PUBLISH"else"PENDING_UPDATE")
+            val next=OfflineExamQueue.createPendingExam(draft).copy(examId=previous.examId,revision=previous.revision,isActiveInLadder=draft.lifecycleStatus!="ARQUIVADO",wrongAnswerPenalty=draft.wrongAnswerPenalty,syncStatus=if(previous.syncStatus=="PENDING_CREATE")"PENDING_CREATE"else if(draft.lifecycleStatus=="EDITAL_PUBLICADO"&&previous.lifecycleStatus!="EDITAL_PUBLICADO")"PENDING_PUBLISH"else"PENDING_UPDATE")
             repository.editExamOffline(next);next
         }
         _selectedContestId.value=created.examId;_showExamBuilder.value=false;_editingExam.value=null
-        val profile=_userProfile.value.copy(activeContestIds=(_userProfile.value.activeContestIds+created.examId).distinct());saveProfile(profile);_userProfile.value=profile
+        val profile=_userProfile.value.copy(activeContestIds=if(created.lifecycleStatus=="ARQUIVADO")_userProfile.value.activeContestIds-created.examId else (_userProfile.value.activeContestIds+created.examId).distinct());saveProfile(profile);_userProfile.value=profile
         repository.saveOnboarding(profile.userId,profile.activeContestIds,profile.dailyQuestionsTarget,profile.dailyStudyHoursTarget,profile.displayName)
         refreshAllData();appContext?.let{OfflineSyncWorker.enqueueNow(it)};_userFeedbackMessage.emit("Concurso salvo neste aparelho. A confirmação do servidor aparecerá após sincronizar.")
     }}
-    fun archiveExam(exam:StoredExam){operation {repository.editExamOffline(exam.copy(lifecycleStatus="ARQUIVADO",isActiveInLadder=false));val profile=_userProfile.value.copy(activeContestIds=_userProfile.value.activeContestIds-exam.examId);saveProfile(profile);_userProfile.value=profile;repository.saveOnboarding(profile.userId,profile.activeContestIds,profile.dailyQuestionsTarget,profile.dailyStudyHoursTarget,profile.displayName);refreshAllData();appContext?.let{OfflineSyncWorker.enqueueNow(it)}}}
+    fun archiveExam(exam:StoredExam)=setExamLifecycle(exam,"ARQUIVADO")
+    fun restoreExam(exam:StoredExam)=setExamLifecycle(exam,"RUMOR_PREVISTO")
+    fun deleteExam(exam:StoredExam)=setExamLifecycle(exam,"EXCLUIDO")
+    private fun setExamLifecycle(exam:StoredExam,status:String){operation {repository.editExamOffline(exam.copy(lifecycleStatus=status,isActiveInLadder=status!="ARQUIVADO"&&status!="EXCLUIDO"));val profile=_userProfile.value.copy(activeContestIds=if(status=="RUMOR_PREVISTO")(_userProfile.value.activeContestIds+exam.examId).distinct()else _userProfile.value.activeContestIds-exam.examId);saveProfile(profile);_userProfile.value=profile;repository.saveOnboarding(profile.userId,profile.activeContestIds,profile.dailyQuestionsTarget,profile.dailyStudyHoursTarget,profile.displayName);refreshAllData();appContext?.let{OfflineSyncWorker.enqueueNow(it)}}}
     fun applyEditalDiffUpdate(id:String){operation {val before=_storedExams.value.find{it.examId==id}?.revision;repository.syncPendingAttempts(repository.ownerUserId);refreshAllData();_userFeedbackMessage.emit(if(repository.loadStoredExams().find{it.examId==id}?.revision!=before)"Nova revisão de edital salva. Histórico preservado."else"Nenhuma revisão nova de edital foi publicada para este concurso.")}}
     fun startQuizSession(mode:QuizMode,quantity:Int,contestId:String?=null,disciplina:String?=null){
         startJob?.cancel()

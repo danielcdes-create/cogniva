@@ -35,7 +35,7 @@ pub async fn list(state: &AppState, user_id: i64) -> Result<Vec<ExamBlueprint>, 
         .into_iter()
         .map(|mut e| {
             e.is_active_in_ladder = profile.active_contest_ids.contains(&e.id)
-                && e.status != ExamLifecycleStatus::Arquivado;
+                && !matches!(e.status, ExamLifecycleStatus::Arquivado | ExamLifecycleStatus::Excluido);
             (e.id.clone(), e)
         })
         .collect();
@@ -45,7 +45,7 @@ pub async fn list(state: &AppState, user_id: i64) -> Result<Vec<ExamBlueprint>, 
     while let Some(raw) = cursor.try_next().await? {
         let mut exam = decode(raw)?;
         exam.is_active_in_ladder = profile.active_contest_ids.contains(&exam.id)
-            && exam.status != ExamLifecycleStatus::Arquivado;
+            && !matches!(exam.status, ExamLifecycleStatus::Arquivado | ExamLifecycleStatus::Excluido);
         exams.insert(exam.id.clone(), exam);
     }
     let mut result: Vec<_> = exams.into_values().collect();
@@ -85,7 +85,6 @@ pub fn validate(exam: &ExamBlueprint) -> Result<(), AppError> {
         || !(0.0..=100.0).contains(&exam.historical_cutoff_score)
         || !exam.wrong_answer_penalty.is_finite()
         || !(0.0..=1.0).contains(&exam.wrong_answer_penalty)
-        || exam.subjects.is_empty()
         || exam.subjects.len() > 100
         || !crate::services::exam_engine::system_trunks()
             .iter()
@@ -121,17 +120,21 @@ pub fn validate(exam: &ExamBlueprint) -> Result<(), AppError> {
     }
     let catalog = canonical_subjects();
     let mut subject_ids = HashSet::new();
+    let mut local_subject_ids = HashSet::new();
+    let mut local_topic_ids = HashSet::new();
     let mut topic_ids = HashSet::new();
     for subject in &exam.subjects {
-        let known = catalog
-            .iter()
-            .find(|s| s.canonical_subject_id == subject.canonical_subject_id)
-            .ok_or_else(|| invalid("Disciplina fora do catálogo canônico"))?;
+        let known = catalog.iter().find(|s| s.canonical_subject_id == subject.canonical_subject_id);
+        let custom = subject.canonical_subject_id.strip_prefix("custom-").is_some_and(|id| uuid::Uuid::parse_str(id).is_ok());
+        if known.is_none() && !custom { return Err(invalid("Disciplina fora do catálogo ou sem identidade personalizada válida")); }
+        if subject.display_name.trim().is_empty() || subject.display_name.len()>300 || subject.stage.len()>120 {
+            return Err(invalid("Nome ou etapa da disciplina inválido"));
+        }
         if !subject_ids.insert(&subject.canonical_subject_id)
+            || subject.local_subject_id.trim().is_empty() || !local_subject_ids.insert(&subject.local_subject_id)
             || !subject.weight.is_finite()
             || !(0.01..=100.0).contains(&subject.weight)
             || subject.question_count.is_some_and(|n| n > 500)
-            || subject.topics.is_empty()
             || subject.topics.len() > 1000
         {
             return Err(invalid(
@@ -139,12 +142,12 @@ pub fn validate(exam: &ExamBlueprint) -> Result<(), AppError> {
             ));
         }
         for topic in &subject.topics {
-            if topic.canonical_subject_id != subject.canonical_subject_id
+            if topic.local_topic_id.trim().is_empty() || !local_topic_ids.insert(&topic.local_topic_id)
+                || topic.canonical_subject_id != subject.canonical_subject_id
                 || !topic_ids.insert(&topic.canonical_topic_id)
-                || !known
-                    .topics
-                    .iter()
-                    .any(|t| t.topic_id == topic.canonical_topic_id)
+                || topic.display_title.trim().is_empty() || topic.display_title.len()>1000
+                || !(known.is_some_and(|k| k.topics.iter().any(|t| t.topic_id == topic.canonical_topic_id))
+                    || topic.canonical_topic_id.strip_prefix("custom-").is_some_and(|id| uuid::Uuid::parse_str(id).is_ok()))
             {
                 return Err(invalid("Tópico inválido, repetido ou fora da disciplina"));
             }
@@ -208,33 +211,7 @@ pub async fn save_command(
                 "O concurso mudou em outro aparelho; sincronize e revise antes de salvar".into(),
             ));
         }
-        // Removing a grade item archives its identity. Historical coverage and
-        // configuration remain inspectable after the next synchronization.
-        for previous in &current.subjects {
-            if let Some(subject) = exam
-                .subjects
-                .iter_mut()
-                .find(|s| s.canonical_subject_id == previous.canonical_subject_id)
-            {
-                for topic in &previous.topics {
-                    if !subject
-                        .topics
-                        .iter()
-                        .any(|t| t.canonical_topic_id == topic.canonical_topic_id)
-                    {
-                        let mut archived = topic.clone();
-                        archived.diff_status = CanonicalTopicStatus::Arquivado;
-                        subject.topics.push(archived);
-                    }
-                }
-            } else {
-                let mut archived = previous.clone();
-                for topic in &mut archived.topics {
-                    topic.diff_status = CanonicalTopicStatus::Arquivado;
-                }
-                exam.subjects.push(archived);
-            }
-        }
+        // Removed grade items stay available in revision_history, never reappear in the current grade.
     } else if !create && exam.revision != 0 {
         return Err(AppError::Conflict(
             "A revisão do concurso não está disponível".into(),

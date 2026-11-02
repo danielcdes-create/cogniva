@@ -56,7 +56,7 @@ jobs:
             echo PROFILE_RESOLUTION report=Android17/API35 booted_release=$(adb shell getprop ro.build.version.release | tr -d '\r') booted_sdk=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
             echo Android 17 is API 37. API 35 is Android 15. Booting the report numeric API at S23 Ultra geometry.
             echo EMULATOR_BOOTED $(adb shell getprop ro.build.version.release | tr -d '\r') $(adb shell getprop ro.build.version.sdk | tr -d '\r') $(adb shell wm size | tr -d '\r') $(adb shell wm density | tr -d '\r') punch-hole=hole
-            cd android-app && chmod +x gradlew && ./gradlew :app:connectedDebugAndroidTest -PDO_API_BASE_URL=https://127.0.0.1:1/api/v1/ -Pandroid.testInstrumentationRunnerArguments.class=br.com.concursoprep.app.QuestionInsetCollisionTest,br.com.concursoprep.app.DurableStorageTest,br.com.concursoprep.app.AccountLinkSettingsTest,br.com.concursoprep.app.QuestionPracticeTest --no-daemon --console=plain
+            cd android-app && chmod +x gradlew && ./gradlew :app:connectedDebugAndroidTest -PDO_API_BASE_URL=https://127.0.0.1:1/api/v1/ -Pandroid.testInstrumentationRunnerArguments.class=br.com.concursoprep.app.QuestionInsetCollisionTest,br.com.concursoprep.app.DurableStorageTest,br.com.concursoprep.app.AccountLinkSettingsTest,br.com.concursoprep.app.QuestionPracticeTest,br.com.concursoprep.app.ExamManagementTest --no-daemon --console=plain
             sleep 2
             adb logcat -d -s INSET_CHECK:I
             adb logcat -d | tr -d '\r' | grep -E 'INSET_CHECK.*success'
