@@ -667,28 +667,16 @@ object OfflineExamQueue {
 }
 
 object QuizSelection {
-    fun weightedSimuladoIds(exam: StoredExam, questions: List<QuestionRef>): List<String> {
-        val activeTopics = exam.subjects.flatMap { it.topics }.filter { it.diffStatus!="ARQUIVADO" }.map { it.canonicalTopicId }.toSet()
-        val archivedTopics = exam.subjects
-            .flatMap { it.topics }
-            .filter { it.diffStatus == CanonicalTopicStatus.ARQUIVADO.name }
-            .map { it.canonicalTopicId }
-            .toSet() - activeTopics
-        val candidates = questions.map { question ->
-            SimuladoCandidate(
-                questionId = question.id,
-                canonicalSubjectId = question.canonicalSubjectId.orEmpty(),
-                canonicalTopicId = question.canonicalTopicId.orEmpty(),
-                archived = question.canonicalTopicId != null && archivedTopics.contains(question.canonicalTopicId)
-            )
+    fun allowed(decisions:List<br.com.concursoprep.app.data.remote.PracticeDecision>,exam:StoredExam,component:StoredSubject,id:String,revision:String):Boolean = decisions.filter { it.examId==exam.examId && it.examRevision==exam.revision && it.componentId==component.localSubjectId && it.questionId==id && it.questionRevision==revision && it.catalogVersion==ExamCatalog.knowledgeVersion() }.maxWithOrNull(compareBy<br.com.concursoprep.app.data.remote.PracticeDecision> { it.revision }.thenBy { if(it.relation=="EXCLUDED")2 else if(it.relation=="ANALOGOUS")1 else 0 })?.relation?.let { it=="DIRECT" }?:true
+    fun weightedSimuladoIds(exam: StoredExam, questions: List<QuestionRef>,decisions:List<br.com.concursoprep.app.data.remote.PracticeDecision> = emptyList()): List<String> {
+        val picked=mutableListOf<String>()
+        for(subject in exam.subjects){
+            val topics=subject.topics.filter { it.diffStatus!="ARQUIVADO" }.map { it.canonicalTopicId }.toSet()
+            val count=subject.questionCount?:0
+            if(topics.isEmpty() || count<=0 || subject.weight<=0)continue
+            picked+=questions.filter { it.id !in picked && it.canonicalSubjectId==subject.canonicalSubjectId && it.canonicalTopicId in topics && allowed(decisions,exam,subject,it.id,it.revision) }.distinctBy { it.id }.shuffled().take(count).map { it.id }
         }
-        val quotas = exam.subjects.mapNotNull { subject ->
-            val live = subject.topics.any { it.diffStatus != CanonicalTopicStatus.ARQUIVADO.name }
-            val count = subject.questionCount ?: return@mapNotNull null
-            if (!live || count <= 0 || subject.weight <= 0.0) null
-            else SubjectQuota(subject.canonicalSubjectId, subject.weight, count, subject.topics.filter { it.diffStatus!="ARQUIVADO" }.map { it.canonicalTopicId }.toSet())
-        }
-        return ExamEngine.drawWeightedSimulado(quotas, candidates)
+        return picked
     }
 
     fun commonTrunkIds(
@@ -720,10 +708,13 @@ object QuizSelection {
 data class QuestionRef(
     val id: String,
     val canonicalSubjectId: String?,
-    val canonicalTopicId: String?
+    val canonicalTopicId: String?,
+    val revision:String=""
 )
 
 object ExamCatalog {
+    fun knowledgeVersion():Long=knowledge.getValue("catalog_version").jsonPrimitive.long
+    fun subjectIdForLabel(label:String):String?=allSubjects().firstOrNull { legacyLabels(it.canonicalSubjectId).any { name -> name.equals(label,true) } }?.canonicalSubjectId
     @Volatile private var installedKnowledge: JsonObject? = null
     private val bundledKnowledge: JsonObject by lazy {
         checkNotNull(ExamCatalog::class.java.getResourceAsStream("/knowledge-catalog.json")).bufferedReader(Charsets.UTF_8).use { Json.parseToJsonElement(it.readText()).jsonObject }

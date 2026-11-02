@@ -17,6 +17,8 @@ use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnswerAttemptItem {
+    #[serde(default,skip_serializing_if="Option::is_none")]
+    pub exam_component_id:Option<String>,
     pub attempt_id: String,
     pub occurred_at: String,
     pub question_revision: String,

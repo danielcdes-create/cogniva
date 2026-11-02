@@ -94,9 +94,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if std::env::args().nth(1).as_deref()==Some("--prepare-question-storage") {
         let result=services::question_storage::prepare(&db).await?;
         services::question_storage::recover_audit(&db).await?;
+        services::classification::recover(&db).await?;
         println!("{}",result);return Ok(());
     }
 
+    services::question_storage::recover_audit(&db).await?;
+    services::classification::recover(&db).await?;
     // Inicia agendador diário em background (substitui schedule do AFTBot.py + countdown.py)
     spawn_background_daily_scheduler(db.clone());
 
@@ -122,7 +125,12 @@ pub fn build_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/api/v1/admin/questions/v2",post(routes::questions_v2::save))
         .route("/api/v1/admin/questions/v2/:id",get(routes::questions_v2::get))
+        .route("/api/v1/admin/classification/proposals", post(routes::questions_v2::generate_proposals))
+        .route("/api/v1/admin/classification/proposals/:id", get(routes::questions_v2::review_proposals))
+        .route("/api/v1/admin/classification/decisions", post(routes::questions_v2::decide_proposal))
+        .route("/api/v1/admin/classification/compatibility", post(routes::questions_v2::decide_compatibility).get(routes::questions_v2::list_compatibility))
         .route("/api/v1/catalog/knowledge",get(routes::questions_v2::catalog))
+        .route("/api/v1/questions/cache-state",post(routes::questions_v2::cache_state))
         .route("/api/v1/admin/canonical-mapping",post(routes::canonical_mapping::apply))
         .route("/api/v1/auth/profile", get(routes::auth::get_profile))
         .route(

@@ -1,7 +1,5 @@
 use crate::models::exam_hierarchy::*;
-use bson::{doc, Document};
 use chrono::NaiveDate;
-use futures::stream::TryStreamExt;
 use mongodb::Database;
 use std::collections::{HashMap, HashSet};
 
@@ -759,45 +757,8 @@ pub fn apply_publish(
     result
 }
 
-pub async fn load_canonical_slices(
-    db: &Database,
-    user_id: i64,
-) -> Result<Vec<CanonicalActivitySlice>, crate::error::AppError> {
-    let load = async {
-        let mut cursor = db
-            .collection::<Document>("userActivityLog")
-            .find(doc! { "user_id": user_id })
-            .await?;
-        let mut rows = Vec::new();
-        while let Some(document) = cursor.try_next().await? {
-            let subject = document
-                .get_str("canonical_subject_id")
-                .unwrap_or("")
-                .to_string();
-            let topic = document
-                .get_str("canonical_topic_id")
-                .unwrap_or("")
-                .to_string();
-            if subject.is_empty() && topic.is_empty() {
-                continue;
-            }
-            rows.push(CanonicalActivitySlice {
-                canonical_subject_id: subject,
-                canonical_topic_id: topic,
-                accuracy_pct: document
-                    .get_f64("percentual_acertos")
-                    .or_else(|_| document.get_i32("percentual_acertos").map(|n| n as f64))
-                    .unwrap_or(0.0),
-                confidence_avg: document.get_i32("nivel_confianca_med_rec").ok(),
-                mastered: document.get_bool("dominada").unwrap_or(false),
-                high_confidence_error: document
-                    .get_bool("high_confidence_error_flag")
-                    .unwrap_or(false),
-            });
-        }
-        Ok::<Vec<CanonicalActivitySlice>, mongodb::error::Error>(rows)
-    };
-    load.await.map_err(Into::into)
+pub async fn load_canonical_slices(db: &Database, user_id: i64) -> Result<Vec<CanonicalActivitySlice>, crate::error::AppError> {
+    crate::services::knowledge::slices(db,user_id).await
 }
 
 #[cfg(test)]

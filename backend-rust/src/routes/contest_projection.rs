@@ -10,8 +10,7 @@ use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
-use bson::{doc, Document};
-use futures::TryStreamExt;
+use bson::doc;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 
@@ -120,19 +119,10 @@ pub async fn get_contest_syllabus(
     Query(_query): Query<SyllabusQuery>,
 ) -> Result<Json<Vec<DisciplineSyllabusGroupDto>>, AppError> {
     let exam = exam_store::get(&state, user.0, &id).await?;
-    let mut cursor = state
-        .db
-        .collection::<Document>("userActivityLog")
-        .find(doc! {"user_id":user.0})
-        .await?;
-    let mut counts: HashMap<String, i32> = HashMap::new();
-    while let Some(raw) = cursor.try_next().await? {
-        if let Ok(topic) = raw.get_str("canonical_topic_id") {
-            *counts.entry(topic.into()).or_default() +=
-                raw.get_i32("quantidade_praticas").unwrap_or(0);
-        }
-    }
-    let mastery = mastery_by_canonical_topic(&load_canonical_slices(&state.db, user.0).await?);
+    let evidence=crate::services::knowledge::load(&state.db,user.0).await?;
+    let mut counts:HashMap<String,i32>=HashMap::new();
+    for e in &evidence { *counts.entry(e.canonical_topic_id.clone()).or_default()+=e.attempts; }
+    let mastery=mastery_by_canonical_topic(&evidence.into_iter().map(crate::services::knowledge::slice).collect::<Vec<_>>());
     Ok(Json(
         exam.subjects
             .iter()

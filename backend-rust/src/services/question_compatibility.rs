@@ -14,12 +14,8 @@ pub fn canonical_filter(filter: Document) -> Document {
             };
             let mut link = doc! {"role":"PRIMARY","coverage":"DIRECT"};
             link.insert(leaf, value.clone());
-            let legacy = if value == Bson::Null {
-                doc! {"$and":[{key.clone():value.clone()},{"schema_version":{"$ne":2}}]}
-            } else {
-                doc! {key.clone():value.clone()}
-            };
-            clauses.push(doc!{"$or":[legacy,{"schema_version":2,"classification.state":{"$in":["CONFIRMED","PARTIAL"]},"classification.links":{"$elemMatch":link}}]});
+            let legacy = doc! {"$and":[{key.clone():value.clone()},{"schema_version":{"$ne":2}},{"classification":{"$exists":false}}]};
+            clauses.push(doc!{"$or":[legacy,{"classification.state":{"$in":["CONFIRMED","PARTIAL"]},"classification.links":{"$elemMatch":link}}]});
         } else if ["$and", "$or", "$nor"].contains(&key.as_str()) {
             if let Bson::Array(a) = value {
                 let mapped: Vec<Bson> = a
@@ -79,20 +75,33 @@ pub fn decode(mut raw: Document) -> Result<QuestionDocument, AppError> {
             validity.get_str("status").ok(),
             Some("OBSOLETE" | "UNDER_REVIEW")
         ) || validity.get_str("scope").ok() == Some("EXPLICIT_HISTORICAL_DATE")
-            || validity
-                .get_str("review_due_on")
-                .ok()
-                .is_some_and(|due| due < today.as_str())
+            || validity.get_str("review_due_on").ok().is_some_and(|due| {
+                chrono::NaiveDate::parse_from_str(due, "%Y-%m-%d").is_err() || due < today.as_str()
+            })
         {
             return Err(AppError::Conflict(
                 "Questão fora da validade corrente".into(),
             ));
         }
     }
-    if let Some(classification) = modern
-        .then(|| raw.get_document("classification").ok())
-        .flatten()
-    {
+    if let Ok(classification) = raw.get_document("classification").cloned() {
+        let contracts = crate::services::question_contracts::catalog_ref();
+        crate::services::question_contracts::shape(
+            "classification",
+            &bson::Bson::Document(classification.clone()).into_relaxed_extjson(),
+        )?;
+        if classification
+            .get("catalog_version")
+            .and_then(|v| v.as_i64().or_else(|| v.as_i32().map(i64::from)))
+            != contracts["catalog_version"].as_i64()
+        {
+            return Err(AppError::Conflict(
+                "Versão de classificação desconhecida".into(),
+            ));
+        }
+        if !modern {
+            crate::services::classification::content_revision_of(&raw)?;
+        }
         if matches!(
             classification.get_str("state").ok(),
             Some("CONFIRMED" | "PARTIAL")
@@ -100,6 +109,24 @@ pub fn decode(mut raw: Document) -> Result<QuestionDocument, AppError> {
             let links = classification
                 .get_array("links")
                 .map_err(|_| AppError::Conflict("Classificação sem vínculos".into()))?;
+            for link in links.iter().filter_map(|l| l.as_document()) {
+                let human = link.get_document("provenance").ok().is_some_and(|p| {
+                    p.get_str("method").ok() == Some("MANUAL_REVIEW")
+                        && p.get_document("actor")
+                            .ok()
+                            .is_some_and(|a| a.get_str("type").ok() == Some("HUMAN"))
+                });
+                if !human
+                    || !crate::services::question_contracts::known_topic(
+                        link.get_str("subject_id").unwrap_or(""),
+                        link.get_str("topic_id").unwrap_or(""),
+                    )
+                {
+                    return Err(AppError::Conflict(
+                        "Classificação sem vínculo revisado verificável".into(),
+                    ));
+                }
+            }
             let primary: Vec<_> = links
                 .iter()
                 .filter_map(|l| l.as_document())
@@ -108,6 +135,12 @@ pub fn decode(mut raw: Document) -> Result<QuestionDocument, AppError> {
                         && l.get_str("coverage").ok() == Some("DIRECT")
                 })
                 .collect();
+            if primary.is_empty() && classification.get_str("state").ok() == Some("PARTIAL") {
+                raw.insert("canonical_subject_id", bson::Bson::Null);
+                raw.insert("canonical_topic_id", bson::Bson::Null);
+                return bson::from_document(raw)
+                    .map_err(|_| AppError::Conflict("Questão inválida".into()));
+            }
             if primary.len() != 1 {
                 return Err(AppError::Conflict("Classificação principal ambígua".into()));
             }
@@ -132,6 +165,9 @@ pub fn decode(mut raw: Document) -> Result<QuestionDocument, AppError> {
                 }
                 raw.insert(field, value);
             }
+        } else {
+            raw.insert("canonical_subject_id", bson::Bson::Null);
+            raw.insert("canonical_topic_id", bson::Bson::Null);
         }
     }
     bson::from_document(raw).map_err(|_| AppError::Conflict("Documento de questão inválido".into()))
@@ -146,10 +182,12 @@ mod tests {
         let mut raw = doc! {"_id":ObjectId::new(),"question":"Fixture","answers":["A","B"],"correct_answers":["B"]};
         let before = decode(raw.clone()).unwrap();
         raw.insert("classification",doc!{"state":"CONFIRMED","links":[{"role":"PRIMARY","coverage":"DIRECT","subject_id":"PORT","topic_id":"PORT_01"}]});
-        let unchanged = decode(raw.clone()).unwrap();
-        assert_eq!(before.id, unchanged.id);
-        assert_eq!(before.revision().unwrap(), unchanged.revision().unwrap());
-        assert!(unchanged.canonical_topic_id.is_none());
+        assert!(decode(raw.clone()).is_err()); // A bare label is not reviewed provenance.
+        raw.remove("classification");
+        assert_eq!(
+            before.revision().unwrap(),
+            decode(raw).unwrap().revision().unwrap()
+        );
         let q: serde_json::Value = serde_json::from_str(include_str!(
             "../../../shared/examples/question-contracts/question-multiple-choice.json"
         ))

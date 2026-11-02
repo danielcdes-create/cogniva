@@ -1,0 +1,21 @@
+{
+  "dry_run": true,
+  "documents_read": 618,
+  "documents_modified": 0,
+  "learning_events_modified": 0,
+  "legacy_singular_assumed_human_review": false,
+  "textual_name_counted_as_canonical": 0,
+  "counts": {
+    "legacy_unclassified": 612,
+    "existing_singular_canonical": 0,
+    "v2_confirmed": 0,
+    "v2_partial": 0,
+    "v2_unclassified": 0,
+    "invalid_ambiguous": 6,
+    "obsolete_under_review": 0,
+    "insufficient_metadata": 0
+  },
+  "captured_at": "20261102T220726Z",
+  "catalog_version": 1,
+  "access": "read-only private backup; no provider calls"
+}

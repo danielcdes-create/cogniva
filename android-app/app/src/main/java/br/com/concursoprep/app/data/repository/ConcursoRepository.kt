@@ -109,7 +109,7 @@ class ConcursoRepository(
     suspend fun focusedTrunkSlugs(): Set<String> { ensureExamSeed();return examDao.listTrunks().filter { it.isFocusedTrunk }.map { it.slug }.toSet() }
 
     private suspend fun baseLearning(): List<LearningRecord> = durable?.learning().orEmpty().map { json.decodeFromString<LearningRecord>(it.payloadJson) }
-    private fun PendingAttemptEntity.event() = LearningEvent(attemptId,Instant.ofEpochMilli(createdAtEpochMs).toString(),isCorrect,confidenceLevel,timeSpentSeconds)
+    private fun PendingAttemptEntity.event() = LearningEvent(attemptId,Instant.ofEpochMilli(createdAtEpochMs).toString(),isCorrect,confidenceLevel,timeSpentSeconds,questionRevision)
     suspend fun projectedLearning(): List<LearningRecord> {
         val base=baseLearning().associateBy { it.questionId }.toMutableMap()
         val pending=dao.getAllPendingAttempts().filter { it.ownerUserId==ownerUserId && it.syncError==null }
@@ -123,7 +123,7 @@ class ConcursoRepository(
     suspend fun getContestSyllabus(contestId: String,userId: Long): List<DisciplineSyllabusGroupDto> {
         owner(userId)
         val exam=loadStoredExams().firstOrNull { it.examId==contestId } ?: return emptyList()
-        val rows=projectedLearning();val mastery=LearningProjection.masteryByTopic(rows)
+        val rows=LearningProjection.knowledgeRows(projectedLearning());val mastery=LearningProjection.masteryByTopic(rows)
         return exam.subjects.mapNotNull { subject ->
             val visible=subject.topics.filter { it.diffStatus!="ARQUIVADO" };if(visible.isEmpty()) return@mapNotNull null
             val nodes=visible.mapIndexed { index,topic ->
@@ -170,12 +170,13 @@ class ConcursoRepository(
         val records=projectedLearning().associateBy { it.questionId }
         return questions.map { q->records[q.id]?.let { row->q.copy(userStats=UserQuestionBriefStats(row.attempts,row.accuracyPct,row.events.maxByOrNull { Instant.parse(it.occurredAt) }?.occurredAt,row.isMastered,row.inErrorNotebook)) }?:q }
     }
-    suspend fun fetchOrGetOfflineQuiz(userId: Long,mode: QuizMode,quantity: Int,contestId: String?=null,disciplina: String?=null): List<QuestionDto> {
+    suspend fun fetchOrGetOfflineQuiz(userId: Long,mode: QuizMode,quantity: Int,contestId: String?=null,disciplina: String?=null,componentId:String?=null): List<QuestionDto> {
         owner(userId);val count=quantity.coerceIn(1,120)
         val scope=PracticeScope.contest(mode,contestId)
         try {
             auth?.ensureSession(api,ownerUserId)
-            val remote=api.generateQuizQuestions(QuizGeneratePayload(userId,mode,count,trunkFocusSlugs=focusedTrunkSlugs().toList(),contestId=scope,disciplina=disciplina)).map(QuestionCacheMapping::withRevision)
+            val remote=api.generateQuizQuestions(QuizGeneratePayload(userId,mode,count,trunkFocusSlugs=focusedTrunkSlugs().toList(),contestId=scope,disciplina=disciplina,componentId=componentId)).map(QuestionCacheMapping::withRevision)
+            require(componentId==null || remote.all { it.examComponentId==componentId }){"O servidor precisa confirmar o componente selecionado. Atualize e tente novamente."}
             if(remote.isNotEmpty()) dao.insertQuestions(remote.map { QuestionCacheMapping.toEntity(it,json) })
             return decorateQuestions(remote)
         } catch(e: CancellationException){throw e} catch(e: retrofit2.HttpException){
@@ -187,8 +188,12 @@ class ConcursoRepository(
             throw IllegalStateException("Não foi possível interpretar as questões enviadas pelo servidor. Atualize o aplicativo e tente novamente.",e)
         } catch(_: java.io.IOException) { }
         val rows=projectedLearning().associateBy { it.questionId }
-        val all=dao.getCachedQuestions(null,10000).map { QuestionCacheMapping.toDto(it,json) }.filter { it.correctAnswerIndices.size==1&&it.correctAnswerIndices[0] in it.answers.indices&&rows[it.id]?.practiceAvailable!=false }
-        val exam=loadStoredExams().firstOrNull { it.examId==scope }
+        val blocked=metadata("cache_unavailable_ids")?.let { json.decodeFromString<List<String>>(it).toSet() }.orEmpty()
+        val all=dao.getCachedQuestions(null,10000).map { QuestionCacheMapping.toDto(it,json) }.filter { it.id !in blocked && QuestionCacheMapping.withinReviewDate(it,LocalDate.now(LearningProjection.studyZone)) && it.correctAnswerIndices.size==1&&it.correctAnswerIndices[0] in it.answers.indices&&rows[it.id]?.practiceAvailable!=false }
+        val savedExam=loadStoredExams().firstOrNull { it.examId==scope }
+        require(componentId==null || (mode==QuizMode.STANDARD && savedExam?.subjects?.any { it.localSubjectId==componentId }==true)){"Componente não pertence ao concurso selecionado."}
+        val exam=if(componentId==null)savedExam else savedExam?.copy(subjects=savedExam.subjects.filter { it.localSubjectId==componentId })
+        val decisions=metadata("practice_decisions")?.let { json.decodeFromString<List<PracticeDecision>>(it) }.orEmpty()
         require(scope==null||exam!=null){"Concurso não disponível neste aparelho. Sincronize a escada e selecione novamente."}
         require(mode!=QuizMode.SIMULADO||exam!=null){"Selecione um concurso não arquivado para o simulado."}
         require(mode==QuizMode.COMMON_TRUNK||exam?.lifecycleStatus!="ARQUIVADO"){"Concurso arquivado; revise sua seleção de estudo."}
@@ -196,13 +201,16 @@ class ConcursoRepository(
         val topics=exam?.subjects?.flatMap { it.topics }?.filter { it.diffStatus!="ARQUIVADO" }?.map { it.canonicalTopicId }?.toSet()
         val commonTopics=if(mode==QuizMode.COMMON_TRUNK)loadStoredExams().filter { it.isActiveInLadder&&it.lifecycleStatus!="ARQUIVADO" }.flatMap { it.subjects }.flatMap { it.topics }.filter { it.diffStatus!="ARQUIVADO" }.map { it.canonicalTopicId }.toSet()else emptySet()
         val boardFilter=exam?.examBoards.orEmpty().filter { it!="A definir"&&it.isNotBlank() }.flatMap { if(it=="Cebraspe")listOf("Cebraspe","CEBRASPE","CESPE")else listOf(it) }.toSet()
-        val pool=all.filter { mode!=QuizMode.SIMULADO||boardFilter.isEmpty()||it.source in boardFilter }.filter { q -> (disciplina==null||q.disciplina in ExamCatalog.equivalentLabels(disciplina)) && if(mode==QuizMode.COMMON_TRUNK)q.canonicalTopicId in commonTopics else (exam==null||q.canonicalTopicId in topics.orEmpty()||(q.canonicalTopicId==null&&exam.subjects.any { it.topics.any { t->t.diffStatus!="ARQUIVADO" }&&(it.displayName==q.disciplina||q.disciplina in ExamCatalog.legacyLabels(it.canonicalSubjectId)) })) }
+        val pool=all.filter { mode!=QuizMode.SIMULADO||boardFilter.isEmpty()||it.source in boardFilter }.filter { q ->
+            (disciplina==null || if(q.canonicalSubjectId!=null)q.canonicalSubjectId==ExamCatalog.subjectIdForLabel(disciplina) else q.disciplina in ExamCatalog.equivalentLabels(disciplina)) &&
+            if(mode==QuizMode.COMMON_TRUNK)q.canonicalTopicId in commonTopics else (exam==null || q.canonicalTopicId in topics.orEmpty() || (componentId==null && q.canonicalTopicId==null && exam.subjects.any { it.topics.any { t->t.diffStatus!="ARQUIVADO" } && (it.displayName==q.disciplina || q.disciplina in ExamCatalog.legacyLabels(it.canonicalSubjectId)) }))
+        }.filter { q -> exam==null || mode==QuizMode.SIMULADO || exam.subjects.any { s -> (q.canonicalTopicId==null || s.topics.any { it.diffStatus!="ARQUIVADO" && it.canonicalTopicId==q.canonicalTopicId }) && QuizSelection.allowed(decisions,exam,s,q.id,q.questionRevision) } }
         val selected=when(mode){
             QuizMode.SRS_REVIEW->pool.filter { rows[it.id]?.let { r->r.practiceAvailable!=false&&(r.reviewRequired||Instant.parse(r.nextReviewAt)<=Instant.now()) }==true }.sortedBy { rows[it.id]?.nextReviewAt }.take(count)
             QuizMode.ERROR_NOTEBOOK->pool.filter { rows[it.id]?.let { r->r.practiceAvailable!=false&&r.inErrorNotebook }==true }.take(count)
             QuizMode.MOST_BADASS->pool.filter { rows[it.id]?.let { r->r.practiceAvailable!=false&&!r.isMastered&&r.attempts>0 }==true }.sortedBy { rows[it.id]?.accuracyPct }.take(count)
             QuizMode.SIMULADO->{if(exam==null) emptyList() else {
-                val ids=QuizSelection.weightedSimuladoIds(exam,pool.map { QuestionRef(it.id,it.canonicalSubjectId,it.canonicalTopicId) })
+                val ids=QuizSelection.weightedSimuladoIds(exam,pool.map { QuestionRef(it.id,it.canonicalSubjectId,it.canonicalTopicId,it.questionRevision) },decisions)
                 val expected=exam.subjects.filter { it.topics.any { t->t.diffStatus!="ARQUIVADO" } }.sumOf { it.questionCount?:0 }
                 require(expected>0&&ids.size==expected){"Cache insuficiente para o simulado: ${ids.size}/$expected questões. Conecte-se ou ajuste a grade."}
                 var offset=0
@@ -210,7 +218,7 @@ class ConcursoRepository(
                     ids.drop(offset).take(subject.questionCount?:0).mapNotNull { id->pool.find { it.id==id }?.copy(examComponentId=subject.localSubjectId) }.also { offset+=subject.questionCount?:0 }
                 }
             }}
-            QuizMode.COMMON_TRUNK->{val ids=QuizSelection.commonTrunkIds(loadStoredExams(),pool.map { QuestionRef(it.id,it.canonicalSubjectId,it.canonicalTopicId) },focusedTrunkSlugs(),canonicalMasteryBySubject(),LocalDate.now(LearningProjection.studyZone),count);ids.mapNotNull { id->pool.find { it.id==id } }}
+            QuizMode.COMMON_TRUNK->{val exams=loadStoredExams();val eligible=pool.filter { q->exams.any { e->e.isActiveInLadder&&e.lifecycleStatus !in setOf("ARQUIVADO","EXCLUIDO")&&e.subjects.any { s->s.topics.any { it.diffStatus!="ARQUIVADO"&&it.canonicalTopicId==q.canonicalTopicId }&&QuizSelection.allowed(decisions,e,s,q.id,q.questionRevision) } } };val ids=QuizSelection.commonTrunkIds(exams,eligible.map { QuestionRef(it.id,it.canonicalSubjectId,it.canonicalTopicId) },focusedTrunkSlugs(),canonicalMasteryBySubject(),LocalDate.now(LearningProjection.studyZone),count);ids.mapNotNull { id->eligible.find { it.id==id } }}
             QuizMode.SINGLE->emptyList()
             else->pool.shuffled().take(count)
         }
@@ -218,7 +226,7 @@ class ConcursoRepository(
             val expected=rows.values.any { r->r.practiceAvailable!=false&&(disciplina==null||r.disciplina in ExamCatalog.equivalentLabels(disciplina))&&when(mode){QuizMode.SRS_REVIEW->r.reviewRequired||Instant.parse(r.nextReviewAt)<=Instant.now();QuizMode.ERROR_NOTEBOOK->r.inErrorNotebook;else->!r.isMastered&&r.attempts>0} }
             require(!expected){"Seu histórico contém registros para este modo, mas as questões não estão disponíveis no cache. Conecte-se para recuperá-las."}
         }
-        return decorateQuestions(selected)
+        return decorateQuestions(if(componentId==null)selected else selected.map { it.copy(examComponentId=componentId) })
     }
 
     suspend fun recordAttemptOfflineFirst(userId: Long,attempt: PendingAttemptEntity, session: SessionSnapshot? = null) {
@@ -300,12 +308,27 @@ class ConcursoRepository(
                 } }
                 cursor=page.nextCursor
             }while(cursor!=null)}
+            refreshQuestionCache()
             metadata("last_sync",Instant.now().toString());metadata("sync_error",if(transient)"Há tentativas aguardando confirmação do servidor." else "")
             if(transient) error("Há tentativas aguardando confirmação do servidor.")
             synced
         } catch(e: CancellationException){throw e} catch(e: Exception){if(e is retrofit2.HttpException&&e.code()==401)auth?.invalidate(userId);metadata("sync_error","Sincronização pendente. Seus registros continuam neste aparelho.");throw e}
     }
-    private fun PendingAttemptEntity.payload()=AnswerAttemptPayload(attemptId,Instant.ofEpochMilli(createdAtEpochMs).toString(),questionRevision,questionId,chosenIndex,chosenText,isCorrect,timeSpentSeconds,confidenceLevel,sessionUuid,quizMode,examBlock,contestId,userNote,canonicalSubjectId,canonicalTopicId)
+    private fun PendingAttemptEntity.payload()=AnswerAttemptPayload(attemptId,Instant.ofEpochMilli(createdAtEpochMs).toString(),questionRevision,questionId,chosenIndex,chosenText,isCorrect,timeSpentSeconds,confidenceLevel,sessionUuid,quizMode,examBlock,contestId,userNote,canonicalSubjectId,canonicalTopicId,examComponentId)
+
+    private suspend fun refreshQuestionCache(){
+        val blocked=metadata("cache_unavailable_ids")?.let { json.decodeFromString<List<String>>(it).toMutableSet() }?:mutableSetOf()
+        for(ids in dao.getCachedQuestions(null,10000).map { it.id }.chunked(200)){
+            val response=api.cacheState(CacheStatePayload(ids))
+            require(response.projectionVersion==1 && response.questions.map { it.questionId }.toSet()==ids.toSet()){ "Resposta de cache incompleta; estado anterior preservado." }
+            mutationMutex.withLock { transaction {
+                response.questions.forEach { row -> if(row.question==null)blocked+=row.questionId else { require(row.question.id==row.questionId);blocked-=row.questionId;dao.insertQuestions(listOf(QuestionCacheMapping.toEntity(row.question,json))) } }
+                metadata("cache_unavailable_ids",json.encodeToString(blocked.toList()))
+                val prior=metadata("practice_decisions")?.let { json.decodeFromString<List<PracticeDecision>>(it) }.orEmpty()
+                metadata("practice_decisions",json.encodeToString(prior.filter { it.questionId !in ids }+response.decisions))
+            } }
+        }
+    }
 
     private suspend fun syncPendingExams(): Int {
         var count=0

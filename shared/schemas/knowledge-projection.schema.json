@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cogniva.local/schemas/knowledge-projection-v1.json",
+  "title": "Projeção de conhecimento e elegibilidade de cache, versão 1",
+  "$defs": {
+    "evidence": {
+      "type": "object", "additionalProperties": false,
+      "required": ["canonical_subject_id", "canonical_topic_id", "question_revision", "attempts", "correct", "accuracy_pct", "confidence_avg", "recent_confidences", "high_confidence_error", "mastered", "review_due_on"],
+      "properties": {
+        "canonical_subject_id": {"type": "string", "minLength": 1},
+        "canonical_topic_id": {"type": "string", "minLength": 1},
+        "question_revision": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "attempts": {"type": "integer", "minimum": 1},
+        "correct": {"type": "integer", "minimum": 0},
+        "accuracy_pct": {"type": "number", "minimum": 0, "maximum": 100},
+        "confidence_avg": {"type": ["integer", "null"], "minimum": 0, "maximum": 3},
+        "recent_confidences": {"type": "array", "maxItems": 3, "items": {"type": "integer", "minimum": 0, "maximum": 3}},
+        "high_confidence_error": {"type": "boolean"},
+        "mastered": {"type": "boolean"},
+        "review_due_on": {"type": ["string", "null"], "format": "date"}
+      },
+      "$comment": "Somente principal direto revisado e eventos distintos da mesma revisão do conteúdo. Totais globais permanecem históricos; conferir correct <= attempts e a razão no produtor. Não instalar este DTO como validador de userActivityLog."
+    },
+    "decision": {
+      "type": "object", "additionalProperties": false,
+      "required": ["question_id", "question_revision", "exam_id", "exam_revision", "component_id", "relation", "revision", "catalog_version"],
+      "properties": {
+        "question_id": {"type": "string", "pattern": "^[a-f0-9]{24}$"},
+        "question_revision": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "exam_id": {"type": "string", "minLength": 1},
+        "exam_revision": {"type": "integer", "minimum": 1},
+        "component_id": {"type": "string", "minLength": 1},
+        "relation": {"enum": ["DIRECT", "ANALOGOUS", "EXCLUDED"]},
+        "revision": {"type": "integer", "minimum": 1},
+        "catalog_version": {"type": "integer", "minimum": 1}
+      }
+    },
+    "cache_request": {
+      "type": "object", "required": ["question_ids"], "additionalProperties": false,
+      "properties": {"question_ids": {"type": "array", "maxItems": 200, "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-f0-9]{24}$"}}}
+    }
+  }
+}

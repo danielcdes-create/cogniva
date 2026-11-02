@@ -307,6 +307,7 @@ fn generate_request(
     trunk_focus_slugs: Vec<String>,
 ) -> QuizGenerateRequest {
     QuizGenerateRequest {
+        component_id:None,
         user_id,
         mode,
         quantity,

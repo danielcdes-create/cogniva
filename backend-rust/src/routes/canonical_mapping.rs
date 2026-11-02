@@ -67,7 +67,7 @@ pub async fn apply(
             .find_one(doc! {"_id":oid})
             .await?
             .ok_or_else(|| AppError::NotFound("Questão ausente".into()))?;
-        if raw.get_i32("schema_version").ok()==Some(2) || raw.get_i64("schema_version").ok()==Some(2) {return Err(AppError::Conflict("Questões v2 devem ser editadas pelo endpoint versionado".into()));}
+        if raw.get_i32("schema_version").ok()==Some(2) || raw.get_i64("schema_version").ok()==Some(2) || raw.contains_key("classification") {return Err(AppError::Conflict("Questões v2 devem ser editadas pelo endpoint versionado".into()));}
         let hash = format!(
             "{:x}",
             Sha256::digest(

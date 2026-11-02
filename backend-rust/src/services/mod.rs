@@ -18,3 +18,6 @@ pub mod question_compatibility;
 
 pub mod question_contracts;
 pub mod question_storage;
+pub mod classification;
+pub mod knowledge;
+pub mod practice_context;

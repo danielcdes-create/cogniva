@@ -52,7 +52,7 @@ class ConcursoApp : Application() {
             AppDatabase::class.java,
             databaseName
         )
-            .addMigrations(ExamMigrations.MIGRATION_1_2,ExamMigrations.MIGRATION_2_3,ExamMigrations.MIGRATION_3_4)
+            .addMigrations(ExamMigrations.MIGRATION_1_2,ExamMigrations.MIGRATION_2_3,ExamMigrations.MIGRATION_3_4,ExamMigrations.MIGRATION_4_5)
             .build()
 
         // 2. Configura OkHttp com timeouts generosos para LLMs (Gemini / OpenAI)

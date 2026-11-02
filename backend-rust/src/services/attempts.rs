@@ -13,9 +13,11 @@ use mongodb::options::{CollectionOptions, WriteConcern};
 use sha2::{Digest, Sha256};
 
 fn payload_hash(item: &AnswerAttemptItem) -> String {
-    let mut payload = serde_json::to_value(item).expect("serializable attempt");
+    let mut core=item.clone();core.exam_component_id=None;
+    let mut payload = serde_json::to_value(core).expect("serializable attempt");
     // This hint is never trusted as a result, nor part of the event's authoritative meaning.
     payload.as_object_mut().unwrap().remove("is_correct");
+    payload.as_object_mut().unwrap().remove("exam_component_id");
     format!(
         "{:x}",
         Sha256::digest(serde_json::to_vec(&payload).unwrap())
@@ -75,16 +77,8 @@ fn validate(
             "Alternativa não corresponde à versão da questão".into(),
         ));
     }
-    for (provided, actual) in [
-        (&item.canonical_subject_id, &question.canonical_subject_id),
-        (&item.canonical_topic_id, &question.canonical_topic_id),
-    ] {
-        if provided.is_some() && provided != actual {
-            return Err(AppError::Conflict(
-                "Vínculo canônico divergente da questão".into(),
-            ));
-        }
-    }
+    // Submitted taxonomy is historical client context, never authority. A
+    // review may change it while the exact same content is queued offline.
     question.answer_indices()?;
     let occurred = DateTime::parse_from_rfc3339(&item.occurred_at)
         .map_err(|_| AppError::BadRequest("Data da tentativa deve incluir fuso".into()))?
@@ -285,6 +279,9 @@ fn project(
         bson::to_document(&event).map_err(|_| AppError::Internal("Evento inválido".into()))?;
     event.insert("attempt_id", &item.attempt_id);
     event.insert("question_revision", &item.question_revision);
+    event.insert("submitted_canonical_subject_id",item.canonical_subject_id.clone());
+    event.insert("submitted_canonical_topic_id",item.canonical_topic_id.clone());
+    event.insert("exam_component_id",item.exam_component_id.clone());
     event.insert("payload_sha256", payload_hash(item));
     event.insert("received_at", bson::DateTime::now());
     event.insert("ack", bson::to_document(&ack).unwrap());
@@ -386,6 +383,7 @@ mod tests {
     fn fixture_legacy_answer_is_authoritative_and_event_is_append_only() {
         let q:QuestionDocument=bson::from_document(doc!{"_id":ObjectId::new(),"question":"Q","answers":["A","B"],"correct_answers":["B"],"disciplina":"D"}).unwrap();
         let item = AnswerAttemptItem {
+            exam_component_id:None,
             attempt_id: uuid::Uuid::new_v4().to_string(),
             occurred_at: Utc::now().to_rfc3339(),
             question_revision: q.revision().unwrap(),
@@ -405,6 +403,8 @@ mod tests {
         };
         let (fields, event, ack) =
             project(empty(123, &q, Utc::now()), &q, &item, Utc::now()).unwrap();
+        let mut contextual=item.clone();contextual.exam_component_id=Some("second-stage".into());
+        assert_eq!(payload_hash(&item),payload_hash(&contextual));
         assert!(!ack.is_correct);
         assert!(!fields.contains_key("pastSessions"));
         assert!(!fields.contains_key("datas"));

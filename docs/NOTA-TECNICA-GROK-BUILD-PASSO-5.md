@@ -1,5 +1,7 @@
 # Nota técnica para Grok Build — etapas 5, 6 e 7
 
+Atualização da implementação: a entrega 1.4.6/build 13 implementa e está validando o fluxo de classificação recebido e a seleção/projeção do passo 6. O estado e as evidências atuais estão em [ETAPAS-5-7-CLASSIFICACAO-SELECAO.md](ETAPAS-5-7-CLASSIFICACAO-SELECAO.md) e `remediation-validation/1.4.6/`. O roteiro abaixo continua descrevendo requisitos; não equivale a dizer que as questões reais foram revisadas em lote. A leitura e os totais históricos são preservados.
+
 ## Plano e dependências
 
 Esta é a mesma nota originalmente criada para o passo 5; o nome do arquivo foi mantido para preservar os links. Agora orienta a sequência completa restante:

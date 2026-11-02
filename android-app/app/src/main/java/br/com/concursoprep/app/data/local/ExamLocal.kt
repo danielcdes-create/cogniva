@@ -258,6 +258,7 @@ object ExamLocalMapping {
 }
 
 object ExamMigrations {
+    val MIGRATION_4_5=object:Migration(4,5){override fun migrate(db:SupportSQLiteDatabase){db.execSQL("ALTER TABLE pending_attempts ADD COLUMN examComponentId TEXT")}}
     val MIGRATION_3_4 = object : Migration(3,4) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE exam_subjects ADD COLUMN stage TEXT NOT NULL DEFAULT ''")

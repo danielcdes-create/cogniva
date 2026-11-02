@@ -28,6 +28,7 @@ pub enum QuizMode {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuizGenerateRequest {
+    pub component_id:Option<String>,
     #[serde(default)]
     pub trunk_focus_slugs: Vec<String>,
     pub user_id: i64,

@@ -195,7 +195,9 @@ data class QuestionDto(
     @SerialName("has_plausibility") val hasPlausibility: Boolean = false,
     @SerialName("hints_count") val hintsCount: Int = 0,
     @SerialName("user_stats") val userStats: UserQuestionBriefStats? = null,
-    @SerialName("exam_component_id") val examComponentId: String? = null
+    @SerialName("exam_component_id") val examComponentId: String? = null,
+    @SerialName("knowledge_projection_version") val knowledgeProjectionVersion: Int = 0,
+    @SerialName("practice_review_due_on") val practiceReviewDueOn: String? = null
 )
 
 @Serializable
@@ -215,7 +217,8 @@ data class AnswerAttemptPayload(
     @SerialName("contest_id") val contestId: String? = null,
     @SerialName("user_note") val userNote: String? = null,
     @SerialName("canonical_subject_id") val canonicalSubjectId: String? = null,
-    @SerialName("canonical_topic_id") val canonicalTopicId: String? = null
+    @SerialName("canonical_topic_id") val canonicalTopicId: String? = null,
+    @SerialName("exam_component_id") val examComponentId:String?=null
 )
 
 @Serializable

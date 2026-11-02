@@ -14,7 +14,20 @@ data class LearningEvent(
     @SerialName("occurred_at") val occurredAt: String,
     @SerialName("is_correct") val isCorrect: Boolean,
     @SerialName("confidence_level") val confidenceLevel: Int,
-    @SerialName("time_spent_seconds") val timeSpentSeconds: Int
+    @SerialName("time_spent_seconds") val timeSpentSeconds: Int,
+    @SerialName("question_revision") val questionRevision:String?=null
+)
+@Serializable data class KnowledgeEvidence(
+    @SerialName("canonical_subject_id") val canonicalSubjectId:String,
+    @SerialName("canonical_topic_id") val canonicalTopicId:String,
+    @SerialName("question_revision") val questionRevision:String,
+    val attempts:Int,val correct:Int,
+    @SerialName("accuracy_pct") val accuracyPct:Double,
+    @SerialName("confidence_avg") val confidenceAvg:Int?=null,
+    @SerialName("recent_confidences") val recentConfidences:List<Int> = emptyList(),
+    @SerialName("high_confidence_error") val highConfidenceError:Boolean=false,
+    @SerialName("review_due_on") val reviewDueOn:String?=null,
+    val mastered:Boolean=false
 )
 @Serializable
 data class LearningRecord(
@@ -33,7 +46,9 @@ data class LearningRecord(
     val events: List<LearningEvent> = emptyList(),
     @SerialName("confidence_avg") val confidenceAvg: Int? = null,
     @SerialName("review_required") val reviewRequired: Boolean = false,
-    @SerialName("practice_available") val practiceAvailable: Boolean? = null
+    @SerialName("practice_available") val practiceAvailable: Boolean? = null,
+    @SerialName("knowledge_projection_version") val knowledgeProjectionVersion:Int=0,
+    @SerialName("knowledge_evidence") val knowledgeEvidence:KnowledgeEvidence?=null
 )
 @Serializable
 data class LearningPage(val records: List<LearningRecord>, @SerialName("next_cursor") val nextCursor: String? = null)
@@ -41,15 +56,35 @@ data class LearningPage(val records: List<LearningRecord>, @SerialName("next_cur
 /** Contract v2. Practice evidence is presence of a record, including a score of zero. */
 object LearningProjection {
     val studyZone: ZoneOffset = ZoneOffset.ofHours(-3)
-    fun masteryByTopic(rows: List<LearningRecord>): Map<String, Double> = rows
+    fun knowledgeRows(rows:List<LearningRecord>):List<LearningRecord> = rows.distinctBy { it.questionId }.mapNotNull { r ->
+        if(r.knowledgeProjectionVersion==0) r else r.knowledgeEvidence?.takeIf { e -> e.reviewDueOn?.let { runCatching { !java.time.LocalDate.parse(it).isBefore(java.time.LocalDate.now(studyZone)) }.getOrDefault(false) }?:true }?.let { e ->
+            r.copy(canonicalSubjectId=e.canonicalSubjectId,canonicalTopicId=e.canonicalTopicId,attempts=e.attempts,correct=e.correct,accuracyPct=e.accuracyPct,confidenceAvg=e.confidenceAvg,isMastered=e.mastered,highConfidenceError=e.highConfidenceError)
+        }
+    }
+    fun masteryByTopic(rows: List<LearningRecord>): Map<String, Double> = knowledgeRows(rows)
         .filter { !it.canonicalTopicId.isNullOrBlank() }
         .groupBy { it.canonicalTopicId!! }
         .mapValues { (_, records) -> records.map { ExamEngine.masteryFraction(it.accuracyPct, it.isMastered, it.highConfidenceError,it.confidenceAvg) }.average() }
-    fun masteryBySubject(rows: List<LearningRecord>): Map<String, Double> = rows
+    fun masteryBySubject(rows: List<LearningRecord>): Map<String, Double> = knowledgeRows(rows)
         .filter { !it.canonicalSubjectId.isNullOrBlank() }
         .groupBy { it.canonicalSubjectId!! }
         .mapValues { (_, records) -> records.map { ExamEngine.masteryFraction(it.accuracyPct, it.isMastered, it.highConfidenceError,it.confidenceAvg) }.average() }
     fun project(base: LearningRecord?, question: QuestionDto, pending: List<LearningEvent>): LearningRecord {
+        val history=projectHistory(base,question,pending)
+        if(question.knowledgeProjectionVersion==0)return history
+        val subject=question.canonicalSubjectId;val topic=question.canonicalTopicId
+        if(subject==null || topic==null || br.com.concursoprep.app.domain.exam.ExamCatalog.catalogTopics(subject).none { it.canonicalTopicId==topic } || !br.com.concursoprep.app.data.local.QuestionCacheMapping.withinReviewDate(question,java.time.LocalDate.now(studyZone)))return history.copy(knowledgeProjectionVersion=1,knowledgeEvidence=null)
+        val previous=base?.knowledgeEvidence?.takeIf { it.questionRevision==question.questionRevision }
+        val confirmed=base?.events.orEmpty().map { it.attemptId }.toSet()
+        val fresh=pending.filter { it.attemptId !in confirmed && it.questionRevision==question.questionRevision }.distinctBy { it.attemptId }.sortedWith(compareBy<LearningEvent> { Instant.parse(it.occurredAt) }.thenBy { it.attemptId })
+        val attempts=(previous?.attempts?:0)+fresh.size
+        if(attempts==0)return history.copy(knowledgeProjectionVersion=1,knowledgeEvidence=null)
+        val correct=(previous?.correct?:0)+fresh.count { it.isCorrect }
+        val recent=(previous?.recentConfidences.orEmpty()+fresh.map { it.confidenceLevel.coerceIn(0,3) }).takeLast(3)
+        val high=fresh.lastOrNull()?.let { !it.isCorrect&&it.confidenceLevel>=2 }?:previous?.highConfidenceError?:false
+        return history.copy(knowledgeProjectionVersion=1,knowledgeEvidence=KnowledgeEvidence(subject,topic,question.questionRevision,attempts,correct,100.0*correct/attempts,if(recent.isEmpty())null else kotlin.math.floor(recent.average()+0.5).toInt(),recent,high,question.practiceReviewDueOn,history.attempts==attempts&&history.isMastered))
+    }
+    private fun projectHistory(base: LearningRecord?, question: QuestionDto, pending: List<LearningEvent>): LearningRecord {
         val confirmed = base?.events.orEmpty().map { it.attemptId }.toSet()
         val fresh = pending.filter { it.attemptId !in confirmed }.distinctBy { it.attemptId }
         if (fresh.isEmpty() && base != null) return base

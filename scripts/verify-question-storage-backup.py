@@ -13,6 +13,7 @@ p = argparse.ArgumentParser()
 p.add_argument("before", type=pathlib.Path)
 p.add_argument("after", type=pathlib.Path)
 p.add_argument("--output", type=pathlib.Path, required=True)
+p.add_argument("--authorized-classification", action="store_true")
 a = p.parse_args()
 before, after = [json.loads(path.read_text(encoding="utf-8-sig")) for path in [a.before, a.after]]
 old_root, new_root = [pathlib.Path(v["private_backup_directory"]) for v in [before, after]]
@@ -29,8 +30,13 @@ def indexes(name):
 preserved = {}
 for name in ["todasQuestoes", "user_exams"]:
     old, new = data(old_root, name), data(new_root, name)
-    assert old == new, f"{name}: documents changed; inspect differences before claiming preservation"
-    preserved[name] = {"documents": after["collections"][name], "sha256": hashlib.sha256(new).hexdigest(), "byte_identical": True}
+    if name == "todasQuestoes" and a.authorized_classification:
+        import classification_preservation
+        classification_preservation.compare_snapshots(decode_all(old), decode_all(new), [], [], [], [])
+        preserved[name] = {"documents": after["collections"][name], "sha256": hashlib.sha256(new).hexdigest(), "authorized_classification_only": True}
+    else:
+        assert old == new, f"{name}: documents changed; inspect differences before claiming preservation"
+        preserved[name] = {"documents": after["collections"][name], "sha256": hashlib.sha256(new).hexdigest(), "byte_identical": True}
 assert before["protected_history"] == after["protected_history"], "Learning history changed"
 
 options = json.loads((new_root / "collection-options.json").read_text(encoding="utf-8"))

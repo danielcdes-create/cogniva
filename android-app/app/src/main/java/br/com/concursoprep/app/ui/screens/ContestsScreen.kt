@@ -82,7 +82,7 @@ fun ContestsScreen(
     syllabusGroups: List<DisciplineSyllabusGroupDto>,
     diffData: ContestDiffScreenDto?,
     onSelectContest: (String) -> Unit,
-    onPracticeDiscipline: (String) -> Unit,
+    onPracticeDiscipline: (String,String?) -> Unit,
     onApplyDiffConsent: (String) -> Unit = {},
     syllabusViewMode: SyllabusViewMode = SyllabusViewMode.CONTEST,
     onSyllabusViewMode: (SyllabusViewMode) -> Unit = {},
@@ -349,7 +349,7 @@ fun ContestsScreen(
                             Spacer(modifier = Modifier.height(12.dp))
                             // Botão uniforme fillMaxWidth(min = 48dp)
                             OutlinedButton(
-                                onClick = { onPracticeDiscipline(group.discipline) },
+                                onClick = { onPracticeDiscipline(group.discipline,group.componentId) },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .heightIn(min = 48.dp)
@@ -431,7 +431,7 @@ fun ContestsScreen(
                         onClick = {
                             val disc = topic.discipline
                             selectedTopicForSourceSheet = null
-                            onPracticeDiscipline(disc)
+                            onPracticeDiscipline(disc,syllabusGroups.firstOrNull { g -> g.topics.any { it.topic.id==topic.id } }?.componentId)
                         },
                         modifier = Modifier
                             .weight(1f)

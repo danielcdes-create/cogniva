@@ -7,6 +7,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.decodeFromString
 
 object QuestionCacheMapping {
+    fun withinReviewDate(dto:QuestionDto,today:java.time.LocalDate):Boolean = dto.practiceReviewDueOn?.let { runCatching { !java.time.LocalDate.parse(it).isBefore(today) }.getOrDefault(false) } ?: true
     fun withRevision(dto: QuestionDto): QuestionDto {
         if(dto.questionRevision.isNotEmpty()) return dto
         val hash=java.security.MessageDigest.getInstance("SHA-256")

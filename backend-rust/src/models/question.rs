@@ -60,6 +60,8 @@ fn default_validity_status() -> String {
 /// Representa um documento da coleção `todasQuestoes` no MongoDB Atlas (100% retrocompatível com AFTBot.py)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuestionDocument {
+    #[serde(default)]
+    pub validity:Option<serde_json::Value>,
     #[serde(rename = "_id")]
     pub id: ObjectId,
     pub question: String,
@@ -121,6 +123,8 @@ pub struct QuestionDocument {
 /// DTO enxuto e tipado enviado para o cliente Android (Jetpack Compose / Room)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuestionDto {
+    pub knowledge_projection_version:i32,
+    pub practice_review_due_on:Option<String>,
     /// Session-only exam component; never a classification of the bank document.
     pub exam_component_id: Option<String>,
     pub id: String,
@@ -222,6 +226,8 @@ impl QuestionDocument {
 
     pub fn to_dto(&self, user_stats: Option<UserQuestionBriefStats>) -> QuestionDto {
         QuestionDto {
+            knowledge_projection_version:1,
+            practice_review_due_on:self.validity.as_ref().and_then(|v|v["review_due_on"].as_str()).map(str::to_string),
             exam_component_id: None,
             id: self.id.to_hex(),
             question_revision: self.revision().unwrap_or_default(),

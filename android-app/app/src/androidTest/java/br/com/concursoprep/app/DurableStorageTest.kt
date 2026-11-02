@@ -23,7 +23,19 @@ import java.util.UUID
 class DurableStorageTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
     private fun open(name: String) = Room.databaseBuilder(context,AppDatabase::class.java,name)
-        .addMigrations(ExamMigrations.MIGRATION_1_2,ExamMigrations.MIGRATION_2_3,ExamMigrations.MIGRATION_3_4).build()
+        .addMigrations(ExamMigrations.MIGRATION_1_2,ExamMigrations.MIGRATION_2_3,ExamMigrations.MIGRATION_3_4,ExamMigrations.MIGRATION_4_5).build()
+
+    @Test fun queuedExamComponentSurvivesReopen()=runBlocking {
+        val name="cogniva-test-component-${UUID.randomUUID()}.db"
+        try {
+            var db=open(name)
+            val pending=PendingAttemptEntity(questionId="q",chosenIndex=1,chosenText="B",isCorrect=true,timeSpentSeconds=10,confidenceLevel=3,sessionUuid="session",quizMode="SIMULADO",examBlock=null,contestId="exam",userNote=null,ownerUserId=123,questionRevision="revision",examComponentId="second-stage")
+            db.concursoDao().enqueuePendingAttempt(pending);db.close();db=open(name)
+            val restored=db.concursoDao().getAllPendingAttempts().single()
+            assertEquals(pending.attemptId,restored.attemptId);assertEquals("second-stage",restored.examComponentId);assertEquals(123L,restored.ownerUserId)
+            db.close()
+        }finally{context.deleteDatabase(name)}
+    }
 
     @Test fun versionTwoPreservesLegacyBytesAndQuarantinesAmbiguousDelivery() = runBlocking {
         val name="cogniva-test-migration-${UUID.randomUUID()}.db"
@@ -54,6 +66,7 @@ class DurableStorageTest {
             assertEquals(1793480400000L,attempt.createdAtEpochMs)
             assertEquals(42,attempt.timeSpentSeconds)
             assertEquals("nota preservada",attempt.userNote)
+            assertNull(attempt.examComponentId)
             assertNotNull(attempt.syncError)
             UUID.fromString(attempt.attemptId)
             db.concursoDao().bindLegacyOwner(123)

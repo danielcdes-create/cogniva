@@ -176,13 +176,13 @@ class MainViewModel(private val repository:ConcursoRepository,private val appCon
     fun deleteExam(exam:StoredExam)=setExamLifecycle(exam,"EXCLUIDO")
     private fun setExamLifecycle(exam:StoredExam,status:String){operation {repository.editExamOffline(exam.copy(lifecycleStatus=status,isActiveInLadder=status!="ARQUIVADO"&&status!="EXCLUIDO"));val profile=_userProfile.value.copy(activeContestIds=if(status=="RUMOR_PREVISTO")(_userProfile.value.activeContestIds+exam.examId).distinct()else _userProfile.value.activeContestIds-exam.examId);saveProfile(profile);_userProfile.value=profile;repository.saveOnboarding(profile.userId,profile.activeContestIds,profile.dailyQuestionsTarget,profile.dailyStudyHoursTarget,profile.displayName);refreshAllData();appContext?.let{OfflineSyncWorker.enqueueNow(it)}}}
     fun applyEditalDiffUpdate(id:String){operation {val before=_storedExams.value.find{it.examId==id}?.revision;repository.syncPendingAttempts(repository.ownerUserId);refreshAllData();_userFeedbackMessage.emit(if(repository.loadStoredExams().find{it.examId==id}?.revision!=before)"Nova revisão de edital salva. Histórico preservado."else"Nenhuma revisão nova de edital foi publicada para este concurso.")}}
-    fun startQuizSession(mode:QuizMode,quantity:Int,contestId:String?=null,disciplina:String?=null){
+    fun startQuizSession(mode:QuizMode,quantity:Int,contestId:String?=null,disciplina:String?=null,componentId:String?=null){
         startJob?.cancel()
         val id=PracticeScope.contest(mode,if(mode==QuizMode.SIMULADO)contestId?:_selectedContestId.value else contestId)
         startJob=operation {
             _isStartingQuiz.value=true
             try{
-                val questions=repository.fetchOrGetOfflineQuiz(repository.ownerUserId,mode,quantity,id,disciplina)
+                val questions=repository.fetchOrGetOfflineQuiz(repository.ownerUserId,mode,quantity,id,disciplina,componentId)
                 if(questions.isEmpty()){
                     _userFeedbackMessage.emit(when(mode){
                         QuizMode.SRS_REVIEW->"Nenhuma revisão válida disponível agora. Use o Shuffle Geral para praticar o acervo."
@@ -212,7 +212,7 @@ class MainViewModel(private val repository:ConcursoRepository,private val appCon
         return try{
             require(chosenIndex in question.answers.indices&&question.correctAnswerIndices.size==1)
             val attempt=PendingAttemptEntity(questionId=question.id,chosenIndex=chosenIndex,chosenText=question.answers[chosenIndex],isCorrect=chosenIndex in question.correctAnswerIndices,timeSpentSeconds=timeSpentSeconds.coerceIn(1,86400),confidenceLevel=confidenceLevel,sessionUuid=session.sessionId,quizMode=session.mode.name,examBlock=null,contestId=session.exam?.examId,userNote=null,canonicalSubjectId=question.canonicalSubjectId,canonicalTopicId=question.canonicalTopicId,ownerUserId=session.ownerUserId,
-                attemptId=UUID.nameUUIDFromBytes("${session.sessionId}:${question.id}".toByteArray()).toString(),questionRevision=question.questionRevision)
+                attemptId=UUID.nameUUIDFromBytes("${session.sessionId}:${question.id}".toByteArray()).toString(),questionRevision=question.questionRevision,examComponentId=question.examComponentId)
             val next=session.copy(answers=session.answers+(question.id to SessionAnswer(chosenIndex,confidenceLevel,timeSpentSeconds,true)),revision=session.revision+1)
             repository.recordAttemptOfflineFirst(session.ownerUserId,attempt,next)
             if(_activeSession.value?.sessionId==session.sessionId)_activeSession.value=next

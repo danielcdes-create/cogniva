@@ -69,6 +69,8 @@ A partir de 1.4.4/build 11, Ajustes → Gerenciar concursos e registros reúne e
 
 As etapas [3](ETAPA-3-BACKEND-MONGO.md) e [4](ETAPA-4-CADASTRO-CATALOGO.md) acrescentam o catálogo compartilhado, componentes em etapas distintas, validação v2 e escrita administrativa com dry-run por padrão. Questões abertas podem ser armazenadas, mas continuam fora do protocolo objetivo atual. A [nota para Grok Build — etapas 5–7](NOTA-TECNICA-GROK-BUILD-PASSO-5.md) orienta classificação assistida, seleção/progresso e validação/publicação posteriores; não executar classificação como migração implícita do deploy.
 
+A etapa 5 expõe, para administrador, `POST /api/v1/admin/classification/proposals`, `POST /api/v1/admin/classification/decisions` e `POST /api/v1/admin/classification/compatibility`. O modelo de classificação é o `grok-4.3` já configurado, com o prompt `classify-question` versão 1; a chave não entra no repositório. Toda geração exige `limit` e `max_paid_calls`. Proposta pendente não muda treino nem SRS. O inventário `scripts/inventory_questions.py --dry-run` só conta estados e não grava o banco. A comparação `scripts/classification_preservation.py` permite diferença apenas nos campos de classificação autorizados e continua exigindo histórico idêntico. Nesta entrega não houve lote real: quantidade revisada em produção é 0 e o acervo não está classificado.
+
 Antes de cada promoção, capturar as identidades atuais do servidor compartilhado, sem comparar eternamente com a primeira instalação:
 
 ```powershell

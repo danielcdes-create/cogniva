@@ -71,7 +71,8 @@ data class QuizGeneratePayload(
     @SerialName("block_name") val blockName: String? = null,
     val disciplina: String? = null,
     val source: String? = null,
-    @SerialName("syllabus_topic_id") val syllabusTopicId: String? = null
+    @SerialName("syllabus_topic_id") val syllabusTopicId: String? = null,
+    @SerialName("component_id") val componentId:String?=null
 )
 
 @Serializable
@@ -122,7 +123,20 @@ data class ExamBlueprintPayload(
     @SerialName("sync_status") val syncStatus: String
 )
 
+@Serializable data class CacheStatePayload(@SerialName("question_ids") val questionIds:List<String>)
+@Serializable data class CacheStateItem(@SerialName("question_id") val questionId:String,val question:QuestionDto?=null)
+@Serializable data class PracticeDecision(
+    @SerialName("question_id") val questionId:String,
+    @SerialName("question_revision") val questionRevision:String,
+    @SerialName("exam_id") val examId:String,
+    @SerialName("exam_revision") val examRevision:Long,
+    @SerialName("component_id") val componentId:String,
+    val relation:String,val revision:Long,
+    @SerialName("catalog_version") val catalogVersion:Long
+)
+@Serializable data class CacheStateResponse(@SerialName("projection_version") val projectionVersion:Int,val questions:List<CacheStateItem>,val decisions:List<PracticeDecision> = emptyList())
 interface ConcursoApiService {
+    @POST("questions/cache-state") suspend fun cacheState(@Body payload:CacheStatePayload):CacheStateResponse
     @GET("catalog/knowledge") suspend fun knowledgeCatalog(): JsonObject
     @GET("auth/profile")
     suspend fun profile(): UserProfileDto

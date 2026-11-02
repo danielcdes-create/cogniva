@@ -229,7 +229,7 @@ fun ProgressScreen(
             // 4. Desempenho por Disciplina (Ordenado por Pior Desempenho)
             item {
                 Text(
-                    text = "Domínio por Disciplina (Prioridade de Ataque)",
+                    text = "Histórico de acertos por disciplina",
                     style = MaterialTheme.typography.titleMedium
                 )
             }

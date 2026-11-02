@@ -57,7 +57,8 @@ data class PendingAttemptEntity(
     @androidx.room.ColumnInfo(defaultValue = "0") val ownerUserId: Long = 0,
     @androidx.room.ColumnInfo(defaultValue = "''") val attemptId: String = java.util.UUID.randomUUID().toString(),
     @androidx.room.ColumnInfo(defaultValue = "''") val questionRevision: String = "",
-    val syncError: String? = null
+    val syncError: String? = null,
+    val examComponentId:String?=null
 )
 
 @Dao
@@ -124,7 +125,7 @@ interface ConcursoLocalDao {
         LearningRecordEntity::class, PendingReportEntity::class, QuizSessionEntity::class, LocalMetadataEntity::class,
         CanonicalMasteryEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

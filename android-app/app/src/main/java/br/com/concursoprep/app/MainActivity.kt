@@ -322,12 +322,12 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                         trunkRows = ExamEngine.trunkRows(trunkSlug, storedExams),
                         trunkSlug = trunkSlug,
                         onSelectTrunk = { trunkSlug = it },
-                        onPracticeDiscipline = { disc ->
+                        onPracticeDiscipline = { disc, component ->
                             viewModel.startQuizSession(
                                 mode = QuizMode.STANDARD,
                                 quantity = 10,
                                 contestId = selectedContestId,
-                                disciplina = disc
+                                disciplina = disc, componentId=component
                             )
                         },
                         onApplyDiffConsent = { cid ->
