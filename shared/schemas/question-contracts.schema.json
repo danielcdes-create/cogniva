@@ -759,7 +759,7 @@
         "revision": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 9223372036854775806
+          "maximum": 9007199254740991
         },
         "criteria": {
           "type": "array",

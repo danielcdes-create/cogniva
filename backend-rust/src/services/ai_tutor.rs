@@ -78,7 +78,7 @@ pub async fn get_or_generate_ai_assist_budget(db:&Database,config:&AppConfig,que
         .await?
         .ok_or_else(|| AppError::NotFound(format!("Questão {} não encontrada", question_id)))?;
 
-    let questao: QuestionDocument = bson::from_document(original.clone()).map_err(|_| AppError::Conflict("Formato da questão exige revisão".into()))?;
+    let questao = crate::services::question_compatibility::decode(original.clone())?;
 
     // 1. Verificar se já existe no cache do documento MongoDB
     match &kind {
@@ -314,7 +314,7 @@ pub async fn get_or_generate_ai_assist_budget(db:&Database,config:&AppConfig,que
     };
 
     let mut guard=doc!{"_id":oid};
-    for field in ["question","answers","correct_answers","correct_answer_indices"] {
+    for field in ["question","answers","correct_answers","correct_answer_indices","content_revision","grading","status","validity","legal_validity"] {
         guard.insert(field,original.get(field).cloned().unwrap_or_else(||bson::Bson::Document(doc!{"$exists":false})));
     }
     let result = coll.update_one(guard, update_doc).await?;

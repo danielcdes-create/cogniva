@@ -1,7 +1,7 @@
 //! Explicit operator-reviewed mappings. No label inference or historical array rewrite.
 use crate::{
     error::AppError, models::question::QuestionDocument, security::SessionUser,
-    services::exam_engine::canonical_subjects, AppState,
+    AppState,
 };
 use axum::{extract::State, Extension, Json};
 use bson::{doc, oid::ObjectId, Document};
@@ -46,7 +46,7 @@ pub async fn apply(
             "Revise de 1 a 100 vínculos explícitos por lote".into(),
         ));
     }
-    let catalog = canonical_subjects();
+
     let coll = state.db.collection::<Document>("todasQuestoes");
     let mut plans = Vec::new();
     let mut seen = HashSet::new();
@@ -59,12 +59,7 @@ pub async fn apply(
                 "Operação, justificativa ou identidade repetida inválida".into(),
             ));
         }
-        if !catalog.iter().any(|s| {
-            s.canonical_subject_id == entry.canonical_subject_id
-                && s.topics
-                    .iter()
-                    .any(|t| t.topic_id == entry.canonical_topic_id)
-        }) {
+        if !crate::services::question_contracts::known_topic(&entry.canonical_subject_id,&entry.canonical_topic_id) {
             return Err(AppError::BadRequest("Vínculo fora do catálogo".into()));
         }
         let oid = ObjectId::parse_str(&entry.question_id)?;
@@ -72,6 +67,7 @@ pub async fn apply(
             .find_one(doc! {"_id":oid})
             .await?
             .ok_or_else(|| AppError::NotFound("Questão ausente".into()))?;
+        if raw.get_i32("schema_version").ok()==Some(2) || raw.get_i64("schema_version").ok()==Some(2) {return Err(AppError::Conflict("Questões v2 devem ser editadas pelo endpoint versionado".into()));}
         let hash = format!(
             "{:x}",
             Sha256::digest(

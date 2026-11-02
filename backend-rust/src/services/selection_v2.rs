@@ -23,8 +23,10 @@ pub(crate) async fn pool(
     limit: usize,
 ) -> Result<Vec<QuestionDocument>, AppError> {
     let mut matchers = vec![
-        filter,
-        doc! {"legal_validity.status":{"$in":[bson::Bson::Null,bson::Bson::String("ACTIVE".into()),bson::Bson::String("VIGENTE".into())]}},
+        crate::services::question_compatibility::canonical_filter(filter),
+        doc! {"validity.status":{"$nin":["OBSOLETE","UNDER_REVIEW"]}},
+        doc! {"question_type":{"$ne":"OPEN_ENDED"}},
+        doc! {"$or":[{"schema_version":2},{"legal_validity.status":{"$in":[bson::Bson::Null,bson::Bson::String("ACTIVE".into()),bson::Bson::String("VIGENTE".into())]}}]},
     ];
     let mut reports=state.db.collection::<Document>("reportedQuestoes").find(doc!{"fix.status_solved":false,"problemas":{"$in":["Questão com Erros de Conteúdo","Alternativas Corretas em Duplicidade","Alternativas Mal Formuladas","Enunciado c/ Erros de Conteúdo","Alternativas Incorretas","Questão Completamente Problemática"]}}).await?;
     let mut excluded = Vec::new();
@@ -44,7 +46,7 @@ pub(crate) async fn pool(
         .await?;
     let mut result = Vec::new();
     while let Some(raw) = cursor.try_next().await? {
-        match bson::from_document::<QuestionDocument>(raw) {
+        match crate::services::question_compatibility::decode(raw) {
             Ok(q) if q.answer_indices().is_ok() => result.push(q),
             _ => tracing::warn!(
                 "Questão com formato/gabarito inválido excluída da seleção; conteúdo preservado"

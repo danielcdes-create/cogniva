@@ -94,6 +94,7 @@ try:
     if '--exercise-rollback' in sys.argv:
         controlled_failure=True
         raise RuntimeError('CONTROLLED_SMOKE_FAILURE_FOR_ROLLBACK')
+    print(run("docker","exec",SERVICE,"/usr/local/bin/app","--prepare-question-storage"))
     gate(False)  # The first moment client writes can reach the verified candidate.
     atomic_json(ROOT/'cogniva-current-release.json',{**manifest,'runtime_size_bytes':size,'previous_image_id':old_image,'previous_image':before['Config']['Image']})
     print(json.dumps({'promoted':release.name,'runtime_size_bytes':size,'other_containers_preserved':True}))

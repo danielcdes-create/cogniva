@@ -13,3 +13,8 @@ pub mod exam_store;
 pub mod legacy_validation;
 pub mod rate_limit;
 pub mod selection_v2;
+
+pub mod question_compatibility;
+
+pub mod question_contracts;
+pub mod question_storage;

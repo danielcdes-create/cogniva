@@ -91,6 +91,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::with_uri_str(&config.mongodb_uri).await?;
     let db = client.database(&config.mongodb_db);
 
+    if std::env::args().nth(1).as_deref()==Some("--prepare-question-storage") {
+        let result=services::question_storage::prepare(&db).await?;
+        services::question_storage::recover_audit(&db).await?;
+        println!("{}",result);return Ok(());
+    }
+
     // Inicia agendador diário em background (substitui schedule do AFTBot.py + countdown.py)
     spawn_background_daily_scheduler(db.clone());
 
@@ -114,6 +120,9 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .allow_headers(Any);
 
     Router::new()
+        .route("/api/v1/admin/questions/v2",post(routes::questions_v2::save))
+        .route("/api/v1/admin/questions/v2/:id",get(routes::questions_v2::get))
+        .route("/api/v1/catalog/knowledge",get(routes::questions_v2::catalog))
         .route("/api/v1/admin/canonical-mapping",post(routes::canonical_mapping::apply))
         .route("/api/v1/auth/profile", get(routes::auth::get_profile))
         .route(

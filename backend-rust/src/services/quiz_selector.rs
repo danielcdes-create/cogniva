@@ -154,11 +154,11 @@ async fn fetch_single_mode(
     db: &Database,
     req: &QuizGenerateRequest,
 ) -> Result<Vec<QuestionDocument>, AppError> {
-    let coll = db.collection::<QuestionDocument>("todasQuestoes");
+    let coll = db.collection::<Document>("todasQuestoes");
     if let Some(id_str) = &req.single_question_id {
         let oid = ObjectId::parse_str(id_str.trim())?;
         if let Some(q) = coll.find_one(doc! { "_id": oid }).await? {
-            return Ok(vec![q]);
+            return Ok(crate::services::question_compatibility::decode(q).ok().into_iter().collect());
         }
         return Ok(Vec::new());
     }
@@ -170,7 +170,7 @@ async fn fetch_single_mode(
         let mut cursor = coll.find(regex_filter).limit(5).await?;
         let mut results = Vec::new();
         while let Some(q) = cursor.try_next().await? {
-            results.push(q);
+            if let Ok(q)=crate::services::question_compatibility::decode(q){results.push(q);}
         }
         return Ok(results);
     }
@@ -289,7 +289,7 @@ async fn fetch_standard_or_shuffle_mode(
 
     let mut results = Vec::new();
     while let Some(raw_doc) = cursor.try_next().await? {
-        if let Ok(q) = bson::from_document::<QuestionDocument>(raw_doc) {
+        if let Ok(q) = crate::services::question_compatibility::decode(raw_doc) {
             results.push(q);
         }
     }
@@ -401,7 +401,7 @@ async fn fetch_badass_mode(
 
     let mut results = Vec::new();
     while let Some(raw_doc) = cursor.try_next().await? {
-        if let Ok(q) = bson::from_document::<QuestionDocument>(raw_doc) {
+        if let Ok(q) = crate::services::question_compatibility::decode(raw_doc) {
             results.push(q);
         }
     }
@@ -476,7 +476,7 @@ async fn fetch_simulado_mode(
             .await?;
 
         while let Some(raw_doc) = cursor.try_next().await? {
-            if let Ok(q) = bson::from_document::<QuestionDocument>(raw_doc) {
+            if let Ok(q) = crate::services::question_compatibility::decode(raw_doc) {
                 questoes_simulado.push(q);
             }
         }
@@ -523,7 +523,7 @@ async fn fetch_srs_review_mode(
 
     let mut results = Vec::new();
     while let Some(raw_doc) = cursor.try_next().await? {
-        if let Ok(q) = bson::from_document::<QuestionDocument>(raw_doc) {
+        if let Ok(q) = crate::services::question_compatibility::decode(raw_doc) {
             results.push(q);
         }
     }
@@ -572,7 +572,7 @@ async fn fetch_error_notebook_mode(
 
     let mut results = Vec::new();
     while let Some(raw_doc) = cursor.try_next().await? {
-        if let Ok(q) = bson::from_document::<QuestionDocument>(raw_doc) {
+        if let Ok(q) = crate::services::question_compatibility::decode(raw_doc) {
             results.push(q);
         }
     }
@@ -614,7 +614,7 @@ async fn fetch_common_trunk_mode(
 
     let mut results = Vec::new();
     while let Some(raw_doc) = cursor.try_next().await? {
-        if let Ok(q) = bson::from_document::<QuestionDocument>(raw_doc) {
+        if let Ok(q) = crate::services::question_compatibility::decode(raw_doc) {
             results.push(q);
         }
     }

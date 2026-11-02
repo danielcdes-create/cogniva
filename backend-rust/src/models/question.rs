@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 pub enum QuestionType {
     MultipleChoice,
     TrueFalse,
+    OpenEnded,
 }
 
 impl Default for QuestionType {
@@ -187,7 +188,7 @@ impl QuestionDocument {
             }
             indices = mapped;
         }
-        if indices.len() != 1
+        if self.question_type == QuestionType::OpenEnded || indices.len() != 1
             || indices[0] >= self.answers.len()
             || self.answers.len() < 2
             || (self.question_type == QuestionType::TrueFalse && self.answers.len() != 2)
@@ -233,7 +234,7 @@ impl QuestionDocument {
             source: self
                 .source
                 .clone()
-                .unwrap_or_else(|| " Inédita / IA".to_string()),
+                .unwrap_or_else(|| "Origem não informada".to_string()),
             exam_year: self.exam_year,
             level: self.level.clone().unwrap_or_else(|| "Médio".to_string()),
             syllabus_topic_ids: self.syllabus_topic_ids.clone(),

@@ -321,7 +321,7 @@ pub async fn commit(
         }
         let question = state
             .db
-            .collection::<QuestionDocument>("todasQuestoes")
+            .collection::<Document>("todasQuestoes")
             .find_one(doc! {"_id":qid})
             .await?
             .ok_or_else(|| {
@@ -329,6 +329,7 @@ pub async fn commit(
                     "Questão não encontrada; tentativa preservada para revisão".into(),
                 )
             })?;
+        let question=crate::services::question_compatibility::decode(question)?;
         let at = validate(item, &question)?;
         let activity = match &existing {
             Some(raw) => bson::from_document(raw.clone()).map_err(|_| {

@@ -61,6 +61,64 @@ async fn editable_exam_components_and_deletion_survive_sync_without_touching_his
     assert!(name.starts_with("cogniva_test_"));db.drop().await.unwrap();
 }
 
+#[tokio::test]
+#[ignore = "Requires dedicated loopback Mongo 27048"]
+async fn stage3_storage_validators_indexes_cas_and_legacy_preservation() {
+    use services::{question_contracts as contract,question_storage as storage};
+    let uri=std::env::var("COGNIVA_TEST_MONGODB_URI").unwrap();assert!(uri.starts_with("mongodb://127.0.0.1:27048/"));
+    let client=Client::with_uri_str(&uri).await.unwrap();let name=format!("cogniva_test_{}",uuid::Uuid::new_v4().simple());let db=client.database(&name);
+    let fixture=|file:&str|->serde_json::Value {serde_json::from_slice(&std::fs::read(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../shared/examples/question-contracts").join(file)).unwrap()).unwrap()};
+    let mut q=fixture("question-multiple-choice.json");let id=ObjectId::new();q["_id"]=serde_json::json!({"$oid":id.to_hex()});
+    let legacy=doc!{"_id":id,"question":q["question"].as_str().unwrap(),"answers":["3","4","5","6","7"],"correct_answers":["4"],"mnemonico":"cached resource preserved","unmodeled_legacy":{"keep":true}};
+    db.collection::<Document>("todasQuestoes").insert_one(legacy.clone()).await.unwrap();
+    db.collection::<Document>("userActivityLog").insert_one(doc!{"user_id":123_i64,"pastSessions":[{"attempt_id":"preserved-event"}]}).await.unwrap();
+    let before_history=db.collection::<Document>("userActivityLog").find_one(doc!{}).await.unwrap();
+    storage::prepare(&db).await.unwrap();storage::prepare(&db).await.unwrap();
+    assert_eq!(db.collection::<Document>("todasQuestoes").find_one(doc!{"_id":id}).await.unwrap(),Some(legacy.clone()));
+    let indexes:Vec<_>=db.collection::<Document>("todasQuestoes").list_indexes().await.unwrap().try_collect().await.unwrap();assert!(indexes.iter().any(|i|i.options.as_ref().and_then(|o|o.name.as_deref())==Some("qv2_classification_validity")));
+    let operation=uuid::Uuid::new_v4().to_string();
+    let request=|document:serde_json::Value,op:String,expected:i64,dry_run:bool|storage::SaveRequest{operation_id:op,expected_revision:expected,dry_run,document};
+    assert_eq!(storage::save(&db,123,request(q.clone(),operation.clone(),0,true)).await.unwrap()["status"],"validated_dry_run");
+    assert_eq!(db.collection::<Document>("question_commands").count_documents(doc!{}).await.unwrap(),0);
+    assert_eq!(storage::save(&db,123,request(q.clone(),operation.clone(),0,false)).await.unwrap()["status"],"applied");
+    assert_eq!(storage::save(&db,123,request(q.clone(),operation.clone(),0,false)).await.unwrap()["status"],"already_applied");
+    let row=db.collection::<Document>("todasQuestoes").find_one(doc!{"_id":id}).await.unwrap().unwrap();
+    assert_eq!(row.get_str("mnemonico").unwrap(),"cached resource preserved");assert!(row.get_document("unmodeled_legacy").unwrap().get_bool("keep").unwrap());
+    assert_eq!(row.get_str("canonical_topic_id").unwrap(),"MAT_01_001");
+    assert!(db.collection::<Document>("todasQuestoes").update_one(doc!{"_id":id},doc!{"$set":{"answers":["invalid"]}}).await.is_err());
+    db.collection::<Document>("todasQuestoes").update_one(doc!{"_id":id},doc!{"$unset":{"canonical_subject_id":"","canonical_topic_id":""}}).await.unwrap();
+    let state=AppState::new(db.clone(),config(&uri));
+    let selected=services::selection_v2::pool(&state,doc!{"canonical_topic_id":"MAT_01_001"},10).await.unwrap();assert_eq!(selected.len(),1);assert_eq!(selected[0].canonical_subject_id.as_deref(),Some("MAT"));
+    let mut open=fixture("question-open-ai.json");open["_id"]=serde_json::json!({"$oid":ObjectId::new().to_hex()});
+    storage::save(&db,123,request(open,uuid::Uuid::new_v4().to_string(),0,false)).await.unwrap();
+    let mut obsolete=fixture("question-obsolete.json");obsolete["_id"]=serde_json::json!({"$oid":ObjectId::new().to_hex()});
+    storage::save(&db,123,request(obsolete,uuid::Uuid::new_v4().to_string(),0,false)).await.unwrap();
+    assert_eq!(services::selection_v2::pool(&state,doc!{},10).await.unwrap().len(),1);
+    let row=db.collection::<Document>("todasQuestoes").find_one(doc!{"_id":id}).await.unwrap().unwrap();
+    let mut changed=bson::Bson::Document(row).into_relaxed_extjson();changed["revision"]=serde_json::json!(2);changed["question"]=serde_json::json!("Enunciado sintético revisado");changed["content_revision"]=serde_json::json!(contract::hash(&changed).unwrap());changed["validity"]["evaluated_content_revision"]=changed["content_revision"].clone();changed["validity"]["revision"]=serde_json::json!(2);
+    let op=uuid::Uuid::new_v4().to_string();storage::save(&db,123,request(changed.clone(),op.clone(),1,false)).await.unwrap();
+    let current=db.collection::<Document>("todasQuestoes").find_one(doc!{"_id":id}).await.unwrap().unwrap();assert!(!current.contains_key("mnemonico"));
+    let audit=db.collection::<Document>("question_revision_events").find_one(doc!{"_id":format!("123:{op}")}).await.unwrap().unwrap();assert_eq!(audit.get_document("previous").unwrap().get_str("mnemonico").unwrap(),"cached resource preserved");
+    assert!(storage::save(&db,123,request(changed,uuid::Uuid::new_v4().to_string(),1,false)).await.is_err());
+    let current=db.collection::<Document>("todasQuestoes").find_one(doc!{"_id":id}).await.unwrap().unwrap();
+    let mut left=bson::Bson::Document(current).into_relaxed_extjson();left["revision"]=serde_json::json!(3);left["question"]=serde_json::json!("Concorrente A");left["content_revision"]=serde_json::json!(contract::hash(&left).unwrap());left["validity"]["evaluated_content_revision"]=left["content_revision"].clone();left["validity"]["revision"]=serde_json::json!(3);
+    let mut right=left.clone();right["question"]=serde_json::json!("Concorrente B");right["content_revision"]=serde_json::json!(contract::hash(&right).unwrap());right["validity"]["evaluated_content_revision"]=right["content_revision"].clone();
+    let (a,b)=tokio::join!(storage::save(&db,123,request(left,uuid::Uuid::new_v4().to_string(),2,false)),storage::save(&db,123,request(right,uuid::Uuid::new_v4().to_string(),2,false)));
+    assert_ne!(a.is_ok(),b.is_ok(),"CAS must accept exactly one writer");
+    let pending_id=uuid::Uuid::new_v4().to_string();
+    db.collection::<Document>("todasQuestoes").update_one(doc!{"_id":id},doc!{"$set":{"schema_outbox":{"_id":&pending_id,"question_id":id.to_hex(),"revision":3_i64,"payload_sha256":"synthetic-recovery"}}}).await.unwrap();
+    storage::recover_audit(&db).await.unwrap();storage::recover_audit(&db).await.unwrap();
+    assert_eq!(db.collection::<Document>("question_revision_events").count_documents(doc!{"_id":pending_id}).await.unwrap(),1);
+    assert!(!db.collection::<Document>("todasQuestoes").find_one(doc!{"_id":id}).await.unwrap().unwrap().contains_key("schema_outbox"));
+    assert_eq!(before_history,db.collection::<Document>("userActivityLog").find_one(doc!{}).await.unwrap());
+    let app=build_router(Arc::new(state));
+    assert_eq!(request_http_metadata(&app).await,StatusCode::UNAUTHORIZED);
+    assert!(name.starts_with("cogniva_test_"));db.drop().await.unwrap();
+}
+async fn request_http_metadata(app:&Router)->StatusCode {
+    app.clone().oneshot(Request::builder().uri("/api/v1/catalog/knowledge").body(Body::empty()).unwrap()).await.unwrap().status()
+}
+
 fn config(uri: &str) -> AppConfig {
     AppConfig {
         port: 0,

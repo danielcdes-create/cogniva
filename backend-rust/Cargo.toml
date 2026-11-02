@@ -1,6 +1,6 @@
 [package]
 name = "api-rust-core"
-version = "1.4.4"
+version = "1.4.5"
 edition = "2021"
 authors = ["Daniel Caires <daniel.caires@yahoo.com>"]
 description = "Backend em Rust (Axum + MongoDB) para Plataforma de Preparação de Concursos Públicos"
@@ -26,6 +26,8 @@ rand = "0.8"
 futures = "0.3"
 regex = "1.11"
 sha2 = "0.10"
+jsonschema = { version = "0.29.1", default-features = false }
+serde_json_canonicalizer = "0.4.1"
 
 [profile.release]
 lto = true
