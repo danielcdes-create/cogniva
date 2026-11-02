@@ -31,7 +31,9 @@ data class LearningRecord(
     @SerialName("next_review_at") val nextReviewAt: String,
     val revision: Long = 0,
     val events: List<LearningEvent> = emptyList(),
-    @SerialName("confidence_avg") val confidenceAvg: Int? = null
+    @SerialName("confidence_avg") val confidenceAvg: Int? = null,
+    @SerialName("review_required") val reviewRequired: Boolean = false,
+    @SerialName("practice_available") val practiceAvailable: Boolean? = null
 )
 @Serializable
 data class LearningPage(val records: List<LearningRecord>, @SerialName("next_cursor") val nextCursor: String? = null)
@@ -59,7 +61,7 @@ object LearningProjection {
             // be replaced with an invented streak starting at zero.
             return base.copy(attempts=attempts,correct=correct,accuracyPct=correct*100.0/attempts,
                 isMastered=base.isMastered&&fresh.none { !it.isCorrect },
-                inErrorNotebook=base.inErrorNotebook||fresh.any { !it.isCorrect },events=events)
+                inErrorNotebook=base.inErrorNotebook||fresh.any { !it.isCorrect },events=events,reviewRequired=false,practiceAvailable=true)
         }
         var points = 0.0; var streak = 0; var errors = 0
         events.forEach { event ->
@@ -77,6 +79,6 @@ object LearningProjection {
             if (last?.isCorrect == false) true else if (mastered) false else base?.inErrorNotebook == true || fresh.any { !it.isCorrect },
             last?.let { !it.isCorrect && it.confidenceLevel >= 2 } ?: false, points,
             last?.let { Instant.parse(it.occurredAt).plusSeconds(interval * 86400L).toString() } ?: Instant.EPOCH.toString(),
-            base?.revision ?: 0, events,confidence)
+            base?.revision ?: 0, events,confidence,reviewRequired=false,practiceAvailable=true)
     }
 }

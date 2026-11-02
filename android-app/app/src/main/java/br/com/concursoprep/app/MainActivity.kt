@@ -309,7 +309,7 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                 BottomTab.CONCURSOS -> {
                     ContestsScreen(
                         selectedContestId = selectedContestId,
-                        availableContests = storedExams.map { exam -> exam.examId to exam.shortName },
+                        availableContests = storedExams.filter { it.lifecycleStatus != "ARQUIVADO" }.map { exam -> exam.examId to exam.shortName },
                         syllabusGroups = syllabusGroups,
                         diffData = contestDiff,
                         onSelectContest = { cid ->
@@ -341,7 +341,7 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                             viewModel.startQuizSession(
                                 mode = mode,
                                 quantity = quantity,
-                                contestId = selectedContestId
+                                contestId = if(mode==QuizMode.SIMULADO)selectedContestId else null
                             )
                         }
                     )
@@ -355,7 +355,7 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                             viewModel.startQuizSession(
                                 mode = mode,
                                 quantity = 10,
-                                contestId = selectedContestId,
+                                contestId = null,
                                 disciplina = disc
                             )
                         }

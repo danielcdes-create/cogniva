@@ -139,7 +139,7 @@ class ConcursoRepository(
                 SyllabusTopicNodeDto(SyllabusTopicDto(topic.localTopicId,exam.examId,subject.category,subject.displayName,topic.displayTitle,index,
                     estimation=EstimationMetadata(topic.diffStatus=="PRE_EDITAL_BASE",ConfidenceBadge.LOW,"Modelo/manual. Valide o conteúdo no edital e registre a fonte.",emptyList()),
                     diffStatus=when(topic.diffStatus){"OFICIAL_NOVO"->TopicDiffStatus.NEW_IN_EDITAL;"ARQUIVADO"->TopicDiffStatus.REMOVED_ARCHIVED;else->TopicDiffStatus.CONFIRMED}),value,related.sumOf { it.attempts },
-                    if(related.isEmpty()) "NAO_INICIADO" else if(related.all { it.isMastered }) "DOMINADO" else if(related.any { Instant.parse(it.nextReviewAt)<=Instant.now() }) "REVISAO" else "QUESTOES")
+                    if(related.isEmpty()) "NAO_INICIADO" else if(related.all { it.isMastered }) "DOMINADO" else if(related.any { it.practiceAvailable!=false&&(it.reviewRequired||Instant.parse(it.nextReviewAt)<=Instant.now()) }) "REVISAO" else "QUESTOES")
             }
             DisciplineSyllabusGroupDto(subject.category,subject.displayName,nodes.map { it.userMasteryPct }.average(),nodes)
         }
@@ -155,8 +155,9 @@ class ConcursoRepository(
     suspend fun getTodayDashboard(userId: Long,dailyGoalQuestions: Int=50,activeContestIds: List<String> = listOf("CPNU")): TodayDashboardDto {
         owner(userId);val rows=projectedLearning();val today=LocalDate.now(LearningProjection.studyZone)
         val events=rows.flatMap { it.events }.filter { Instant.parse(it.occurredAt).atOffset(LearningProjection.studyZone).toLocalDate()==today }
+        val actionable=rows.filter { it.practiceAvailable != false }
         return TodayDashboardDto(userId,today.toString(),dailyGoalQuestions,events.size,if(events.isEmpty())0.0 else events.count { it.isCorrect }*100.0/events.size,
-            rows.count { Instant.parse(it.nextReviewAt)<=Instant.now() }.toLong(),rows.count { it.inErrorNotebook }.toLong(),rows.count { it.highConfidenceError }.toLong(),emptyList(),CommonTrunkSuggestion("",emptyList(),""),
+            actionable.count { it.reviewRequired || Instant.parse(it.nextReviewAt)<=Instant.now() }.toLong(),actionable.count { it.inErrorNotebook }.toLong(),actionable.count { it.inErrorNotebook&&it.highConfidenceError }.toLong(),emptyList(),CommonTrunkSuggestion("",emptyList(),""),
             lastSyncedAt=metadata("last_sync"),syncMessage=metadata("sync_error"))
     }
     suspend fun getProgressAnalytics(userId: Long): ProgressAnalyticsDto {
@@ -178,26 +179,35 @@ class ConcursoRepository(
     }
     suspend fun fetchOrGetOfflineQuiz(userId: Long,mode: QuizMode,quantity: Int,contestId: String?=null,disciplina: String?=null): List<QuestionDto> {
         owner(userId);val count=quantity.coerceIn(1,120)
+        val scope=PracticeScope.contest(mode,contestId)
         try {
             auth?.ensureSession(api,ownerUserId)
-            val remote=api.generateQuizQuestions(QuizGeneratePayload(userId,mode,count,trunkFocusSlugs=focusedTrunkSlugs().toList(),contestId=contestId,disciplina=disciplina)).map(QuestionCacheMapping::withRevision)
+            val remote=api.generateQuizQuestions(QuizGeneratePayload(userId,mode,count,trunkFocusSlugs=focusedTrunkSlugs().toList(),contestId=scope,disciplina=disciplina)).map(QuestionCacheMapping::withRevision)
             if(remote.isNotEmpty()) dao.insertQuestions(remote.map { QuestionCacheMapping.toEntity(it,json) })
             return decorateQuestions(remote)
         } catch(e: CancellationException){throw e} catch(e: retrofit2.HttpException){
-            if(e.code() in listOf(400,409,422)) throw IllegalStateException("Não há questões suficientes ou válidas para esta grade. Confira disciplinas, tópicos e quantidades.")
-        } catch(_: Exception) { }
+            if(e.code() in listOf(400,401,403,404,409,422)) {
+                val detail=runCatching { Json.parseToJsonElement(e.response()?.errorBody()?.string().orEmpty()).jsonObject["message"]?.jsonPrimitive?.content }.getOrNull()
+                throw IllegalStateException(detail?.removePrefix("Requisição inválida: ")?.take(600) ?: "Não foi possível abrir as questões (${e.code()}). Confira a conta e o filtro de estudo.")
+            }
+        } catch(e: kotlinx.serialization.SerializationException) {
+            throw IllegalStateException("Não foi possível interpretar as questões enviadas pelo servidor. Atualize o aplicativo e tente novamente.",e)
+        } catch(_: java.io.IOException) { }
         val rows=projectedLearning().associateBy { it.questionId }
-        val all=dao.getCachedQuestions(null,10000).map { QuestionCacheMapping.toDto(it,json) }.filter { it.correctAnswerIndices.size==1&&it.correctAnswerIndices[0] in it.answers.indices }
-        val exam=loadStoredExams().firstOrNull { it.examId==contestId }
+        val all=dao.getCachedQuestions(null,10000).map { QuestionCacheMapping.toDto(it,json) }.filter { it.correctAnswerIndices.size==1&&it.correctAnswerIndices[0] in it.answers.indices&&rows[it.id]?.practiceAvailable!=false }
+        val exam=loadStoredExams().firstOrNull { it.examId==scope }
+        require(scope==null||exam!=null){"Concurso não disponível neste aparelho. Sincronize a escada e selecione novamente."}
+        require(mode!=QuizMode.SIMULADO||exam!=null){"Selecione um concurso não arquivado para o simulado."}
         require(mode==QuizMode.COMMON_TRUNK||exam?.lifecycleStatus!="ARQUIVADO"){"Concurso arquivado; revise sua seleção de estudo."}
+        require(all.isNotEmpty()){"Não foi possível recuperar questões do servidor e ainda não há questões válidas em cache. Verifique a conexão e tente novamente."}
         val topics=exam?.subjects?.flatMap { it.topics }?.filter { it.diffStatus!="ARQUIVADO" }?.map { it.canonicalTopicId }?.toSet()
         val commonTopics=if(mode==QuizMode.COMMON_TRUNK)loadStoredExams().filter { it.isActiveInLadder&&it.lifecycleStatus!="ARQUIVADO" }.flatMap { it.subjects }.flatMap { it.topics }.filter { it.diffStatus!="ARQUIVADO" }.map { it.canonicalTopicId }.toSet()else emptySet()
         val boardFilter=exam?.examBoards.orEmpty().filter { it!="A definir"&&it.isNotBlank() }.flatMap { if(it=="Cebraspe")listOf("Cebraspe","CEBRASPE","CESPE")else listOf(it) }.toSet()
         val pool=all.filter { mode!=QuizMode.SIMULADO||boardFilter.isEmpty()||it.source in boardFilter }.filter { q -> (disciplina==null||q.disciplina in ExamCatalog.equivalentLabels(disciplina)) && if(mode==QuizMode.COMMON_TRUNK)q.canonicalTopicId in commonTopics else (exam==null||q.canonicalTopicId in topics.orEmpty()||(q.canonicalTopicId==null&&exam.subjects.any { it.topics.any { t->t.diffStatus!="ARQUIVADO" }&&(it.displayName==q.disciplina||q.disciplina in ExamCatalog.legacyLabels(it.canonicalSubjectId)) })) }
         val selected=when(mode){
-            QuizMode.SRS_REVIEW->pool.filter { rows[it.id]?.let { r->Instant.parse(r.nextReviewAt)<=Instant.now() }==true }.sortedBy { rows[it.id]?.nextReviewAt }.take(count)
-            QuizMode.ERROR_NOTEBOOK->pool.filter { rows[it.id]?.inErrorNotebook==true }.take(count)
-            QuizMode.MOST_BADASS->pool.filter { rows[it.id]?.let { r->!r.isMastered&&r.attempts>0 }==true }.sortedBy { rows[it.id]?.accuracyPct }.take(count)
+            QuizMode.SRS_REVIEW->pool.filter { rows[it.id]?.let { r->r.practiceAvailable!=false&&(r.reviewRequired||Instant.parse(r.nextReviewAt)<=Instant.now()) }==true }.sortedBy { rows[it.id]?.nextReviewAt }.take(count)
+            QuizMode.ERROR_NOTEBOOK->pool.filter { rows[it.id]?.let { r->r.practiceAvailable!=false&&r.inErrorNotebook }==true }.take(count)
+            QuizMode.MOST_BADASS->pool.filter { rows[it.id]?.let { r->r.practiceAvailable!=false&&!r.isMastered&&r.attempts>0 }==true }.sortedBy { rows[it.id]?.accuracyPct }.take(count)
             QuizMode.SIMULADO->{if(exam==null) emptyList() else {
                 val ids=QuizSelection.weightedSimuladoIds(exam,pool.map { QuestionRef(it.id,it.canonicalSubjectId,it.canonicalTopicId) })
                 val expected=exam.subjects.filter { it.topics.any { t->t.diffStatus!="ARQUIVADO" } }.sumOf { it.questionCount?:0 }
@@ -207,6 +217,10 @@ class ConcursoRepository(
             QuizMode.COMMON_TRUNK->{val ids=QuizSelection.commonTrunkIds(loadStoredExams(),pool.map { QuestionRef(it.id,it.canonicalSubjectId,it.canonicalTopicId) },focusedTrunkSlugs(),canonicalMasteryBySubject(),LocalDate.now(LearningProjection.studyZone),count);ids.mapNotNull { id->pool.find { it.id==id } }}
             QuizMode.SINGLE->emptyList()
             else->pool.shuffled().take(count)
+        }
+        if(selected.isEmpty()&&mode in listOf(QuizMode.SRS_REVIEW,QuizMode.ERROR_NOTEBOOK,QuizMode.MOST_BADASS)) {
+            val expected=rows.values.any { r->r.practiceAvailable!=false&&(disciplina==null||r.disciplina in ExamCatalog.equivalentLabels(disciplina))&&when(mode){QuizMode.SRS_REVIEW->r.reviewRequired||Instant.parse(r.nextReviewAt)<=Instant.now();QuizMode.ERROR_NOTEBOOK->r.inErrorNotebook;else->!r.isMastered&&r.attempts>0} }
+            require(!expected){"Seu histórico contém registros para este modo, mas as questões não estão disponíveis no cache. Conecte-se para recuperá-las."}
         }
         return decorateQuestions(selected)
     }

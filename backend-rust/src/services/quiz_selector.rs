@@ -112,7 +112,7 @@ pub async fn enrich_questions_with_user_stats(
                 accuracy_pct: (act.percentual_acertos * 100.0).round() / 100.0,
                 last_session_iso: Some(act.datas.ultima_sessao.to_rfc3339()),
                 is_mastered: act.dominada,
-                in_error_notebook: act.in_error_notebook
+                in_error_notebook: act.error_notebook()
                     || act.quantidade_erros > act.quantidade_acertos,
             },
         );

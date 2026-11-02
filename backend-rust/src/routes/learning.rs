@@ -37,6 +37,8 @@ pub struct LearningRecord {
     pub high_confidence_error: bool,
     pub points: f64,
     pub next_review_at: String,
+    pub review_required: bool,
+    pub practice_available: bool,
     pub revision: i64,
     pub events: Vec<LearningEvent>,
 }
@@ -72,6 +74,7 @@ pub async fn get_state(
                 "Histórico legado com formato desconhecido; nenhum dado foi apagado".into(),
             )
         })?;
+        let error_notebook = activity.error_notebook();
         let raw_events = raw.get_array("pastSessions").ok();
         let events = activity
             .past_sessions
@@ -99,9 +102,11 @@ pub async fn get_state(
             correct: activity.quantidade_acertos,
             accuracy_pct: activity.percentual_acertos,
             is_mastered: activity.dominada,
-            in_error_notebook: activity.in_error_notebook,
+            in_error_notebook: error_notebook,
             high_confidence_error: activity.high_confidence_error_flag,
             confidence_avg: activity.nivel_confianca_med_rec,
+            review_required: activity.revisao_necessaria,
+            practice_available: false,
             points: activity.points,
             next_review_at: (activity.datas.ultima_sessao
                 + chrono::Duration::days(activity.spaced_repetition_interval.max(1) as i64))
@@ -111,6 +116,12 @@ pub async fn get_state(
         });
         last = Some(id.to_hex());
     }
+    // Preserve every learning record, including references to unavailable or
+    // invalid questions. Only the actionable queues exclude those references.
+    let ids: Vec<_> = records.iter().filter_map(|r| ObjectId::parse_str(&r.question_id).ok()).collect();
+    let available = crate::services::selection_v2::pool(&state, doc!{"_id":{"$in":ids}}, 10000).await?;
+    let available: std::collections::HashSet<_> = available.into_iter().map(|q| q.id.to_hex()).collect();
+    for record in &mut records { record.practice_available = available.contains(&record.question_id); }
     Ok(Json(LearningPage {
         next_cursor: if records.len() == 200 { last } else { None },
         records,

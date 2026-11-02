@@ -131,3 +131,12 @@ pub struct UserActivityDocument {
     #[serde(default)]
     pub canonical_topic_id: Option<String>,
 }
+
+impl UserActivityDocument {
+    pub fn review_due(&self, now: DateTime<Utc>) -> bool {
+        self.revisao_necessaria || now >= self.datas.ultima_sessao + chrono::Duration::days(self.spaced_repetition_interval.max(1) as i64)
+    }
+    pub fn error_notebook(&self) -> bool {
+        self.in_error_notebook || self.quantidade_erros > 0 && !self.dominada
+    }
+}

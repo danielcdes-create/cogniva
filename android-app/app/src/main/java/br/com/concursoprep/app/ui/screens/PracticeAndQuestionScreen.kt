@@ -143,12 +143,12 @@ fun PracticeHubScreen(
             )
             PracticeModeCard(
                 title = "Cogniva Questions · The Most Badass",
-                description = "Seleciona as questões com maior índice de erro, tempo gasto e reincidência no seu histórico.",
+                description = "Questões já praticadas e ainda não dominadas, priorizadas pela menor acurácia.",
                 onClick = { onLaunchSession(QuizMode.MOST_BADASS, selectedQuantity) }
             )
             PracticeModeCard(
-                title = "Cogniva Exams · Simulado Oficial Ponderado",
-                description = "Full-screen com cronômetro, distribuição exata de pesos do edital e cálculo de nota líquida.",
+                title = "Cogniva Exams · Simulado Ponderado",
+                description = "Usa a grade selecionada em Concursos. Exige questões válidas e vínculos confirmados para os tópicos da prova.",
                 onClick = { onLaunchSession(QuizMode.SIMULADO, selectedQuantity) }
             )
             PracticeModeCard(
@@ -163,7 +163,7 @@ fun PracticeHubScreen(
             )
             PracticeModeCard(
                 title = "Shuffle Geral / Prática Livre",
-                description = "Treino sem timer com feedback imediato e tutores de IA sob demanda.",
+                description = "Todo o acervo válido, independente do concurso selecionado. Treino sem cronômetro, com feedback e tutores de IA.",
                 onClick = { onLaunchSession(QuizMode.SHUFFLE, selectedQuantity) }
             )
         }

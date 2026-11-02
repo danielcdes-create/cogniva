@@ -17,7 +17,7 @@ use futures::TryStreamExt;
 use rand::seq::SliceRandom;
 use std::collections::HashMap;
 
-async fn pool(
+pub(crate) async fn pool(
     state: &AppState,
     filter: Document,
     limit: usize,
@@ -26,7 +26,7 @@ async fn pool(
         filter,
         doc! {"legal_validity.status":{"$in":[bson::Bson::Null,bson::Bson::String("ACTIVE".into()),bson::Bson::String("VIGENTE".into())]}},
     ];
-    let mut reports=state.db.collection::<Document>("reportedQuestoes").find(doc!{"fix.status_solved":false,"problemas":{"$in":["Questão com Erros de Conteúdo","Alternativas Corretas em Duplicidade","Alternativas Mal Formuladas","Enunciado c/ Erros de Conteúdo"]}}).await?;
+    let mut reports=state.db.collection::<Document>("reportedQuestoes").find(doc!{"fix.status_solved":false,"problemas":{"$in":["Questão com Erros de Conteúdo","Alternativas Corretas em Duplicidade","Alternativas Mal Formuladas","Enunciado c/ Erros de Conteúdo","Alternativas Incorretas","Questão Completamente Problemática"]}}).await?;
     let mut excluded = Vec::new();
     while let Some(report) = reports.try_next().await? {
         if let Ok(id) = report.get_object_id("questao_id") {
@@ -62,7 +62,10 @@ pub async fn generate(
 ) -> Result<Vec<QuestionDto>, AppError> {
     let quantity = req.quantity.clamp(1, 120);
     let exams = exam_store::list(state, req.user_id).await?;
-    let exam = match req.contest_id.as_deref() {
+    // General shuffle and personal history queues are independent of the
+    // planner's selected tab, including requests from older Android clients.
+    let scoped_contest = if matches!(req.mode, QuizMode::Shuffle | QuizMode::SrsReview | QuizMode::ErrorNotebook | QuizMode::MostBadass | QuizMode::CommonTrunk) { None } else { req.contest_id.as_deref() };
+    let exam = match scoped_contest {
         Some("Geral") | None => None,
         Some(id) => Some(exams.iter().find(|e| e.id == id).ok_or_else(|| {
             AppError::NotFound("Concurso não pertence à escada desta conta".into())
@@ -225,17 +228,8 @@ pub async fn generate(
             let mut eligible = Vec::new();
             while let Some(row) = activities.try_next().await? {
                 let allowed = match req.mode {
-                    QuizMode::SrsReview => {
-                        row.revisao_necessaria
-                            || chrono::Utc::now()
-                                >= row.datas.ultima_sessao
-                                    + chrono::Duration::days(
-                                        row.spaced_repetition_interval.max(1) as i64
-                                    )
-                    }
-                    QuizMode::ErrorNotebook => {
-                        row.in_error_notebook || row.quantidade_erros > 0 && !row.dominada
-                    }
+                    QuizMode::SrsReview => row.review_due(chrono::Utc::now()),
+                    QuizMode::ErrorNotebook => row.error_notebook(),
                     _ => !row.dominada && row.quantidade_praticas > 0,
                 };
                 if allowed {

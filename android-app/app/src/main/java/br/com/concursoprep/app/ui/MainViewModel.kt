@@ -132,6 +132,8 @@ class MainViewModel(private val repository:ConcursoRepository,private val appCon
             val profile=_userProfile.value.copy(displayName=prefs?.getString("display_name",_userProfile.value.displayName),dailyQuestionsTarget=prefs?.getInt("daily_questions_target",50)?:50,dailyStudyHoursTarget=(prefs?.getFloat("daily_study_hours_target",2f)?:2f).toDouble(),activeContestIds=(prefs?.getString("active_contests","CPNU")?:"CPNU").split(',').filter { it.isNotBlank() })
             _userProfile.value=profile
             val stored=repository.loadStoredExams();_storedExams.value=stored
+            val selected=PracticeScope.selected(stored,_selectedContestId.value)
+            if(selected!=_selectedContestId.value){_selectedContestId.value=selected;prefs?.edit()?.putString("selected_contest_id",selected)?.apply()}
             _focusedTrunks.value=repository.focusedTrunkSlugs()
             val dashboard=repository.getTodayDashboard(uid,profile.dailyQuestionsTarget,profile.activeContestIds)
             _todayDashboard.value=overlayLadder(dashboard,stored,_focusedTrunks.value,repository.canonicalMasteryBySubject())
@@ -170,12 +172,21 @@ class MainViewModel(private val repository:ConcursoRepository,private val appCon
     fun archiveExam(exam:StoredExam){operation {repository.editExamOffline(exam.copy(lifecycleStatus="ARQUIVADO",isActiveInLadder=false));val profile=_userProfile.value.copy(activeContestIds=_userProfile.value.activeContestIds-exam.examId);saveProfile(profile);_userProfile.value=profile;repository.saveOnboarding(profile.userId,profile.activeContestIds,profile.dailyQuestionsTarget,profile.dailyStudyHoursTarget,profile.displayName);refreshAllData();appContext?.let{OfflineSyncWorker.enqueueNow(it)}}}
     fun applyEditalDiffUpdate(id:String){operation {val before=_storedExams.value.find{it.examId==id}?.revision;repository.syncPendingAttempts(repository.ownerUserId);refreshAllData();_userFeedbackMessage.emit(if(repository.loadStoredExams().find{it.examId==id}?.revision!=before)"Nova revisão de edital salva. Histórico preservado."else"Nenhuma revisão nova de edital foi publicada para este concurso.")}}
     fun startQuizSession(mode:QuizMode,quantity:Int,contestId:String?=null,disciplina:String?=null){
-        startJob?.cancel();val id=contestId?:_selectedContestId.value
+        startJob?.cancel()
+        val id=PracticeScope.contest(mode,if(mode==QuizMode.SIMULADO)contestId?:_selectedContestId.value else contestId)
         startJob=operation {
             _isStartingQuiz.value=true
             try{
                 val questions=repository.fetchOrGetOfflineQuiz(repository.ownerUserId,mode,quantity,id,disciplina)
-                if(questions.isEmpty()){_userFeedbackMessage.emit("Nenhuma questão disponível para este modo e filtro. Conecte-se para ampliar o cache.");return@operation}
+                if(questions.isEmpty()){
+                    _userFeedbackMessage.emit(when(mode){
+                        QuizMode.SRS_REVIEW->"Nenhuma revisão válida disponível agora. Use o Shuffle Geral para praticar o acervo."
+                        QuizMode.ERROR_NOTEBOOK->"Nenhuma questão válida disponível no caderno de erros. O histórico continua preservado."
+                        QuizMode.MOST_BADASS->"Nenhuma questão válida do seu histórico atende ao desafio agora. Use o Shuffle Geral."
+                        QuizMode.COMMON_TRUNK->"Nenhuma questão disponível para o tronco das grades ativas. Confira os vínculos ou conecte-se para atualizar o cache."
+                        else->if(disciplina!=null)"Não foi possível obter questões de $disciplina neste filtro. O Shuffle Geral acessa outras matérias disponíveis." else "Nenhuma questão disponível neste filtro. Confira a conexão e o acervo em cache."
+                    });return@operation
+                }
                 val exam=repository.loadStoredExams().find{it.examId==id}
                 val session=SessionSnapshot(UUID.randomUUID().toString(),repository.ownerUserId,questions,mode,exam,if(mode==QuizMode.SIMULADO)System.currentTimeMillis()+questions.size*180000L else null)
                 repository.createSession(session);showSession(session)

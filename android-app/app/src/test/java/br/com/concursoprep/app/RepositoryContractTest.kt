@@ -19,12 +19,24 @@ import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.ResponseBody.Companion.toResponseBody
 
 /** Protocol invariants; fakes model network outcomes, not Room's SQL/transaction implementation. */
 class RepositoryContractTest {
     private val json=Json { ignoreUnknownKeys=true }
     private inline fun <reified T> fake(crossinline call:(String,Array<out Any?>)->Any?):T =
-        Proxy.newProxyInstance(T::class.java.classLoader,arrayOf(T::class.java)){_,method,args->call(method.name,args?:emptyArray())} as T
+        Proxy.newProxyInstance(T::class.java.classLoader,arrayOf(T::class.java)){_,method,args->
+            try { call(method.name,args?:emptyArray()) }
+            catch(error:Throwable) {
+                // Model a suspend failure, rather than Java Proxy wrapping a
+                // checked IOException in UndeclaredThrowableException.
+                val continuation=args?.lastOrNull() as? kotlin.coroutines.Continuation<Any?>
+                if(continuation==null)throw error
+                continuation.resumeWith(Result.failure(error))
+                kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED
+            }
+        } as T
     private fun question(id:String="000000000000000000000001")=QuestionCacheMapping.withRevision(QuestionDto(id=id,question="Q",answers=listOf("A","B"),correctAnswerIndices=listOf(1),disciplina="Finanças Públicas",source="Fixture",level="Médio"))
     private fun attempt(q:QuestionDto=question(),owner:Long=123,id:String=UUID.randomUUID().toString())=PendingAttemptEntity(
         localId=1,questionId=q.id,chosenIndex=1,chosenText="B",isCorrect=true,timeSpentSeconds=10,confidenceLevel=3,sessionUuid=id,quizMode="STANDARD",examBlock=null,contestId=null,userNote=null,createdAtEpochMs=Instant.parse("2026-10-31T22:00:00Z").toEpochMilli(),ownerUserId=owner,attemptId=id,questionRevision=q.questionRevision)
@@ -83,7 +95,7 @@ class RepositoryContractTest {
             "observeMetadata"->flowOf(null)
             else->error("Unexpected durable operation $method")
         }}
-        fun repository(submit:(SubmitBatchPayload)->SubmitBatchResponseDto={throw IOException("Synthetic outage")},sendReport:()->Unit={},updateExam:(ExamBlueprintPayload)->ExamBlueprintPayload={throw IOException("Synthetic outage")}):ConcursoRepository {
+        fun repository(submit:(SubmitBatchPayload)->SubmitBatchResponseDto={throw IOException("Synthetic outage")},sendReport:()->Unit={},updateExam:(ExamBlueprintPayload)->ExamBlueprintPayload={throw IOException("Synthetic outage")},generate:(QuizGeneratePayload)->List<QuestionDto> = {throw IOException("Synthetic outage")}):ConcursoRepository {
             val api=fake<ConcursoApiService>{method,args->when(method){
                 "submitAttemptsBatch"->submit(args[0] as SubmitBatchPayload)
                 "listExams"->remoteExams
@@ -91,7 +103,7 @@ class RepositoryContractTest {
                 "catalog"->Json.parseToJsonElement(checkNotNull(javaClass.getResourceAsStream("/canonical-catalog.json")).bufferedReader().readText()).jsonObject
                 "learningState"->LearningPage(emptyList())
                 "reportQuestionProblem"->{sendReport();Unit}
-                "generateQuizQuestions"->throw IOException("Synthetic outage")
+                "generateQuizQuestions"->generate(args[0] as QuizGeneratePayload)
                 else->error("Unexpected API operation $method")
             }}
             return ConcursoRepository(api,dao,exams,json,durable=durable,ownerUserId=123)
@@ -141,6 +153,41 @@ class RepositoryContractTest {
         assertTrue(repo.fetchOrGetOfflineQuiz(123,QuizMode.ERROR_NOTEBOOK,10).isEmpty())
         assertTrue(repo.fetchOrGetOfflineQuiz(123,QuizMode.SRS_REVIEW,10).isEmpty())
         assertEquals(1,repo.fetchOrGetOfflineQuiz(123,QuizMode.STANDARD,10).size)
+    }
+    @Test fun generalAndPersonalModesDoNotInheritAnArchivedPlannerSelection()=runBlocking {
+        val store=Store();val q=question();val archived=ExamCatalog.systemExams().first().copy(examId="archived",lifecycleStatus="ARQUIVADO",isActiveInLadder=false)
+        store.putExam(archived);store.questions[q.id]=QuestionCacheMapping.toEntity(q,json)
+        for(mode in listOf(QuizMode.SHUFFLE,QuizMode.SRS_REVIEW,QuizMode.ERROR_NOTEBOOK,QuizMode.MOST_BADASS,QuizMode.COMMON_TRUNK)) {
+            val repo=store.repository(generate={ request ->assertNull(request.contestId);listOf(q) })
+            assertEquals(q.id,repo.fetchOrGetOfflineQuiz(123,mode,10,"archived").single().id)
+        }
+        assertEquals(q.id,store.repository().fetchOrGetOfflineQuiz(123,QuizMode.SHUFFLE,10,"archived").single().id)
+        assertTrue(runCatching { store.repository().fetchOrGetOfflineQuiz(123,QuizMode.STANDARD,10,"archived") }.isFailure)
+        assertTrue(runCatching { store.repository().fetchOrGetOfflineQuiz(123,QuizMode.SIMULADO,10,"archived") }.isFailure)
+        assertEquals("active",PracticeScope.selected(listOf(archived,archived.copy(examId="active",lifecycleStatus="RUMOR_PREVISTO",isActiveInLadder=true)),"archived"))
+        assertEquals("",PracticeScope.selected(listOf(archived),"archived"))
+    }
+    @Test fun reviewFlagAndAvailabilityAgreeBetweenDashboardAndOfflineSelection()=runBlocking {
+        val store=Store();val q=question();store.questions[q.id]=QuestionCacheMapping.toEntity(q,json)
+        val row=LearningRecord(q.id,q.disciplina,attempts=1,correct=0,accuracyPct=0.0,isMastered=false,inErrorNotebook=true,highConfidenceError=true,points=0.0,nextReviewAt="2099-01-01T00:00:00Z",reviewRequired=true,practiceAvailable=true)
+        fun put(value:LearningRecord){store.learning[q.id]=LearningRecordEntity(q.id,0,json.encodeToString(value))}
+        put(row);val repo=store.repository()
+        assertEquals(1L,repo.getTodayDashboard(123).pendingSrsReviewsCount)
+        assertEquals(q.id,repo.fetchOrGetOfflineQuiz(123,QuizMode.SRS_REVIEW,10).single().id)
+        put(row.copy(practiceAvailable=false))
+        val dashboard=repo.getTodayDashboard(123)
+        assertEquals(0L,dashboard.pendingSrsReviewsCount);assertEquals(0L,dashboard.errorNotebookCount)
+        assertTrue(runCatching { repo.fetchOrGetOfflineQuiz(123,QuizMode.SRS_REVIEW,10) }.isFailure)
+        assertTrue(runCatching { repo.fetchOrGetOfflineQuiz(123,QuizMode.ERROR_NOTEBOOK,10) }.isFailure)
+        assertTrue(runCatching { repo.fetchOrGetOfflineQuiz(123,QuizMode.SHUFFLE,10) }.isFailure)
+        assertEquals(1,repo.getProgressAnalytics(123).totalQuestionsPracticed)
+    }
+    @Test fun serverRejectionIsNotRewrittenAsAnInsufficientGradeOrSilentlyReplacedByCache()=runBlocking {
+        val store=Store();val q=question();store.questions[q.id]=QuestionCacheMapping.toEntity(q,json)
+        val body="""{"message":"Requisição inválida: Concurso arquivado; selecione outro concurso"}"""
+        val repo=store.repository(generate={throw retrofit2.HttpException(retrofit2.Response.error<List<QuestionDto>>(400,body.toResponseBody("application/json".toMediaType())))})
+        val error=runCatching { repo.fetchOrGetOfflineQuiz(123,QuizMode.STANDARD,10,"CPNU") }.exceptionOrNull()
+        assertEquals("Concurso arquivado; selecione outro concurso",error?.message)
     }
     @Test fun cacheRoundtripPreservesMeaningWithoutInventingCanonicalLinks(){
         val original=question().copy(syllabusTopicIds=listOf("topic"),commonTrunkId="common",isBorrowedAnalogous=true,hasDrSincero=true,hasMnemonic=true,hasPlausibility=true,hintsCount=3,userStats=UserQuestionBriefStats(4,75.0,"2026-10-31T22:00:00Z",true,true))

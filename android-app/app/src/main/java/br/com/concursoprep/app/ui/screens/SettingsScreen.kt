@@ -137,7 +137,7 @@ fun SettingsScreen(
         selectedContests.addAll(userProfile.activeContestIds.ifEmpty { listOf("CPNU", "RFB") })
     }
 
-    val ladderChips = ladderExams.ifEmpty { emptyList() }
+    val ladderChips = ladderExams.filter { it.lifecycleStatus != "ARQUIVADO" }
 
     Surface(
         color = MaterialTheme.colorScheme.background,
@@ -157,7 +157,7 @@ fun SettingsScreen(
             )
 
             OutlinedButton(onClick=onOpenPending,modifier=Modifier.fillMaxWidth()){Text(if(pendingSyncCount>0)"Revisar $pendingSyncCount registro(s) pendente(s)"else"Ver registros preservados")}
-            ladderChips.forEach { exam ->
+            ladderExams.forEach { exam ->
                 Row(modifier=Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick={onEditExam(exam)},modifier=Modifier.weight(1f)){Text("Editar ${exam.shortName}")}
                     OutlinedButton(onClick={onArchiveExam(exam)}){Text("Arquivar")}

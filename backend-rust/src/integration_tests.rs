@@ -7,6 +7,7 @@ use axum::{
 use bson::{doc, oid::ObjectId, Document};
 use std::path::PathBuf;
 use tower::ServiceExt;
+use futures::TryStreamExt;
 
 fn config(uri: &str) -> AppConfig {
     AppConfig {
@@ -146,6 +147,49 @@ async fn protected_routes_reject_untrusted_identity_before_database_access() {
         .0,
         StatusCode::UNAUTHORIZED
     );
+}
+
+#[tokio::test]
+#[ignore = "Requires the dedicated loopback MongoDB on 27048"]
+async fn legacy_question_bank_remains_practicable_with_an_archived_selected_exam() {
+    let uri=std::env::var("COGNIVA_TEST_MONGODB_URI").unwrap();
+    assert!(uri.starts_with("mongodb://127.0.0.1:27048/")||uri.starts_with("mongodb://localhost:27048/"));
+    let client=Client::with_uri_str(&uri).await.unwrap();
+    let name=format!("cogniva_test_{}",uuid::Uuid::new_v4().simple());let db=client.database(&name);
+    let cfg=config(&uri);let secret=cfg.jwt_secret.clone();let state=Arc::new(AppState::new(db.clone(),cfg));let app=build_router(state.clone());
+    for owner in [123_i64,456_i64]{db.collection::<Document>("usuarios").insert_one(doc!{"user_id":owner,"active_contest_ids":[]}).await.unwrap();}
+    let mut archived=services::exam_engine::system_exam_blueprints().into_iter().find(|e|e.id=="CPNU").unwrap();
+    archived.status=models::exam_hierarchy::ExamLifecycleStatus::Arquivado;archived.is_active_in_ladder=false;
+    services::exam_store::save(&state,123,archived,false).await.unwrap();
+    let ids=[ObjectId::new(),ObjectId::new(),ObjectId::new()];
+    for (index,id) in ids.iter().enumerate(){
+        let mut question=doc!{"_id":id,"question":"Questão legada sintética ç","answers":["A","B"],"disciplina":"Direito do Trabalho"};
+        if index!=1{question.insert("correct_answers",vec!["B"]);}
+        db.collection::<Document>("todasQuestoes").insert_one(question).await.unwrap();
+        let now=bson::DateTime::now();
+        db.collection::<Document>("userActivityLog").insert_one(doc!{"user_id":if index==2 {456_i64}else{123_i64},"question_id":id,"disciplina":"Direito do Trabalho","datas":{"ultima_sessao":now,"data_primeira_sessao":now},"tempos":{},"quantidade_praticas":1,"quantidade_erros":1,"spaced_repetition_interval":30,"revisao_necessaria":true,"pastSessions":[]}).await.unwrap();
+    }
+    let before_questions:Vec<Document>=db.collection("todasQuestoes").find(doc!{}).sort(doc!{"_id":1}).await.unwrap().try_collect().await.unwrap();
+    let before_history:Vec<Document>=db.collection("userActivityLog").find(doc!{}).sort(doc!{"_id":1}).await.unwrap().try_collect().await.unwrap();
+    for mode in ["SHUFFLE","SRS_REVIEW","ERROR_NOTEBOOK","MOST_BADASS"] {
+        let (status,body)=request(&app,&secret,Some(123),"POST","/api/v1/quiz/generate",serde_json::json!({"user_id":123,"mode":mode,"quantity":10,"contest_id":"CPNU"})).await;
+        assert_eq!(status,StatusCode::OK,"{mode}: {body}");let questions=body.as_array().unwrap();
+        assert_eq!(questions.len(),if mode=="SHUFFLE"{2}else{1});
+        if mode!="SHUFFLE"{assert_eq!(questions[0]["id"],ids[0].to_hex());}
+        for q in questions{assert!(!q["question_revision"].as_str().unwrap().is_empty());assert!(q["canonical_topic_id"].is_null());assert_eq!(q["correct_answer_indices"],serde_json::json!([1]));}
+    }
+    let (status,page)=request(&app,&secret,Some(123),"GET","/api/v1/learning/state",serde_json::Value::Null).await;
+    assert_eq!(status,StatusCode::OK,"{page}");let rows=page["records"].as_array().unwrap();assert_eq!(rows.len(),2);
+    assert!(rows.iter().all(|r|r["review_required"]==true&&r["in_error_notebook"]==true));
+    assert_eq!(rows.iter().filter(|r|r["practice_available"]==true).count(),1);
+    for mode in ["STANDARD","SIMULADO"]{
+        let (status,body)=request(&app,&secret,Some(123),"POST","/api/v1/quiz/generate",serde_json::json!({"user_id":123,"mode":mode,"quantity":10,"contest_id":"CPNU"})).await;
+        assert_eq!(status,StatusCode::BAD_REQUEST);assert!(body["message"].as_str().unwrap().contains("arquivado"));
+    }
+    let after_questions:Vec<Document>=db.collection("todasQuestoes").find(doc!{}).sort(doc!{"_id":1}).await.unwrap().try_collect().await.unwrap();
+    let after_history:Vec<Document>=db.collection("userActivityLog").find(doc!{}).sort(doc!{"_id":1}).await.unwrap().try_collect().await.unwrap();
+    assert_eq!(before_questions,after_questions);assert_eq!(before_history,after_history);
+    assert!(name.starts_with("cogniva_test_"));db.drop().await.unwrap();
 }
 
 #[tokio::test]
