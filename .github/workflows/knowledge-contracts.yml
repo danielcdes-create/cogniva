@@ -1,0 +1,37 @@
+name: Knowledge catalog and question contracts
+on:
+  workflow_dispatch:
+  workflow_call:
+  push:
+    paths:
+      - 'shared/knowledge-*'
+      - 'shared/canonical-catalog.json'
+      - 'shared/schemas/**'
+      - 'shared/examples/question-contracts/**'
+      - 'scripts/knowledge_catalog.py'
+      - 'scripts/question_contracts.py'
+      - 'scripts/tests/**'
+      - 'scripts/requirements-contracts.txt'
+      - 'docs/catalogo/**'
+      - '.github/workflows/knowledge-contracts.yml'
+permissions:
+  contents: read
+jobs:
+  contracts:
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: scripts/requirements-contracts.txt
+      - run: python -m pip install -r scripts/requirements-contracts.txt
+      - name: Catalog identity, hierarchy and runtime compatibility
+        run: python scripts/knowledge_catalog.py --check
+      - name: Question, suggestion, compatibility and grading examples
+        run: python scripts/question_contracts.py --examples
+      - name: Positive and adversarial contract tests
+        run: python -m unittest discover -s scripts/tests -p 'test_*.py' -v

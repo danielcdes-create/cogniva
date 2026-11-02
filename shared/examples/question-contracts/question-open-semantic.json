@@ -1,0 +1,134 @@
+{
+  "_id": {
+    "$oid": "000000000000000000000004"
+  },
+  "schema_version": 2,
+  "revision": 1,
+  "content_revision": "ccba0fca26a2ac56e9fc70cd4731c5a3d947c30a1ad3531422f11010a289a4a6",
+  "content_hash_version": "question-v2-jcs-sha256",
+  "status": "ACTIVE",
+  "question": "Exemplo sintético: explique como a coesão contribui para a organização de um texto e apresente um exemplo.",
+  "question_type": "OPEN_ENDED",
+  "answers": [],
+  "correct_answer_indices": [],
+  "correct_answers": [],
+  "origins": [
+    {
+      "origin_id": "00000000-0000-0000-0000-000000000068",
+      "kind": "AUTHOR_CREATED",
+      "verification": "CONFIRMED",
+      "source_exam_code": null,
+      "institution": null,
+      "organizer": null,
+      "exam_year": null,
+      "question_number": null,
+      "source_reference": null,
+      "provenance": {
+        "actor": {
+          "type": "HUMAN",
+          "id": "synthetic-fixture-reviewer"
+        },
+        "method": "MANUAL_REVIEW",
+        "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+        "recorded_at": "2026-11-02T15:00:00Z",
+        "evidence": [],
+        "model": null,
+        "prompt_id": null,
+        "prompt_version": null,
+        "source_suggestion_id": null
+      }
+    }
+  ],
+  "classification": {
+    "revision": 1,
+    "catalog_version": 1,
+    "state": "CONFIRMED",
+    "links": [
+      {
+        "link_id": "00000000-0000-0000-0000-0000000000cc",
+        "subject_id": "PORT",
+        "topic_id": "PORT_01_002",
+        "role": "PRIMARY",
+        "coverage": "DIRECT",
+        "provenance": {
+          "actor": {
+            "type": "HUMAN",
+            "id": "synthetic-fixture-reviewer"
+          },
+          "method": "MANUAL_REVIEW",
+          "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+          "recorded_at": "2026-11-02T15:00:00Z",
+          "evidence": [],
+          "model": null,
+          "prompt_id": null,
+          "prompt_version": null,
+          "source_suggestion_id": null
+        }
+      }
+    ]
+  },
+  "validity": {
+    "revision": 1,
+    "status": "CURRENT",
+    "basis": "TIMELESS",
+    "reference_date": "2026-11-02",
+    "review_due_on": null,
+    "reason_codes": [],
+    "evaluated_content_revision": "ccba0fca26a2ac56e9fc70cd4731c5a3d947c30a1ad3531422f11010a289a4a6",
+    "decision": {
+      "actor": {
+        "type": "HUMAN",
+        "id": "synthetic-fixture-reviewer"
+      },
+      "method": "MANUAL_REVIEW",
+      "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+      "recorded_at": "2026-11-02T15:00:00Z",
+      "evidence": [],
+      "model": null,
+      "prompt_id": null,
+      "prompt_version": null,
+      "source_suggestion_id": null
+    },
+    "scope": "CURRENT_KNOWLEDGE",
+    "context_date": null
+  },
+  "grading": {
+    "strategy": "SEMANTIC",
+    "max_score": 100,
+    "pass_score": 60,
+    "expected_responses": [
+      "A coesão estabelece relações entre partes do texto por mecanismos referenciais e sequenciais. Um pronome pode retomar um substantivo apresentado antes; formulações equivalentes são aceitas."
+    ],
+    "rubric": {
+      "revision": 1,
+      "criteria": [
+        {
+          "criterion_id": "CONCEPT",
+          "description": "Explicar as relações entre partes do texto sem reduzir coesão a repetição de palavras.",
+          "max_points": 50,
+          "essential": true
+        },
+        {
+          "criterion_id": "EXAMPLE",
+          "description": "Apresentar um exemplo pertinente de mecanismo coesivo.",
+          "max_points": 50,
+          "essential": false
+        }
+      ]
+    },
+    "engine": {
+      "provider": null,
+      "model": null,
+      "prompt_id": null,
+      "prompt_version": null,
+      "semantic_model_id": "synthetic-semantic-model",
+      "semantic_model_revision": "synthetic-v1",
+      "calibration_id": "synthetic-calibration-v1"
+    },
+    "confirmation_policy": "HUMAN_REVIEW",
+    "policy_version": "open-rubric-human-review/1"
+  },
+  "explanation": null,
+  "contextualHint": [],
+  "mnemonico": null
+}

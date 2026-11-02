@@ -1,0 +1,24 @@
+{
+  "catalog_version": 1,
+  "trunks": 7,
+  "subjects": 35,
+  "topics": 49,
+  "subtopics": 174,
+  "subject_aliases": 41,
+  "legacy_subjects_preserved": 24,
+  "legacy_topics_preserved": 26,
+  "runtime_catalog_sha256": "d9258c4921b0233dbd2abadf1b2f23605a0dfef9a5d069664e7336ee4648343e",
+  "catalog_sha256": "f941cae8cafd51cb49492e1843a300d34c3a6b90c445a616670dc9a0dd2881bb",
+  "runtime_transition": "NOT_APPLIED",
+  "contract_status": "STAGED_NOT_DEPLOYED",
+  "unit_tests": 34,
+  "test_failures": 0,
+  "examples": {
+    "questions": 7,
+    "suggestions": 1,
+    "compatibilities": 1,
+    "evaluations": 4
+  },
+  "production_migration_performed": false,
+  "paid_ai_calls": 0
+}

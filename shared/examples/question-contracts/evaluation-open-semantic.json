@@ -1,0 +1,57 @@
+{
+  "_id": "00000000-0000-0000-0000-0000000001f7",
+  "schema_version": 1,
+  "attempt_id": "00000000-0000-0000-0000-00000000025b",
+  "user_id": 123,
+  "question_id": "000000000000000000000004",
+  "question_content_revision": "ccba0fca26a2ac56e9fc70cd4731c5a3d947c30a1ad3531422f11010a289a4a6",
+  "rubric_revision": 1,
+  "submission": {
+    "type": "TEXT",
+    "text": "Resposta sintética: mecanismos de referência e conectivos relacionam trechos; por exemplo, um pronome pode retomar uma expressão anterior.",
+    "language": "pt-BR"
+  },
+  "strategy": "SEMANTIC",
+  "status": "PROVISIONAL",
+  "score": 70,
+  "max_score": 100,
+  "criterion_results": [
+    {
+      "criterion_id": "CONCEPT",
+      "awarded_points": 35.0,
+      "justification": "Justificativa sintética por critério, usada somente para validar o contrato."
+    },
+    {
+      "criterion_id": "EXAMPLE",
+      "awarded_points": 35.0,
+      "justification": "Justificativa sintética por critério, usada somente para validar o contrato."
+    }
+  ],
+  "is_correct": null,
+  "feedback": "Feedback sintético de validação.",
+  "engine": {
+    "provider": null,
+    "model": null,
+    "prompt_id": null,
+    "prompt_version": null,
+    "semantic_model_id": "synthetic-semantic-model",
+    "semantic_model_revision": "synthetic-v1",
+    "calibration_id": "synthetic-calibration-v1"
+  },
+  "decision": {
+    "actor": {
+      "type": "SYSTEM",
+      "id": "synthetic-fixture-engine"
+    },
+    "method": "RULE_BASED",
+    "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+    "recorded_at": "2026-11-02T15:00:00Z",
+    "evidence": [],
+    "model": "synthetic-semantic-model",
+    "prompt_id": null,
+    "prompt_version": null,
+    "source_suggestion_id": null
+  },
+  "supersedes_evaluation_id": null,
+  "created_at": "2026-11-02T15:00:00Z"
+}

@@ -4,6 +4,8 @@ Aplicativo Android de estudo para concursos, com cliente Kotlin/Compose e API Ru
 
 ## Estado da recuperação de 2026-11-01
 
+As etapas de [catálogo compartilhado de conhecimentos](docs/CATALOGO-CONHECIMENTOS.md) e [formalização dos contratos de questões](docs/SCHEMA-QUESTOES-V2.md) estão definidas e validadas em arquivos versionados. Incluem validade atual/obsoleta, classificações com proveniência e questões abertas com rubrica/correção semântica ou IA. São contratos preparados para a próxima integração, sem migração do Mongo ou habilitação de questões abertas no APK atual. [Consulta do catálogo](docs/catalogo/CONHECIMENTOS.md).
+
 Versão em produção: **1.4.4 / Android build 11 / contrato de sincronização 2**, revisão `dfbcd0fd22c50b89229274b0d73e0bd24b9b695a`, promovida em 02/11/2026 às 12:52 (UTC−03:00). O [pipeline completo](https://github.com/danielcdes-create/cogniva/actions/runs/41472251563) passou gates, assinatura, ensaio de rollback e promoção. HTTPS, prontidão com Mongo, download público e preservação do acervo/histórico foram conferidos externamente. A [gestão de concursos](docs/GESTAO-CONCURSOS-1.4.4.md) permite disciplinas de todo o catálogo ou personalizadas, etapa/grupo, edição e exclusão de componentes e gestão de arquivados numa área própria de Ajustes. A [correção de questões](docs/CORRECAO-QUESTOES-1.4.2.md) recupera o acesso ao acervo sem herdar concursos arquivados; a [correção de Ajustes](docs/CORRECAO-VINCULO-1.4.1.md) mantém confirmação junto ao código. Consulte [FECHAMENTO-AUDITORIA.md](docs/FECHAMENTO-AUDITORIA.md) para C01–C39 e os limites de aceite; [REMEDIACAO.md](docs/REMEDIACAO.md) preserva o registro da execução.
 
 - API: `https://198.199.65.103/api/v1/`.

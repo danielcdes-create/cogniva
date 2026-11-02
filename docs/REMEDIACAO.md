@@ -98,3 +98,12 @@ Modelo Grok 4.3 escolhido pelo proprietário após autenticação válida e aus�
 Disciplinas de todo o catálogo e personalizadas, etapa/grupo de conhecimentos, edição de nomes, pesos, quantidades e tópicos. Remoções deixam de ser reinseridas na grade pelo merge local/servidor; revisões anteriores já sincronizadas continuam preservadas. Em Ajustes, gestão própria com arquivados, restauração, exclusão confirmada e revisão de pedidos pendentes. Marcadores sincronizados impedem reaparecimento de concursos excluídos. Migração Room 3→4 sem descarte de dados.
 
 27 Rust, 48 JVM, lint/nove imagens e nove instrumentados aprovados. Promoção em 02/11/2026 às 12:52 (UTC−03:00), rollback ensaiado, download/hash/assinatura e prontidão conferidos. Backups mantiveram 618 questões, quatro cadastros de concursos e todos os 20 documentos/32 eventos históricos iguais. [Detalhes e limites](GESTAO-CONCURSOS-1.4.4.md).
+
+
+## Catálogo e contratos — etapas 1 e 2
+
+Definição versionada em 02/11/2026: sete troncos, 35 disciplinas, 49 assuntos, 174 subassuntos e 41 aliases de disciplinas. Preservados os 24 IDs de disciplinas e 26 de tópicos existentes, com registro de 265 identidades e vínculos herdados identificados. Fiscalização do Trabalho recebe um perfil próprio; AFO/Finanças Públicas e demais sobreposições não são fundidas por rótulo.
+
+Contratos JSON Schema e validação semântica para documento de questão, sugestão de classificação, compatibilidade com edital e avaliação de tentativa. Incluem MC de cinco alternativas, certo/errado e abertas; status de validade atual/obsoleta/revisão/desconhecida, contexto histórico, proveniência, revisões, rubricas e avaliação semântica/xAI provisória. Gabarito, nota ou classificação não são confirmados por confiança do modelo.
+
+Esta entrega prepara a integração da etapa 3. O catálogo usado em execução e os fontes de Android/Rust permanecem sem alteração; não houve migração do Mongo, nova publicação de APK ou inferência paga. [Catálogo](CATALOGO-CONHECIMENTOS.md), [contratos e regras](SCHEMA-QUESTOES-V2.md), [consulta completa](catalogo/CONHECIMENTOS.md).

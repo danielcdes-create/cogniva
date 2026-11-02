@@ -1,0 +1,13 @@
+{
+  "owner_user_id": 123,
+  "exam_id": "synthetic-exam",
+  "revision": 1,
+  "components": [
+    {
+      "component_id": "synthetic-component",
+      "topic_ids": [
+        "MAT_01_001"
+      ]
+    }
+  ]
+}

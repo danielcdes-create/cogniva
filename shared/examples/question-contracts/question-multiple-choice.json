@@ -1,0 +1,118 @@
+{
+  "_id": {
+    "$oid": "000000000000000000000001"
+  },
+  "schema_version": 2,
+  "revision": 1,
+  "content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+  "content_hash_version": "question-v2-jcs-sha256",
+  "status": "ACTIVE",
+  "question": "Exemplo sintético: quanto é 2 + 2?",
+  "question_type": "MULTIPLE_CHOICE",
+  "answers": [
+    "3",
+    "4",
+    "5",
+    "6",
+    "7"
+  ],
+  "correct_answer_indices": [
+    1
+  ],
+  "correct_answers": [
+    "4"
+  ],
+  "origins": [
+    {
+      "origin_id": "00000000-0000-0000-0000-000000000065",
+      "kind": "AUTHOR_CREATED",
+      "verification": "CONFIRMED",
+      "source_exam_code": null,
+      "institution": null,
+      "organizer": null,
+      "exam_year": null,
+      "question_number": null,
+      "source_reference": null,
+      "provenance": {
+        "actor": {
+          "type": "HUMAN",
+          "id": "synthetic-fixture-reviewer"
+        },
+        "method": "MANUAL_REVIEW",
+        "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+        "recorded_at": "2026-11-02T15:00:00Z",
+        "evidence": [],
+        "model": null,
+        "prompt_id": null,
+        "prompt_version": null,
+        "source_suggestion_id": null
+      }
+    }
+  ],
+  "classification": {
+    "revision": 1,
+    "catalog_version": 1,
+    "state": "CONFIRMED",
+    "links": [
+      {
+        "link_id": "00000000-0000-0000-0000-0000000000c9",
+        "subject_id": "MAT",
+        "topic_id": "MAT_01_001",
+        "role": "PRIMARY",
+        "coverage": "DIRECT",
+        "provenance": {
+          "actor": {
+            "type": "HUMAN",
+            "id": "synthetic-fixture-reviewer"
+          },
+          "method": "MANUAL_REVIEW",
+          "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+          "recorded_at": "2026-11-02T15:00:00Z",
+          "evidence": [],
+          "model": null,
+          "prompt_id": null,
+          "prompt_version": null,
+          "source_suggestion_id": null
+        }
+      }
+    ]
+  },
+  "validity": {
+    "revision": 1,
+    "status": "CURRENT",
+    "basis": "TIMELESS",
+    "reference_date": "2026-11-02",
+    "review_due_on": null,
+    "reason_codes": [],
+    "evaluated_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+    "decision": {
+      "actor": {
+        "type": "HUMAN",
+        "id": "synthetic-fixture-reviewer"
+      },
+      "method": "MANUAL_REVIEW",
+      "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+      "recorded_at": "2026-11-02T15:00:00Z",
+      "evidence": [],
+      "model": null,
+      "prompt_id": null,
+      "prompt_version": null,
+      "source_suggestion_id": null
+    },
+    "scope": "CURRENT_KNOWLEDGE",
+    "context_date": null
+  },
+  "grading": {
+    "strategy": "EXACT_OPTION",
+    "max_score": 100,
+    "pass_score": 60,
+    "expected_responses": [],
+    "rubric": null,
+    "engine": null,
+    "confirmation_policy": "AUTOMATIC_EXACT",
+    "policy_version": "objective-exact/1"
+  },
+  "explanation": null,
+  "contextualHint": [],
+  "mnemonico": null
+}

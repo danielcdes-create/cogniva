@@ -1,0 +1,34 @@
+{
+  "_id": "00000000-0000-0000-0000-00000000012d",
+  "schema_version": 1,
+  "question_id": "000000000000000000000007",
+  "question_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+  "expected_classification_revision": 0,
+  "catalog_version": 1,
+  "status": "PENDING",
+  "proposed_links": [
+    {
+      "subject_id": "MAT",
+      "topic_id": "MAT_01_001",
+      "role": "PRIMARY",
+      "coverage": "DIRECT",
+      "rationale": "Sugestão sintética de conteúdo matemático; requer decisão de um revisor.",
+      "confidence": 0.9
+    }
+  ],
+  "provenance": {
+    "actor": {
+      "type": "AI",
+      "id": "synthetic-fixture-engine"
+    },
+    "method": "AI_SUGGESTION",
+    "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+    "recorded_at": "2026-11-02T15:00:00Z",
+    "evidence": [],
+    "model": "grok-4.3",
+    "prompt_id": "classify-question",
+    "prompt_version": "1",
+    "source_suggestion_id": null
+  },
+  "resolution": null
+}

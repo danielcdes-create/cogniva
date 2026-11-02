@@ -1,0 +1,4225 @@
+{
+  "$schema": "knowledge-catalog.schema.json",
+  "schema_version": 1,
+  "catalog_id": "cogniva-knowledge",
+  "catalog_version": 1,
+  "updated_at": "2026-11-02",
+  "status": "EDITORIAL_BASELINE",
+  "review_status": "EDITORIAL_PROPOSAL",
+  "language": "pt-BR",
+  "sources": [
+    {
+      "source_id": "LEGACY_V2",
+      "kind": "LEGACY_INTERNAL",
+      "reference": "shared/canonical-catalog.json",
+      "note": "Identidades e vínculos existentes; templates configuráveis, não editais oficiais."
+    },
+    {
+      "source_id": "EDITORIAL_V1",
+      "kind": "EDITORIAL_PROPOSAL",
+      "reference": "docs/CATALOGO-CONHECIMENTOS.md",
+      "note": "Decomposição e relações propostas para revisão; sem atribuição automática de questões ou cobertura de edital."
+    },
+    {
+      "source_id": "CPNU_B4",
+      "kind": "REFERENCE_PORTAL",
+      "reference": "https://www.gov.br/gestao/pt-br/concursonacional/editais/edital-cpnu-bloco-4-10jan2024.pdf/view",
+      "note": "Referência do bloco Trabalho e Saúde do Servidor; não certifica a cobertura desta taxonomia."
+    },
+    {
+      "source_id": "RFB_2022",
+      "kind": "REFERENCE_PORTAL",
+      "reference": "https://conhecimento.fgv.br/concursos/rfb22",
+      "note": "Portal oficial da organizadora; referência para revisão de editais tributários, não grade importada."
+    },
+    {
+      "source_id": "DNIT_2023",
+      "kind": "REFERENCE_PORTAL",
+      "reference": "https://conhecimento.fgv.br/concursos/dnit23",
+      "note": "Portal oficial da organizadora; referência de especialidades, não grade importada."
+    },
+    {
+      "source_id": "CPNUJE_2024",
+      "kind": "REFERENCE_PORTAL",
+      "reference": "https://www.tre-ma.jus.br/institucional/concurso-publico/concurso-publico-unificado-2024",
+      "note": "Portal oficial da Justiça Eleitoral; referência de concurso, não grade importada."
+    }
+  ],
+  "trunks": [
+    {
+      "trunk_id": "fiscal",
+      "label": "Área Fiscal",
+      "aliases": [],
+      "source_ids": [
+        "LEGACY_V2"
+      ],
+      "status": "ACTIVE"
+    },
+    {
+      "trunk_id": "policial",
+      "label": "Carreiras Policiais",
+      "aliases": [],
+      "source_ids": [
+        "LEGACY_V2"
+      ],
+      "status": "ACTIVE"
+    },
+    {
+      "trunk_id": "controle",
+      "label": "Controle",
+      "aliases": [],
+      "source_ids": [
+        "LEGACY_V2"
+      ],
+      "status": "ACTIVE"
+    },
+    {
+      "trunk_id": "engenharia",
+      "label": "Engenharia",
+      "aliases": [],
+      "source_ids": [
+        "LEGACY_V2"
+      ],
+      "status": "ACTIVE"
+    },
+    {
+      "trunk_id": "tribunais",
+      "label": "Tribunais",
+      "aliases": [],
+      "source_ids": [
+        "LEGACY_V2"
+      ],
+      "status": "ACTIVE"
+    },
+    {
+      "trunk_id": "bancaria",
+      "label": "Bancária",
+      "aliases": [],
+      "source_ids": [
+        "LEGACY_V2"
+      ],
+      "status": "ACTIVE"
+    },
+    {
+      "trunk_id": "fiscalizacao_trabalho",
+      "label": "Fiscalização do Trabalho",
+      "aliases": [
+        "Inspeção do Trabalho"
+      ],
+      "source_ids": [
+        "EDITORIAL_V1",
+        "CPNU_B4"
+      ],
+      "status": "ACTIVE"
+    }
+  ],
+  "subjects": [
+    {
+      "subject_id": "AFO",
+      "label": "Administração Financeira e Orçamentária",
+      "aliases": [
+        "AFO",
+        "Orçamento Público e Administração Financeira"
+      ],
+      "scope_note": "Gestão do orçamento e de sua execução; não é sinônimo integral de Finanças Públicas.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2",
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "controle",
+          "role": "FOUNDATIONAL",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        }
+      ]
+    },
+    {
+      "subject_id": "AUDITORIA",
+      "label": "Auditoria Governamental",
+      "aliases": [
+        "Auditoria no Setor Público"
+      ],
+      "scope_note": "Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial, sem pretensão de exaustividade.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2",
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "controle",
+          "role": "FOUNDATIONAL",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        }
+      ]
+    },
+    {
+      "subject_id": "CONTAB",
+      "label": "Contabilidade Geral",
+      "aliases": [
+        "Contabilidade Financeira"
+      ],
+      "scope_note": "Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial, sem pretensão de exaustividade.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2",
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "fiscal",
+          "role": "FOUNDATIONAL",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        }
+      ]
+    },
+    {
+      "subject_id": "DIR_ADM",
+      "label": "Direito Administrativo",
+      "aliases": [
+        "Direito da Administração Pública"
+      ],
+      "scope_note": "Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial, sem pretensão de exaustividade.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2",
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "fiscal",
+          "role": "RELATED",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        },
+        {
+          "trunk_id": "controle",
+          "role": "RELATED",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        },
+        {
+          "trunk_id": "tribunais",
+          "role": "RELATED",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        }
+      ]
+    },
+    {
+      "subject_id": "DIR_CONST",
+      "label": "Direito Constitucional",
+      "aliases": [
+        "Direito da Constituição"
+      ],
+      "scope_note": "Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial, sem pretensão de exaustividade.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2",
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "fiscal",
+          "role": "RELATED",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        },
+        {
+          "trunk_id": "policial",
+          "role": "RELATED",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        },
+        {
+          "trunk_id": "controle",
+          "role": "RELATED",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        },
+        {
+          "trunk_id": "tribunais",
+          "role": "FOUNDATIONAL",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        }
+      ]
+    },
+    {
+      "subject_id": "DIR_PEN",
+      "label": "Direito Penal",
+      "aliases": [
+        "Direito Criminal"
+      ],
+      "scope_note": "Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial, sem pretensão de exaustividade.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2",
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "policial",
+          "role": "FOUNDATIONAL",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        }
+      ]
+    },
+    {
+      "subject_id": "DIR_PROC_CIV",
+      "label": "Direito Processual Civil",
+      "aliases": [
+        "Processo Civil"
+      ],
+      "scope_note": "Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial, sem pretensão de exaustividade.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2",
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "tribunais",
+          "role": "FOUNDATIONAL",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        }
+      ]
+    },
+    {
+      "subject_id": "DIR_PROC_PEN",
+      "label": "Direito Processual Penal",
+      "aliases": [
+        "Processo Penal"
+      ],
+      "scope_note": "Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial, sem pretensão de exaustividade.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2",
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "policial",
+          "role": "FOUNDATIONAL",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        }
+      ]
+    },
+    {
+      "subject_id": "DIR_TRIB",
+      "label": "Direito Tributário",
+      "aliases": [
+        "Direito Tributário Brasileiro"
+      ],
+      "scope_note": "Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial, sem pretensão de exaustividade.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2",
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "fiscal",
+          "role": "FOUNDATIONAL",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        }
+      ]
+    },
+    {
+      "subject_id": "ECON",
+      "label": "Economia",
+      "aliases": [
+        "Ciências Econômicas"
+      ],
+      "scope_note": "Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial, sem pretensão de exaustividade.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2",
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "bancaria",
+          "role": "FOUNDATIONAL",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        }
+      ]
+    },
+    {
+      "subject_id": "ENG_CIVIL",
+      "label": "Estruturas",
+      "aliases": [
+        "Estruturas de Engenharia Civil"
+      ],
+      "scope_note": "Identidade legada restrita a Estruturas. O código não representa toda a Engenharia Civil.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2",
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "engenharia",
+          "role": "FOUNDATIONAL",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        }
+      ]
+    },
+    {
+      "subject_id": "ENG_MAT",
+      "label": "Resistência dos Materiais",
+      "aliases": [
+        "Mecânica dos Materiais"
+      ],
+      "scope_note": "Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial, sem pretensão de exaustividade.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2",
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "engenharia",
+          "role": "FOUNDATIONAL",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        }
+      ]
+    },
+    {
+      "subject_id": "FIN_PUB",
+      "label": "Finanças Públicas",
+      "aliases": [
+        "Finanças do Setor Público"
+      ],
+      "scope_note": "Finanças estatais e seus instrumentos, receitas, despesas e resultados; sobrepõe-se parcialmente a AFO.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2",
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "fiscal",
+          "role": "FOUNDATIONAL",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        },
+        {
+          "trunk_id": "controle",
+          "role": "FOUNDATIONAL",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        },
+        {
+          "trunk_id": "bancaria",
+          "role": "FOUNDATIONAL",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        }
+      ]
+    },
+    {
+      "subject_id": "MFIN",
+      "label": "Mercado Financeiro",
+      "aliases": [
+        "Conhecimentos do Mercado Financeiro"
+      ],
+      "scope_note": "Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial, sem pretensão de exaustividade.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2",
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "bancaria",
+          "role": "FOUNDATIONAL",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        }
+      ]
+    },
+    {
+      "subject_id": "PORT",
+      "label": "Língua Portuguesa",
+      "aliases": [
+        "Português"
+      ],
+      "scope_note": "Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial, sem pretensão de exaustividade.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2",
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "fiscal",
+          "role": "RELATED",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        },
+        {
+          "trunk_id": "policial",
+          "role": "RELATED",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        },
+        {
+          "trunk_id": "controle",
+          "role": "RELATED",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        },
+        {
+          "trunk_id": "engenharia",
+          "role": "RELATED",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        },
+        {
+          "trunk_id": "tribunais",
+          "role": "RELATED",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        },
+        {
+          "trunk_id": "bancaria",
+          "role": "RELATED",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        },
+        {
+          "trunk_id": "fiscalizacao_trabalho",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Perfil proposto para fiscalização do trabalho; confirmar conteúdo por edital."
+        }
+      ]
+    },
+    {
+      "subject_id": "SST",
+      "label": "Segurança e Saúde do Trabalhador",
+      "aliases": [
+        "Segurança e Saúde no Trabalho",
+        "Saúde e Segurança do Trabalho"
+      ],
+      "scope_note": "Conteúdos de segurança e saúde no trabalho; títulos normativos exigem consulta da versão aplicável, sem interpretação jurídica incorporada ao catálogo.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2",
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "controle",
+          "role": "RELATED",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        },
+        {
+          "trunk_id": "fiscalizacao_trabalho",
+          "role": "FOUNDATIONAL",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Perfil proposto para fiscalização do trabalho; confirmar conteúdo por edital."
+        }
+      ]
+    },
+    {
+      "subject_id": "DIR_TRAB",
+      "label": "Direito do Trabalho",
+      "aliases": [
+        "Direito Laboral"
+      ],
+      "scope_note": "Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial, sem pretensão de exaustividade.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2",
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "controle",
+          "role": "RELATED",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        },
+        {
+          "trunk_id": "fiscalizacao_trabalho",
+          "role": "FOUNDATIONAL",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Perfil proposto para fiscalização do trabalho; confirmar conteúdo por edital."
+        }
+      ]
+    },
+    {
+      "subject_id": "SOC_TRAB",
+      "label": "Sociologia e Psicologia Aplicadas ao Trabalho",
+      "aliases": [
+        "Sociologia e Psicologia Aplicadas",
+        "Sociologia e Psicologia do Trabalho"
+      ],
+      "scope_note": "Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial, sem pretensão de exaustividade.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2",
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "controle",
+          "role": "RELATED",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        },
+        {
+          "trunk_id": "fiscalizacao_trabalho",
+          "role": "FOUNDATIONAL",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Perfil proposto para fiscalização do trabalho; confirmar conteúdo por edital."
+        }
+      ]
+    },
+    {
+      "subject_id": "POL_PUB",
+      "label": "Políticas Públicas",
+      "aliases": [
+        "Políticas Governamentais"
+      ],
+      "scope_note": "Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial, sem pretensão de exaustividade.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2",
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "controle",
+          "role": "RELATED",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        },
+        {
+          "trunk_id": "fiscalizacao_trabalho",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Perfil proposto para fiscalização do trabalho; confirmar conteúdo por edital."
+        }
+      ]
+    },
+    {
+      "subject_id": "GOV",
+      "label": "Gestão Governamental e Governança Pública",
+      "aliases": [
+        "Governança e Gestão no Setor Público"
+      ],
+      "scope_note": "Governança e mecanismos de direção, estratégia e gestão no setor público; não equivale a toda a Administração Pública.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2",
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "controle",
+          "role": "RELATED",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        },
+        {
+          "trunk_id": "fiscalizacao_trabalho",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Perfil proposto para fiscalização do trabalho; confirmar conteúdo por edital."
+        }
+      ]
+    },
+    {
+      "subject_id": "ESTADO",
+      "label": "Desafios do Estado de Direito",
+      "aliases": [
+        "Estado de Direito e Democracia"
+      ],
+      "scope_note": "Instituições, democracia e desafios do Estado de Direito; não equivale a todo o Direito Constitucional.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2",
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "controle",
+          "role": "RELATED",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        },
+        {
+          "trunk_id": "fiscalizacao_trabalho",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Perfil proposto para fiscalização do trabalho; confirmar conteúdo por edital."
+        }
+      ]
+    },
+    {
+      "subject_id": "ETICA",
+      "label": "Ética e Integridade",
+      "aliases": [
+        "Ética no Serviço Público"
+      ],
+      "scope_note": "Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial, sem pretensão de exaustividade.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2",
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "controle",
+          "role": "RELATED",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        },
+        {
+          "trunk_id": "fiscalizacao_trabalho",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Perfil proposto para fiscalização do trabalho; confirmar conteúdo por edital."
+        }
+      ]
+    },
+    {
+      "subject_id": "APF",
+      "label": "Administração Pública Federal",
+      "aliases": [
+        "Organização da Administração Pública Federal"
+      ],
+      "scope_note": "Organização e funcionamento da Administração Pública Federal.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2",
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "controle",
+          "role": "RELATED",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        },
+        {
+          "trunk_id": "fiscalizacao_trabalho",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Perfil proposto para fiscalização do trabalho; confirmar conteúdo por edital."
+        }
+      ]
+    },
+    {
+      "subject_id": "DIVERSIDADE",
+      "label": "Diversidade e Inclusão na Sociedade",
+      "aliases": [
+        "Diversidade e Inclusão Social"
+      ],
+      "scope_note": "Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial, sem pretensão de exaustividade.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2",
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "controle",
+          "role": "RELATED",
+          "basis": "LEGACY_TEMPLATE",
+          "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
+        },
+        {
+          "trunk_id": "fiscalizacao_trabalho",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Perfil proposto para fiscalização do trabalho; confirmar conteúdo por edital."
+        }
+      ]
+    },
+    {
+      "subject_id": "MAT",
+      "label": "Matemática",
+      "aliases": [
+        "Matemática Básica"
+      ],
+      "scope_note": "Expansão editorial inicial; requer confirmação dos tópicos aplicáveis em cada edital.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "fiscal",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        },
+        {
+          "trunk_id": "policial",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        },
+        {
+          "trunk_id": "engenharia",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        },
+        {
+          "trunk_id": "bancaria",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        }
+      ]
+    },
+    {
+      "subject_id": "RLM",
+      "label": "Raciocínio Lógico",
+      "aliases": [
+        "Raciocínio Lógico-Matemático"
+      ],
+      "scope_note": "Expansão editorial inicial; requer confirmação dos tópicos aplicáveis em cada edital.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "fiscal",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        },
+        {
+          "trunk_id": "policial",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        },
+        {
+          "trunk_id": "controle",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        },
+        {
+          "trunk_id": "tribunais",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        },
+        {
+          "trunk_id": "bancaria",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        },
+        {
+          "trunk_id": "fiscalizacao_trabalho",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        }
+      ]
+    },
+    {
+      "subject_id": "MAT_FIN",
+      "label": "Matemática Financeira",
+      "aliases": [
+        "Cálculo Financeiro"
+      ],
+      "scope_note": "Expansão editorial inicial; requer confirmação dos tópicos aplicáveis em cada edital.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "fiscal",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        },
+        {
+          "trunk_id": "controle",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        },
+        {
+          "trunk_id": "bancaria",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        }
+      ]
+    },
+    {
+      "subject_id": "ESTAT",
+      "label": "Estatística",
+      "aliases": [
+        "Estatística Aplicada"
+      ],
+      "scope_note": "Expansão editorial inicial; requer confirmação dos tópicos aplicáveis em cada edital.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "fiscal",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        },
+        {
+          "trunk_id": "controle",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        },
+        {
+          "trunk_id": "bancaria",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        },
+        {
+          "trunk_id": "fiscalizacao_trabalho",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        }
+      ]
+    },
+    {
+      "subject_id": "INFO",
+      "label": "Informática Básica",
+      "aliases": [
+        "Noções de Informática"
+      ],
+      "scope_note": "Expansão editorial inicial; requer confirmação dos tópicos aplicáveis em cada edital.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "fiscal",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        },
+        {
+          "trunk_id": "policial",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        },
+        {
+          "trunk_id": "controle",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        },
+        {
+          "trunk_id": "engenharia",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        },
+        {
+          "trunk_id": "tribunais",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        },
+        {
+          "trunk_id": "bancaria",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        },
+        {
+          "trunk_id": "fiscalizacao_trabalho",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        }
+      ]
+    },
+    {
+      "subject_id": "ADM_GERAL",
+      "label": "Administração Geral",
+      "aliases": [
+        "Teoria Geral da Administração"
+      ],
+      "scope_note": "Expansão editorial inicial; requer confirmação dos tópicos aplicáveis em cada edital.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "controle",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        },
+        {
+          "trunk_id": "tribunais",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        },
+        {
+          "trunk_id": "bancaria",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        },
+        {
+          "trunk_id": "fiscalizacao_trabalho",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        }
+      ]
+    },
+    {
+      "subject_id": "CONTAB_PUB",
+      "label": "Contabilidade Pública",
+      "aliases": [
+        "Contabilidade Aplicada ao Setor Público",
+        "CASP"
+      ],
+      "scope_note": "Expansão editorial inicial; requer confirmação dos tópicos aplicáveis em cada edital.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "fiscal",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        },
+        {
+          "trunk_id": "controle",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        }
+      ]
+    },
+    {
+      "subject_id": "GEST_PESSOAS",
+      "label": "Gestão de Pessoas",
+      "aliases": [
+        "Administração de Recursos Humanos",
+        "Recursos Humanos"
+      ],
+      "scope_note": "Expansão editorial inicial; requer confirmação dos tópicos aplicáveis em cada edital.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "controle",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        },
+        {
+          "trunk_id": "tribunais",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        },
+        {
+          "trunk_id": "bancaria",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        },
+        {
+          "trunk_id": "fiscalizacao_trabalho",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        }
+      ]
+    },
+    {
+      "subject_id": "DIR_CIV",
+      "label": "Direito Civil",
+      "aliases": [
+        "Direito Civil Brasileiro"
+      ],
+      "scope_note": "Expansão editorial inicial; requer confirmação dos tópicos aplicáveis em cada edital.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "fiscal",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        },
+        {
+          "trunk_id": "tribunais",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        }
+      ]
+    },
+    {
+      "subject_id": "ENG_OBRAS",
+      "label": "Planejamento e Gestão de Obras",
+      "aliases": [
+        "Gestão de Obras",
+        "Planejamento de Obras"
+      ],
+      "scope_note": "Expansão editorial inicial; requer confirmação dos tópicos aplicáveis em cada edital.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "engenharia",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        },
+        {
+          "trunk_id": "controle",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        }
+      ]
+    },
+    {
+      "subject_id": "DIR_ELEITORAL",
+      "label": "Direito Eleitoral",
+      "aliases": [
+        "Legislação Eleitoral"
+      ],
+      "scope_note": "Expansão editorial inicial; requer confirmação dos tópicos aplicáveis em cada edital.",
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ],
+      "trunk_links": [
+        {
+          "trunk_id": "tribunais",
+          "role": "RELATED",
+          "basis": "EDITORIAL_SUGGESTION",
+          "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
+        }
+      ]
+    }
+  ],
+  "topics": [
+    {
+      "topic_id": "AFO_01",
+      "subject_id": "AFO",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Ciclo orçamentário",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2"
+      ]
+    },
+    {
+      "topic_id": "AFO_01_001",
+      "subject_id": "AFO",
+      "parent_topic_id": "AFO_01",
+      "kind": "SUBTOPIC",
+      "label": "Planejamento e proposta orçamentária",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "AFO_01_002",
+      "subject_id": "AFO",
+      "parent_topic_id": "AFO_01",
+      "kind": "SUBTOPIC",
+      "label": "Discussão e aprovação do orçamento",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "AFO_01_003",
+      "subject_id": "AFO",
+      "parent_topic_id": "AFO_01",
+      "kind": "SUBTOPIC",
+      "label": "Execução orçamentária e financeira",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "AFO_01_004",
+      "subject_id": "AFO",
+      "parent_topic_id": "AFO_01",
+      "kind": "SUBTOPIC",
+      "label": "Controle e avaliação do ciclo orçamentário",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "AUD_01",
+      "subject_id": "AUDITORIA",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Controle interno e externo",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2"
+      ]
+    },
+    {
+      "topic_id": "AUD_01_001",
+      "subject_id": "AUDITORIA",
+      "parent_topic_id": "AUD_01",
+      "kind": "SUBTOPIC",
+      "label": "Controle interno governamental",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "AUD_01_002",
+      "subject_id": "AUDITORIA",
+      "parent_topic_id": "AUD_01",
+      "kind": "SUBTOPIC",
+      "label": "Controle externo e tribunais de contas",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "AUD_01_003",
+      "subject_id": "AUDITORIA",
+      "parent_topic_id": "AUD_01",
+      "kind": "SUBTOPIC",
+      "label": "Planejamento e evidências de auditoria",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "AUD_01_004",
+      "subject_id": "AUDITORIA",
+      "parent_topic_id": "AUD_01",
+      "kind": "SUBTOPIC",
+      "label": "Achados e relatórios de auditoria",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "CONTAB_01",
+      "subject_id": "CONTAB",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Demonstrações contábeis",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2"
+      ]
+    },
+    {
+      "topic_id": "CONTAB_01_001",
+      "subject_id": "CONTAB",
+      "parent_topic_id": "CONTAB_01",
+      "kind": "SUBTOPIC",
+      "label": "Balanço patrimonial",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "CONTAB_01_002",
+      "subject_id": "CONTAB",
+      "parent_topic_id": "CONTAB_01",
+      "kind": "SUBTOPIC",
+      "label": "Demonstração do resultado",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "CONTAB_01_003",
+      "subject_id": "CONTAB",
+      "parent_topic_id": "CONTAB_01",
+      "kind": "SUBTOPIC",
+      "label": "Demonstração dos fluxos de caixa",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "CONTAB_01_004",
+      "subject_id": "CONTAB",
+      "parent_topic_id": "CONTAB_01",
+      "kind": "SUBTOPIC",
+      "label": "Demonstrações das mutações do patrimônio líquido",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_ADM_01",
+      "subject_id": "DIR_ADM",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Atos administrativos e licitações",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2"
+      ]
+    },
+    {
+      "topic_id": "DIR_ADM_01_001",
+      "subject_id": "DIR_ADM",
+      "parent_topic_id": "DIR_ADM_01",
+      "kind": "SUBTOPIC",
+      "label": "Elementos e atributos dos atos administrativos",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_ADM_01_002",
+      "subject_id": "DIR_ADM",
+      "parent_topic_id": "DIR_ADM_01",
+      "kind": "SUBTOPIC",
+      "label": "Anulação e revogação de atos administrativos",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_ADM_01_003",
+      "subject_id": "DIR_ADM",
+      "parent_topic_id": "DIR_ADM_01",
+      "kind": "SUBTOPIC",
+      "label": "Planejamento e procedimentos de contratação",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_ADM_01_004",
+      "subject_id": "DIR_ADM",
+      "parent_topic_id": "DIR_ADM_01",
+      "kind": "SUBTOPIC",
+      "label": "Contratos administrativos e sua execução",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_CONST_01",
+      "subject_id": "DIR_CONST",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Direitos fundamentais e organização do Estado",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2"
+      ]
+    },
+    {
+      "topic_id": "DIR_CONST_01_001",
+      "subject_id": "DIR_CONST",
+      "parent_topic_id": "DIR_CONST_01",
+      "kind": "SUBTOPIC",
+      "label": "Direitos e garantias fundamentais",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_CONST_01_002",
+      "subject_id": "DIR_CONST",
+      "parent_topic_id": "DIR_CONST_01",
+      "kind": "SUBTOPIC",
+      "label": "Organização político-administrativa",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_CONST_01_003",
+      "subject_id": "DIR_CONST",
+      "parent_topic_id": "DIR_CONST_01",
+      "kind": "SUBTOPIC",
+      "label": "Organização dos Poderes",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_CONST_01_004",
+      "subject_id": "DIR_CONST",
+      "parent_topic_id": "DIR_CONST_01",
+      "kind": "SUBTOPIC",
+      "label": "Controle de constitucionalidade",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_PEN_01",
+      "subject_id": "DIR_PEN",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Teoria do crime",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2"
+      ]
+    },
+    {
+      "topic_id": "DIR_PEN_01_001",
+      "subject_id": "DIR_PEN",
+      "parent_topic_id": "DIR_PEN_01",
+      "kind": "SUBTOPIC",
+      "label": "Tipicidade e conduta",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_PEN_01_002",
+      "subject_id": "DIR_PEN",
+      "parent_topic_id": "DIR_PEN_01",
+      "kind": "SUBTOPIC",
+      "label": "Ilicitude e causas de justificação",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_PEN_01_003",
+      "subject_id": "DIR_PEN",
+      "parent_topic_id": "DIR_PEN_01",
+      "kind": "SUBTOPIC",
+      "label": "Culpabilidade",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_PEN_01_004",
+      "subject_id": "DIR_PEN",
+      "parent_topic_id": "DIR_PEN_01",
+      "kind": "SUBTOPIC",
+      "label": "Concurso de pessoas",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DPC_01",
+      "subject_id": "DIR_PROC_CIV",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Processo de conhecimento",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2"
+      ]
+    },
+    {
+      "topic_id": "DPC_01_001",
+      "subject_id": "DIR_PROC_CIV",
+      "parent_topic_id": "DPC_01",
+      "kind": "SUBTOPIC",
+      "label": "Jurisdição, ação e pressupostos processuais",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DPC_01_002",
+      "subject_id": "DIR_PROC_CIV",
+      "parent_topic_id": "DPC_01",
+      "kind": "SUBTOPIC",
+      "label": "Partes, capacidade e representação processual",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DPC_01_003",
+      "subject_id": "DIR_PROC_CIV",
+      "parent_topic_id": "DPC_01",
+      "kind": "SUBTOPIC",
+      "label": "Procedimento comum e provas",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DPC_01_004",
+      "subject_id": "DIR_PROC_CIV",
+      "parent_topic_id": "DPC_01",
+      "kind": "SUBTOPIC",
+      "label": "Sentença e coisa julgada",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_PROC_PEN_01",
+      "subject_id": "DIR_PROC_PEN",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Inquérito e ação penal",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2"
+      ]
+    },
+    {
+      "topic_id": "DIR_PROC_PEN_01_001",
+      "subject_id": "DIR_PROC_PEN",
+      "parent_topic_id": "DIR_PROC_PEN_01",
+      "kind": "SUBTOPIC",
+      "label": "Finalidade e características do inquérito policial",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_PROC_PEN_01_002",
+      "subject_id": "DIR_PROC_PEN",
+      "parent_topic_id": "DIR_PROC_PEN_01",
+      "kind": "SUBTOPIC",
+      "label": "Investigação e produção de elementos informativos",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_PROC_PEN_01_003",
+      "subject_id": "DIR_PROC_PEN",
+      "parent_topic_id": "DIR_PROC_PEN_01",
+      "kind": "SUBTOPIC",
+      "label": "Espécies e condições da ação penal",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_PROC_PEN_01_004",
+      "subject_id": "DIR_PROC_PEN",
+      "parent_topic_id": "DIR_PROC_PEN_01",
+      "kind": "SUBTOPIC",
+      "label": "Titularidade e princípios da ação penal",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_TRIB_01",
+      "subject_id": "DIR_TRIB",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Competência tributária e crédito",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2"
+      ]
+    },
+    {
+      "topic_id": "DIR_TRIB_01_001",
+      "subject_id": "DIR_TRIB",
+      "parent_topic_id": "DIR_TRIB_01",
+      "kind": "SUBTOPIC",
+      "label": "Competência e capacidade tributária",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_TRIB_01_002",
+      "subject_id": "DIR_TRIB",
+      "parent_topic_id": "DIR_TRIB_01",
+      "kind": "SUBTOPIC",
+      "label": "Limitações ao poder de tributar",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_TRIB_01_003",
+      "subject_id": "DIR_TRIB",
+      "parent_topic_id": "DIR_TRIB_01",
+      "kind": "SUBTOPIC",
+      "label": "Obrigação tributária e lançamento",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_TRIB_01_004",
+      "subject_id": "DIR_TRIB",
+      "parent_topic_id": "DIR_TRIB_01",
+      "kind": "SUBTOPIC",
+      "label": "Suspensão, extinção e exclusão do crédito tributário",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ECON_01",
+      "subject_id": "ECON",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Política monetária e fiscal",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2"
+      ]
+    },
+    {
+      "topic_id": "ECON_01_001",
+      "subject_id": "ECON",
+      "parent_topic_id": "ECON_01",
+      "kind": "SUBTOPIC",
+      "label": "Instrumentos de política monetária",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ECON_01_002",
+      "subject_id": "ECON",
+      "parent_topic_id": "ECON_01",
+      "kind": "SUBTOPIC",
+      "label": "Inflação e mecanismos de transmissão monetária",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ECON_01_003",
+      "subject_id": "ECON",
+      "parent_topic_id": "ECON_01",
+      "kind": "SUBTOPIC",
+      "label": "Instrumentos e resultados da política fiscal",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ECON_01_004",
+      "subject_id": "ECON",
+      "parent_topic_id": "ECON_01",
+      "kind": "SUBTOPIC",
+      "label": "Interações entre políticas monetária e fiscal",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ENG_01",
+      "subject_id": "ENG_CIVIL",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Concreto armado",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2"
+      ]
+    },
+    {
+      "topic_id": "ENG_01_001",
+      "subject_id": "ENG_CIVIL",
+      "parent_topic_id": "ENG_01",
+      "kind": "SUBTOPIC",
+      "label": "Propriedades e comportamento do concreto e do aço",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ENG_01_002",
+      "subject_id": "ENG_CIVIL",
+      "parent_topic_id": "ENG_01",
+      "kind": "SUBTOPIC",
+      "label": "Estados limites e critérios de dimensionamento",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ENG_01_003",
+      "subject_id": "ENG_CIVIL",
+      "parent_topic_id": "ENG_01",
+      "kind": "SUBTOPIC",
+      "label": "Elementos de concreto armado",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ENG_01_004",
+      "subject_id": "ENG_CIVIL",
+      "parent_topic_id": "ENG_01",
+      "kind": "SUBTOPIC",
+      "label": "Detalhamento e disposições construtivas",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ENG_02",
+      "subject_id": "ENG_MAT",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Tração, compressão e flexão",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2"
+      ]
+    },
+    {
+      "topic_id": "ENG_02_001",
+      "subject_id": "ENG_MAT",
+      "parent_topic_id": "ENG_02",
+      "kind": "SUBTOPIC",
+      "label": "Tensões, deformações e relações constitutivas",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ENG_02_002",
+      "subject_id": "ENG_MAT",
+      "parent_topic_id": "ENG_02",
+      "kind": "SUBTOPIC",
+      "label": "Tração e compressão axial",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ENG_02_003",
+      "subject_id": "ENG_MAT",
+      "parent_topic_id": "ENG_02",
+      "kind": "SUBTOPIC",
+      "label": "Flexão e distribuição de tensões",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ENG_02_004",
+      "subject_id": "ENG_MAT",
+      "parent_topic_id": "ENG_02",
+      "kind": "SUBTOPIC",
+      "label": "Esforços solicitantes e diagramas",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "FIN_PUB_01",
+      "subject_id": "FIN_PUB",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Orçamento público: PPA, LDO e LOA",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2"
+      ]
+    },
+    {
+      "topic_id": "FIN_PUB_01_001",
+      "subject_id": "FIN_PUB",
+      "parent_topic_id": "FIN_PUB_01",
+      "kind": "SUBTOPIC",
+      "label": "Plano Plurianual",
+      "aliases": [
+        "PPA"
+      ],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "FIN_PUB_01_002",
+      "subject_id": "FIN_PUB",
+      "parent_topic_id": "FIN_PUB_01",
+      "kind": "SUBTOPIC",
+      "label": "Lei de Diretrizes Orçamentárias",
+      "aliases": [
+        "LDO"
+      ],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "FIN_PUB_01_003",
+      "subject_id": "FIN_PUB",
+      "parent_topic_id": "FIN_PUB_01",
+      "kind": "SUBTOPIC",
+      "label": "Lei Orçamentária Anual",
+      "aliases": [
+        "LOA"
+      ],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "FIN_PUB_01_004",
+      "subject_id": "FIN_PUB",
+      "parent_topic_id": "FIN_PUB_01",
+      "kind": "SUBTOPIC",
+      "label": "Integração entre os instrumentos de planejamento",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "FIN_PUB_02",
+      "subject_id": "FIN_PUB",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Receita e despesa públicas",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2"
+      ]
+    },
+    {
+      "topic_id": "FIN_PUB_02_001",
+      "subject_id": "FIN_PUB",
+      "parent_topic_id": "FIN_PUB_02",
+      "kind": "SUBTOPIC",
+      "label": "Classificações e estágios da receita pública",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "FIN_PUB_02_002",
+      "subject_id": "FIN_PUB",
+      "parent_topic_id": "FIN_PUB_02",
+      "kind": "SUBTOPIC",
+      "label": "Classificações e estágios da despesa pública",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "FIN_PUB_02_003",
+      "subject_id": "FIN_PUB",
+      "parent_topic_id": "FIN_PUB_02",
+      "kind": "SUBTOPIC",
+      "label": "Restos a pagar e despesas de exercícios anteriores",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "FIN_PUB_02_004",
+      "subject_id": "FIN_PUB",
+      "parent_topic_id": "FIN_PUB_02",
+      "kind": "SUBTOPIC",
+      "label": "Resultados fiscais e endividamento público",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "MFIN_01",
+      "subject_id": "MFIN",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Sistema financeiro nacional",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2"
+      ]
+    },
+    {
+      "topic_id": "MFIN_01_001",
+      "subject_id": "MFIN",
+      "parent_topic_id": "MFIN_01",
+      "kind": "SUBTOPIC",
+      "label": "Órgãos normativos do sistema financeiro",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "MFIN_01_002",
+      "subject_id": "MFIN",
+      "parent_topic_id": "MFIN_01",
+      "kind": "SUBTOPIC",
+      "label": "Entidades supervisoras do sistema financeiro",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "MFIN_01_003",
+      "subject_id": "MFIN",
+      "parent_topic_id": "MFIN_01",
+      "kind": "SUBTOPIC",
+      "label": "Instituições e intermediários financeiros",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "MFIN_01_004",
+      "subject_id": "MFIN",
+      "parent_topic_id": "MFIN_01",
+      "kind": "SUBTOPIC",
+      "label": "Mercados monetário, de crédito, de capitais e cambial",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "PORT_01",
+      "subject_id": "PORT",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Interpretação e gramática aplicada",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2"
+      ]
+    },
+    {
+      "topic_id": "PORT_01_001",
+      "subject_id": "PORT",
+      "parent_topic_id": "PORT_01",
+      "kind": "SUBTOPIC",
+      "label": "Compreensão e interpretação de textos",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "PORT_01_002",
+      "subject_id": "PORT",
+      "parent_topic_id": "PORT_01",
+      "kind": "SUBTOPIC",
+      "label": "Coesão e coerência textual",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "PORT_01_003",
+      "subject_id": "PORT",
+      "parent_topic_id": "PORT_01",
+      "kind": "SUBTOPIC",
+      "label": "Classes de palavras e relações sintáticas",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "PORT_01_004",
+      "subject_id": "PORT",
+      "parent_topic_id": "PORT_01",
+      "kind": "SUBTOPIC",
+      "label": "Concordância, regência e crase",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "PORT_01_005",
+      "subject_id": "PORT",
+      "parent_topic_id": "PORT_01",
+      "kind": "SUBTOPIC",
+      "label": "Pontuação e efeitos de sentido",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "SST_01",
+      "subject_id": "SST",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "NR-01 — Gerenciamento de riscos ocupacionais",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2"
+      ]
+    },
+    {
+      "topic_id": "SST_01_001",
+      "subject_id": "SST",
+      "parent_topic_id": "SST_01",
+      "kind": "SUBTOPIC",
+      "label": "Identificação de perigos e avaliação de riscos ocupacionais",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "SST_01_002",
+      "subject_id": "SST",
+      "parent_topic_id": "SST_01",
+      "kind": "SUBTOPIC",
+      "label": "Programa de gerenciamento de riscos",
+      "aliases": [
+        "PGR"
+      ],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "SST_01_003",
+      "subject_id": "SST",
+      "parent_topic_id": "SST_01",
+      "kind": "SUBTOPIC",
+      "label": "Inventário de riscos e plano de ação",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "SST_01_004",
+      "subject_id": "SST",
+      "parent_topic_id": "SST_01",
+      "kind": "SUBTOPIC",
+      "label": "Medidas de prevenção e acompanhamento",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "SST_02",
+      "subject_id": "SST",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "NR-15 — Atividades e operações insalubres",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2"
+      ]
+    },
+    {
+      "topic_id": "SST_02_001",
+      "subject_id": "SST",
+      "parent_topic_id": "SST_02",
+      "kind": "SUBTOPIC",
+      "label": "Agentes físicos e avaliação de exposição",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "SST_02_002",
+      "subject_id": "SST",
+      "parent_topic_id": "SST_02",
+      "kind": "SUBTOPIC",
+      "label": "Agentes químicos e avaliação de exposição",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "SST_02_003",
+      "subject_id": "SST",
+      "parent_topic_id": "SST_02",
+      "kind": "SUBTOPIC",
+      "label": "Agentes biológicos e avaliação de exposição",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "SST_02_004",
+      "subject_id": "SST",
+      "parent_topic_id": "SST_02",
+      "kind": "SUBTOPIC",
+      "label": "Critérios de caracterização e medidas de controle",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_TRAB_01",
+      "subject_id": "DIR_TRAB",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Relação de emprego e proteção do trabalhador",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2"
+      ]
+    },
+    {
+      "topic_id": "DIR_TRAB_01_001",
+      "subject_id": "DIR_TRAB",
+      "parent_topic_id": "DIR_TRAB_01",
+      "kind": "SUBTOPIC",
+      "label": "Elementos e sujeitos da relação de emprego",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_TRAB_01_002",
+      "subject_id": "DIR_TRAB",
+      "parent_topic_id": "DIR_TRAB_01",
+      "kind": "SUBTOPIC",
+      "label": "Contrato individual de trabalho",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_TRAB_01_003",
+      "subject_id": "DIR_TRAB",
+      "parent_topic_id": "DIR_TRAB_01",
+      "kind": "SUBTOPIC",
+      "label": "Jornada, descansos e remuneração",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_TRAB_01_004",
+      "subject_id": "DIR_TRAB",
+      "parent_topic_id": "DIR_TRAB_01",
+      "kind": "SUBTOPIC",
+      "label": "Proteção do trabalho e atuação fiscalizatória",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "SOC_TRAB_01",
+      "subject_id": "SOC_TRAB",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Trabalho e relações sociais",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2"
+      ]
+    },
+    {
+      "topic_id": "SOC_TRAB_01_001",
+      "subject_id": "SOC_TRAB",
+      "parent_topic_id": "SOC_TRAB_01",
+      "kind": "SUBTOPIC",
+      "label": "Organização e divisão social do trabalho",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "SOC_TRAB_01_002",
+      "subject_id": "SOC_TRAB",
+      "parent_topic_id": "SOC_TRAB_01",
+      "kind": "SUBTOPIC",
+      "label": "Relações de poder e conflitos no trabalho",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "SOC_TRAB_01_003",
+      "subject_id": "SOC_TRAB",
+      "parent_topic_id": "SOC_TRAB_01",
+      "kind": "SUBTOPIC",
+      "label": "Subjetividade e saúde mental no trabalho",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "SOC_TRAB_01_004",
+      "subject_id": "SOC_TRAB",
+      "parent_topic_id": "SOC_TRAB_01",
+      "kind": "SUBTOPIC",
+      "label": "Transformações do trabalho e seus impactos sociais",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "POL_PUB_01",
+      "subject_id": "POL_PUB",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Formulação, implementação e avaliação de políticas",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2"
+      ]
+    },
+    {
+      "topic_id": "POL_PUB_01_001",
+      "subject_id": "POL_PUB",
+      "parent_topic_id": "POL_PUB_01",
+      "kind": "SUBTOPIC",
+      "label": "Agenda pública e identificação de problemas",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "POL_PUB_01_002",
+      "subject_id": "POL_PUB",
+      "parent_topic_id": "POL_PUB_01",
+      "kind": "SUBTOPIC",
+      "label": "Formulação e desenho de políticas",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "POL_PUB_01_003",
+      "subject_id": "POL_PUB",
+      "parent_topic_id": "POL_PUB_01",
+      "kind": "SUBTOPIC",
+      "label": "Implementação e coordenação de políticas",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "POL_PUB_01_004",
+      "subject_id": "POL_PUB",
+      "parent_topic_id": "POL_PUB_01",
+      "kind": "SUBTOPIC",
+      "label": "Monitoramento e avaliação de políticas",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "GOV_01",
+      "subject_id": "GOV",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Governança e gestão pública",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2"
+      ]
+    },
+    {
+      "topic_id": "GOV_01_001",
+      "subject_id": "GOV",
+      "parent_topic_id": "GOV_01",
+      "kind": "SUBTOPIC",
+      "label": "Governança no setor público",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "GOV_01_002",
+      "subject_id": "GOV",
+      "parent_topic_id": "GOV_01",
+      "kind": "SUBTOPIC",
+      "label": "Estratégia e gestão de resultados",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "GOV_01_003",
+      "subject_id": "GOV",
+      "parent_topic_id": "GOV_01",
+      "kind": "SUBTOPIC",
+      "label": "Gestão de riscos e controles organizacionais",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "GOV_01_004",
+      "subject_id": "GOV",
+      "parent_topic_id": "GOV_01",
+      "kind": "SUBTOPIC",
+      "label": "Transparência, participação e prestação de contas",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ESTADO_01",
+      "subject_id": "ESTADO",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Estado de direito e democracia",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2"
+      ]
+    },
+    {
+      "topic_id": "ESTADO_01_001",
+      "subject_id": "ESTADO",
+      "parent_topic_id": "ESTADO_01",
+      "kind": "SUBTOPIC",
+      "label": "Estado, governo e democracia",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ESTADO_01_002",
+      "subject_id": "ESTADO",
+      "parent_topic_id": "ESTADO_01",
+      "kind": "SUBTOPIC",
+      "label": "Cidadania e participação política",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ESTADO_01_003",
+      "subject_id": "ESTADO",
+      "parent_topic_id": "ESTADO_01",
+      "kind": "SUBTOPIC",
+      "label": "Instituições e equilíbrio entre Poderes",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ESTADO_01_004",
+      "subject_id": "ESTADO",
+      "parent_topic_id": "ESTADO_01",
+      "kind": "SUBTOPIC",
+      "label": "Proteção de direitos e desafios democráticos",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ETICA_01",
+      "subject_id": "ETICA",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Integridade no serviço público",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2"
+      ]
+    },
+    {
+      "topic_id": "ETICA_01_001",
+      "subject_id": "ETICA",
+      "parent_topic_id": "ETICA_01",
+      "kind": "SUBTOPIC",
+      "label": "Ética e conduta no serviço público",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ETICA_01_002",
+      "subject_id": "ETICA",
+      "parent_topic_id": "ETICA_01",
+      "kind": "SUBTOPIC",
+      "label": "Conflitos de interesses",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ETICA_01_003",
+      "subject_id": "ETICA",
+      "parent_topic_id": "ETICA_01",
+      "kind": "SUBTOPIC",
+      "label": "Prevenção da corrupção e programas de integridade",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ETICA_01_004",
+      "subject_id": "ETICA",
+      "parent_topic_id": "ETICA_01",
+      "kind": "SUBTOPIC",
+      "label": "Responsabilização e canais de manifestação",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "APF_01",
+      "subject_id": "APF",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Organização e gestão da administração federal",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2"
+      ]
+    },
+    {
+      "topic_id": "APF_01_001",
+      "subject_id": "APF",
+      "parent_topic_id": "APF_01",
+      "kind": "SUBTOPIC",
+      "label": "Administração direta e indireta",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "APF_01_002",
+      "subject_id": "APF",
+      "parent_topic_id": "APF_01",
+      "kind": "SUBTOPIC",
+      "label": "Estruturas e competências organizacionais",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "APF_01_003",
+      "subject_id": "APF",
+      "parent_topic_id": "APF_01",
+      "kind": "SUBTOPIC",
+      "label": "Coordenação e gestão administrativa",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "APF_01_004",
+      "subject_id": "APF",
+      "parent_topic_id": "APF_01",
+      "kind": "SUBTOPIC",
+      "label": "Transformação e capacidade de atuação estatal",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIVERSIDADE_01",
+      "subject_id": "DIVERSIDADE",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Diversidade e inclusão",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "LEGACY_V2"
+      ]
+    },
+    {
+      "topic_id": "DIVERSIDADE_01_001",
+      "subject_id": "DIVERSIDADE",
+      "parent_topic_id": "DIVERSIDADE_01",
+      "kind": "SUBTOPIC",
+      "label": "Desigualdades e discriminações sociais",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIVERSIDADE_01_002",
+      "subject_id": "DIVERSIDADE",
+      "parent_topic_id": "DIVERSIDADE_01",
+      "kind": "SUBTOPIC",
+      "label": "Acessibilidade e direitos das pessoas com deficiência",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIVERSIDADE_01_003",
+      "subject_id": "DIVERSIDADE",
+      "parent_topic_id": "DIVERSIDADE_01",
+      "kind": "SUBTOPIC",
+      "label": "Equidade e políticas de inclusão",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIVERSIDADE_01_004",
+      "subject_id": "DIVERSIDADE",
+      "parent_topic_id": "DIVERSIDADE_01",
+      "kind": "SUBTOPIC",
+      "label": "Diversidade nas relações institucionais e de trabalho",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "MAT_01",
+      "subject_id": "MAT",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Números e operações",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "MAT_01_001",
+      "subject_id": "MAT",
+      "parent_topic_id": "MAT_01",
+      "kind": "SUBTOPIC",
+      "label": "Conjuntos numéricos e operações",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "MAT_01_002",
+      "subject_id": "MAT",
+      "parent_topic_id": "MAT_01",
+      "kind": "SUBTOPIC",
+      "label": "Frações e números decimais",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "MAT_01_003",
+      "subject_id": "MAT",
+      "parent_topic_id": "MAT_01",
+      "kind": "SUBTOPIC",
+      "label": "Potências e raízes",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "MAT_02",
+      "subject_id": "MAT",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Grandezas e proporcionalidade",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "MAT_02_001",
+      "subject_id": "MAT",
+      "parent_topic_id": "MAT_02",
+      "kind": "SUBTOPIC",
+      "label": "Razões e proporções",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "MAT_02_002",
+      "subject_id": "MAT",
+      "parent_topic_id": "MAT_02",
+      "kind": "SUBTOPIC",
+      "label": "Regra de três",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "MAT_02_003",
+      "subject_id": "MAT",
+      "parent_topic_id": "MAT_02",
+      "kind": "SUBTOPIC",
+      "label": "Porcentagens e variações percentuais",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "RLM_01",
+      "subject_id": "RLM",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Lógica proposicional",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "RLM_01_001",
+      "subject_id": "RLM",
+      "parent_topic_id": "RLM_01",
+      "kind": "SUBTOPIC",
+      "label": "Proposições e conectivos",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "RLM_01_002",
+      "subject_id": "RLM",
+      "parent_topic_id": "RLM_01",
+      "kind": "SUBTOPIC",
+      "label": "Tabelas-verdade e equivalências",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "RLM_01_003",
+      "subject_id": "RLM",
+      "parent_topic_id": "RLM_01",
+      "kind": "SUBTOPIC",
+      "label": "Argumentação e validade lógica",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "RLM_02",
+      "subject_id": "RLM",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Raciocínio analítico e conjuntos",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "RLM_02_001",
+      "subject_id": "RLM",
+      "parent_topic_id": "RLM_02",
+      "kind": "SUBTOPIC",
+      "label": "Relações e organização de informações",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "RLM_02_002",
+      "subject_id": "RLM",
+      "parent_topic_id": "RLM_02",
+      "kind": "SUBTOPIC",
+      "label": "Conjuntos e operações",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "RLM_02_003",
+      "subject_id": "RLM",
+      "parent_topic_id": "RLM_02",
+      "kind": "SUBTOPIC",
+      "label": "Sequências e reconhecimento de padrões",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "MAT_FIN_01",
+      "subject_id": "MAT_FIN",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Juros e equivalência de capitais",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "MAT_FIN_01_001",
+      "subject_id": "MAT_FIN",
+      "parent_topic_id": "MAT_FIN_01",
+      "kind": "SUBTOPIC",
+      "label": "Juros simples",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "MAT_FIN_01_002",
+      "subject_id": "MAT_FIN",
+      "parent_topic_id": "MAT_FIN_01",
+      "kind": "SUBTOPIC",
+      "label": "Juros compostos e taxas equivalentes",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "MAT_FIN_01_003",
+      "subject_id": "MAT_FIN",
+      "parent_topic_id": "MAT_FIN_01",
+      "kind": "SUBTOPIC",
+      "label": "Equivalência de capitais",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "MAT_FIN_02",
+      "subject_id": "MAT_FIN",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Descontos e fluxos financeiros",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "MAT_FIN_02_001",
+      "subject_id": "MAT_FIN",
+      "parent_topic_id": "MAT_FIN_02",
+      "kind": "SUBTOPIC",
+      "label": "Descontos financeiros",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "MAT_FIN_02_002",
+      "subject_id": "MAT_FIN",
+      "parent_topic_id": "MAT_FIN_02",
+      "kind": "SUBTOPIC",
+      "label": "Séries de pagamentos",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "MAT_FIN_02_003",
+      "subject_id": "MAT_FIN",
+      "parent_topic_id": "MAT_FIN_02",
+      "kind": "SUBTOPIC",
+      "label": "Sistemas de amortização",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ESTAT_01",
+      "subject_id": "ESTAT",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Estatística descritiva",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ESTAT_01_001",
+      "subject_id": "ESTAT",
+      "parent_topic_id": "ESTAT_01",
+      "kind": "SUBTOPIC",
+      "label": "Organização e representação de dados",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ESTAT_01_002",
+      "subject_id": "ESTAT",
+      "parent_topic_id": "ESTAT_01",
+      "kind": "SUBTOPIC",
+      "label": "Medidas de posição",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ESTAT_01_003",
+      "subject_id": "ESTAT",
+      "parent_topic_id": "ESTAT_01",
+      "kind": "SUBTOPIC",
+      "label": "Medidas de dispersão",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ESTAT_02",
+      "subject_id": "ESTAT",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Probabilidade e variáveis aleatórias",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ESTAT_02_001",
+      "subject_id": "ESTAT",
+      "parent_topic_id": "ESTAT_02",
+      "kind": "SUBTOPIC",
+      "label": "Eventos e probabilidade condicional",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ESTAT_02_002",
+      "subject_id": "ESTAT",
+      "parent_topic_id": "ESTAT_02",
+      "kind": "SUBTOPIC",
+      "label": "Variáveis aleatórias",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ESTAT_02_003",
+      "subject_id": "ESTAT",
+      "parent_topic_id": "ESTAT_02",
+      "kind": "SUBTOPIC",
+      "label": "Distribuições de probabilidade",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ESTAT_03",
+      "subject_id": "ESTAT",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Inferência estatística",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ESTAT_03_001",
+      "subject_id": "ESTAT",
+      "parent_topic_id": "ESTAT_03",
+      "kind": "SUBTOPIC",
+      "label": "Amostragem e estimação",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ESTAT_03_002",
+      "subject_id": "ESTAT",
+      "parent_topic_id": "ESTAT_03",
+      "kind": "SUBTOPIC",
+      "label": "Intervalos de confiança",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ESTAT_03_003",
+      "subject_id": "ESTAT",
+      "parent_topic_id": "ESTAT_03",
+      "kind": "SUBTOPIC",
+      "label": "Testes de hipóteses",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "INFO_01",
+      "subject_id": "INFO",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Sistemas e ferramentas de produtividade",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "INFO_01_001",
+      "subject_id": "INFO",
+      "parent_topic_id": "INFO_01",
+      "kind": "SUBTOPIC",
+      "label": "Sistemas operacionais e arquivos",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "INFO_01_002",
+      "subject_id": "INFO",
+      "parent_topic_id": "INFO_01",
+      "kind": "SUBTOPIC",
+      "label": "Editores de texto",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "INFO_01_003",
+      "subject_id": "INFO",
+      "parent_topic_id": "INFO_01",
+      "kind": "SUBTOPIC",
+      "label": "Planilhas eletrônicas",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "INFO_02",
+      "subject_id": "INFO",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Internet, redes e segurança do usuário",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "INFO_02_001",
+      "subject_id": "INFO",
+      "parent_topic_id": "INFO_02",
+      "kind": "SUBTOPIC",
+      "label": "Navegação e serviços de Internet",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "INFO_02_002",
+      "subject_id": "INFO",
+      "parent_topic_id": "INFO_02",
+      "kind": "SUBTOPIC",
+      "label": "Fundamentos de redes de computadores",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "INFO_02_003",
+      "subject_id": "INFO",
+      "parent_topic_id": "INFO_02",
+      "kind": "SUBTOPIC",
+      "label": "Proteção de dados, ameaças e boas práticas",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ADM_GERAL_01",
+      "subject_id": "ADM_GERAL",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Organizações e funções administrativas",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ADM_GERAL_01_001",
+      "subject_id": "ADM_GERAL",
+      "parent_topic_id": "ADM_GERAL_01",
+      "kind": "SUBTOPIC",
+      "label": "Planejamento e tomada de decisão",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ADM_GERAL_01_002",
+      "subject_id": "ADM_GERAL",
+      "parent_topic_id": "ADM_GERAL_01",
+      "kind": "SUBTOPIC",
+      "label": "Estruturas organizacionais",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ADM_GERAL_01_003",
+      "subject_id": "ADM_GERAL",
+      "parent_topic_id": "ADM_GERAL_01",
+      "kind": "SUBTOPIC",
+      "label": "Direção e controle administrativo",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ADM_GERAL_02",
+      "subject_id": "ADM_GERAL",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Processos, projetos e qualidade",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ADM_GERAL_02_001",
+      "subject_id": "ADM_GERAL",
+      "parent_topic_id": "ADM_GERAL_02",
+      "kind": "SUBTOPIC",
+      "label": "Gestão de processos",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ADM_GERAL_02_002",
+      "subject_id": "ADM_GERAL",
+      "parent_topic_id": "ADM_GERAL_02",
+      "kind": "SUBTOPIC",
+      "label": "Fundamentos de gestão de projetos",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ADM_GERAL_02_003",
+      "subject_id": "ADM_GERAL",
+      "parent_topic_id": "ADM_GERAL_02",
+      "kind": "SUBTOPIC",
+      "label": "Gestão da qualidade e melhoria contínua",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "CONTAB_PUB_01",
+      "subject_id": "CONTAB_PUB",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Patrimônio e registros no setor público",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "CONTAB_PUB_01_001",
+      "subject_id": "CONTAB_PUB",
+      "parent_topic_id": "CONTAB_PUB_01",
+      "kind": "SUBTOPIC",
+      "label": "Patrimônio e variações patrimoniais",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "CONTAB_PUB_01_002",
+      "subject_id": "CONTAB_PUB",
+      "parent_topic_id": "CONTAB_PUB_01",
+      "kind": "SUBTOPIC",
+      "label": "Reconhecimento e mensuração de elementos patrimoniais",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "CONTAB_PUB_01_003",
+      "subject_id": "CONTAB_PUB",
+      "parent_topic_id": "CONTAB_PUB_01",
+      "kind": "SUBTOPIC",
+      "label": "Plano de contas e registros contábeis",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "CONTAB_PUB_02",
+      "subject_id": "CONTAB_PUB",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Demonstrações contábeis do setor público",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "CONTAB_PUB_02_001",
+      "subject_id": "CONTAB_PUB",
+      "parent_topic_id": "CONTAB_PUB_02",
+      "kind": "SUBTOPIC",
+      "label": "Balanços orçamentário e financeiro",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "CONTAB_PUB_02_002",
+      "subject_id": "CONTAB_PUB",
+      "parent_topic_id": "CONTAB_PUB_02",
+      "kind": "SUBTOPIC",
+      "label": "Balanço patrimonial e demonstração das variações patrimoniais",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "CONTAB_PUB_02_003",
+      "subject_id": "CONTAB_PUB",
+      "parent_topic_id": "CONTAB_PUB_02",
+      "kind": "SUBTOPIC",
+      "label": "Fluxos de caixa e notas explicativas",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "GEST_PESSOAS_01",
+      "subject_id": "GEST_PESSOAS",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Processos de gestão de pessoas",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "GEST_PESSOAS_01_001",
+      "subject_id": "GEST_PESSOAS",
+      "parent_topic_id": "GEST_PESSOAS_01",
+      "kind": "SUBTOPIC",
+      "label": "Recrutamento e seleção",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "GEST_PESSOAS_01_002",
+      "subject_id": "GEST_PESSOAS",
+      "parent_topic_id": "GEST_PESSOAS_01",
+      "kind": "SUBTOPIC",
+      "label": "Desenvolvimento e capacitação",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "GEST_PESSOAS_01_003",
+      "subject_id": "GEST_PESSOAS",
+      "parent_topic_id": "GEST_PESSOAS_01",
+      "kind": "SUBTOPIC",
+      "label": "Avaliação de desempenho",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "GEST_PESSOAS_02",
+      "subject_id": "GEST_PESSOAS",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Comportamento organizacional",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "GEST_PESSOAS_02_001",
+      "subject_id": "GEST_PESSOAS",
+      "parent_topic_id": "GEST_PESSOAS_02",
+      "kind": "SUBTOPIC",
+      "label": "Liderança e motivação",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "GEST_PESSOAS_02_002",
+      "subject_id": "GEST_PESSOAS",
+      "parent_topic_id": "GEST_PESSOAS_02",
+      "kind": "SUBTOPIC",
+      "label": "Comunicação e trabalho em equipe",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "GEST_PESSOAS_02_003",
+      "subject_id": "GEST_PESSOAS",
+      "parent_topic_id": "GEST_PESSOAS_02",
+      "kind": "SUBTOPIC",
+      "label": "Cultura e clima organizacionais",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_CIV_01",
+      "subject_id": "DIR_CIV",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Pessoas, bens e fatos jurídicos",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_CIV_01_001",
+      "subject_id": "DIR_CIV",
+      "parent_topic_id": "DIR_CIV_01",
+      "kind": "SUBTOPIC",
+      "label": "Pessoas naturais e jurídicas",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_CIV_01_002",
+      "subject_id": "DIR_CIV",
+      "parent_topic_id": "DIR_CIV_01",
+      "kind": "SUBTOPIC",
+      "label": "Bens e suas classificações",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_CIV_01_003",
+      "subject_id": "DIR_CIV",
+      "parent_topic_id": "DIR_CIV_01",
+      "kind": "SUBTOPIC",
+      "label": "Negócio jurídico, prescrição e decadência",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_CIV_02",
+      "subject_id": "DIR_CIV",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Obrigações, contratos e responsabilidade civil",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_CIV_02_001",
+      "subject_id": "DIR_CIV",
+      "parent_topic_id": "DIR_CIV_02",
+      "kind": "SUBTOPIC",
+      "label": "Modalidades e efeitos das obrigações",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_CIV_02_002",
+      "subject_id": "DIR_CIV",
+      "parent_topic_id": "DIR_CIV_02",
+      "kind": "SUBTOPIC",
+      "label": "Princípios e formação dos contratos",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_CIV_02_003",
+      "subject_id": "DIR_CIV",
+      "parent_topic_id": "DIR_CIV_02",
+      "kind": "SUBTOPIC",
+      "label": "Responsabilidade civil e reparação de danos",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ENG_OBRAS_01",
+      "subject_id": "ENG_OBRAS",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Planejamento, orçamento e acompanhamento de obras",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ENG_OBRAS_01_001",
+      "subject_id": "ENG_OBRAS",
+      "parent_topic_id": "ENG_OBRAS_01",
+      "kind": "SUBTOPIC",
+      "label": "Levantamento de quantitativos e custos",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ENG_OBRAS_01_002",
+      "subject_id": "ENG_OBRAS",
+      "parent_topic_id": "ENG_OBRAS_01",
+      "kind": "SUBTOPIC",
+      "label": "Cronogramas e planejamento físico-financeiro",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ENG_OBRAS_01_003",
+      "subject_id": "ENG_OBRAS",
+      "parent_topic_id": "ENG_OBRAS_01",
+      "kind": "SUBTOPIC",
+      "label": "Medições e acompanhamento da execução",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ENG_OBRAS_02",
+      "subject_id": "ENG_OBRAS",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Materiais e execução de obras",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ENG_OBRAS_02_001",
+      "subject_id": "ENG_OBRAS",
+      "parent_topic_id": "ENG_OBRAS_02",
+      "kind": "SUBTOPIC",
+      "label": "Materiais de construção e controle de qualidade",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ENG_OBRAS_02_002",
+      "subject_id": "ENG_OBRAS",
+      "parent_topic_id": "ENG_OBRAS_02",
+      "kind": "SUBTOPIC",
+      "label": "Técnicas e serviços de construção",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "ENG_OBRAS_02_003",
+      "subject_id": "ENG_OBRAS",
+      "parent_topic_id": "ENG_OBRAS_02",
+      "kind": "SUBTOPIC",
+      "label": "Fiscalização, recebimento e manutenção de obras",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_ELEITORAL_01",
+      "subject_id": "DIR_ELEITORAL",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Organização e direitos eleitorais",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_ELEITORAL_01_001",
+      "subject_id": "DIR_ELEITORAL",
+      "parent_topic_id": "DIR_ELEITORAL_01",
+      "kind": "SUBTOPIC",
+      "label": "Organização da Justiça Eleitoral",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_ELEITORAL_01_002",
+      "subject_id": "DIR_ELEITORAL",
+      "parent_topic_id": "DIR_ELEITORAL_01",
+      "kind": "SUBTOPIC",
+      "label": "Alistamento e direitos políticos",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_ELEITORAL_01_003",
+      "subject_id": "DIR_ELEITORAL",
+      "parent_topic_id": "DIR_ELEITORAL_01",
+      "kind": "SUBTOPIC",
+      "label": "Partidos políticos",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_ELEITORAL_02",
+      "subject_id": "DIR_ELEITORAL",
+      "parent_topic_id": null,
+      "kind": "TOPIC",
+      "label": "Processo eleitoral",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_ELEITORAL_02_001",
+      "subject_id": "DIR_ELEITORAL",
+      "parent_topic_id": "DIR_ELEITORAL_02",
+      "kind": "SUBTOPIC",
+      "label": "Registro de candidaturas",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_ELEITORAL_02_002",
+      "subject_id": "DIR_ELEITORAL",
+      "parent_topic_id": "DIR_ELEITORAL_02",
+      "kind": "SUBTOPIC",
+      "label": "Propaganda eleitoral",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "topic_id": "DIR_ELEITORAL_02_003",
+      "subject_id": "DIR_ELEITORAL",
+      "parent_topic_id": "DIR_ELEITORAL_02",
+      "kind": "SUBTOPIC",
+      "label": "Votação, apuração e instrumentos de controle eleitoral",
+      "aliases": [],
+      "status": "ACTIVE",
+      "revision": 1,
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    }
+  ],
+  "relations": [
+    {
+      "from_topic_id": "AFO_01",
+      "to_topic_id": "FIN_PUB_01",
+      "relation": "OVERLAPS_WITH",
+      "note": "Planejamento e orçamento são interseção, não equivalência integral entre as disciplinas.",
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "from_topic_id": "AFO_01",
+      "to_topic_id": "FIN_PUB_02",
+      "relation": "OVERLAPS_WITH",
+      "note": "A execução orçamentária se relaciona a receitas e despesas, sem identidade entre os escopos.",
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "from_topic_id": "CONTAB_01",
+      "to_topic_id": "CONTAB_PUB_02",
+      "relation": "RELATED_TO",
+      "note": "Demonstrações de contextos distintos não são intercambiáveis sem revisão.",
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "from_topic_id": "DIR_CONST_01",
+      "to_topic_id": "ESTADO_01",
+      "relation": "OVERLAPS_WITH",
+      "note": "Instituições e direitos se cruzam, mas os domínios não são sinônimos.",
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "from_topic_id": "GOV_01",
+      "to_topic_id": "APF_01",
+      "relation": "OVERLAPS_WITH",
+      "note": "Governança e organização administrativa têm interseção de conteúdo.",
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "from_topic_id": "ENG_01",
+      "to_topic_id": "ENG_02",
+      "relation": "RELATED_TO",
+      "note": "Mecânica dos materiais apoia estruturas; não comprova domínio equivalente.",
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "from_topic_id": "SOC_TRAB_01",
+      "to_topic_id": "GEST_PESSOAS_02",
+      "relation": "OVERLAPS_WITH",
+      "note": "Relações de trabalho e comportamento organizacional têm perspectivas distintas.",
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    },
+    {
+      "from_topic_id": "FIN_PUB_02",
+      "to_topic_id": "CONTAB_PUB_01",
+      "relation": "RELATED_TO",
+      "note": "Fenômenos financeiros e seu registro contábil são conteúdos relacionados.",
+      "source_ids": [
+        "EDITORIAL_V1"
+      ]
+    }
+  ],
+  "compatibility": {
+    "runtime_catalog_path": "shared/canonical-catalog.json",
+    "runtime_catalog_sha256": "d9258c4921b0233dbd2abadf1b2f23605a0dfef9a5d069664e7336ee4648343e",
+    "legacy_subject_ids": [
+      "AFO",
+      "AUDITORIA",
+      "CONTAB",
+      "DIR_ADM",
+      "DIR_CONST",
+      "DIR_PEN",
+      "DIR_PROC_CIV",
+      "DIR_PROC_PEN",
+      "DIR_TRIB",
+      "ECON",
+      "ENG_CIVIL",
+      "ENG_MAT",
+      "FIN_PUB",
+      "MFIN",
+      "PORT",
+      "SST",
+      "DIR_TRAB",
+      "SOC_TRAB",
+      "POL_PUB",
+      "GOV",
+      "ESTADO",
+      "ETICA",
+      "APF",
+      "DIVERSIDADE"
+    ],
+    "legacy_topic_ids": [
+      "AFO_01",
+      "AUD_01",
+      "CONTAB_01",
+      "DIR_ADM_01",
+      "DIR_CONST_01",
+      "DIR_PEN_01",
+      "DPC_01",
+      "DIR_PROC_PEN_01",
+      "DIR_TRIB_01",
+      "ECON_01",
+      "ENG_01",
+      "ENG_02",
+      "FIN_PUB_01",
+      "FIN_PUB_02",
+      "MFIN_01",
+      "PORT_01",
+      "SST_01",
+      "SST_02",
+      "DIR_TRAB_01",
+      "SOC_TRAB_01",
+      "POL_PUB_01",
+      "GOV_01",
+      "ESTADO_01",
+      "ETICA_01",
+      "APF_01",
+      "DIVERSIDADE_01"
+    ],
+    "runtime_transition": "NOT_APPLIED"
+  }
+}

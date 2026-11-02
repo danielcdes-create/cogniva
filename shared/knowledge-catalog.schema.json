@@ -1,0 +1,430 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Cogniva knowledge catalog v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "catalog_id",
+    "catalog_version",
+    "updated_at",
+    "status",
+    "review_status",
+    "language",
+    "sources",
+    "trunks",
+    "subjects",
+    "topics",
+    "relations",
+    "compatibility"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "knowledge-catalog.schema.json"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "catalog_id": {
+      "const": "cogniva-knowledge"
+    },
+    "catalog_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date"
+    },
+    "status": {
+      "const": "EDITORIAL_BASELINE"
+    },
+    "review_status": {
+      "const": "EDITORIAL_PROPOSAL"
+    },
+    "language": {
+      "const": "pt-BR"
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/source"
+      },
+      "uniqueItems": true,
+      "minItems": 1
+    },
+    "trunks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/trunk"
+      },
+      "uniqueItems": true,
+      "minItems": 1
+    },
+    "subjects": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/subject"
+      },
+      "uniqueItems": true,
+      "minItems": 1
+    },
+    "topics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/topic"
+      },
+      "uniqueItems": true,
+      "minItems": 1
+    },
+    "relations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/relation"
+      },
+      "uniqueItems": true,
+      "minItems": 0
+    },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runtime_catalog_path",
+        "runtime_catalog_sha256",
+        "legacy_subject_ids",
+        "legacy_topic_ids",
+        "runtime_transition"
+      ],
+      "properties": {
+        "runtime_catalog_path": {
+          "const": "shared/canonical-catalog.json"
+        },
+        "runtime_catalog_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "legacy_subject_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$"
+          },
+          "uniqueItems": true,
+          "minItems": 1
+        },
+        "legacy_topic_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$"
+          },
+          "uniqueItems": true,
+          "minItems": 1
+        },
+        "runtime_transition": {
+          "const": "NOT_APPLIED"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_id",
+        "kind",
+        "reference",
+        "note"
+      ],
+      "properties": {
+        "source_id": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "kind": {
+          "enum": [
+            "LEGACY_INTERNAL",
+            "EDITORIAL_PROPOSAL",
+            "REFERENCE_PORTAL"
+          ]
+        },
+        "reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        }
+      }
+    },
+    "trunk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "trunk_id",
+        "label",
+        "aliases",
+        "source_ids",
+        "status"
+      ],
+      "properties": {
+        "trunk_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "uniqueItems": true,
+          "minItems": 0
+        },
+        "source_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$"
+          },
+          "uniqueItems": true,
+          "minItems": 1
+        },
+        "status": {
+          "enum": [
+            "ACTIVE",
+            "DEPRECATED"
+          ]
+        }
+      }
+    },
+    "link": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "trunk_id",
+        "role",
+        "basis",
+        "note"
+      ],
+      "properties": {
+        "trunk_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "role": {
+          "enum": [
+            "FOUNDATIONAL",
+            "RELATED"
+          ]
+        },
+        "basis": {
+          "enum": [
+            "LEGACY_TEMPLATE",
+            "EDITORIAL_SUGGESTION"
+          ]
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        }
+      }
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "subject_id",
+        "label",
+        "aliases",
+        "scope_note",
+        "status",
+        "revision",
+        "source_ids",
+        "trunk_links"
+      ],
+      "properties": {
+        "subject_id": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "uniqueItems": true,
+          "minItems": 0
+        },
+        "scope_note": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "status": {
+          "enum": [
+            "ACTIVE",
+            "DEPRECATED"
+          ]
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "source_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$"
+          },
+          "uniqueItems": true,
+          "minItems": 1
+        },
+        "trunk_links": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/link"
+          },
+          "uniqueItems": true,
+          "minItems": 1
+        }
+      }
+    },
+    "topic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "topic_id",
+        "subject_id",
+        "parent_topic_id",
+        "kind",
+        "label",
+        "aliases",
+        "status",
+        "revision",
+        "source_ids"
+      ],
+      "properties": {
+        "topic_id": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "subject_id": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "parent_topic_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_]*$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "enum": [
+            "TOPIC",
+            "SUBTOPIC"
+          ]
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "uniqueItems": true,
+          "minItems": 0
+        },
+        "status": {
+          "enum": [
+            "ACTIVE",
+            "DEPRECATED"
+          ]
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "source_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$"
+          },
+          "uniqueItems": true,
+          "minItems": 1
+        }
+      }
+    },
+    "relation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from_topic_id",
+        "to_topic_id",
+        "relation",
+        "note",
+        "source_ids"
+      ],
+      "properties": {
+        "from_topic_id": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "to_topic_id": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "relation": {
+          "enum": [
+            "OVERLAPS_WITH",
+            "RELATED_TO"
+          ]
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "source_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$"
+          },
+          "uniqueItems": true,
+          "minItems": 1
+        }
+      }
+    }
+  }
+}

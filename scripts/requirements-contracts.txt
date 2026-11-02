@@ -1,0 +1,3 @@
+# Offline development/CI tools only; no Python service or dependency in the APK.
+jsonschema==4.26.0
+rfc8785==0.1.4

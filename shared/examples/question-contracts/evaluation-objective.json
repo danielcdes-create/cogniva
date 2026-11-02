@@ -1,0 +1,37 @@
+{
+  "_id": "00000000-0000-0000-0000-0000000001f5",
+  "schema_version": 1,
+  "attempt_id": "00000000-0000-0000-0000-000000000259",
+  "user_id": 123,
+  "question_id": "000000000000000000000001",
+  "question_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+  "rubric_revision": null,
+  "submission": {
+    "type": "OPTION",
+    "selected_index": 1
+  },
+  "strategy": "EXACT_OPTION",
+  "status": "CONFIRMED",
+  "score": 100,
+  "max_score": 100,
+  "criterion_results": [],
+  "is_correct": true,
+  "feedback": "Feedback sintético de validação.",
+  "engine": null,
+  "decision": {
+    "actor": {
+      "type": "SYSTEM",
+      "id": "synthetic-fixture-engine"
+    },
+    "method": "RULE_BASED",
+    "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+    "recorded_at": "2026-11-02T15:00:00Z",
+    "evidence": [],
+    "model": null,
+    "prompt_id": null,
+    "prompt_version": null,
+    "source_suggestion_id": null
+  },
+  "supersedes_evaluation_id": null,
+  "created_at": "2026-11-02T15:00:00Z"
+}

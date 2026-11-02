@@ -1,0 +1,31 @@
+{
+  "_id": "00000000-0000-0000-0000-000000000191",
+  "schema_version": 1,
+  "revision": 1,
+  "owner_user_id": 123,
+  "exam_id": "synthetic-exam",
+  "exam_revision": 1,
+  "component_id": "synthetic-component",
+  "question_id": "000000000000000000000001",
+  "question_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+  "catalog_version": 1,
+  "relation": "DIRECT",
+  "status": "CONFIRMED",
+  "matched_topic_ids": [
+    "MAT_01_001"
+  ],
+  "provenance": {
+    "actor": {
+      "type": "HUMAN",
+      "id": "synthetic-fixture-reviewer"
+    },
+    "method": "MANUAL_REVIEW",
+    "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+    "recorded_at": "2026-11-02T15:00:00Z",
+    "evidence": [],
+    "model": null,
+    "prompt_id": null,
+    "prompt_version": null,
+    "source_suggestion_id": null
+  }
+}

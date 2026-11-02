@@ -1,0 +1,1861 @@
+{
+  "registry_version": 1,
+  "catalog_id": "cogniva-knowledge",
+  "entries": [
+    {
+      "id": "fiscal",
+      "entity": "TRUNK",
+      "subject_id": null,
+      "parent_topic_id": null,
+      "initial_label": "Área Fiscal"
+    },
+    {
+      "id": "policial",
+      "entity": "TRUNK",
+      "subject_id": null,
+      "parent_topic_id": null,
+      "initial_label": "Carreiras Policiais"
+    },
+    {
+      "id": "controle",
+      "entity": "TRUNK",
+      "subject_id": null,
+      "parent_topic_id": null,
+      "initial_label": "Controle"
+    },
+    {
+      "id": "engenharia",
+      "entity": "TRUNK",
+      "subject_id": null,
+      "parent_topic_id": null,
+      "initial_label": "Engenharia"
+    },
+    {
+      "id": "tribunais",
+      "entity": "TRUNK",
+      "subject_id": null,
+      "parent_topic_id": null,
+      "initial_label": "Tribunais"
+    },
+    {
+      "id": "bancaria",
+      "entity": "TRUNK",
+      "subject_id": null,
+      "parent_topic_id": null,
+      "initial_label": "Bancária"
+    },
+    {
+      "id": "fiscalizacao_trabalho",
+      "entity": "TRUNK",
+      "subject_id": null,
+      "parent_topic_id": null,
+      "initial_label": "Fiscalização do Trabalho"
+    },
+    {
+      "id": "AFO",
+      "entity": "SUBJECT",
+      "subject_id": "AFO",
+      "parent_topic_id": null,
+      "initial_label": "Administração Financeira e Orçamentária"
+    },
+    {
+      "id": "AUDITORIA",
+      "entity": "SUBJECT",
+      "subject_id": "AUDITORIA",
+      "parent_topic_id": null,
+      "initial_label": "Auditoria Governamental"
+    },
+    {
+      "id": "CONTAB",
+      "entity": "SUBJECT",
+      "subject_id": "CONTAB",
+      "parent_topic_id": null,
+      "initial_label": "Contabilidade Geral"
+    },
+    {
+      "id": "DIR_ADM",
+      "entity": "SUBJECT",
+      "subject_id": "DIR_ADM",
+      "parent_topic_id": null,
+      "initial_label": "Direito Administrativo"
+    },
+    {
+      "id": "DIR_CONST",
+      "entity": "SUBJECT",
+      "subject_id": "DIR_CONST",
+      "parent_topic_id": null,
+      "initial_label": "Direito Constitucional"
+    },
+    {
+      "id": "DIR_PEN",
+      "entity": "SUBJECT",
+      "subject_id": "DIR_PEN",
+      "parent_topic_id": null,
+      "initial_label": "Direito Penal"
+    },
+    {
+      "id": "DIR_PROC_CIV",
+      "entity": "SUBJECT",
+      "subject_id": "DIR_PROC_CIV",
+      "parent_topic_id": null,
+      "initial_label": "Direito Processual Civil"
+    },
+    {
+      "id": "DIR_PROC_PEN",
+      "entity": "SUBJECT",
+      "subject_id": "DIR_PROC_PEN",
+      "parent_topic_id": null,
+      "initial_label": "Direito Processual Penal"
+    },
+    {
+      "id": "DIR_TRIB",
+      "entity": "SUBJECT",
+      "subject_id": "DIR_TRIB",
+      "parent_topic_id": null,
+      "initial_label": "Direito Tributário"
+    },
+    {
+      "id": "ECON",
+      "entity": "SUBJECT",
+      "subject_id": "ECON",
+      "parent_topic_id": null,
+      "initial_label": "Economia"
+    },
+    {
+      "id": "ENG_CIVIL",
+      "entity": "SUBJECT",
+      "subject_id": "ENG_CIVIL",
+      "parent_topic_id": null,
+      "initial_label": "Estruturas"
+    },
+    {
+      "id": "ENG_MAT",
+      "entity": "SUBJECT",
+      "subject_id": "ENG_MAT",
+      "parent_topic_id": null,
+      "initial_label": "Resistência dos Materiais"
+    },
+    {
+      "id": "FIN_PUB",
+      "entity": "SUBJECT",
+      "subject_id": "FIN_PUB",
+      "parent_topic_id": null,
+      "initial_label": "Finanças Públicas"
+    },
+    {
+      "id": "MFIN",
+      "entity": "SUBJECT",
+      "subject_id": "MFIN",
+      "parent_topic_id": null,
+      "initial_label": "Mercado Financeiro"
+    },
+    {
+      "id": "PORT",
+      "entity": "SUBJECT",
+      "subject_id": "PORT",
+      "parent_topic_id": null,
+      "initial_label": "Língua Portuguesa"
+    },
+    {
+      "id": "SST",
+      "entity": "SUBJECT",
+      "subject_id": "SST",
+      "parent_topic_id": null,
+      "initial_label": "Segurança e Saúde do Trabalhador"
+    },
+    {
+      "id": "DIR_TRAB",
+      "entity": "SUBJECT",
+      "subject_id": "DIR_TRAB",
+      "parent_topic_id": null,
+      "initial_label": "Direito do Trabalho"
+    },
+    {
+      "id": "SOC_TRAB",
+      "entity": "SUBJECT",
+      "subject_id": "SOC_TRAB",
+      "parent_topic_id": null,
+      "initial_label": "Sociologia e Psicologia Aplicadas ao Trabalho"
+    },
+    {
+      "id": "POL_PUB",
+      "entity": "SUBJECT",
+      "subject_id": "POL_PUB",
+      "parent_topic_id": null,
+      "initial_label": "Políticas Públicas"
+    },
+    {
+      "id": "GOV",
+      "entity": "SUBJECT",
+      "subject_id": "GOV",
+      "parent_topic_id": null,
+      "initial_label": "Gestão Governamental e Governança Pública"
+    },
+    {
+      "id": "ESTADO",
+      "entity": "SUBJECT",
+      "subject_id": "ESTADO",
+      "parent_topic_id": null,
+      "initial_label": "Desafios do Estado de Direito"
+    },
+    {
+      "id": "ETICA",
+      "entity": "SUBJECT",
+      "subject_id": "ETICA",
+      "parent_topic_id": null,
+      "initial_label": "Ética e Integridade"
+    },
+    {
+      "id": "APF",
+      "entity": "SUBJECT",
+      "subject_id": "APF",
+      "parent_topic_id": null,
+      "initial_label": "Administração Pública Federal"
+    },
+    {
+      "id": "DIVERSIDADE",
+      "entity": "SUBJECT",
+      "subject_id": "DIVERSIDADE",
+      "parent_topic_id": null,
+      "initial_label": "Diversidade e Inclusão na Sociedade"
+    },
+    {
+      "id": "MAT",
+      "entity": "SUBJECT",
+      "subject_id": "MAT",
+      "parent_topic_id": null,
+      "initial_label": "Matemática"
+    },
+    {
+      "id": "RLM",
+      "entity": "SUBJECT",
+      "subject_id": "RLM",
+      "parent_topic_id": null,
+      "initial_label": "Raciocínio Lógico"
+    },
+    {
+      "id": "MAT_FIN",
+      "entity": "SUBJECT",
+      "subject_id": "MAT_FIN",
+      "parent_topic_id": null,
+      "initial_label": "Matemática Financeira"
+    },
+    {
+      "id": "ESTAT",
+      "entity": "SUBJECT",
+      "subject_id": "ESTAT",
+      "parent_topic_id": null,
+      "initial_label": "Estatística"
+    },
+    {
+      "id": "INFO",
+      "entity": "SUBJECT",
+      "subject_id": "INFO",
+      "parent_topic_id": null,
+      "initial_label": "Informática Básica"
+    },
+    {
+      "id": "ADM_GERAL",
+      "entity": "SUBJECT",
+      "subject_id": "ADM_GERAL",
+      "parent_topic_id": null,
+      "initial_label": "Administração Geral"
+    },
+    {
+      "id": "CONTAB_PUB",
+      "entity": "SUBJECT",
+      "subject_id": "CONTAB_PUB",
+      "parent_topic_id": null,
+      "initial_label": "Contabilidade Pública"
+    },
+    {
+      "id": "GEST_PESSOAS",
+      "entity": "SUBJECT",
+      "subject_id": "GEST_PESSOAS",
+      "parent_topic_id": null,
+      "initial_label": "Gestão de Pessoas"
+    },
+    {
+      "id": "DIR_CIV",
+      "entity": "SUBJECT",
+      "subject_id": "DIR_CIV",
+      "parent_topic_id": null,
+      "initial_label": "Direito Civil"
+    },
+    {
+      "id": "ENG_OBRAS",
+      "entity": "SUBJECT",
+      "subject_id": "ENG_OBRAS",
+      "parent_topic_id": null,
+      "initial_label": "Planejamento e Gestão de Obras"
+    },
+    {
+      "id": "DIR_ELEITORAL",
+      "entity": "SUBJECT",
+      "subject_id": "DIR_ELEITORAL",
+      "parent_topic_id": null,
+      "initial_label": "Direito Eleitoral"
+    },
+    {
+      "id": "AFO_01",
+      "entity": "TOPIC",
+      "subject_id": "AFO",
+      "parent_topic_id": null,
+      "initial_label": "Ciclo orçamentário"
+    },
+    {
+      "id": "AFO_01_001",
+      "entity": "TOPIC",
+      "subject_id": "AFO",
+      "parent_topic_id": "AFO_01",
+      "initial_label": "Planejamento e proposta orçamentária"
+    },
+    {
+      "id": "AFO_01_002",
+      "entity": "TOPIC",
+      "subject_id": "AFO",
+      "parent_topic_id": "AFO_01",
+      "initial_label": "Discussão e aprovação do orçamento"
+    },
+    {
+      "id": "AFO_01_003",
+      "entity": "TOPIC",
+      "subject_id": "AFO",
+      "parent_topic_id": "AFO_01",
+      "initial_label": "Execução orçamentária e financeira"
+    },
+    {
+      "id": "AFO_01_004",
+      "entity": "TOPIC",
+      "subject_id": "AFO",
+      "parent_topic_id": "AFO_01",
+      "initial_label": "Controle e avaliação do ciclo orçamentário"
+    },
+    {
+      "id": "AUD_01",
+      "entity": "TOPIC",
+      "subject_id": "AUDITORIA",
+      "parent_topic_id": null,
+      "initial_label": "Controle interno e externo"
+    },
+    {
+      "id": "AUD_01_001",
+      "entity": "TOPIC",
+      "subject_id": "AUDITORIA",
+      "parent_topic_id": "AUD_01",
+      "initial_label": "Controle interno governamental"
+    },
+    {
+      "id": "AUD_01_002",
+      "entity": "TOPIC",
+      "subject_id": "AUDITORIA",
+      "parent_topic_id": "AUD_01",
+      "initial_label": "Controle externo e tribunais de contas"
+    },
+    {
+      "id": "AUD_01_003",
+      "entity": "TOPIC",
+      "subject_id": "AUDITORIA",
+      "parent_topic_id": "AUD_01",
+      "initial_label": "Planejamento e evidências de auditoria"
+    },
+    {
+      "id": "AUD_01_004",
+      "entity": "TOPIC",
+      "subject_id": "AUDITORIA",
+      "parent_topic_id": "AUD_01",
+      "initial_label": "Achados e relatórios de auditoria"
+    },
+    {
+      "id": "CONTAB_01",
+      "entity": "TOPIC",
+      "subject_id": "CONTAB",
+      "parent_topic_id": null,
+      "initial_label": "Demonstrações contábeis"
+    },
+    {
+      "id": "CONTAB_01_001",
+      "entity": "TOPIC",
+      "subject_id": "CONTAB",
+      "parent_topic_id": "CONTAB_01",
+      "initial_label": "Balanço patrimonial"
+    },
+    {
+      "id": "CONTAB_01_002",
+      "entity": "TOPIC",
+      "subject_id": "CONTAB",
+      "parent_topic_id": "CONTAB_01",
+      "initial_label": "Demonstração do resultado"
+    },
+    {
+      "id": "CONTAB_01_003",
+      "entity": "TOPIC",
+      "subject_id": "CONTAB",
+      "parent_topic_id": "CONTAB_01",
+      "initial_label": "Demonstração dos fluxos de caixa"
+    },
+    {
+      "id": "CONTAB_01_004",
+      "entity": "TOPIC",
+      "subject_id": "CONTAB",
+      "parent_topic_id": "CONTAB_01",
+      "initial_label": "Demonstrações das mutações do patrimônio líquido"
+    },
+    {
+      "id": "DIR_ADM_01",
+      "entity": "TOPIC",
+      "subject_id": "DIR_ADM",
+      "parent_topic_id": null,
+      "initial_label": "Atos administrativos e licitações"
+    },
+    {
+      "id": "DIR_ADM_01_001",
+      "entity": "TOPIC",
+      "subject_id": "DIR_ADM",
+      "parent_topic_id": "DIR_ADM_01",
+      "initial_label": "Elementos e atributos dos atos administrativos"
+    },
+    {
+      "id": "DIR_ADM_01_002",
+      "entity": "TOPIC",
+      "subject_id": "DIR_ADM",
+      "parent_topic_id": "DIR_ADM_01",
+      "initial_label": "Anulação e revogação de atos administrativos"
+    },
+    {
+      "id": "DIR_ADM_01_003",
+      "entity": "TOPIC",
+      "subject_id": "DIR_ADM",
+      "parent_topic_id": "DIR_ADM_01",
+      "initial_label": "Planejamento e procedimentos de contratação"
+    },
+    {
+      "id": "DIR_ADM_01_004",
+      "entity": "TOPIC",
+      "subject_id": "DIR_ADM",
+      "parent_topic_id": "DIR_ADM_01",
+      "initial_label": "Contratos administrativos e sua execução"
+    },
+    {
+      "id": "DIR_CONST_01",
+      "entity": "TOPIC",
+      "subject_id": "DIR_CONST",
+      "parent_topic_id": null,
+      "initial_label": "Direitos fundamentais e organização do Estado"
+    },
+    {
+      "id": "DIR_CONST_01_001",
+      "entity": "TOPIC",
+      "subject_id": "DIR_CONST",
+      "parent_topic_id": "DIR_CONST_01",
+      "initial_label": "Direitos e garantias fundamentais"
+    },
+    {
+      "id": "DIR_CONST_01_002",
+      "entity": "TOPIC",
+      "subject_id": "DIR_CONST",
+      "parent_topic_id": "DIR_CONST_01",
+      "initial_label": "Organização político-administrativa"
+    },
+    {
+      "id": "DIR_CONST_01_003",
+      "entity": "TOPIC",
+      "subject_id": "DIR_CONST",
+      "parent_topic_id": "DIR_CONST_01",
+      "initial_label": "Organização dos Poderes"
+    },
+    {
+      "id": "DIR_CONST_01_004",
+      "entity": "TOPIC",
+      "subject_id": "DIR_CONST",
+      "parent_topic_id": "DIR_CONST_01",
+      "initial_label": "Controle de constitucionalidade"
+    },
+    {
+      "id": "DIR_PEN_01",
+      "entity": "TOPIC",
+      "subject_id": "DIR_PEN",
+      "parent_topic_id": null,
+      "initial_label": "Teoria do crime"
+    },
+    {
+      "id": "DIR_PEN_01_001",
+      "entity": "TOPIC",
+      "subject_id": "DIR_PEN",
+      "parent_topic_id": "DIR_PEN_01",
+      "initial_label": "Tipicidade e conduta"
+    },
+    {
+      "id": "DIR_PEN_01_002",
+      "entity": "TOPIC",
+      "subject_id": "DIR_PEN",
+      "parent_topic_id": "DIR_PEN_01",
+      "initial_label": "Ilicitude e causas de justificação"
+    },
+    {
+      "id": "DIR_PEN_01_003",
+      "entity": "TOPIC",
+      "subject_id": "DIR_PEN",
+      "parent_topic_id": "DIR_PEN_01",
+      "initial_label": "Culpabilidade"
+    },
+    {
+      "id": "DIR_PEN_01_004",
+      "entity": "TOPIC",
+      "subject_id": "DIR_PEN",
+      "parent_topic_id": "DIR_PEN_01",
+      "initial_label": "Concurso de pessoas"
+    },
+    {
+      "id": "DPC_01",
+      "entity": "TOPIC",
+      "subject_id": "DIR_PROC_CIV",
+      "parent_topic_id": null,
+      "initial_label": "Processo de conhecimento"
+    },
+    {
+      "id": "DPC_01_001",
+      "entity": "TOPIC",
+      "subject_id": "DIR_PROC_CIV",
+      "parent_topic_id": "DPC_01",
+      "initial_label": "Jurisdição, ação e pressupostos processuais"
+    },
+    {
+      "id": "DPC_01_002",
+      "entity": "TOPIC",
+      "subject_id": "DIR_PROC_CIV",
+      "parent_topic_id": "DPC_01",
+      "initial_label": "Partes, capacidade e representação processual"
+    },
+    {
+      "id": "DPC_01_003",
+      "entity": "TOPIC",
+      "subject_id": "DIR_PROC_CIV",
+      "parent_topic_id": "DPC_01",
+      "initial_label": "Procedimento comum e provas"
+    },
+    {
+      "id": "DPC_01_004",
+      "entity": "TOPIC",
+      "subject_id": "DIR_PROC_CIV",
+      "parent_topic_id": "DPC_01",
+      "initial_label": "Sentença e coisa julgada"
+    },
+    {
+      "id": "DIR_PROC_PEN_01",
+      "entity": "TOPIC",
+      "subject_id": "DIR_PROC_PEN",
+      "parent_topic_id": null,
+      "initial_label": "Inquérito e ação penal"
+    },
+    {
+      "id": "DIR_PROC_PEN_01_001",
+      "entity": "TOPIC",
+      "subject_id": "DIR_PROC_PEN",
+      "parent_topic_id": "DIR_PROC_PEN_01",
+      "initial_label": "Finalidade e características do inquérito policial"
+    },
+    {
+      "id": "DIR_PROC_PEN_01_002",
+      "entity": "TOPIC",
+      "subject_id": "DIR_PROC_PEN",
+      "parent_topic_id": "DIR_PROC_PEN_01",
+      "initial_label": "Investigação e produção de elementos informativos"
+    },
+    {
+      "id": "DIR_PROC_PEN_01_003",
+      "entity": "TOPIC",
+      "subject_id": "DIR_PROC_PEN",
+      "parent_topic_id": "DIR_PROC_PEN_01",
+      "initial_label": "Espécies e condições da ação penal"
+    },
+    {
+      "id": "DIR_PROC_PEN_01_004",
+      "entity": "TOPIC",
+      "subject_id": "DIR_PROC_PEN",
+      "parent_topic_id": "DIR_PROC_PEN_01",
+      "initial_label": "Titularidade e princípios da ação penal"
+    },
+    {
+      "id": "DIR_TRIB_01",
+      "entity": "TOPIC",
+      "subject_id": "DIR_TRIB",
+      "parent_topic_id": null,
+      "initial_label": "Competência tributária e crédito"
+    },
+    {
+      "id": "DIR_TRIB_01_001",
+      "entity": "TOPIC",
+      "subject_id": "DIR_TRIB",
+      "parent_topic_id": "DIR_TRIB_01",
+      "initial_label": "Competência e capacidade tributária"
+    },
+    {
+      "id": "DIR_TRIB_01_002",
+      "entity": "TOPIC",
+      "subject_id": "DIR_TRIB",
+      "parent_topic_id": "DIR_TRIB_01",
+      "initial_label": "Limitações ao poder de tributar"
+    },
+    {
+      "id": "DIR_TRIB_01_003",
+      "entity": "TOPIC",
+      "subject_id": "DIR_TRIB",
+      "parent_topic_id": "DIR_TRIB_01",
+      "initial_label": "Obrigação tributária e lançamento"
+    },
+    {
+      "id": "DIR_TRIB_01_004",
+      "entity": "TOPIC",
+      "subject_id": "DIR_TRIB",
+      "parent_topic_id": "DIR_TRIB_01",
+      "initial_label": "Suspensão, extinção e exclusão do crédito tributário"
+    },
+    {
+      "id": "ECON_01",
+      "entity": "TOPIC",
+      "subject_id": "ECON",
+      "parent_topic_id": null,
+      "initial_label": "Política monetária e fiscal"
+    },
+    {
+      "id": "ECON_01_001",
+      "entity": "TOPIC",
+      "subject_id": "ECON",
+      "parent_topic_id": "ECON_01",
+      "initial_label": "Instrumentos de política monetária"
+    },
+    {
+      "id": "ECON_01_002",
+      "entity": "TOPIC",
+      "subject_id": "ECON",
+      "parent_topic_id": "ECON_01",
+      "initial_label": "Inflação e mecanismos de transmissão monetária"
+    },
+    {
+      "id": "ECON_01_003",
+      "entity": "TOPIC",
+      "subject_id": "ECON",
+      "parent_topic_id": "ECON_01",
+      "initial_label": "Instrumentos e resultados da política fiscal"
+    },
+    {
+      "id": "ECON_01_004",
+      "entity": "TOPIC",
+      "subject_id": "ECON",
+      "parent_topic_id": "ECON_01",
+      "initial_label": "Interações entre políticas monetária e fiscal"
+    },
+    {
+      "id": "ENG_01",
+      "entity": "TOPIC",
+      "subject_id": "ENG_CIVIL",
+      "parent_topic_id": null,
+      "initial_label": "Concreto armado"
+    },
+    {
+      "id": "ENG_01_001",
+      "entity": "TOPIC",
+      "subject_id": "ENG_CIVIL",
+      "parent_topic_id": "ENG_01",
+      "initial_label": "Propriedades e comportamento do concreto e do aço"
+    },
+    {
+      "id": "ENG_01_002",
+      "entity": "TOPIC",
+      "subject_id": "ENG_CIVIL",
+      "parent_topic_id": "ENG_01",
+      "initial_label": "Estados limites e critérios de dimensionamento"
+    },
+    {
+      "id": "ENG_01_003",
+      "entity": "TOPIC",
+      "subject_id": "ENG_CIVIL",
+      "parent_topic_id": "ENG_01",
+      "initial_label": "Elementos de concreto armado"
+    },
+    {
+      "id": "ENG_01_004",
+      "entity": "TOPIC",
+      "subject_id": "ENG_CIVIL",
+      "parent_topic_id": "ENG_01",
+      "initial_label": "Detalhamento e disposições construtivas"
+    },
+    {
+      "id": "ENG_02",
+      "entity": "TOPIC",
+      "subject_id": "ENG_MAT",
+      "parent_topic_id": null,
+      "initial_label": "Tração, compressão e flexão"
+    },
+    {
+      "id": "ENG_02_001",
+      "entity": "TOPIC",
+      "subject_id": "ENG_MAT",
+      "parent_topic_id": "ENG_02",
+      "initial_label": "Tensões, deformações e relações constitutivas"
+    },
+    {
+      "id": "ENG_02_002",
+      "entity": "TOPIC",
+      "subject_id": "ENG_MAT",
+      "parent_topic_id": "ENG_02",
+      "initial_label": "Tração e compressão axial"
+    },
+    {
+      "id": "ENG_02_003",
+      "entity": "TOPIC",
+      "subject_id": "ENG_MAT",
+      "parent_topic_id": "ENG_02",
+      "initial_label": "Flexão e distribuição de tensões"
+    },
+    {
+      "id": "ENG_02_004",
+      "entity": "TOPIC",
+      "subject_id": "ENG_MAT",
+      "parent_topic_id": "ENG_02",
+      "initial_label": "Esforços solicitantes e diagramas"
+    },
+    {
+      "id": "FIN_PUB_01",
+      "entity": "TOPIC",
+      "subject_id": "FIN_PUB",
+      "parent_topic_id": null,
+      "initial_label": "Orçamento público: PPA, LDO e LOA"
+    },
+    {
+      "id": "FIN_PUB_01_001",
+      "entity": "TOPIC",
+      "subject_id": "FIN_PUB",
+      "parent_topic_id": "FIN_PUB_01",
+      "initial_label": "Plano Plurianual"
+    },
+    {
+      "id": "FIN_PUB_01_002",
+      "entity": "TOPIC",
+      "subject_id": "FIN_PUB",
+      "parent_topic_id": "FIN_PUB_01",
+      "initial_label": "Lei de Diretrizes Orçamentárias"
+    },
+    {
+      "id": "FIN_PUB_01_003",
+      "entity": "TOPIC",
+      "subject_id": "FIN_PUB",
+      "parent_topic_id": "FIN_PUB_01",
+      "initial_label": "Lei Orçamentária Anual"
+    },
+    {
+      "id": "FIN_PUB_01_004",
+      "entity": "TOPIC",
+      "subject_id": "FIN_PUB",
+      "parent_topic_id": "FIN_PUB_01",
+      "initial_label": "Integração entre os instrumentos de planejamento"
+    },
+    {
+      "id": "FIN_PUB_02",
+      "entity": "TOPIC",
+      "subject_id": "FIN_PUB",
+      "parent_topic_id": null,
+      "initial_label": "Receita e despesa públicas"
+    },
+    {
+      "id": "FIN_PUB_02_001",
+      "entity": "TOPIC",
+      "subject_id": "FIN_PUB",
+      "parent_topic_id": "FIN_PUB_02",
+      "initial_label": "Classificações e estágios da receita pública"
+    },
+    {
+      "id": "FIN_PUB_02_002",
+      "entity": "TOPIC",
+      "subject_id": "FIN_PUB",
+      "parent_topic_id": "FIN_PUB_02",
+      "initial_label": "Classificações e estágios da despesa pública"
+    },
+    {
+      "id": "FIN_PUB_02_003",
+      "entity": "TOPIC",
+      "subject_id": "FIN_PUB",
+      "parent_topic_id": "FIN_PUB_02",
+      "initial_label": "Restos a pagar e despesas de exercícios anteriores"
+    },
+    {
+      "id": "FIN_PUB_02_004",
+      "entity": "TOPIC",
+      "subject_id": "FIN_PUB",
+      "parent_topic_id": "FIN_PUB_02",
+      "initial_label": "Resultados fiscais e endividamento público"
+    },
+    {
+      "id": "MFIN_01",
+      "entity": "TOPIC",
+      "subject_id": "MFIN",
+      "parent_topic_id": null,
+      "initial_label": "Sistema financeiro nacional"
+    },
+    {
+      "id": "MFIN_01_001",
+      "entity": "TOPIC",
+      "subject_id": "MFIN",
+      "parent_topic_id": "MFIN_01",
+      "initial_label": "Órgãos normativos do sistema financeiro"
+    },
+    {
+      "id": "MFIN_01_002",
+      "entity": "TOPIC",
+      "subject_id": "MFIN",
+      "parent_topic_id": "MFIN_01",
+      "initial_label": "Entidades supervisoras do sistema financeiro"
+    },
+    {
+      "id": "MFIN_01_003",
+      "entity": "TOPIC",
+      "subject_id": "MFIN",
+      "parent_topic_id": "MFIN_01",
+      "initial_label": "Instituições e intermediários financeiros"
+    },
+    {
+      "id": "MFIN_01_004",
+      "entity": "TOPIC",
+      "subject_id": "MFIN",
+      "parent_topic_id": "MFIN_01",
+      "initial_label": "Mercados monetário, de crédito, de capitais e cambial"
+    },
+    {
+      "id": "PORT_01",
+      "entity": "TOPIC",
+      "subject_id": "PORT",
+      "parent_topic_id": null,
+      "initial_label": "Interpretação e gramática aplicada"
+    },
+    {
+      "id": "PORT_01_001",
+      "entity": "TOPIC",
+      "subject_id": "PORT",
+      "parent_topic_id": "PORT_01",
+      "initial_label": "Compreensão e interpretação de textos"
+    },
+    {
+      "id": "PORT_01_002",
+      "entity": "TOPIC",
+      "subject_id": "PORT",
+      "parent_topic_id": "PORT_01",
+      "initial_label": "Coesão e coerência textual"
+    },
+    {
+      "id": "PORT_01_003",
+      "entity": "TOPIC",
+      "subject_id": "PORT",
+      "parent_topic_id": "PORT_01",
+      "initial_label": "Classes de palavras e relações sintáticas"
+    },
+    {
+      "id": "PORT_01_004",
+      "entity": "TOPIC",
+      "subject_id": "PORT",
+      "parent_topic_id": "PORT_01",
+      "initial_label": "Concordância, regência e crase"
+    },
+    {
+      "id": "PORT_01_005",
+      "entity": "TOPIC",
+      "subject_id": "PORT",
+      "parent_topic_id": "PORT_01",
+      "initial_label": "Pontuação e efeitos de sentido"
+    },
+    {
+      "id": "SST_01",
+      "entity": "TOPIC",
+      "subject_id": "SST",
+      "parent_topic_id": null,
+      "initial_label": "NR-01 — Gerenciamento de riscos ocupacionais"
+    },
+    {
+      "id": "SST_01_001",
+      "entity": "TOPIC",
+      "subject_id": "SST",
+      "parent_topic_id": "SST_01",
+      "initial_label": "Identificação de perigos e avaliação de riscos ocupacionais"
+    },
+    {
+      "id": "SST_01_002",
+      "entity": "TOPIC",
+      "subject_id": "SST",
+      "parent_topic_id": "SST_01",
+      "initial_label": "Programa de gerenciamento de riscos"
+    },
+    {
+      "id": "SST_01_003",
+      "entity": "TOPIC",
+      "subject_id": "SST",
+      "parent_topic_id": "SST_01",
+      "initial_label": "Inventário de riscos e plano de ação"
+    },
+    {
+      "id": "SST_01_004",
+      "entity": "TOPIC",
+      "subject_id": "SST",
+      "parent_topic_id": "SST_01",
+      "initial_label": "Medidas de prevenção e acompanhamento"
+    },
+    {
+      "id": "SST_02",
+      "entity": "TOPIC",
+      "subject_id": "SST",
+      "parent_topic_id": null,
+      "initial_label": "NR-15 — Atividades e operações insalubres"
+    },
+    {
+      "id": "SST_02_001",
+      "entity": "TOPIC",
+      "subject_id": "SST",
+      "parent_topic_id": "SST_02",
+      "initial_label": "Agentes físicos e avaliação de exposição"
+    },
+    {
+      "id": "SST_02_002",
+      "entity": "TOPIC",
+      "subject_id": "SST",
+      "parent_topic_id": "SST_02",
+      "initial_label": "Agentes químicos e avaliação de exposição"
+    },
+    {
+      "id": "SST_02_003",
+      "entity": "TOPIC",
+      "subject_id": "SST",
+      "parent_topic_id": "SST_02",
+      "initial_label": "Agentes biológicos e avaliação de exposição"
+    },
+    {
+      "id": "SST_02_004",
+      "entity": "TOPIC",
+      "subject_id": "SST",
+      "parent_topic_id": "SST_02",
+      "initial_label": "Critérios de caracterização e medidas de controle"
+    },
+    {
+      "id": "DIR_TRAB_01",
+      "entity": "TOPIC",
+      "subject_id": "DIR_TRAB",
+      "parent_topic_id": null,
+      "initial_label": "Relação de emprego e proteção do trabalhador"
+    },
+    {
+      "id": "DIR_TRAB_01_001",
+      "entity": "TOPIC",
+      "subject_id": "DIR_TRAB",
+      "parent_topic_id": "DIR_TRAB_01",
+      "initial_label": "Elementos e sujeitos da relação de emprego"
+    },
+    {
+      "id": "DIR_TRAB_01_002",
+      "entity": "TOPIC",
+      "subject_id": "DIR_TRAB",
+      "parent_topic_id": "DIR_TRAB_01",
+      "initial_label": "Contrato individual de trabalho"
+    },
+    {
+      "id": "DIR_TRAB_01_003",
+      "entity": "TOPIC",
+      "subject_id": "DIR_TRAB",
+      "parent_topic_id": "DIR_TRAB_01",
+      "initial_label": "Jornada, descansos e remuneração"
+    },
+    {
+      "id": "DIR_TRAB_01_004",
+      "entity": "TOPIC",
+      "subject_id": "DIR_TRAB",
+      "parent_topic_id": "DIR_TRAB_01",
+      "initial_label": "Proteção do trabalho e atuação fiscalizatória"
+    },
+    {
+      "id": "SOC_TRAB_01",
+      "entity": "TOPIC",
+      "subject_id": "SOC_TRAB",
+      "parent_topic_id": null,
+      "initial_label": "Trabalho e relações sociais"
+    },
+    {
+      "id": "SOC_TRAB_01_001",
+      "entity": "TOPIC",
+      "subject_id": "SOC_TRAB",
+      "parent_topic_id": "SOC_TRAB_01",
+      "initial_label": "Organização e divisão social do trabalho"
+    },
+    {
+      "id": "SOC_TRAB_01_002",
+      "entity": "TOPIC",
+      "subject_id": "SOC_TRAB",
+      "parent_topic_id": "SOC_TRAB_01",
+      "initial_label": "Relações de poder e conflitos no trabalho"
+    },
+    {
+      "id": "SOC_TRAB_01_003",
+      "entity": "TOPIC",
+      "subject_id": "SOC_TRAB",
+      "parent_topic_id": "SOC_TRAB_01",
+      "initial_label": "Subjetividade e saúde mental no trabalho"
+    },
+    {
+      "id": "SOC_TRAB_01_004",
+      "entity": "TOPIC",
+      "subject_id": "SOC_TRAB",
+      "parent_topic_id": "SOC_TRAB_01",
+      "initial_label": "Transformações do trabalho e seus impactos sociais"
+    },
+    {
+      "id": "POL_PUB_01",
+      "entity": "TOPIC",
+      "subject_id": "POL_PUB",
+      "parent_topic_id": null,
+      "initial_label": "Formulação, implementação e avaliação de políticas"
+    },
+    {
+      "id": "POL_PUB_01_001",
+      "entity": "TOPIC",
+      "subject_id": "POL_PUB",
+      "parent_topic_id": "POL_PUB_01",
+      "initial_label": "Agenda pública e identificação de problemas"
+    },
+    {
+      "id": "POL_PUB_01_002",
+      "entity": "TOPIC",
+      "subject_id": "POL_PUB",
+      "parent_topic_id": "POL_PUB_01",
+      "initial_label": "Formulação e desenho de políticas"
+    },
+    {
+      "id": "POL_PUB_01_003",
+      "entity": "TOPIC",
+      "subject_id": "POL_PUB",
+      "parent_topic_id": "POL_PUB_01",
+      "initial_label": "Implementação e coordenação de políticas"
+    },
+    {
+      "id": "POL_PUB_01_004",
+      "entity": "TOPIC",
+      "subject_id": "POL_PUB",
+      "parent_topic_id": "POL_PUB_01",
+      "initial_label": "Monitoramento e avaliação de políticas"
+    },
+    {
+      "id": "GOV_01",
+      "entity": "TOPIC",
+      "subject_id": "GOV",
+      "parent_topic_id": null,
+      "initial_label": "Governança e gestão pública"
+    },
+    {
+      "id": "GOV_01_001",
+      "entity": "TOPIC",
+      "subject_id": "GOV",
+      "parent_topic_id": "GOV_01",
+      "initial_label": "Governança no setor público"
+    },
+    {
+      "id": "GOV_01_002",
+      "entity": "TOPIC",
+      "subject_id": "GOV",
+      "parent_topic_id": "GOV_01",
+      "initial_label": "Estratégia e gestão de resultados"
+    },
+    {
+      "id": "GOV_01_003",
+      "entity": "TOPIC",
+      "subject_id": "GOV",
+      "parent_topic_id": "GOV_01",
+      "initial_label": "Gestão de riscos e controles organizacionais"
+    },
+    {
+      "id": "GOV_01_004",
+      "entity": "TOPIC",
+      "subject_id": "GOV",
+      "parent_topic_id": "GOV_01",
+      "initial_label": "Transparência, participação e prestação de contas"
+    },
+    {
+      "id": "ESTADO_01",
+      "entity": "TOPIC",
+      "subject_id": "ESTADO",
+      "parent_topic_id": null,
+      "initial_label": "Estado de direito e democracia"
+    },
+    {
+      "id": "ESTADO_01_001",
+      "entity": "TOPIC",
+      "subject_id": "ESTADO",
+      "parent_topic_id": "ESTADO_01",
+      "initial_label": "Estado, governo e democracia"
+    },
+    {
+      "id": "ESTADO_01_002",
+      "entity": "TOPIC",
+      "subject_id": "ESTADO",
+      "parent_topic_id": "ESTADO_01",
+      "initial_label": "Cidadania e participação política"
+    },
+    {
+      "id": "ESTADO_01_003",
+      "entity": "TOPIC",
+      "subject_id": "ESTADO",
+      "parent_topic_id": "ESTADO_01",
+      "initial_label": "Instituições e equilíbrio entre Poderes"
+    },
+    {
+      "id": "ESTADO_01_004",
+      "entity": "TOPIC",
+      "subject_id": "ESTADO",
+      "parent_topic_id": "ESTADO_01",
+      "initial_label": "Proteção de direitos e desafios democráticos"
+    },
+    {
+      "id": "ETICA_01",
+      "entity": "TOPIC",
+      "subject_id": "ETICA",
+      "parent_topic_id": null,
+      "initial_label": "Integridade no serviço público"
+    },
+    {
+      "id": "ETICA_01_001",
+      "entity": "TOPIC",
+      "subject_id": "ETICA",
+      "parent_topic_id": "ETICA_01",
+      "initial_label": "Ética e conduta no serviço público"
+    },
+    {
+      "id": "ETICA_01_002",
+      "entity": "TOPIC",
+      "subject_id": "ETICA",
+      "parent_topic_id": "ETICA_01",
+      "initial_label": "Conflitos de interesses"
+    },
+    {
+      "id": "ETICA_01_003",
+      "entity": "TOPIC",
+      "subject_id": "ETICA",
+      "parent_topic_id": "ETICA_01",
+      "initial_label": "Prevenção da corrupção e programas de integridade"
+    },
+    {
+      "id": "ETICA_01_004",
+      "entity": "TOPIC",
+      "subject_id": "ETICA",
+      "parent_topic_id": "ETICA_01",
+      "initial_label": "Responsabilização e canais de manifestação"
+    },
+    {
+      "id": "APF_01",
+      "entity": "TOPIC",
+      "subject_id": "APF",
+      "parent_topic_id": null,
+      "initial_label": "Organização e gestão da administração federal"
+    },
+    {
+      "id": "APF_01_001",
+      "entity": "TOPIC",
+      "subject_id": "APF",
+      "parent_topic_id": "APF_01",
+      "initial_label": "Administração direta e indireta"
+    },
+    {
+      "id": "APF_01_002",
+      "entity": "TOPIC",
+      "subject_id": "APF",
+      "parent_topic_id": "APF_01",
+      "initial_label": "Estruturas e competências organizacionais"
+    },
+    {
+      "id": "APF_01_003",
+      "entity": "TOPIC",
+      "subject_id": "APF",
+      "parent_topic_id": "APF_01",
+      "initial_label": "Coordenação e gestão administrativa"
+    },
+    {
+      "id": "APF_01_004",
+      "entity": "TOPIC",
+      "subject_id": "APF",
+      "parent_topic_id": "APF_01",
+      "initial_label": "Transformação e capacidade de atuação estatal"
+    },
+    {
+      "id": "DIVERSIDADE_01",
+      "entity": "TOPIC",
+      "subject_id": "DIVERSIDADE",
+      "parent_topic_id": null,
+      "initial_label": "Diversidade e inclusão"
+    },
+    {
+      "id": "DIVERSIDADE_01_001",
+      "entity": "TOPIC",
+      "subject_id": "DIVERSIDADE",
+      "parent_topic_id": "DIVERSIDADE_01",
+      "initial_label": "Desigualdades e discriminações sociais"
+    },
+    {
+      "id": "DIVERSIDADE_01_002",
+      "entity": "TOPIC",
+      "subject_id": "DIVERSIDADE",
+      "parent_topic_id": "DIVERSIDADE_01",
+      "initial_label": "Acessibilidade e direitos das pessoas com deficiência"
+    },
+    {
+      "id": "DIVERSIDADE_01_003",
+      "entity": "TOPIC",
+      "subject_id": "DIVERSIDADE",
+      "parent_topic_id": "DIVERSIDADE_01",
+      "initial_label": "Equidade e políticas de inclusão"
+    },
+    {
+      "id": "DIVERSIDADE_01_004",
+      "entity": "TOPIC",
+      "subject_id": "DIVERSIDADE",
+      "parent_topic_id": "DIVERSIDADE_01",
+      "initial_label": "Diversidade nas relações institucionais e de trabalho"
+    },
+    {
+      "id": "MAT_01",
+      "entity": "TOPIC",
+      "subject_id": "MAT",
+      "parent_topic_id": null,
+      "initial_label": "Números e operações"
+    },
+    {
+      "id": "MAT_01_001",
+      "entity": "TOPIC",
+      "subject_id": "MAT",
+      "parent_topic_id": "MAT_01",
+      "initial_label": "Conjuntos numéricos e operações"
+    },
+    {
+      "id": "MAT_01_002",
+      "entity": "TOPIC",
+      "subject_id": "MAT",
+      "parent_topic_id": "MAT_01",
+      "initial_label": "Frações e números decimais"
+    },
+    {
+      "id": "MAT_01_003",
+      "entity": "TOPIC",
+      "subject_id": "MAT",
+      "parent_topic_id": "MAT_01",
+      "initial_label": "Potências e raízes"
+    },
+    {
+      "id": "MAT_02",
+      "entity": "TOPIC",
+      "subject_id": "MAT",
+      "parent_topic_id": null,
+      "initial_label": "Grandezas e proporcionalidade"
+    },
+    {
+      "id": "MAT_02_001",
+      "entity": "TOPIC",
+      "subject_id": "MAT",
+      "parent_topic_id": "MAT_02",
+      "initial_label": "Razões e proporções"
+    },
+    {
+      "id": "MAT_02_002",
+      "entity": "TOPIC",
+      "subject_id": "MAT",
+      "parent_topic_id": "MAT_02",
+      "initial_label": "Regra de três"
+    },
+    {
+      "id": "MAT_02_003",
+      "entity": "TOPIC",
+      "subject_id": "MAT",
+      "parent_topic_id": "MAT_02",
+      "initial_label": "Porcentagens e variações percentuais"
+    },
+    {
+      "id": "RLM_01",
+      "entity": "TOPIC",
+      "subject_id": "RLM",
+      "parent_topic_id": null,
+      "initial_label": "Lógica proposicional"
+    },
+    {
+      "id": "RLM_01_001",
+      "entity": "TOPIC",
+      "subject_id": "RLM",
+      "parent_topic_id": "RLM_01",
+      "initial_label": "Proposições e conectivos"
+    },
+    {
+      "id": "RLM_01_002",
+      "entity": "TOPIC",
+      "subject_id": "RLM",
+      "parent_topic_id": "RLM_01",
+      "initial_label": "Tabelas-verdade e equivalências"
+    },
+    {
+      "id": "RLM_01_003",
+      "entity": "TOPIC",
+      "subject_id": "RLM",
+      "parent_topic_id": "RLM_01",
+      "initial_label": "Argumentação e validade lógica"
+    },
+    {
+      "id": "RLM_02",
+      "entity": "TOPIC",
+      "subject_id": "RLM",
+      "parent_topic_id": null,
+      "initial_label": "Raciocínio analítico e conjuntos"
+    },
+    {
+      "id": "RLM_02_001",
+      "entity": "TOPIC",
+      "subject_id": "RLM",
+      "parent_topic_id": "RLM_02",
+      "initial_label": "Relações e organização de informações"
+    },
+    {
+      "id": "RLM_02_002",
+      "entity": "TOPIC",
+      "subject_id": "RLM",
+      "parent_topic_id": "RLM_02",
+      "initial_label": "Conjuntos e operações"
+    },
+    {
+      "id": "RLM_02_003",
+      "entity": "TOPIC",
+      "subject_id": "RLM",
+      "parent_topic_id": "RLM_02",
+      "initial_label": "Sequências e reconhecimento de padrões"
+    },
+    {
+      "id": "MAT_FIN_01",
+      "entity": "TOPIC",
+      "subject_id": "MAT_FIN",
+      "parent_topic_id": null,
+      "initial_label": "Juros e equivalência de capitais"
+    },
+    {
+      "id": "MAT_FIN_01_001",
+      "entity": "TOPIC",
+      "subject_id": "MAT_FIN",
+      "parent_topic_id": "MAT_FIN_01",
+      "initial_label": "Juros simples"
+    },
+    {
+      "id": "MAT_FIN_01_002",
+      "entity": "TOPIC",
+      "subject_id": "MAT_FIN",
+      "parent_topic_id": "MAT_FIN_01",
+      "initial_label": "Juros compostos e taxas equivalentes"
+    },
+    {
+      "id": "MAT_FIN_01_003",
+      "entity": "TOPIC",
+      "subject_id": "MAT_FIN",
+      "parent_topic_id": "MAT_FIN_01",
+      "initial_label": "Equivalência de capitais"
+    },
+    {
+      "id": "MAT_FIN_02",
+      "entity": "TOPIC",
+      "subject_id": "MAT_FIN",
+      "parent_topic_id": null,
+      "initial_label": "Descontos e fluxos financeiros"
+    },
+    {
+      "id": "MAT_FIN_02_001",
+      "entity": "TOPIC",
+      "subject_id": "MAT_FIN",
+      "parent_topic_id": "MAT_FIN_02",
+      "initial_label": "Descontos financeiros"
+    },
+    {
+      "id": "MAT_FIN_02_002",
+      "entity": "TOPIC",
+      "subject_id": "MAT_FIN",
+      "parent_topic_id": "MAT_FIN_02",
+      "initial_label": "Séries de pagamentos"
+    },
+    {
+      "id": "MAT_FIN_02_003",
+      "entity": "TOPIC",
+      "subject_id": "MAT_FIN",
+      "parent_topic_id": "MAT_FIN_02",
+      "initial_label": "Sistemas de amortização"
+    },
+    {
+      "id": "ESTAT_01",
+      "entity": "TOPIC",
+      "subject_id": "ESTAT",
+      "parent_topic_id": null,
+      "initial_label": "Estatística descritiva"
+    },
+    {
+      "id": "ESTAT_01_001",
+      "entity": "TOPIC",
+      "subject_id": "ESTAT",
+      "parent_topic_id": "ESTAT_01",
+      "initial_label": "Organização e representação de dados"
+    },
+    {
+      "id": "ESTAT_01_002",
+      "entity": "TOPIC",
+      "subject_id": "ESTAT",
+      "parent_topic_id": "ESTAT_01",
+      "initial_label": "Medidas de posição"
+    },
+    {
+      "id": "ESTAT_01_003",
+      "entity": "TOPIC",
+      "subject_id": "ESTAT",
+      "parent_topic_id": "ESTAT_01",
+      "initial_label": "Medidas de dispersão"
+    },
+    {
+      "id": "ESTAT_02",
+      "entity": "TOPIC",
+      "subject_id": "ESTAT",
+      "parent_topic_id": null,
+      "initial_label": "Probabilidade e variáveis aleatórias"
+    },
+    {
+      "id": "ESTAT_02_001",
+      "entity": "TOPIC",
+      "subject_id": "ESTAT",
+      "parent_topic_id": "ESTAT_02",
+      "initial_label": "Eventos e probabilidade condicional"
+    },
+    {
+      "id": "ESTAT_02_002",
+      "entity": "TOPIC",
+      "subject_id": "ESTAT",
+      "parent_topic_id": "ESTAT_02",
+      "initial_label": "Variáveis aleatórias"
+    },
+    {
+      "id": "ESTAT_02_003",
+      "entity": "TOPIC",
+      "subject_id": "ESTAT",
+      "parent_topic_id": "ESTAT_02",
+      "initial_label": "Distribuições de probabilidade"
+    },
+    {
+      "id": "ESTAT_03",
+      "entity": "TOPIC",
+      "subject_id": "ESTAT",
+      "parent_topic_id": null,
+      "initial_label": "Inferência estatística"
+    },
+    {
+      "id": "ESTAT_03_001",
+      "entity": "TOPIC",
+      "subject_id": "ESTAT",
+      "parent_topic_id": "ESTAT_03",
+      "initial_label": "Amostragem e estimação"
+    },
+    {
+      "id": "ESTAT_03_002",
+      "entity": "TOPIC",
+      "subject_id": "ESTAT",
+      "parent_topic_id": "ESTAT_03",
+      "initial_label": "Intervalos de confiança"
+    },
+    {
+      "id": "ESTAT_03_003",
+      "entity": "TOPIC",
+      "subject_id": "ESTAT",
+      "parent_topic_id": "ESTAT_03",
+      "initial_label": "Testes de hipóteses"
+    },
+    {
+      "id": "INFO_01",
+      "entity": "TOPIC",
+      "subject_id": "INFO",
+      "parent_topic_id": null,
+      "initial_label": "Sistemas e ferramentas de produtividade"
+    },
+    {
+      "id": "INFO_01_001",
+      "entity": "TOPIC",
+      "subject_id": "INFO",
+      "parent_topic_id": "INFO_01",
+      "initial_label": "Sistemas operacionais e arquivos"
+    },
+    {
+      "id": "INFO_01_002",
+      "entity": "TOPIC",
+      "subject_id": "INFO",
+      "parent_topic_id": "INFO_01",
+      "initial_label": "Editores de texto"
+    },
+    {
+      "id": "INFO_01_003",
+      "entity": "TOPIC",
+      "subject_id": "INFO",
+      "parent_topic_id": "INFO_01",
+      "initial_label": "Planilhas eletrônicas"
+    },
+    {
+      "id": "INFO_02",
+      "entity": "TOPIC",
+      "subject_id": "INFO",
+      "parent_topic_id": null,
+      "initial_label": "Internet, redes e segurança do usuário"
+    },
+    {
+      "id": "INFO_02_001",
+      "entity": "TOPIC",
+      "subject_id": "INFO",
+      "parent_topic_id": "INFO_02",
+      "initial_label": "Navegação e serviços de Internet"
+    },
+    {
+      "id": "INFO_02_002",
+      "entity": "TOPIC",
+      "subject_id": "INFO",
+      "parent_topic_id": "INFO_02",
+      "initial_label": "Fundamentos de redes de computadores"
+    },
+    {
+      "id": "INFO_02_003",
+      "entity": "TOPIC",
+      "subject_id": "INFO",
+      "parent_topic_id": "INFO_02",
+      "initial_label": "Proteção de dados, ameaças e boas práticas"
+    },
+    {
+      "id": "ADM_GERAL_01",
+      "entity": "TOPIC",
+      "subject_id": "ADM_GERAL",
+      "parent_topic_id": null,
+      "initial_label": "Organizações e funções administrativas"
+    },
+    {
+      "id": "ADM_GERAL_01_001",
+      "entity": "TOPIC",
+      "subject_id": "ADM_GERAL",
+      "parent_topic_id": "ADM_GERAL_01",
+      "initial_label": "Planejamento e tomada de decisão"
+    },
+    {
+      "id": "ADM_GERAL_01_002",
+      "entity": "TOPIC",
+      "subject_id": "ADM_GERAL",
+      "parent_topic_id": "ADM_GERAL_01",
+      "initial_label": "Estruturas organizacionais"
+    },
+    {
+      "id": "ADM_GERAL_01_003",
+      "entity": "TOPIC",
+      "subject_id": "ADM_GERAL",
+      "parent_topic_id": "ADM_GERAL_01",
+      "initial_label": "Direção e controle administrativo"
+    },
+    {
+      "id": "ADM_GERAL_02",
+      "entity": "TOPIC",
+      "subject_id": "ADM_GERAL",
+      "parent_topic_id": null,
+      "initial_label": "Processos, projetos e qualidade"
+    },
+    {
+      "id": "ADM_GERAL_02_001",
+      "entity": "TOPIC",
+      "subject_id": "ADM_GERAL",
+      "parent_topic_id": "ADM_GERAL_02",
+      "initial_label": "Gestão de processos"
+    },
+    {
+      "id": "ADM_GERAL_02_002",
+      "entity": "TOPIC",
+      "subject_id": "ADM_GERAL",
+      "parent_topic_id": "ADM_GERAL_02",
+      "initial_label": "Fundamentos de gestão de projetos"
+    },
+    {
+      "id": "ADM_GERAL_02_003",
+      "entity": "TOPIC",
+      "subject_id": "ADM_GERAL",
+      "parent_topic_id": "ADM_GERAL_02",
+      "initial_label": "Gestão da qualidade e melhoria contínua"
+    },
+    {
+      "id": "CONTAB_PUB_01",
+      "entity": "TOPIC",
+      "subject_id": "CONTAB_PUB",
+      "parent_topic_id": null,
+      "initial_label": "Patrimônio e registros no setor público"
+    },
+    {
+      "id": "CONTAB_PUB_01_001",
+      "entity": "TOPIC",
+      "subject_id": "CONTAB_PUB",
+      "parent_topic_id": "CONTAB_PUB_01",
+      "initial_label": "Patrimônio e variações patrimoniais"
+    },
+    {
+      "id": "CONTAB_PUB_01_002",
+      "entity": "TOPIC",
+      "subject_id": "CONTAB_PUB",
+      "parent_topic_id": "CONTAB_PUB_01",
+      "initial_label": "Reconhecimento e mensuração de elementos patrimoniais"
+    },
+    {
+      "id": "CONTAB_PUB_01_003",
+      "entity": "TOPIC",
+      "subject_id": "CONTAB_PUB",
+      "parent_topic_id": "CONTAB_PUB_01",
+      "initial_label": "Plano de contas e registros contábeis"
+    },
+    {
+      "id": "CONTAB_PUB_02",
+      "entity": "TOPIC",
+      "subject_id": "CONTAB_PUB",
+      "parent_topic_id": null,
+      "initial_label": "Demonstrações contábeis do setor público"
+    },
+    {
+      "id": "CONTAB_PUB_02_001",
+      "entity": "TOPIC",
+      "subject_id": "CONTAB_PUB",
+      "parent_topic_id": "CONTAB_PUB_02",
+      "initial_label": "Balanços orçamentário e financeiro"
+    },
+    {
+      "id": "CONTAB_PUB_02_002",
+      "entity": "TOPIC",
+      "subject_id": "CONTAB_PUB",
+      "parent_topic_id": "CONTAB_PUB_02",
+      "initial_label": "Balanço patrimonial e demonstração das variações patrimoniais"
+    },
+    {
+      "id": "CONTAB_PUB_02_003",
+      "entity": "TOPIC",
+      "subject_id": "CONTAB_PUB",
+      "parent_topic_id": "CONTAB_PUB_02",
+      "initial_label": "Fluxos de caixa e notas explicativas"
+    },
+    {
+      "id": "GEST_PESSOAS_01",
+      "entity": "TOPIC",
+      "subject_id": "GEST_PESSOAS",
+      "parent_topic_id": null,
+      "initial_label": "Processos de gestão de pessoas"
+    },
+    {
+      "id": "GEST_PESSOAS_01_001",
+      "entity": "TOPIC",
+      "subject_id": "GEST_PESSOAS",
+      "parent_topic_id": "GEST_PESSOAS_01",
+      "initial_label": "Recrutamento e seleção"
+    },
+    {
+      "id": "GEST_PESSOAS_01_002",
+      "entity": "TOPIC",
+      "subject_id": "GEST_PESSOAS",
+      "parent_topic_id": "GEST_PESSOAS_01",
+      "initial_label": "Desenvolvimento e capacitação"
+    },
+    {
+      "id": "GEST_PESSOAS_01_003",
+      "entity": "TOPIC",
+      "subject_id": "GEST_PESSOAS",
+      "parent_topic_id": "GEST_PESSOAS_01",
+      "initial_label": "Avaliação de desempenho"
+    },
+    {
+      "id": "GEST_PESSOAS_02",
+      "entity": "TOPIC",
+      "subject_id": "GEST_PESSOAS",
+      "parent_topic_id": null,
+      "initial_label": "Comportamento organizacional"
+    },
+    {
+      "id": "GEST_PESSOAS_02_001",
+      "entity": "TOPIC",
+      "subject_id": "GEST_PESSOAS",
+      "parent_topic_id": "GEST_PESSOAS_02",
+      "initial_label": "Liderança e motivação"
+    },
+    {
+      "id": "GEST_PESSOAS_02_002",
+      "entity": "TOPIC",
+      "subject_id": "GEST_PESSOAS",
+      "parent_topic_id": "GEST_PESSOAS_02",
+      "initial_label": "Comunicação e trabalho em equipe"
+    },
+    {
+      "id": "GEST_PESSOAS_02_003",
+      "entity": "TOPIC",
+      "subject_id": "GEST_PESSOAS",
+      "parent_topic_id": "GEST_PESSOAS_02",
+      "initial_label": "Cultura e clima organizacionais"
+    },
+    {
+      "id": "DIR_CIV_01",
+      "entity": "TOPIC",
+      "subject_id": "DIR_CIV",
+      "parent_topic_id": null,
+      "initial_label": "Pessoas, bens e fatos jurídicos"
+    },
+    {
+      "id": "DIR_CIV_01_001",
+      "entity": "TOPIC",
+      "subject_id": "DIR_CIV",
+      "parent_topic_id": "DIR_CIV_01",
+      "initial_label": "Pessoas naturais e jurídicas"
+    },
+    {
+      "id": "DIR_CIV_01_002",
+      "entity": "TOPIC",
+      "subject_id": "DIR_CIV",
+      "parent_topic_id": "DIR_CIV_01",
+      "initial_label": "Bens e suas classificações"
+    },
+    {
+      "id": "DIR_CIV_01_003",
+      "entity": "TOPIC",
+      "subject_id": "DIR_CIV",
+      "parent_topic_id": "DIR_CIV_01",
+      "initial_label": "Negócio jurídico, prescrição e decadência"
+    },
+    {
+      "id": "DIR_CIV_02",
+      "entity": "TOPIC",
+      "subject_id": "DIR_CIV",
+      "parent_topic_id": null,
+      "initial_label": "Obrigações, contratos e responsabilidade civil"
+    },
+    {
+      "id": "DIR_CIV_02_001",
+      "entity": "TOPIC",
+      "subject_id": "DIR_CIV",
+      "parent_topic_id": "DIR_CIV_02",
+      "initial_label": "Modalidades e efeitos das obrigações"
+    },
+    {
+      "id": "DIR_CIV_02_002",
+      "entity": "TOPIC",
+      "subject_id": "DIR_CIV",
+      "parent_topic_id": "DIR_CIV_02",
+      "initial_label": "Princípios e formação dos contratos"
+    },
+    {
+      "id": "DIR_CIV_02_003",
+      "entity": "TOPIC",
+      "subject_id": "DIR_CIV",
+      "parent_topic_id": "DIR_CIV_02",
+      "initial_label": "Responsabilidade civil e reparação de danos"
+    },
+    {
+      "id": "ENG_OBRAS_01",
+      "entity": "TOPIC",
+      "subject_id": "ENG_OBRAS",
+      "parent_topic_id": null,
+      "initial_label": "Planejamento, orçamento e acompanhamento de obras"
+    },
+    {
+      "id": "ENG_OBRAS_01_001",
+      "entity": "TOPIC",
+      "subject_id": "ENG_OBRAS",
+      "parent_topic_id": "ENG_OBRAS_01",
+      "initial_label": "Levantamento de quantitativos e custos"
+    },
+    {
+      "id": "ENG_OBRAS_01_002",
+      "entity": "TOPIC",
+      "subject_id": "ENG_OBRAS",
+      "parent_topic_id": "ENG_OBRAS_01",
+      "initial_label": "Cronogramas e planejamento físico-financeiro"
+    },
+    {
+      "id": "ENG_OBRAS_01_003",
+      "entity": "TOPIC",
+      "subject_id": "ENG_OBRAS",
+      "parent_topic_id": "ENG_OBRAS_01",
+      "initial_label": "Medições e acompanhamento da execução"
+    },
+    {
+      "id": "ENG_OBRAS_02",
+      "entity": "TOPIC",
+      "subject_id": "ENG_OBRAS",
+      "parent_topic_id": null,
+      "initial_label": "Materiais e execução de obras"
+    },
+    {
+      "id": "ENG_OBRAS_02_001",
+      "entity": "TOPIC",
+      "subject_id": "ENG_OBRAS",
+      "parent_topic_id": "ENG_OBRAS_02",
+      "initial_label": "Materiais de construção e controle de qualidade"
+    },
+    {
+      "id": "ENG_OBRAS_02_002",
+      "entity": "TOPIC",
+      "subject_id": "ENG_OBRAS",
+      "parent_topic_id": "ENG_OBRAS_02",
+      "initial_label": "Técnicas e serviços de construção"
+    },
+    {
+      "id": "ENG_OBRAS_02_003",
+      "entity": "TOPIC",
+      "subject_id": "ENG_OBRAS",
+      "parent_topic_id": "ENG_OBRAS_02",
+      "initial_label": "Fiscalização, recebimento e manutenção de obras"
+    },
+    {
+      "id": "DIR_ELEITORAL_01",
+      "entity": "TOPIC",
+      "subject_id": "DIR_ELEITORAL",
+      "parent_topic_id": null,
+      "initial_label": "Organização e direitos eleitorais"
+    },
+    {
+      "id": "DIR_ELEITORAL_01_001",
+      "entity": "TOPIC",
+      "subject_id": "DIR_ELEITORAL",
+      "parent_topic_id": "DIR_ELEITORAL_01",
+      "initial_label": "Organização da Justiça Eleitoral"
+    },
+    {
+      "id": "DIR_ELEITORAL_01_002",
+      "entity": "TOPIC",
+      "subject_id": "DIR_ELEITORAL",
+      "parent_topic_id": "DIR_ELEITORAL_01",
+      "initial_label": "Alistamento e direitos políticos"
+    },
+    {
+      "id": "DIR_ELEITORAL_01_003",
+      "entity": "TOPIC",
+      "subject_id": "DIR_ELEITORAL",
+      "parent_topic_id": "DIR_ELEITORAL_01",
+      "initial_label": "Partidos políticos"
+    },
+    {
+      "id": "DIR_ELEITORAL_02",
+      "entity": "TOPIC",
+      "subject_id": "DIR_ELEITORAL",
+      "parent_topic_id": null,
+      "initial_label": "Processo eleitoral"
+    },
+    {
+      "id": "DIR_ELEITORAL_02_001",
+      "entity": "TOPIC",
+      "subject_id": "DIR_ELEITORAL",
+      "parent_topic_id": "DIR_ELEITORAL_02",
+      "initial_label": "Registro de candidaturas"
+    },
+    {
+      "id": "DIR_ELEITORAL_02_002",
+      "entity": "TOPIC",
+      "subject_id": "DIR_ELEITORAL",
+      "parent_topic_id": "DIR_ELEITORAL_02",
+      "initial_label": "Propaganda eleitoral"
+    },
+    {
+      "id": "DIR_ELEITORAL_02_003",
+      "entity": "TOPIC",
+      "subject_id": "DIR_ELEITORAL",
+      "parent_topic_id": "DIR_ELEITORAL_02",
+      "initial_label": "Votação, apuração e instrumentos de controle eleitoral"
+    }
+  ]
+}
