@@ -220,6 +220,8 @@ mod tests {
             .clone();
         q.remove("schema_version");
         q.remove("classification");
+        q.insert("canonical_subject_id", "MAT");
+        q.insert("canonical_topic_id", "MAT_01_001");
         let typed = question_compatibility::decode(q.clone()).unwrap();
         let revision = typed.revision().unwrap();
         let row = doc! {"pastSessions":[{"attempt_id":"a","question_revision":&revision,"status":true,"nivel_confianca":3}]};

@@ -597,10 +597,14 @@ async fn generate_one(
         }
     }
     let previous = commands.find_one(doc! {"_id":&reservation}).await?;
-    if previous
-        .as_ref()
-        .is_some_and(|r| r.get_str("status").ok() == Some("reserved"))
-    {
+    let now = bson::DateTime::now();
+    if previous.as_ref().is_some_and(|r| {
+        r.get_str("status").ok() == Some("reserved")
+            && (reprocess.is_none()
+                || r.get_datetime("lease_until")
+                    .map(|t| t.timestamp_millis() >= now.timestamp_millis())
+                    .unwrap_or(true))
+    }) {
         return Err(conflict(
             "Geração em andamento; não há reprocessamento concorrente",
         ));
@@ -613,7 +617,8 @@ async fn generate_one(
         .checked_add(1)
         .ok_or_else(|| conflict("Gerações esgotadas"))?;
     let suggestion_key = suggestion_id(&reservation, generation);
-    let reserve = doc! {"_id": &reservation, "status": "reserved", "generation": generation, "suggestion_id": &suggestion_key, "paid": false, "batch_operation":batch_operation,"prompt_sha256": prompt_sha256(), "model": &config.xai_model};
+    let lease_until = bson::DateTime::from_millis(now.timestamp_millis() + 120_000);
+    let reserve = doc! {"_id": &reservation, "status": "reserved", "generation": generation, "suggestion_id": &suggestion_key, "paid": false, "batch_operation":batch_operation,"lease_until":lease_until,"prompt_sha256": prompt_sha256(), "model": &config.xai_model};
     if commands
         .find_one(doc! {"_id": &reservation})
         .await?
@@ -625,7 +630,7 @@ async fn generate_one(
             }
         }
     } else if reprocess.is_some() {
-        let changed=commands.update_one(doc! {"_id": &reservation,"generation":prior_generation,"status":{"$ne":"reserved"}}, doc! {"$set": {"status": "reserved", "generation": generation, "suggestion_id": &suggestion_key, "paid": false,"batch_operation":batch_operation}}).await?;
+        let changed=commands.update_one(doc! {"_id": &reservation,"generation":prior_generation,"$or":[{"status":{"$ne":"reserved"}},{"lease_until":{"$lt":now}}]}, doc! {"$set": {"status": "reserved", "generation": generation, "suggestion_id": &suggestion_key, "paid": false,"batch_operation":batch_operation,"lease_until":lease_until}}).await?;
         if changed.matched_count != 1 {
             return Err(conflict("Outro comando reservou a geração"));
         }
@@ -658,7 +663,7 @@ async fn generate_one(
         Err(error) => {
             commands
                 .update_one(
-                    doc! {"_id": &reservation},
+                    doc! {"_id": &reservation,"generation":generation},
                     doc! {"$set": {"status": "failed", "failure": error.to_string()}},
                 )
                 .await?;
@@ -670,14 +675,14 @@ async fn generate_one(
         Err(error) => {
             commands
                 .update_one(
-                    doc! {"_id": &reservation},
+                    doc! {"_id": &reservation,"generation":generation},
                     doc! {"$set": {"status": "failed", "failure": error.to_string()}},
                 )
                 .await?;
             return Err(error);
         }
     };
-    let suggestion = build_suggestion(
+    let mut suggestion = build_suggestion(
         &suggestion_key,
         question_id,
         &content,
@@ -685,6 +690,25 @@ async fn generate_one(
         &parsed,
         &config.xai_model,
     )?;
+    let superseded = json!({"decided_at":now_z(),"actor":{"type":"SYSTEM","id":"classification-lease"},"reason":"Resposta de geração substituída por reprocessamento explícito.","resulting_classification_revision":null});
+    if commands
+        .find_one(doc! {"_id":&reservation,"generation":generation,"status":"reserved"})
+        .await?
+        .is_none()
+    {
+        suggestion["status"] = json!("SUPERSEDED");
+        suggestion["resolution"] = superseded.clone();
+        suggestions
+            .update_one(
+                doc! {"_id":&suggestion_key},
+                doc! {"$setOnInsert":as_doc(suggestion)?},
+            )
+            .upsert(true)
+            .await?;
+        return Err(conflict(
+            "Resposta tardia preservada sem substituir a geração atual",
+        ));
+    }
     if suggestions
         .find_one(doc! {"_id": &suggestion_key})
         .await?
@@ -699,12 +723,23 @@ async fn generate_one(
     {
         suggestions.update_one(doc! {"_id": previous_id, "status": "PENDING"}, doc! {"$set": {"status": "SUPERSEDED", "resolution": as_doc(json!({"decided_at": now_z(), "actor": {"type":"SYSTEM","id":"classification-reprocess"}, "reason": reprocess.unwrap_or("Reprocessamento explícito."), "resulting_classification_revision": null}))?}}).await?;
     }
-    commands
+    let committed = commands
         .update_one(
-            doc! {"_id": &reservation},
+            doc! {"_id": &reservation,"generation":generation,"status":"reserved"},
             doc! {"$set": {"status": "proposed", "suggestion_id": &suggestion_key}},
         )
         .await?;
+    if committed.matched_count != 1 {
+        suggestions
+            .update_one(
+                doc! {"_id":&suggestion_key,"status":"PENDING"},
+                doc! {"$set":{"status":"SUPERSEDED","resolution":as_doc(superseded)?}},
+            )
+            .await?;
+        return Err(conflict(
+            "Geração substituída; resposta não aplicada ao lote",
+        ));
+    }
     Ok(json!({"status":"proposed","provider_call":true,"suggestion": suggestion}))
 }
 
