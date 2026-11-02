@@ -1,0 +1,18 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<testsuite name="br.com.concursoprep.app.QuestionInsetCollisionTest" tests="10" failures="0" errors="0" skipped="0" time="54.728" timestamp="2026-11-02T19:48:30" hostname="localhost">
+  <properties>
+    <property name="device" value="emulator-5554 - 15" />
+    <property name="flavor" value="" />
+    <property name="project" value=":app" />
+  </properties>
+  <testcase name="topBarClearsCutoutAndCtaClearsNavigation" classname="br.com.concursoprep.app.QuestionInsetCollisionTest" time="4.137" />
+  <testcase name="versionTwoPreservesLegacyBytesAndQuarantinesAmbiguousDelivery" classname="br.com.concursoprep.app.DurableStorageTest" time="1.836" />
+  <testcase name="sessionAndDeadlineSurviveReopenAndLateSavesCannotResurrectCompletion" classname="br.com.concursoprep.app.DurableStorageTest" time="1.111" />
+  <testcase name="editedComponentsAndDeletionRemainAfterAcknowledgementAndInterruptedPull" classname="br.com.concursoprep.app.DurableStorageTest" time="0.174" />
+  <testcase name="confirmsBesideTheCodeWithoutSavingPreferences" classname="br.com.concursoprep.app.AccountLinkSettingsTest" time="8.178" />
+  <testcase name="largeFontKeepsAllFieldsAndConfirmationReachable" classname="br.com.concursoprep.app.AccountLinkSettingsTest" time="7.744" />
+  <testcase name="shuffleOpensALegacyQuestionAndSavesAnAnswerDespiteArchivedPlannerContext" classname="br.com.concursoprep.app.QuestionPracticeTest" time="3.26" />
+  <testcase name="sameCatalogDisciplineCanBeAddedTwiceWithIndependentComponents" classname="br.com.concursoprep.app.ExamManagementTest" time="8.308" />
+  <testcase name="createsACustomDisciplineWithStageAndGroupBeyondTheTrunkCatalog" classname="br.com.concursoprep.app.ExamManagementTest" time="13.022" />
+  <testcase name="archiveRestoreAndConfirmedDeleteAreReachableInTheManagementArea" classname="br.com.concursoprep.app.ExamManagementTest" time="4.692" />
+</testsuite>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="br.com.concursoprep.app.MarkdownParserTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-11-02T19:47:34.603Z" hostname="GBP360" time="0.053">
+  <properties/>
+  <testcase name="parsesBulletLists" classname="br.com.concursoprep.app.MarkdownParserTest" time="0.045"/>
+  <testcase name="stripsRedundantPrefixes" classname="br.com.concursoprep.app.MarkdownParserTest" time="0.002"/>
+  <testcase name="collapsesMultipleNewlines" classname="br.com.concursoprep.app.MarkdownParserTest" time="0.001"/>
+  <testcase name="parsesBoldItalicAndCode" classname="br.com.concursoprep.app.MarkdownParserTest" time="0.004"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

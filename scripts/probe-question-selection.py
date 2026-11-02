@@ -12,6 +12,8 @@ p = argparse.ArgumentParser()
 p.add_argument('user_id', type=int)
 p.add_argument('--output', type=pathlib.Path, required=True)
 p.add_argument('--assert-fixed', action='store_true')
+p.add_argument('--expected-version')
+p.add_argument('--assert-catalog', action='store_true')
 a = p.parse_args()
 assert a.user_id > 0
 remote = r'''
@@ -31,6 +33,13 @@ def request(path,payload=None):
         try:return error.code,json.loads(raw)
         except ValueError:return error.code,{'message':raw[:600]}
 _,health=request('/api/v1/health')
+knowledge_status,knowledge=request('/api/v1/catalog/knowledge')
+legacy_status,legacy=request('/api/v1/catalog/trunks')
+catalog={'knowledge_status':knowledge_status,'legacy_status':legacy_status}
+if knowledge_status==200:
+    catalog.update(catalog_id=knowledge['catalog_id'],catalog_version=knowledge['catalog_version'],subjects=len(knowledge['subjects']),topics=len(knowledge['topics']),trunks=len(knowledge['trunks']))
+if legacy_status==200:
+    catalog.update(projected_subjects=len(legacy['subjects']),projected_trunks=len(legacy['trunks']),preserved_templates=len(legacy['exams']))
 status,exams=request('/api/v1/exams');assert status==200
 archived=next((e for e in exams if e['status']=='ARQUIVADO'),None)
 active=next((e for e in exams if e['status']!='ARQUIVADO' and e['is_active_in_ladder']),None)
@@ -66,7 +75,7 @@ learning={'records_preserved':len(records),'availability_known':availability_kno
  'available_records':len(available) if availability_known else None,
  'actionable_srs':sum(r.get('review_required',False) or datetime.datetime.fromisoformat(r['next_review_at'])<=now for r in available) if availability_known else None,
  'actionable_errors':sum(r['in_error_notebook'] for r in available) if availability_known else None}
-print(json.dumps({'captured_at':now.isoformat(),'access':'read-only; no attempts submitted','health':health,'cases':cases,'learning':learning},ensure_ascii=False))
+print(json.dumps({'captured_at':now.isoformat(),'access':'read-only; no attempts submitted','health':health,'catalog':catalog,'cases':cases,'learning':learning},ensure_ascii=False))
 '''
 result = subprocess.run([
     'ssh', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes',
@@ -78,7 +87,7 @@ a.output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='
 print(json.dumps(report, ensure_ascii=False, indent=2))
 if a.assert_fixed:
     cases = {case['case']: case for case in report['cases']}
-    assert report['health']['version'] == '1.4.2'
+    assert report['health']['version'] == (a.expected_version or '1.4.2')
     for mode in ['shuffle', 'error_notebook', 'srs_review', 'most_badass']:
         general = cases[mode + '_general']
         assert general['status'] == 200 and general['count'] > 0
@@ -87,3 +96,9 @@ if a.assert_fixed:
     assert report['learning']['availability_known']
     assert min(report['learning']['actionable_srs'], 10) == cases['srs_review_general']['count']
     assert min(report['learning']['actionable_errors'], 10) == cases['error_notebook_general']['count']
+if a.assert_catalog:
+    catalog=report['catalog']
+    assert catalog['knowledge_status']==catalog['legacy_status']==200
+    assert catalog['subjects']==catalog['projected_subjects']==35
+    assert catalog['trunks']==catalog['projected_trunks']==7
+    assert catalog['topics']==223 and catalog['preserved_templates']==3

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="br.com.concursoprep.app.RepositoryContractTest" tests="22" skipped="0" failures="0" errors="0" timestamp="2026-11-02T19:46:46.014Z" hostname="GBP360" time="9.473">
+  <properties/>
+  <testcase name="eventChangesAfterEnqueueAreRejectedLocally" classname="br.com.concursoprep.app.RepositoryContractTest" time="3.265"/>
+  <testcase name="queuesLargerThanOneBatchAreDrainedWithoutChangingEventIdentity" classname="br.com.concursoprep.app.RepositoryContractTest" time="3.913"/>
+  <testcase name="simultaneousSyncsSendAnEventOnlyOnce" classname="br.com.concursoprep.app.RepositoryContractTest" time="0.425"/>
+  <testcase name="legacyInferredColumnsRemainPreservedButDoNotBecomeVerifiedLinks" classname="br.com.concursoprep.app.RepositoryContractTest" time="0.006"/>
+  <testcase name="anExplicitLegacyLabelCanSelectFreePracticeWithoutInventingATopic" classname="br.com.concursoprep.app.RepositoryContractTest" time="0.183"/>
+  <testcase name="anIncompletePullCannotEraseConfirmedPointsWhenAnotherAnswerIsPending" classname="br.com.concursoprep.app.RepositoryContractTest" time="0.002"/>
+  <testcase name="aPermanentRejectionPreservesAnInspectableRecordWithoutAutomaticReplay" classname="br.com.concursoprep.app.RepositoryContractTest" time="0.106"/>
+  <testcase name="emptyOfflineHistoryHasNoInventedAchievementsOrTasks" classname="br.com.concursoprep.app.RepositoryContractTest" time="0.162"/>
+  <testcase name="lossOfResponseKeepsTheImmutableEventAndOriginalOccurrenceTime" classname="br.com.concursoprep.app.RepositoryContractTest" time="0.012"/>
+  <testcase name="anExamAckCannotReplaceAnEditMadeWhileTheRequestWasInFlight" classname="br.com.concursoprep.app.RepositoryContractTest" time="0.083"/>
+  <testcase name="reviewFlagAndAvailabilityAgreeBetweenDashboardAndOfflineSelection" classname="br.com.concursoprep.app.RepositoryContractTest" time="0.038"/>
+  <testcase name="anOfflinePreAnswerTutorNeverFallsBackToAnAnswerRevealingExplanation" classname="br.com.concursoprep.app.RepositoryContractTest" time="0.015"/>
+  <testcase name="reportIsDurableBeforeSuccessAndSurvivesOutage" classname="br.com.concursoprep.app.RepositoryContractTest" time="0.045"/>
+  <testcase name="offlineCommonTrunkUsesAllActiveGradesInsteadOfOnlyTheOpenedContest" classname="br.com.concursoprep.app.RepositoryContractTest" time="0.077"/>
+  <testcase name="partialAckRemovesOnlyTheConfirmedIdentity" classname="br.com.concursoprep.app.RepositoryContractTest" time="0.058"/>
+  <testcase name="cacheRoundtripPreservesMeaningWithoutInventingCanonicalLinks" classname="br.com.concursoprep.app.RepositoryContractTest" time="0.01"/>
+  <testcase name="zeroAckDoesNotDeleteAndIsReportedAsPending" classname="br.com.concursoprep.app.RepositoryContractTest" time="0.044"/>
+  <testcase name="resolvingAnExamConflictPreservesAndExportsTheExactLocalEditBeforeUsingRemote" classname="br.com.concursoprep.app.RepositoryContractTest" time="0.225"/>
+  <testcase name="accountChangesCannotRetagOrTransmitAnotherOwnersQueue" classname="br.com.concursoprep.app.RepositoryContractTest" time="0.04"/>
+  <testcase name="serverRejectionIsNotRewrittenAsAnInsufficientGradeOrSilentlyReplacedByCache" classname="br.com.concursoprep.app.RepositoryContractTest" time="0.495"/>
+  <testcase name="emptyErrorNotebookAndSrsNeverBecomeOrdinaryPractice" classname="br.com.concursoprep.app.RepositoryContractTest" time="0.028"/>
+  <testcase name="generalAndPersonalModesDoNotInheritAnArchivedPlannerSelection" classname="br.com.concursoprep.app.RepositoryContractTest" time="0.03"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

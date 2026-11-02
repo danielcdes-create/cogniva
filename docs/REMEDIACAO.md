@@ -13,7 +13,7 @@ As notas renomeadas pelo usuário e o histórico de produção são preservados.
 - [x] TLS/distribuição, CI com gates, promoção/rollback e documentação.
 - [x] Suítes atuais, cenários adversariais e build Android verificados.
 
-Resultado atual: **1.4.4/build 11 implantado e conferido externamente**, run [41472251563](https://github.com/danielcdes-create/cogniva/actions/runs/41472251563), revisão `dfbcd0fd22c50b89229274b0d73e0bd24b9b695a`. A [matriz de fechamento](FECHAMENTO-AUDITORIA.md) contém o resultado por achado e os limites de aceite; as correções posteriores de [Ajustes](CORRECAO-VINCULO-1.4.1.md) e [questões](CORRECAO-QUESTOES-1.4.2.md) registram as reproduções adicionais. As seções abaixo são o registro cronológico; afirmações de trabalho pendente descrevem aquela etapa, não o estado final.
+Resultado atual: **1.4.5/build 12 implantado e conferido externamente**, run [41512550219](https://github.com/danielcdes-create/cogniva/actions/runs/41512550219), revisão `9dee93673f2e170e06f2d77ca378df973449414d`. As etapas [3](ETAPA-3-BACKEND-MONGO.md) e [4](ETAPA-4-CADASTRO-CATALOGO.md) acrescentam Mongo/contrato v2 e componentes associados ao catálogo. A [matriz de fechamento](FECHAMENTO-AUDITORIA.md) contém o resultado por achado e os limites de aceite; as correções posteriores de [Ajustes](CORRECAO-VINCULO-1.4.1.md) e [questões](CORRECAO-QUESTOES-1.4.2.md) registram as reproduções adicionais. As seções abaixo são o registro cronológico; afirmações de trabalho pendente descrevem aquela etapa, não o estado final.
 
 Não executar os antigos probes como testes de aceite: eles afirmam o comportamento defeituoso. Os cenários serão incorporados à suíte com os resultados corrigidos. Testes de banco usam apenas uma instância isolada/sintética.
 
@@ -98,6 +98,16 @@ Modelo Grok 4.3 escolhido pelo proprietário após autenticação válida e aus�
 Disciplinas de todo o catálogo e personalizadas, etapa/grupo de conhecimentos, edição de nomes, pesos, quantidades e tópicos. Remoções deixam de ser reinseridas na grade pelo merge local/servidor; revisões anteriores já sincronizadas continuam preservadas. Em Ajustes, gestão própria com arquivados, restauração, exclusão confirmada e revisão de pedidos pendentes. Marcadores sincronizados impedem reaparecimento de concursos excluídos. Migração Room 3→4 sem descarte de dados.
 
 27 Rust, 48 JVM, lint/nove imagens e nove instrumentados aprovados. Promoção em 02/11/2026 às 12:52 (UTC−03:00), rollback ensaiado, download/hash/assinatura e prontidão conferidos. Backups mantiveram 618 questões, quatro cadastros de concursos e todos os 20 documentos/32 eventos históricos iguais. [Detalhes e limites](GESTAO-CONCURSOS-1.4.4.md).
+
+## Catálogo, Mongo v2 e componentes por etapa — 1.4.5/build 12
+
+Etapas 1–4 concluídas: catálogo e contratos versionados, validação/escrita Rust, instalação aditiva de quatro validadores e oito índices com snapshot de catálogo, e associação Android de componentes/assuntos/subassuntos. A mesma disciplina pode aparecer em etapas distintas com IDs locais, pesos e quotas independentes. Personalizados aguardam associação sem perda de texto. Simulados evitam repetir questões e levam a identidade do componente para o resultado ponderado.
+
+32 Rust, 36 contratos Python, 50 JVM, lint/nove imagens e dez instrumentados aprovados. Todos os seis jobs do run `41512550219` passaram. Promoção às 17:02:53 de 02/11/2026 (UTC−03:00), com rollback controlado verificado. API pública, catálogo autenticado normalizado/projetado e modos pessoais foram conferidos, sem enviar tentativas nem chamar IA paga.
+
+Comparação privada antes/depois: 618 questões e quatro cadastros idênticos em bytes; 20 documentos/32 eventos e hash protegido idêntico. Recibos/validadores, oito índices e snapshot versão 1 comprovados. Compose e demais containers preservados. APK servido de 12.796.722 bytes corresponde ao CI e à assinatura/lineage existente; runtime de 29.011.594 bytes. Evidências em `remediation-validation/1.4.5/`. O Mongo sintético local foi encerrado após conferir executável, PID e porta.
+
+O acervo continua sem reclassificação automática: o inventário de aceite ainda tem zero questões com vínculo canônico singular. A [nota técnica para Grok Build](NOTA-TECNICA-GROK-BUILD-PASSO-5.md) especifica as etapas 5–7: classificação assistida, seleção/progresso e validação/publicação. Respostas abertas continuam armazenáveis, com execução/correção no cliente ainda não habilitada. Prova de aparelho físico permanece pendente; emulador não a substitui.
 
 
 ## Catálogo e contratos — etapas 1 e 2

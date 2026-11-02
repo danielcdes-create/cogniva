@@ -1,6 +1,6 @@
 # Etapa 4 — componentes de edital e catálogo compartilhado
 
-Implementação para 1.4.5/build 12, com publicação e aceite registrados em `remediation-validation/1.4.5/`. A etapa 3 está descrita em [ETAPA-3-BACKEND-MONGO.md](ETAPA-3-BACKEND-MONGO.md).
+Concluída e publicada em 1.4.5/build 12, revisão `9dee93673f2e170e06f2d77ca378df973449414d`, [pipeline 41512550219](https://github.com/danielcdes-create/cogniva/actions/runs/41512550219), em 02/11/2026 às 17:02:53 (UTC−03:00). Publicação e aceite estão registrados em `remediation-validation/1.4.5/`. A etapa 3 está descrita em [ETAPA-3-BACKEND-MONGO.md](ETAPA-3-BACKEND-MONGO.md).
 
 ## Identidades e contrato
 
@@ -42,3 +42,5 @@ Classificar o acervo e aceitar propostas de IA pertencem ao passo 5. Execução 
 - Emulador: criar duas ocorrências da mesma disciplina pela tela, além dos testes existentes de etapa/grupo personalizados, ciclo de vida e durabilidade.
 
 Os testes Mongo com `failCommand` devem executar com `--test-threads=1`, pois a injeção de falhas pertence ao servidor inteiro, mesmo com bancos sintéticos distintos. Não usar `MONGODB_URI` de produção para testes.
+
+Resultado: 32 Rust com Mongo sintético, 36 contratos Python, 50 JVM, lint/nove imagens e dez instrumentados aprovados. Catálogo autenticado real: 35 disciplinas, 223 assuntos/subassuntos e sete troncos; projeção legada com as mesmas disciplinas/troncos e três templates preservados. Os quatro cadastros existentes e os 618 documentos de questão permaneceram idênticos em bytes; histórico protegido inalterado. APK release: 12.796.722 bytes, SHA-256 `0727c9a4dc2044e3599a43affe13a0766a9e59a924c13d29c40cc3ef537d4cc4`; assinatura privada/lineage conferida. Runtime medido: 29.011.594 bytes. Prova nativa em emulador API 35/Android 15; instalação no aparelho físico não foi verificada.

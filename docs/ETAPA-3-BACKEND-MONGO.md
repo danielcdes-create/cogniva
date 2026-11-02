@@ -1,6 +1,6 @@
 # Etapa 3 — backend e MongoDB
 
-Implementação em validação para 1.4.5/build 12. Acrescenta suporte persistente ao contrato v2 sem converter automaticamente o acervo. O cliente atual continua no protocolo de tentativas 2; questões abertas são armazenáveis e validáveis, mas não são entregues a esse cliente como objetivas.
+Concluída e publicada em 1.4.5/build 12, revisão `9dee93673f2e170e06f2d77ca378df973449414d`, [pipeline 41512550219](https://github.com/danielcdes-create/cogniva/actions/runs/41512550219), promoção em 02/11/2026 às 17:02:53 (UTC−03:00). Acrescenta suporte persistente ao contrato v2 sem converter automaticamente o acervo. O cliente atual continua no protocolo de tentativas 2; questões abertas são armazenáveis e validáveis, mas não são entregues a esse cliente como objetivas.
 
 ## APIs e escrita
 
@@ -49,4 +49,4 @@ Não há classificação automática nem migração em massa de questões. Aprov
 
 Testes Rust com Mongo isolado verificam preparação repetível, índices, rejeição de documento inválido pelo próprio Mongo, leitura legada, espelhos e vínculo estruturado, preservação de campos extras/cache/histórico, criação e edição versionadas, replay, CAS concorrente, cache retirado com cópia histórica e recuperação da outbox. Fixtures Python e Rust compartilham hashes JCS de múltipla escolha, certo/errado e abertas.
 
-O aceite de produção deve comparar backups antes/depois, conferir os validadores/índices e catálogo efetivamente instalados, saúde, versão, assinatura e bytes do APK. Nenhuma questão real precisa ser alterada para comprovar a instalação.
+Aceite concluído em `remediation-validation/1.4.5/`: quatro validadores/recibos, oito índices e snapshot de catálogo conferidos nos backups reais. Questões (618 documentos) e concursos (quatro documentos) permaneceram idênticos em bytes; histórico protegido manteve 20 documentos/32 eventos e o mesmo hash. Health/ready, assinatura e bytes do APK servido corresponderam à release. Nenhuma questão real foi alterada para comprovar a instalação.

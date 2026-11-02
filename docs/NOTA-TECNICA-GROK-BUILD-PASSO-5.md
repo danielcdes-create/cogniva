@@ -1,10 +1,22 @@
-# Nota técnica para Grok Build — passo 5: classificação assistida do acervo
+# Nota técnica para Grok Build — etapas 5, 6 e 7
+
+## Plano e dependências
+
+Esta é a mesma nota originalmente criada para o passo 5; o nome do arquivo foi mantido para preservar os links. Agora orienta a sequência completa restante:
+
+| Etapa | Entrega | Dependência e portão de conclusão |
+| --- | --- | --- |
+| 5 — Classificar o acervo existente | Inventário, sugestões xAI com justificativas, revisão/decisão em lotes e ambiguidades pendentes | Etapas 1–4 verificadas; comandos recuperáveis, revisão humana e preservação comprovadas |
+| 6 — Atualizar seleção e progresso | Uso de vínculos confirmados no treino, simulado e tronco comum; reaproveitamento entre concursos e cobertura sem crédito indevido | Propostas pendentes isoladas; contrato de projeção e elegibilidade validado com dados sintéticos e legado |
+| 7 — Validar e publicar | Provas de migração, sincronização, edição/exclusão, classificação e seleção; backend/APK promovidos e documentação atualizada | Portões da etapa 6 verdes, backup e comparação antes/depois, assinatura e rollback verificados |
+
+A preparação das três etapas pode avançar em paralelo no código, mas uma proposta gerada na etapa 5 não pode passar a afetar a seleção antes de confirmação válida e de a etapa 6 reconhecer corretamente sua revisão. Publicação não equivale a classificação integral do banco: registrar separadamente o tamanho do lote revisado, pendências e abrangência da entrega.
 
 ## Objetivo e fronteira
 
-Executar o próximo passo após as etapas 1–4: classificar questões existentes pelo catálogo compartilhado, com propostas revisáveis e aplicação auditável. A origem da questão, o conteúdo cobrado e a compatibilidade com um edital são entidades distintas. Não transformar semelhança de nome, confiança de IA ou participação em um tronco em classificação confirmada. Não iniciar uma migração em massa ao abrir o aplicativo nem incluir chamadas pagas de IA na inicialização ou em testes.
+Executar as etapas 5–7 após as etapas 1–4: classificar questões existentes pelo catálogo compartilhado, com propostas revisáveis e aplicação auditável; completar seleção/progresso; validar e publicar a entrega. A origem da questão, o conteúdo cobrado e a compatibilidade com um edital são entidades distintas. Não transformar semelhança de nome, confiança de IA ou participação em um tronco em classificação confirmada. Não iniciar uma migração em massa ao abrir o aplicativo nem incluir chamadas pagas de IA na inicialização ou em testes.
 
-Esta nota define o trabalho seguinte; não afirma que endpoints de geração, decisão ou filas de revisão de sugestões já existam. Conferir o estado de publicação e as evidências da entrega 1.4.5 em `docs/remediation-validation/1.4.5/` antes de partir para produção. O banco real não foi reclassificado pelas etapas anteriores.
+Esta nota define o trabalho seguinte; não afirma que endpoints de geração, decisão ou filas de revisão de sugestões já existam. Conferir o estado de publicação e as evidências da entrega 1.4.5 em `docs/remediation-validation/1.4.5/` antes de partir para produção. Base de implementação das etapas 3–4: `9dee93673f2e170e06f2d77ca378df973449414d`, [pipeline 41512550219](https://github.com/danielcdes-create/cogniva/actions/runs/41512550219). A documentação e as ferramentas de aceite podem ter commits posteriores sem alterar esse runtime. O banco real não foi reclassificado pelas etapas anteriores.
 
 ## Leitura obrigatória do repositório
 
@@ -36,13 +48,27 @@ Ler também as duas notas em `Notas Conversao Kotlin_Rust/` sobre arquitetura/CI
 - Android associa componentes ao catálogo; `local_subject_id` identifica a ocorrência, inclusive disciplina repetida em etapas diferentes. Componentes e tópicos `custom-UUID` permanecem pendentes sem perda de texto ou identidade.
 - Questões abertas têm contrato de armazenamento/rubrica, mas não há execução de correção aberta no cliente atual. Não ampliar o protocolo de respostas como efeito colateral desta classificação.
 
-## Sequência de implementação
+Não confundir identidades de revisão: `question.revision` é o contador inteiro usado no CAS do documento; `question.content_revision` é o SHA-256/JCS do conteúdo definido pelo contrato; `classification.revision` é o contador da classificação. `suggestion.question_content_revision` deve corresponder a `question.content_revision`. O DTO objetivo legado usa `question_revision` calculado pelo protocolo de tentativas, com outro algoritmo: não copiá-lo como se fosse o hash JCS v2 nem reescrever tentativas para uniformizar os hashes. Usar os validadores e helpers existentes.
+
+### Aceite verificado da base 1.4.5
+
+Etapas 1–4 concluídas e publicadas em 02/11/2026 às 17:02:53 (UTC−03:00). O run acima concluiu todos os seis jobs, com 32 Rust/Mongo sintético, 36 contratos Python, 50 JVM, lint/nove imagens e dez testes no emulador API 35. O rollback controlado passou antes da promoção efetiva.
+
+O aceite externo confirmou health/ready e contrato 2; catálogo normalizado/projetado com 35 disciplinas e sete troncos, 223 assuntos/subassuntos e três templates originais; quatro validadores/recibos, oito índices e snapshot imutável versão 1. Os 618 documentos de questão e quatro cadastros ficaram idênticos em bytes; histórico protegido preservou 20 documentos/32 eventos e SHA-256 `b52793dfe1eb3fb77a9e7aad1047ae78e5c9b19cd829791e8fa0ee80acf8da90`. Nenhuma questão foi reclassificada; o inventário ainda aponta zero vínculos canônicos singulares no acervo. Essa é a pendência de dados que a etapa 5 deve tratar, sem confundi-la com ausência do catálogo.
+
+APK 1.4.5/build 12: 12.796.722 bytes, SHA-256 `0727c9a4dc2044e3599a43affe13a0766a9e59a924c13d29c40cc3ef537d4cc4`, bytes servidos iguais ao bundle assinado; assinatura privada/lineage conservada. Runtime medido: 29.011.594 bytes. Compose e containers vizinhos preservados. A prova nativa foi em emulador; não há comprovação de instalação no telefone físico.
+
+Consultar `docs/remediation-validation/1.4.5/actions.json`, `production-release.json`, `mongo-preservation.json`, `question-selection.json`, `release-bundle.json`, `emulator.xml`, `jvm-results/` e logs do pipeline. Backups BSON ficam privados fora do Git; os inventários públicos contêm apenas metadados, contagens e hashes. A futura aplicação de classificações deverá alterar explicitamente os campos aprovados, mantendo os originais auditáveis; não exigir igualdade total do documento depois de uma alteração intencional nem deixar de verificar a preservação dos campos restantes.
+
+## Etapa 5 — classificar o acervo existente
 
 ### 1. Inventariar sem alterar
 
 Criar ferramenta de dry-run que leia documentos brutos e produza contagens por estado: legado não classificado, singular canônico existente, v2 confirmado/parcial, inválido/ambíguo, obsoleto/em revisão e sem metadados suficientes. Distinguir nome textual de referência canônica válida. Verificar que os IDs existentes ainda pertencem ao mesmo conhecimento; não presumir que todo vínculo singular legado já recebeu revisão humana. Relatório compartilhável não deve conter credenciais, conteúdo privado de usuários ou backup BSON.
 
 Antes de aplicar alterações reais, usar o inventário/backup privado existente (`scripts/production-history.py`) e registrar hashes, contagens, opções e índices. O backup fica fora do Git; testar a recuperação em banco isolado. Não apagar o acervo, recriar coleções nem reconstruir eventos de aprendizagem para facilitar a migração.
+
+O verificador `scripts/verify-question-storage-backup.py` comprova a instalação aditiva das etapas 3–4 a partir de dois inventários privados. Para o passo 5, a comparação de questões deve passar a conferir o conjunto explícito de campos/revisões autorizados e a preservação dos demais, pois classificar altera intencionalmente o documento; não desativar a comparação do histórico nem tomar hashes diferentes como permissão para qualquer alteração.
 
 ### 2. Gerar propostas, não confirmações
 
@@ -76,7 +102,7 @@ Começar por exemplos sintéticos, depois dry-run do inventário e revisão de u
 
 Não transformar `UNKNOWN` em `CURRENT`, não certificar vigência por confiança do modelo e não remover exclusão legada sem evidência revisada. Questões obsoletas/em revisão/arquivadas não entram na prática corrente. Alterar conteúdo ou gabarito exige o fluxo de revisão de conteúdo, com invalidação e histórico de cache conforme a etapa 3. Classificação sozinha não deve regenerar recursos pedagógicos que permanecem compatíveis com o mesmo conteúdo.
 
-## Critérios de aceite
+## Critérios de aceite da etapa 5
 
 1. Propostas pendentes nunca alteram a seleção, cobertura, XP ou SRS.
 2. Aceite/rejeição têm autorização, CAS, idempotência, proveniência humana e auditoria recuperável; dois revisores concorrentes não podem aplicar decisões incompatíveis.
@@ -87,7 +113,97 @@ Não transformar `UNKNOWN` em `CURRENT`, não certificar vigência por confianç
 7. Antes/depois comprovam preservação de conteúdo, caches compatíveis, documentos legados extras, respostas, histórico de aprendizagem e serviços vizinhos.
 8. Relatório final separa código testado, aplicação real, quantidade revisada e pendências. Atualizar README, operação, specs e exemplos. Não declarar o acervo inteiro classificado com base em um lote.
 
-## Verificação e entrega
+## Etapa 6 — atualizar seleção e progresso
+
+### Pontos de entrada
+
+Auditar e adaptar os caminhos online e offline em conjunto:
+
+- `backend-rust/src/services/selection_v2.rs`, `quiz_selector.rs` e `question_compatibility.rs`: filtros, elegibilidade, recuperação e DTO objetivo.
+- `backend-rust/src/services/exam_engine.rs`, `routes/exams.rs` e `routes/contest_projection.rs`: tronco comum, quotas, nota, prontidão e projeção do edital.
+- `backend-rust/src/services/attempts.rs` e `backend-rust/src/routes/learning.rs`: identidade, ACK e projeção de eventos.
+- `android-app/app/src/main/java/br/com/concursoprep/app/domain/exam/ExamEngine.kt`, `domain/model/Learning.kt` e `data/repository/ConcursoRepository.kt` (os dois últimos relativos ao mesmo pacote `app`): cache, sorteio, projeções e filas.
+- `android-app/app/src/main/java/br/com/concursoprep/app/data/local/QuestionCacheMapping.kt`, `domain/model/SessionSnapshot.kt`, `ui/screens/ContestsScreen.kt` e `PracticeAndQuestionScreen.kt`: identidade de sessão, snapshot da grade, cards e resultado ponderado.
+
+Não começar removendo a compatibilidade legada já comprovada. A etapa 3 reconhece o principal direto em `classification.links` e os espelhos singulares; a etapa 4 já identifica componentes e evita repetir questões entre quotas. A etapa 6 deve completar e testar o uso desses contratos nas projeções, sem criar uma segunda implementação divergente para Android ou para modos especiais.
+
+### Elegibilidade e seleção
+
+1. Resolver as referências pela versão do catálogo e pelo estado aplicável da questão. Usar vínculos individualmente confirmados/revisados; `PENDING`, `STALE`, propostas rejeitadas e vínculos apenas sugeridos não participam. Uma classificação global `PARTIAL` pode conter um principal já revisado, conforme o contrato atual; não tratar campos ainda pendentes como confirmados.
+2. Adotar o principal `DIRECT` como autoridade da seleção canônica padrão. Vínculos secundários/contextuais não devem virar principal nem autorizar automaticamente `DIRECT` em outro edital. Compatibilidade análoga exige decisão explícita e identificação visual; não misturar silenciosamente com as quotas diretas.
+3. Respeitar tópicos ativos do componente, etapa, grupo, banca e quantidade quando o modo exige a grade. Mesmo `canonical_subject_id` em etapas distintas conserva `local_subject_id` e suas quotas. `exam_component_id` pertence à sessão, não à questão; não persistir esse contexto como classificação do banco.
+4. Expandir assunto para subassuntos somente quando a opção estiver explicitamente cadastrada e versionada. O comportamento entregue é correspondência exata. Não considerar um subassunto como domínio integral do pai, nem selecionar todos os irmãos pela semelhança de prefixo do ID.
+5. Aplicar as mesmas exclusões de conteúdo inválido, arquivado, obsoleto, em revisão, com prazo vencido ou de escopo histórico nos modos geral, single, treino, simulado, SRS, caderno de erros e desafio. Preservar a distinção entre questões legadas admitidas com validade desconhecida e questões efetivamente revisadas como atuais; não rotular a primeira situação como revisão jurídica concluída.
+6. Preservar o acesso geral: shuffle e filas pessoais não herdam um concurso arquivado apenas porque sua aba estava selecionada. Ausência de classificação nova não deve tornar todo o acervo legado inacessível novamente. Caminhos de treino por rótulo legado devem continuar explicitamente distintos de cobertura canônica confirmada.
+7. Compartilhar a questão por identidade, sem copiá-la para cada concurso. Excluir IDs já sorteados dentro da mesma sessão, inclusive entre componentes. Se as quotas não puderem ser atendidas com questões distintas válidas, informar insuficiência e a causa; não repetir IDs, reduzir a grade silenciosamente ou inventar conteúdo.
+
+### Tentativas, cobertura e domínio
+
+Uma tentativa é identificada por `attempt_id` e proprietário. A mesma questão pode ter várias tentativas reais em sessões diferentes; elas não devem ser deduplicadas só por `question_id`. Por outro lado, projetar uma tentativa em dois concursos não cria dois eventos, dois ACKs, XP adicional nem duas entradas SRS. Agregados globais contam cada tentativa aceita uma vez; visões por edital mostram projeções do mesmo histórico com contexto explícito.
+
+Preservar o snapshot original da tentativa: conteúdo/revisão, alternativa ou resposta, instante, confiança, concurso e componente quando disponíveis. Não reescrever o evento antigo para apontar à classificação atual. Uma projeção nova pode reutilizar aprendizagem em outro concurso apenas quando consegue demonstrar correspondência do conteúdo estudado com o vínculo confirmado usado na projeção. Se só existir um ID antigo, sem revisão verificável, manter a evidência histórica e a ambiguidade; não assumir conteúdo idêntico depois de uma edição de enunciado/gabarito.
+
+Para documentos legados, usar a revisão do protocolo de tentativas quando ela estiver disponível e comparar pelo algoritmo correto. Não comparar diretamente seu hash com o JCS v2. Ausência de evidência de tópico não elimina tentativas/acertos globais: apresentar cobertura canônica desconhecida separadamente dos totais preservados.
+
+Definir uma política versionada de contribuição para cobertura antes de alterar os cálculos. O padrão conservador deve conceder evidência ao tópico principal direto efetivamente cobrado. Vínculo secundário/contextual concede zero de domínio direto por padrão; uma contribuição parcial futura exige regra explícita, limitada e testada, nunca crédito integral em todos os tópicos vinculados. Acerto em um subassunto não completa automaticamente seu assunto pai. Ausência de cobertura permanece desconhecida/zero evidência, sem inventar uma resposta errada.
+
+Reutilizar o mesmo domínio de conhecimento entre concursos quando os vínculos de conteúdo forem equivalentes e verificados. Cada componente calcula sua cobertura somente sobre seus próprios tópicos ativos; notas e prontidão respeitam os pesos configurados. Contar a mesma disciplina em duas etapas pode ser correto na ponderação da prova, mas não transforma uma tentativa em duas nem dois componentes em dois concursos para o tronco comum. Progresso global e cobertura por edital são métricas diferentes e precisam manter denominadores claros.
+
+Resultados de IA/semânticos provisórios para questões abertas não viram acerto confirmado, domínio ou evento SRS definitivo. Uma revisão de avaliação mantém o mesmo `attempt_id` e referencia a anterior; não cria uma tentativa adicional. Não mudar os intervalos históricos nem o dia civil de estudo como efeito colateral da taxonomia.
+
+### Sincronização e mudanças de classificação
+
+Propagar alterações de classificação, validade e disponibilidade para o cache de forma versionada. Uma questão que ficou obsoleta ou deixou de ser elegível deve sair das ações atuais sem apagar o conteúdo preservado, a sessão original ou o histórico. Contadores e ações precisam usar o mesmo critério de `practice_available`; um card não pode anunciar questões praticáveis que o seletor sempre rejeita.
+
+Classificação nova, edição de componente ou mudança de revisão do edital invalida decisões de compatibilidade antigas para o contexto atual. Cache offline deve reconhecer essa incerteza, não usar uma aprovação vencida como se fosse recente. Preservar comandos e ACKs de tentativas já feitas, inclusive quando a questão mudou depois: replay de uma tentativa aceita não pode falhar só porque a versão atual da questão deixou de ser selecionável.
+
+Se incluir treino de respostas abertas na entrega, implementar antes o portão de capacidades e o protocolo tipado de submissão, texto livre persistente, rubrica/snapshot, avaliação por critério, estados provisório/confirmado e recuperação de falhas. O campo `OPEN_ENDED` no schema não implementa esses recursos sozinho. Enquanto esse fluxo não estiver validado, manter abertas fora do cliente objetivo e declarar claramente essa pendência; não convertê-las em múltipla escolha fictícia nem anunciar suporte completo.
+
+### Critérios de aceite da etapa 6
+
+- Uma questão principal direta confirmada é reutilizável em dois concursos, sem duplicar evento, XP ou SRS.
+- Uma proposta pendente e um vínculo secundário/contextual não produzem o mesmo crédito do principal direto.
+- Duas etapas da mesma disciplina preservam quotas, pesos, tópicos, cards e identidade de sessão; sorteio e nota online/offline concordam.
+- Alterar classificação ou validade não reescreve tentativas, não elimina acertos históricos e não reutiliza aprovação de compatibilidade vencida.
+- Treino, shuffle, single, simulado, tronco comum e filas pessoais têm testes de elegibilidade, insuficiência e legado; contadores acompanham as ações.
+- Assunto, subassunto e pai/filho não recebem cobertura integral por associação implícita; denominadores e política de contribuição são documentados.
+
+## Etapa 7 — validar e publicar
+
+### Matriz mínima de validação
+
+| Área | Cenários obrigatórios |
+| --- | --- |
+| Migração e schemas | Legado intacto, v2 válido/inválido, extras desconhecidos preservados, preparação repetida, catálogo imutável, índices e validadores efetivos |
+| Classificação | Geração reutilizada, saída xAI inválida, ambiguidade mantida, aceite/rejeição humana, proposta antiga, revisão concorrente e recuperação entre escritas |
+| Conteúdo e validade | Cinco alternativas, certo/errado, abertas armazenáveis, gabarito ambíguo, obsoleta/em revisão, prazo vencido, contexto histórico e cache compatível/incompatível |
+| Cadastro | Criar/editar/vincular/desvincular quando suportado, mesma disciplina em etapas diferentes, tópico fora da disciplina rejeitado, custom pendente, arquivar/restaurar/excluir |
+| Preservação | Não apagar questão global ao excluir componente/concurso; revisões, conteúdo, origem, campos extras, respostas e histórico mantidos |
+| Sincronização | Offline/reabertura, troca de conta, conflito de revisão, perda de ACK, replay, lote parcial e alteração remota enquanto existe tentativa pendente |
+| Seleção | Todos os modos, filtro por componente, quotas insuficientes, nenhuma repetição na sessão, conta correta, concurso arquivado e compatibilidade vencida |
+| Progresso | Tentativa única projetada em dois concursos, duas tentativas reais da mesma questão, secundário sem crédito integral, pai/filho e denominadores claros |
+| Interface | Fluxo real completo, fonte 2.0, tema claro/escuro, campos/CTA alcançáveis, cutout e navegação; sem sucesso visual antes de persistência/ACK |
+| Operação | Build externo, tamanho medido, assinatura/lineage, APK servido idêntico ao artefato, saúde/readiness, rollback, gate e serviços vizinhos preservados |
+
+Usar dados sintéticos para provar os cenários destrutivos e de concorrência. Não disparar uma IA paga em CI, não executar `failCommand` no Atlas e não apagar dados reais para simular falhas. Lotes reais devem ter inventário, orçamento e seleção explícitos; acompanhar documentos efetivamente revisados e pendentes, não apenas chamadas bem-sucedidas ao modelo.
+
+### Sequência de publicação e aceite
+
+1. Atualizar schemas, validadores, exemplos, tipos Android/Rust e política de projeção na mesma alteração. Rodar a matriz e conferir os caminhos reais, além de testes unitários que apenas espelhem a implementação.
+2. Capturar uma referência atual do servidor com `scripts/capture-production-baseline.py` e um backup privado com `scripts/production-history.py`. Guardar a definição de índices/views e testar restauração em instância isolada. Para alterações intencionais de classificação, comparar os campos autorizados; para históricos e serviços vizinhos, exigir preservação.
+3. Validar migração em banco sintético com cópia compatível da estrutura, e fazer dry-run do lote real. Mostrar plano de aplicação, revisões esperadas, comandos retomáveis e estratégia de recuperação. Não tratar rollback do container como rollback automático dos documentos já classificados.
+4. Compilar/assinar em ambiente local ou GitHub Actions e promover pelo fluxo existente, com imagem por digest e artefatos por SHA. A migração aditiva deve terminar antes de abrir tráfego. Não construir na VPS nem substituir o Compose compartilhado.
+5. Verificar o rollback controlado e a promoção efetiva nos logs. Conferir health/ready, revisão, Mongo, gate aberto, rejeição de acesso anônimo e preservação de FIN/Asbuildo/Spamshield. Usar comparação com a referência capturada antes desta promoção, não com containers de uma release antiga.
+6. Baixar o APK servido, comparar tamanho/SHA-256 com `release.json` e o bundle do CI, conferir pacote, versionName/versionCode, ausência de `debuggable` e a assinatura/lineage existente. Testar atualização com dados persistidos quando houver dispositivo disponível; registrar o limite quando a prova for apenas de emulador.
+7. Executar probes autenticados somente de leitura para catálogo e modos de questões. `scripts/probe-question-selection.py` aceita `--expected-version` e `--assert-catalog` para a base atual; se o catálogo mudar de versão, atualizar as contagens esperadas de forma revisada, sem remover as asserções. Não enviar tentativas ou criar textos pagos para comprovar saúde.
+8. Repetir o backup de inventário e produzir evidência antes/depois. Conferir validadores/índices/snapshot, documentos alterados por comando aprovado, histórico protegido, contagens de pendências e compatibilidade do legado. Nenhuma classificação pode desaparecer silenciosamente entre um ACK e a persistência.
+9. Atualizar README, `docs/OPERACAO.md`, documentos de catálogo/schema/etapas, exemplos, registro de execução e PR com o resultado final. Registrar revisão publicada, run, hashes, contagens, lotes revisados, pendências e limites físicos. Código em uma branch, artefato gerado e serviço promovido são estados distintos; afirmar apenas os estados verificados.
+
+### Critérios de conclusão da etapa 7
+
+Todos os testes e os gates exigidos passam no mesmo código publicado. Backend/APK atendem à revisão/versionamento anunciados. Dados e histórico têm comparação verificável, e alterações intencionais são rastreáveis a decisões autorizadas. O aplicativo continua abrindo questões nos modos gerais e respeitando a grade nos modos específicos. Não há pendência escondida de migração, fila, assinatura, rollback ou publicação. A documentação permite reproduzir o aceite e retomar um lote interrompido.
+
+## Comandos de verificação e limites da entrega
 
 ```powershell
 python scripts/knowledge_catalog.py --check

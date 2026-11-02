@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="br.com.concursoprep.app.SharedDomainContractTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-11-02T19:47:46.215Z" hostname="GBP360" time="0.049">
+  <properties/>
+  <testcase name="occurrenceOrderedSrsAndConfidenceMatchTheSharedContract" classname="br.com.concursoprep.app.SharedDomainContractTest" time="0.021"/>
+  <testcase name="weightedPointsAndCalendarDaysMatchTheSharedContract" classname="br.com.concursoprep.app.SharedDomainContractTest" time="0.014"/>
+  <testcase name="bothRuntimesUseTheSameUtf8RevisionAndMasteryPolicy" classname="br.com.concursoprep.app.SharedDomainContractTest" time="0.013"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
