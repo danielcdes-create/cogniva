@@ -1,0 +1,811 @@
+﻿2026-11-02T00:11:55.6598205Z Current runner version: '2.338.2'
+2026-11-02T00:11:55.6623614Z ##[group]Runner Image Provisioner
+2026-11-02T00:11:55.6624623Z Hosted Compute Agent
+2026-11-02T00:11:55.6625256Z Version: 20261021.618
+2026-11-02T00:11:55.6625992Z Commit: 21505ad2541d5be6135ed84fc33697146cf75b8e
+2026-11-02T00:11:55.6626778Z Build Date: 2026-10-21T00:45:21Z
+2026-11-02T00:11:55.6627527Z Worker ID: {0c66ee37-ac4c-438e-8888-e972b6f9ddb4}
+2026-11-02T00:11:55.6628377Z Region: westus3
+2026-11-02T00:11:55.6629012Z Cloud: Azure
+2026-11-02T00:11:55.6629640Z ##[endgroup]
+2026-11-02T00:11:55.6631447Z ##[group]Operating System
+2026-11-02T00:11:55.6632116Z Ubuntu
+2026-11-02T00:11:55.6632833Z 24.04.5
+2026-11-02T00:11:55.6633396Z LTS
+2026-11-02T00:11:55.6633986Z ##[endgroup]
+2026-11-02T00:11:55.6634600Z ##[group]Runner Image
+2026-11-02T00:11:55.6635229Z Image: ubuntu-24.04
+2026-11-02T00:11:55.6635979Z Version: 20261025.353.1
+2026-11-02T00:11:55.6637300Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261025.353/images/ubuntu/Ubuntu2404-Readme.md
+2026-11-02T00:11:55.6639049Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261025.353
+2026-11-02T00:11:55.6640457Z ##[endgroup]
+2026-11-02T00:11:55.6641743Z ##[group]GITHUB_TOKEN Permissions
+2026-11-02T00:11:55.6643867Z Contents: read
+2026-11-02T00:11:55.6644651Z Metadata: read
+2026-11-02T00:11:55.6645299Z ##[endgroup]
+2026-11-02T00:11:55.6647865Z Secret source: Actions
+2026-11-02T00:11:55.6648931Z Cache mode: write
+2026-11-02T00:11:55.6650175Z Prepare workflow directory
+2026-11-02T00:11:55.7050449Z Prepare all required actions
+2026-11-02T00:11:55.7099341Z Getting action download info
+2026-11-02T00:11:56.0808726Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-11-02T00:11:56.2002677Z Download action repository 'actions/setup-java@v4' (SHA:cf277c60eb25467037889841efdb72551f06f6c3)
+2026-11-02T00:11:56.8968976Z Download action repository 'gradle/actions@v4' (SHA:ed408507eac070d1f99cc633dbcf757c94c7933a)
+2026-11-02T00:11:58.0894075Z Download action repository 'reactivecircus/android-emulator-runner@v2' (SHA:a421e43855164a8197daf9d8d40fe71c6996bb0d)
+2026-11-02T00:11:58.6197464Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-11-02T00:11:58.8460962Z Uses: danielcdes-create/cogniva/.github/workflows/emulator-insets.yml@refs/heads/codex/auditoria-convergencia (7d623102e17723e4f2eeff82f1e191f08348b189)
+2026-11-02T00:11:58.8465263Z ##[group] Inputs
+2026-11-02T00:11:58.8465903Z   promote: true
+2026-11-02T00:11:58.8466145Z ##[endgroup]
+2026-11-02T00:11:58.8466455Z Complete job name: emulator / API 35 1440x3088 500dpi punch-hole
+2026-11-02T00:11:58.9365772Z ##[group]Run actions/checkout@v4
+2026-11-02T00:11:58.9366423Z with:
+2026-11-02T00:11:58.9366669Z   repository: danielcdes-create/cogniva
+2026-11-02T00:11:58.9369371Z   token: ***
+2026-11-02T00:11:58.9369599Z   ssh-strict: true
+2026-11-02T00:11:58.9370148Z   ssh-user: git
+2026-11-02T00:11:58.9370398Z   persist-credentials: true
+2026-11-02T00:11:58.9370668Z   clean: true
+2026-11-02T00:11:58.9370889Z   sparse-checkout-cone-mode: true
+2026-11-02T00:11:58.9371152Z   fetch-depth: 1
+2026-11-02T00:11:58.9371360Z   fetch-tags: false
+2026-11-02T00:11:58.9371575Z   show-progress: true
+2026-11-02T00:11:58.9371794Z   lfs: false
+2026-11-02T00:11:58.9371989Z   submodules: false
+2026-11-02T00:11:58.9372204Z   set-safe-directory: true
+2026-11-02T00:11:58.9372463Z   allow-unsafe-pr-checkout: false
+2026-11-02T00:11:58.9372987Z ##[endgroup]
+2026-11-02T00:11:59.2237147Z Syncing repository: danielcdes-create/cogniva
+2026-11-02T00:11:59.2239214Z ##[group]Getting Git version info
+2026-11-02T00:11:59.2240205Z Working directory is '/home/runner/work/cogniva/cogniva'
+2026-11-02T00:11:59.2241189Z [command]/usr/bin/git version
+2026-11-02T00:11:59.2313282Z git version 2.56.0
+2026-11-02T00:11:59.2336236Z ##[endgroup]
+2026-11-02T00:11:59.2352756Z Temporarily overriding HOME='/home/runner/work/_temp/eef37689-5c08-4c6b-9e52-a9aa309a60e9' before making global git config changes
+2026-11-02T00:11:59.2354582Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-02T00:11:59.2359315Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/cogniva/cogniva
+2026-11-02T00:11:59.2424330Z Deleting the contents of '/home/runner/work/cogniva/cogniva'
+2026-11-02T00:11:59.2434511Z ##[group]Initializing the repository
+2026-11-02T00:11:59.2435429Z [command]/usr/bin/git init /home/runner/work/cogniva/cogniva
+2026-11-02T00:11:59.2558834Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-11-02T00:11:59.2560171Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-11-02T00:11:59.2561138Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-11-02T00:11:59.2561832Z hint: call:
+2026-11-02T00:11:59.2562047Z hint:
+2026-11-02T00:11:59.2562363Z hint: 	git config --global init.defaultBranch <name>
+2026-11-02T00:11:59.2562727Z hint:
+2026-11-02T00:11:59.2563056Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-11-02T00:11:59.2563594Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-11-02T00:11:59.2564002Z hint:
+2026-11-02T00:11:59.2564212Z hint: 	git branch -m <name>
+2026-11-02T00:11:59.2564546Z hint:
+2026-11-02T00:11:59.2565087Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-11-02T00:11:59.2571965Z Initialized empty Git repository in /home/runner/work/cogniva/cogniva/.git/
+2026-11-02T00:11:59.2586126Z [command]/usr/bin/git remote add origin https://github.com/danielcdes-create/cogniva
+2026-11-02T00:11:59.2634825Z ##[endgroup]
+2026-11-02T00:11:59.2635309Z ##[group]Disabling automatic garbage collection
+2026-11-02T00:11:59.2640806Z [command]/usr/bin/git config --local gc.auto 0
+2026-11-02T00:11:59.2675945Z ##[endgroup]
+2026-11-02T00:11:59.2685355Z ##[group]Setting up auth
+2026-11-02T00:11:59.2685800Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-02T00:11:59.2725176Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-02T00:11:59.3191894Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-02T00:11:59.3239076Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-02T00:11:59.3489067Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-02T00:11:59.3534954Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-02T00:11:59.3783504Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-11-02T00:11:59.3836471Z ##[endgroup]
+2026-11-02T00:11:59.3837258Z ##[group]Fetching the repository
+2026-11-02T00:11:59.3849453Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +7d623102e17723e4f2eeff82f1e191f08348b189:refs/remotes/origin/codex/auditoria-convergencia
+2026-11-02T00:12:00.1856555Z From https://github.com/danielcdes-create/cogniva
+2026-11-02T00:12:00.1857404Z  * [new ref]         7d623102e17723e4f2eeff82f1e191f08348b189 -> origin/codex/auditoria-convergencia
+2026-11-02T00:12:00.1861982Z ##[endgroup]
+2026-11-02T00:12:00.1862673Z ##[group]Determining the checkout info
+2026-11-02T00:12:00.1864975Z ##[endgroup]
+2026-11-02T00:12:00.1870991Z [command]/usr/bin/git sparse-checkout disable
+2026-11-02T00:12:00.1934326Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-11-02T00:12:00.1974052Z ##[group]Checking out the ref
+2026-11-02T00:12:00.1978743Z [command]/usr/bin/git checkout --progress --force -B codex/auditoria-convergencia refs/remotes/origin/codex/auditoria-convergencia
+2026-11-02T00:12:00.2375221Z Switched to a new branch 'codex/auditoria-convergencia'
+2026-11-02T00:12:00.2380909Z branch 'codex/auditoria-convergencia' set up to track 'origin/codex/auditoria-convergencia'.
+2026-11-02T00:12:00.2388950Z ##[endgroup]
+2026-11-02T00:12:00.2446263Z [command]/usr/bin/git log -1 --format=%H
+2026-11-02T00:12:00.2483331Z 7d623102e17723e4f2eeff82f1e191f08348b189
+2026-11-02T00:12:00.2785435Z ##[group]Run actions/setup-java@v4
+2026-11-02T00:12:00.2785756Z with:
+2026-11-02T00:12:00.2785962Z   distribution: temurin
+2026-11-02T00:12:00.2786201Z   java-version: 21
+2026-11-02T00:12:00.2786419Z   java-package: jdk
+2026-11-02T00:12:00.2786644Z   check-latest: false
+2026-11-02T00:12:00.2786867Z   server-id: github
+2026-11-02T00:12:00.2787092Z   server-username: GITHUB_ACTOR
+2026-11-02T00:12:00.2787353Z   server-password: GITHUB_TOKEN
+2026-11-02T00:12:00.2787615Z   overwrite-settings: true
+2026-11-02T00:12:00.2787871Z   job-status: success
+2026-11-02T00:12:00.2790561Z   token: ***
+2026-11-02T00:12:00.2790780Z ##[endgroup]
+2026-11-02T00:12:00.4588305Z ##[warning]setup-java v4 is deprecated and will no longer receive updates. Please migrate to actions/setup-java@v5.
+2026-11-02T00:12:00.4596251Z ##[group]Installed distributions
+2026-11-02T00:12:00.4639108Z Resolved Java 21.0.13+9 from tool-cache
+2026-11-02T00:12:00.4639652Z Setting Java 21.0.13+9 as the default
+2026-11-02T00:12:00.4650539Z (node:2321) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-02T00:12:00.4651270Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-02T00:12:00.4654685Z Creating toolchains.xml for JDK version 21 from temurin
+2026-11-02T00:12:00.4735309Z Writing to /home/runner/.m2/toolchains.xml
+2026-11-02T00:12:00.4735709Z 
+2026-11-02T00:12:00.4735881Z Java configuration:
+2026-11-02T00:12:00.4736267Z   Distribution: temurin
+2026-11-02T00:12:00.4736676Z   Version: 21.0.13+9
+2026-11-02T00:12:00.4737223Z   Path: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21.0.13-9/x64
+2026-11-02T00:12:00.4737696Z 
+2026-11-02T00:12:00.4738183Z ##[endgroup]
+2026-11-02T00:12:00.4753431Z Creating settings.xml with server-id: github
+2026-11-02T00:12:00.4782113Z Writing to /home/runner/.m2/settings.xml
+2026-11-02T00:12:00.5120944Z ##[group]Run gradle/actions/setup-gradle@v4
+2026-11-02T00:12:00.5121716Z with:
+2026-11-02T00:12:00.5122146Z   cache-read-only: false
+2026-11-02T00:12:00.5122726Z   cache-disabled: false
+2026-11-02T00:12:00.5123163Z   cache-write-only: false
+2026-11-02T00:12:00.5123620Z   cache-overwrite-existing: false
+2026-11-02T00:12:00.5124069Z   cache-cleanup: on-success
+2026-11-02T00:12:00.5124556Z   gradle-home-cache-includes: caches
+notifications
+
+2026-11-02T00:12:00.5125107Z   add-job-summary: always
+2026-11-02T00:12:00.5125537Z   add-job-summary-as-pr-comment: never
+2026-11-02T00:12:00.5126036Z   dependency-graph: disabled
+2026-11-02T00:12:00.5126598Z   dependency-graph-report-dir: dependency-graph-reports
+2026-11-02T00:12:00.5127222Z   dependency-graph-continue-on-failure: true
+2026-11-02T00:12:00.5127731Z   build-scan-publish: false
+2026-11-02T00:12:00.5128133Z   validate-wrappers: true
+2026-11-02T00:12:00.5128536Z   allow-snapshot-wrappers: false
+2026-11-02T00:12:00.5129065Z   gradle-home-cache-strict-match: false
+2026-11-02T00:12:00.5129581Z   workflow-job-context: null
+2026-11-02T00:12:00.5134718Z   github-token: ***
+2026-11-02T00:12:00.5134970Z env:
+2026-11-02T00:12:00.5135291Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21.0.13-9/x64
+2026-11-02T00:12:00.5135950Z   JAVA_HOME_21_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21.0.13-9/x64
+2026-11-02T00:12:00.5136588Z ##[endgroup]
+2026-11-02T00:12:01.9573620Z Merged default JDK locations into /home/runner/.m2/toolchains.xml
+2026-11-02T00:12:01.9576114Z Preparing cache for cleanup.
+2026-11-02T00:12:01.9580998Z ##[group]Restore Gradle state from cache
+2026-11-02T00:12:02.1802971Z Cache hit for restore-key: gradle-home-v1|Linux-X64|s23-ultra-insets[0d0d60652b11b112b164b30571ca3e82]-22bd6027acfe277ea2d1e425578d4d4709620f1d
+2026-11-02T00:12:03.2711693Z Received 10419977 of 10419977 (100.0%), 11.4 MBs/sec
+2026-11-02T00:12:03.2713166Z Cache Size: ~10 MB (10419977 B)
+2026-11-02T00:12:03.2746028Z [command]/usr/bin/tar -xf /home/runner/work/_temp/922bdd24-2931-4f53-9a21-04dffce4f948/cache.tzst -P -C /home/runner/work/cogniva/cogniva --use-compress-program unzstd
+2026-11-02T00:12:03.4537065Z Cache restored successfully
+2026-11-02T00:12:03.4546500Z Restored cache entry with key gradle-home-v1|Linux-X64|s23-ultra-insets[0d0d60652b11b112b164b30571ca3e82]-7d623102e17723e4f2eeff82f1e191f08348b189 to /home/runner/.gradle/caches,/home/runner/.gradle/notifications,/home/runner/.gradle/.setup-gradle in 1493ms
+2026-11-02T00:12:03.6763981Z Cache hit for: gradle-wrapper-zips-v1-8c0de4c6bda6041d6e054bf825a89c98
+2026-11-02T00:12:03.6803998Z Cache hit for: gradle-instrumented-jars-v1-5fcdb0728f630aed09f4568860e2f112
+2026-11-02T00:12:03.6832173Z Cache hit for: gradle-transforms-v1-1d7073c8a297d5e6cfe22875215adb59
+2026-11-02T00:12:03.6863812Z Cache hit for: gradle-generated-gradle-jars-v1-cb4b032a7d08b9bf1e84e9eacaebcc29
+2026-11-02T00:12:03.6889983Z Cache hit for: gradle-dependencies-v1-b7f5b14aad5bdf3803d67c2a6090cae3
+2026-11-02T00:12:03.6915049Z Cache hit for: gradle-groovy-dsl-v1-2bef2c7ec850358ab70818ef08c2185f
+2026-11-02T00:12:03.6963448Z Cache hit for: gradle-kotlin-dsl-v1-05a5577fabcc95ac1bedcee491630adc
+2026-11-02T00:12:04.2177494Z Received 69448 of 69448 (100.0%), 0.2 MBs/sec
+2026-11-02T00:12:04.2178564Z Cache Size: ~0 MB (69448 B)
+2026-11-02T00:12:04.2207378Z [command]/usr/bin/tar -xf /home/runner/work/_temp/c25beb70-5ac9-4073-938f-169efddb7825/cache.tzst -P -C /home/runner/work/cogniva/cogniva --use-compress-program unzstd
+2026-11-02T00:12:04.2325432Z Received 110473 of 110473 (100.0%), 0.3 MBs/sec
+2026-11-02T00:12:04.2326115Z Cache Size: ~0 MB (110473 B)
+2026-11-02T00:12:04.2354031Z [command]/usr/bin/tar -xf /home/runner/work/_temp/fe8e1542-3b49-4d73-a4b1-5ed4fb69bba1/cache.tzst -P -C /home/runner/work/cogniva/cogniva --use-compress-program unzstd
+2026-11-02T00:12:04.2404691Z Cache restored successfully
+2026-11-02T00:12:04.2410337Z Restored cache entry with key gradle-instrumented-jars-v1-5fcdb0728f630aed09f4568860e2f112 to /home/runner/.gradle/caches/jars-*/*/ in 784ms
+2026-11-02T00:12:04.2607260Z Cache restored successfully
+2026-11-02T00:12:04.2610937Z Restored cache entry with key gradle-groovy-dsl-v1-2bef2c7ec850358ab70818ef08c2185f to /home/runner/.gradle/caches/*/groovy-dsl/*/ in 804ms
+2026-11-02T00:12:04.2761609Z Received 117210 of 117210 (100.0%), 0.3 MBs/sec
+2026-11-02T00:12:04.2762299Z Cache Size: ~0 MB (117210 B)
+2026-11-02T00:12:04.2783729Z [command]/usr/bin/tar -xf /home/runner/work/_temp/6a3e2f6b-89d9-4ebc-8c1c-a8bb9ffb448b/cache.tzst -P -C /home/runner/work/cogniva/cogniva --use-compress-program unzstd
+2026-11-02T00:12:04.3267165Z Cache restored successfully
+2026-11-02T00:12:04.3270541Z Restored cache entry with key gradle-kotlin-dsl-v1-05a5577fabcc95ac1bedcee491630adc to /home/runner/.gradle/caches/*/kotlin-dsl/accessors/*/,/home/runner/.gradle/caches/*/kotlin-dsl/scripts/*/ in 870ms
+2026-11-02T00:12:04.9011478Z Received 33554432 of 366745828 (9.1%), 31.6 MBs/sec
+2026-11-02T00:12:04.9014753Z Received 25165824 of 136360638 (18.5%), 23.9 MBs/sec
+2026-11-02T00:12:04.9361707Z Received 37748736 of 205615586 (18.4%), 35.3 MBs/sec
+2026-11-02T00:12:04.9362192Z Received 29410491 of 41993403 (70.0%), 27.7 MBs/sec
+2026-11-02T00:12:05.3633774Z Received 41993403 of 41993403 (100.0%), 27.8 MBs/sec
+2026-11-02T00:12:05.3636489Z Cache Size: ~40 MB (41993403 B)
+2026-11-02T00:12:05.5241772Z [command]/usr/bin/tar -xf /home/runner/work/_temp/c62513eb-04f6-4364-a7f2-03c692fe2749/cache.tzst -P -C /home/runner/work/cogniva/cogniva --use-compress-program unzstd
+2026-11-02T00:12:05.9106944Z Received 134217728 of 366745828 (36.6%), 63.2 MBs/sec
+2026-11-02T00:12:05.9108419Z Received 130023424 of 136360638 (95.4%), 61.6 MBs/sec
+2026-11-02T00:12:05.9680950Z Received 146800640 of 205615586 (71.4%), 68.5 MBs/sec
+2026-11-02T00:12:05.9886364Z Cache restored successfully
+2026-11-02T00:12:05.9934813Z Restored cache entry with key gradle-generated-gradle-jars-v1-cb4b032a7d08b9bf1e84e9eacaebcc29 to /home/runner/.gradle/caches/9.3.1/generated-gradle-jars/gradle-api-9.3.1.jar in 2538ms
+2026-11-02T00:12:06.1260893Z Received 136360638 of 136360638 (100.0%), 58.4 MBs/sec
+2026-11-02T00:12:06.1262081Z Cache Size: ~130 MB (136360638 B)
+2026-11-02T00:12:06.2244346Z [command]/usr/bin/tar -xf /home/runner/work/_temp/85a99f99-3eea-4693-bcea-5769d7cc1628/cache.tzst -P -C /home/runner/work/cogniva/cogniva --use-compress-program unzstd
+2026-11-02T00:12:06.2950554Z Received 205615586 of 205615586 (100.0%), 82.5 MBs/sec
+2026-11-02T00:12:06.2951306Z Cache Size: ~196 MB (205615586 B)
+2026-11-02T00:12:06.3657580Z [command]/usr/bin/tar -xf /home/runner/work/_temp/ed7f17bf-3f85-4b56-af25-b9b890457913/cache.tzst -P -C /home/runner/work/cogniva/cogniva --use-compress-program unzstd
+2026-11-02T00:12:06.5904634Z Cache restored successfully
+2026-11-02T00:12:06.6079104Z Restored cache entry with key gradle-wrapper-zips-v1-8c0de4c6bda6041d6e054bf825a89c98 to /home/runner/.gradle/wrapper/dists/gradle-9.3.1-bin/23ovyewtku6u96viwx3xl3oks in 3151ms
+2026-11-02T00:12:06.9115291Z Received 268435456 of 366745828 (73.2%), 84.6 MBs/sec
+2026-11-02T00:12:07.4251468Z Received 366745828 of 366745828 (100.0%), 98.9 MBs/sec
+2026-11-02T00:12:07.4268427Z Cache Size: ~350 MB (366745828 B)
+2026-11-02T00:12:07.4461701Z [command]/usr/bin/tar -xf /home/runner/work/_temp/4dd2364a-31ed-469b-be8f-c732355c6873/cache.tzst -P -C /home/runner/work/cogniva/cogniva --use-compress-program unzstd
+2026-11-02T00:12:08.3899904Z Cache restored successfully
+2026-11-02T00:12:08.4856518Z Restored cache entry with key gradle-dependencies-v1-b7f5b14aad5bdf3803d67c2a6090cae3 to /home/runner/.gradle/caches/modules-*/files-*/*/*/*/* in 5030ms
+2026-11-02T00:12:08.5853649Z Cache restored successfully
+2026-11-02T00:12:08.5942426Z Restored cache entry with key gradle-transforms-v1-1d7073c8a297d5e6cfe22875215adb59 to /home/runner/.gradle/caches/transforms-4/*/,/home/runner/.gradle/caches/*/transforms/*/ in 5137ms
+2026-11-02T00:12:08.6022824Z ##[endgroup]
+2026-11-02T00:12:08.6154625Z ##[group]All Gradle Wrapper jars are valid
+2026-11-02T00:12:08.6156018Z ✓ Found known Gradle Wrapper JAR files:
+2026-11-02T00:12:08.6156745Z   b3a875ddc1f044746e1b1a55f645584505f4a10438c1afea9f15e92a7c42ec13 android-app/gradle/wrapper/gradle-wrapper.jar
+2026-11-02T00:12:08.6157738Z ##[endgroup]
+2026-11-02T00:12:08.6473757Z ##[group]Run echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+2026-11-02T00:12:08.6474823Z [36;1mecho 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules[0m
+2026-11-02T00:12:08.6475495Z [36;1msudo udevadm control --reload-rules[0m
+2026-11-02T00:12:08.6475910Z [36;1msudo udevadm trigger --name-match=kvm[0m
+2026-11-02T00:12:08.6499434Z shell: /usr/bin/bash -e {0}
+2026-11-02T00:12:08.6500093Z env:
+2026-11-02T00:12:08.6500503Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21.0.13-9/x64
+2026-11-02T00:12:08.6501087Z   JAVA_HOME_21_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21.0.13-9/x64
+2026-11-02T00:12:08.6501601Z   GRADLE_ACTION_ID: gradle/actions/setup-gradle
+2026-11-02T00:12:08.6501972Z   GRADLE_USER_HOME: /home/runner/.gradle
+2026-11-02T00:12:08.6502328Z   GRADLE_BUILD_ACTION_SETUP_COMPLETED: true
+2026-11-02T00:12:08.6502717Z   GRADLE_BUILD_ACTION_CACHE_RESTORED: true
+2026-11-02T00:12:08.6503241Z   DEVELOCITY_INJECTION_INIT_SCRIPT_NAME: gradle-actions.inject-develocity.init.gradle
+2026-11-02T00:12:08.6503795Z   DEVELOCITY_INJECTION_CUSTOM_VALUE: gradle-actions
+2026-11-02T00:12:08.6504174Z   GITHUB_DEPENDENCY_GRAPH_ENABLED: false
+2026-11-02T00:12:08.6504502Z ##[endgroup]
+2026-11-02T00:12:08.6637768Z KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"
+2026-11-02T00:12:08.7068618Z ##[group]Run reactivecircus/android-emulator-runner@v2
+2026-11-02T00:12:08.7069048Z with:
+2026-11-02T00:12:08.7069295Z   api-level: 35
+2026-11-02T00:12:08.7069576Z   target: google_apis
+2026-11-02T00:12:08.7070172Z   arch: x86_64
+2026-11-02T00:12:08.7070447Z   disable-animations: true
+2026-11-02T00:12:08.7070972Z   emulator-options: -no-window -no-snapshot -no-audio -no-boot-anim -gpu swiftshader_indirect
+2026-11-02T00:12:08.7072851Z   pre-emulator-launch-script: python3 -c 'from pathlib import Path; p=next(Path.home().joinpath(".android","avd").rglob("config.ini")); keys={"hw.lcd.width","hw.lcd.height","hw.lcd.density","showDeviceFrame"}; lines=[ln for ln in p.read_text().splitlines() if ln.split("=",1)[0] not in keys]; lines += ["hw.lcd.width=1440","hw.lcd.height=3088","hw.lcd.density=500","showDeviceFrame=no"]; p.write_text("\n".join(lines)+"\n"); print("AVD_CONFIG", p)'
+
+2026-11-02T00:12:08.7079120Z   script: adb shell wm size 1440x3088
+adb shell wm density 500
+adb shell cmd overlay enable com.android.internal.display.cutout.emulation.hole
+adb shell cmd overlay list | tr -d '\r' | grep -E '\[x\].*com\.android\.internal\.display\.cutout\.emulation\.hole'
+adb shell wm size | tr -d '\r' | grep 1440x3088
+adb shell wm density | tr -d '\r' | grep 500
+echo PROFILE_RESOLUTION report=Android17/API35 booted_release=$(adb shell getprop ro.build.version.release | tr -d '\r') booted_sdk=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
+echo Android 17 is API 37. API 35 is Android 15. Booting the report numeric API at S23 Ultra geometry.
+echo EMULATOR_BOOTED $(adb shell getprop ro.build.version.release | tr -d '\r') $(adb shell getprop ro.build.version.sdk | tr -d '\r') $(adb shell wm size | tr -d '\r') $(adb shell wm density | tr -d '\r') punch-hole=hole
+cd android-app && chmod +x gradlew && ./gradlew :app:connectedDebugAndroidTest -PDO_API_BASE_URL=https://127.0.0.1:1/api/v1/ -Pandroid.testInstrumentationRunnerArguments.class=br.com.concursoprep.app.QuestionInsetCollisionTest,br.com.concursoprep.app.DurableStorageTest,br.com.concursoprep.app.AccountLinkSettingsTest,br.com.concursoprep.app.QuestionPracticeTest --no-daemon --console=plain
+sleep 2
+adb logcat -d -s INSET_CHECK:I
+adb logcat -d | tr -d '\r' | grep -E 'INSET_CHECK.*success'
+
+2026-11-02T00:12:08.7084609Z   cores: 2
+2026-11-02T00:12:08.7084857Z   avd-name: test
+2026-11-02T00:12:08.7085126Z   force-avd-creation: true
+2026-11-02T00:12:08.7085428Z   emulator-boot-timeout: 600
+2026-11-02T00:12:08.7085729Z   emulator-port: 5554
+2026-11-02T00:12:08.7086015Z   disable-spellchecker: false
+2026-11-02T00:12:08.7086327Z   disable-linux-hw-accel: auto
+2026-11-02T00:12:08.7086630Z   enable-hw-keyboard: false
+2026-11-02T00:12:08.7086911Z   channel: stable
+2026-11-02T00:12:08.7087162Z env:
+2026-11-02T00:12:08.7087513Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21.0.13-9/x64
+2026-11-02T00:12:08.7088071Z   JAVA_HOME_21_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21.0.13-9/x64
+2026-11-02T00:12:08.7088563Z   GRADLE_ACTION_ID: gradle/actions/setup-gradle
+2026-11-02T00:12:08.7088933Z   GRADLE_USER_HOME: /home/runner/.gradle
+2026-11-02T00:12:08.7089285Z   GRADLE_BUILD_ACTION_SETUP_COMPLETED: true
+2026-11-02T00:12:08.7089641Z   GRADLE_BUILD_ACTION_CACHE_RESTORED: true
+2026-11-02T00:12:08.7090422Z   DEVELOCITY_INJECTION_INIT_SCRIPT_NAME: gradle-actions.inject-develocity.init.gradle
+2026-11-02T00:12:08.7090968Z   DEVELOCITY_INJECTION_CUSTOM_VALUE: gradle-actions
+2026-11-02T00:12:08.7091347Z   GITHUB_DEPENDENCY_GRAPH_ENABLED: false
+2026-11-02T00:12:08.7091666Z ##[endgroup]
+2026-11-02T00:12:08.7749582Z ##[group]Configure emulator
+2026-11-02T00:12:08.7754623Z API level: 35
+2026-11-02T00:12:08.7754940Z System image API level: 35
+2026-11-02T00:12:08.7755391Z target: google_apis
+2026-11-02T00:12:08.7755807Z CPU architecture: x86_64
+2026-11-02T00:12:08.7756108Z Hardware profile: 
+2026-11-02T00:12:08.7756374Z Cores: 2
+2026-11-02T00:12:08.7756795Z RAM size: 
+2026-11-02T00:12:08.7757191Z Heap size: 
+2026-11-02T00:12:08.7758046Z SD card path or size: 
+2026-11-02T00:12:08.7758785Z Disk size: 
+2026-11-02T00:12:08.7759232Z AVD name: test
+2026-11-02T00:12:08.7760022Z force avd creation: true
+2026-11-02T00:12:08.7760665Z Emulator boot timeout: 600
+2026-11-02T00:12:08.7761008Z emulator port: 5554
+2026-11-02T00:12:08.7761671Z emulator options: -no-window -no-snapshot -no-audio -no-boot-anim -gpu swiftshader_indirect
+2026-11-02T00:12:08.7762240Z disable animations: true
+2026-11-02T00:12:08.7763043Z disable spellchecker: false
+2026-11-02T00:12:08.7763955Z disable Linux hardware acceleration: false
+2026-11-02T00:12:08.7764830Z enable hardware keyboard: false
+2026-11-02T00:12:08.7765519Z Channel: 0 (stable)
+2026-11-02T00:12:08.7767925Z Script:
+2026-11-02T00:12:08.7768549Z adb shell wm size 1440x3088
+2026-11-02T00:12:08.7769298Z adb shell wm density 500
+2026-11-02T00:12:08.7770641Z adb shell cmd overlay enable com.android.internal.display.cutout.emulation.hole
+2026-11-02T00:12:08.7772115Z adb shell cmd overlay list | tr -d '\r' | grep -E '\[x\].*com\.android\.internal\.display\.cutout\.emulation\.hole'
+2026-11-02T00:12:08.7773331Z adb shell wm size | tr -d '\r' | grep 1440x3088
+2026-11-02T00:12:08.7774094Z adb shell wm density | tr -d '\r' | grep 500
+2026-11-02T00:12:08.7775323Z echo PROFILE_RESOLUTION report=Android17/API35 booted_release=$(adb shell getprop ro.build.version.release | tr -d '\r') booted_sdk=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
+2026-11-02T00:12:08.7776804Z echo Android 17 is API 37. API 35 is Android 15. Booting the report numeric API at S23 Ultra geometry.
+2026-11-02T00:12:08.7778308Z echo EMULATOR_BOOTED $(adb shell getprop ro.build.version.release | tr -d '\r') $(adb shell getprop ro.build.version.sdk | tr -d '\r') $(adb shell wm size | tr -d '\r') $(adb shell wm density | tr -d '\r') punch-hole=hole
+2026-11-02T00:12:08.7782375Z cd android-app && chmod +x gradlew && ./gradlew :app:connectedDebugAndroidTest -PDO_API_BASE_URL=https://127.0.0.1:1/api/v1/ -Pandroid.testInstrumentationRunnerArguments.class=br.com.concursoprep.app.QuestionInsetCollisionTest,br.com.concursoprep.app.DurableStorageTest,br.com.concursoprep.app.AccountLinkSettingsTest,br.com.concursoprep.app.QuestionPracticeTest --no-daemon --console=plain
+2026-11-02T00:12:08.7786192Z sleep 2
+2026-11-02T00:12:08.7786667Z adb logcat -d -s INSET_CHECK:I
+2026-11-02T00:12:08.7787277Z adb logcat -d | tr -d '\r' | grep -E 'INSET_CHECK.*success'
+2026-11-02T00:12:08.7787987Z Pre emulator launch script:
+2026-11-02T00:12:08.7790946Z python3 -c 'from pathlib import Path; p=next(Path.home().joinpath(".android","avd").rglob("config.ini")); keys={"hw.lcd.width","hw.lcd.height","hw.lcd.density","showDeviceFrame"}; lines=[ln for ln in p.read_text().splitlines() if ln.split("=",1)[0] not in keys]; lines += ["hw.lcd.width=1440","hw.lcd.height=3088","hw.lcd.density=500","showDeviceFrame=no"]; p.write_text("\n".join(lines)+"\n"); print("AVD_CONFIG", p)'
+2026-11-02T00:12:08.7793596Z ##[endgroup]
+2026-11-02T00:12:08.7794443Z ##[group]Install Android SDK
+2026-11-02T00:12:08.7840968Z [command]/usr/bin/sh -c \yes | sdkmanager --licenses > /dev/null
+2026-11-02T00:12:18.1164883Z Installing latest build tools, platform tools, and platform.
+2026-11-02T00:12:18.1179651Z [command]/usr/bin/sh -c \sdkmanager --install 'build-tools;37.0.0' platform-tools 'platforms;android-35'> /dev/null
+2026-11-02T00:12:19.8062659Z Installing latest emulator.
+2026-11-02T00:12:19.8077885Z [command]/usr/bin/sh -c \sdkmanager --install emulator --channel=0 > /dev/null
+2026-11-02T00:12:28.3065004Z Installing system images.
+2026-11-02T00:12:28.3079524Z [command]/usr/bin/sh -c \sdkmanager --install 'system-images;android-35;google_apis;x86_64' --channel=0 > /dev/null
+2026-11-02T00:13:14.2119193Z ##[endgroup]
+2026-11-02T00:13:14.2120924Z ##[group]Create AVD
+2026-11-02T00:13:14.2121704Z Creating AVD.
+2026-11-02T00:13:14.2170754Z [command]/usr/bin/sh -c \echo no | avdmanager create avd --force -n test --package 'system-images;android-35;google_apis;x86_64'
+2026-11-02T00:13:15.0113719Z Loading local repository...                                                     
+2026-11-02T00:13:15.0130668Z [=========                              ] 25% Loading local repository...       
+2026-11-02T00:13:15.0131270Z [=========                              ] 25% Fetch remote repository...        
+2026-11-02T00:13:15.0131787Z [=======================================] 100% Fetch remote repository...       
+2026-11-02T00:13:15.1027973Z Auto-selecting single ABI x86_64
+2026-11-02T00:13:15.1918718Z Do you wish to create a custom hardware profile? [no] [command]/usr/bin/sh -c \printf 'hw.cpu.ncore=2\n' >> /home/runner/.android/avd/test.avd/config.ini
+2026-11-02T00:13:15.1942372Z ##[endgroup]
+2026-11-02T00:13:15.1943458Z ##[group]Run pre emulator launch script
+2026-11-02T00:13:15.1958837Z [command]/usr/bin/sh -c python3 -c 'from pathlib import Path; p=next(Path.home().joinpath(".android","avd").rglob("config.ini")); keys={"hw.lcd.width","hw.lcd.height","hw.lcd.density","showDeviceFrame"}; lines=[ln for ln in p.read_text().splitlines() if ln.split("=",1)[0] not in keys]; lines += ["hw.lcd.width=1440","hw.lcd.height=3088","hw.lcd.density=500","showDeviceFrame=no"]; p.write_text("\n".join(lines)+"\n"); print("AVD_CONFIG", p)'
+2026-11-02T00:13:15.2200418Z AVD_CONFIG /home/runner/.android/avd/test.avd/config.ini
+2026-11-02T00:13:15.2241471Z ##[endgroup]
+2026-11-02T00:13:15.2242760Z ##[group]Launch Emulator
+2026-11-02T00:13:15.2243355Z Starting emulator.
+2026-11-02T00:13:15.2256944Z [command]/usr/bin/sh -c \/usr/local/lib/android/sdk/emulator/emulator -port 5554 -avd test -no-window -no-snapshot -no-audio -no-boot-anim -gpu swiftshader_indirect &
+2026-11-02T00:13:15.2384263Z INFO         | Android emulator version 37.2.13.0 (build_id 16740729) (CL:N/A)
+2026-11-02T00:13:15.2385021Z INFO         | Graphics backend: gfxstream
+2026-11-02T00:13:15.2385625Z INFO         | Found systemPath /usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64/
+2026-11-02T00:13:15.8660674Z INFO         | Saving last run QEMU version for the AVD to 2
+2026-11-02T00:13:15.8661496Z INFO         | Increasing RAM size to 4096MB
+2026-11-02T00:13:15.8662183Z ##############################################################################
+2026-11-02T00:13:15.8662955Z ##                        WARNING - ACTION REQUIRED                         ##
+2026-11-02T00:13:15.8663847Z ##  Consider using the '-metrics-collection' flag to help improve the       ##
+2026-11-02T00:13:15.8664793Z ##  emulator by sending anonymized usage data. Or use the '-no-metrics'     ##
+2026-11-02T00:13:15.8665736Z ##  flag to bypass this warning and turn off the metrics collection.        ##
+2026-11-02T00:13:15.8666664Z ##  In a future release this warning will turn into a one-time blocking     ##
+2026-11-02T00:13:15.8667647Z ##  prompt to ask for explicit user input regarding metrics collection.     ##
+2026-11-02T00:13:15.8668463Z ##                                                                          ##
+2026-11-02T00:13:15.8669288Z ##  Please see '-help-metrics-collection' for more details. You can use     ##
+2026-11-02T00:13:15.8670480Z ##  '-metrics-to-file' or '-metrics-to-console' flags to see what type of   ##
+2026-11-02T00:13:15.8671446Z ##  data is being collected by emulator as part of usage statistics.        ##
+2026-11-02T00:13:15.8672262Z ##############################################################################
+2026-11-02T00:13:15.8672931Z INFO         | Guest GLES Driver: Auto (ext controls)
+2026-11-02T00:13:15.8673826Z INFO         | emuglConfig_init: vulkan_mode_selected:swiftshader gles_mode_selected:swiftshader
+2026-11-02T00:13:15.8674722Z INFO         | Checking system compatibility:
+2026-11-02T00:13:15.8675361Z INFO         |   Checking: hasSufficientDiskSpace
+2026-11-02T00:13:15.8676086Z INFO         |      Ok: Disk space requirements to run avd: `test` are met
+2026-11-02T00:13:15.8676809Z INFO         |   Checking: hasSufficientHwGpu
+2026-11-02T00:13:15.8677513Z INFO         |      Ok: Hardware GPU compatibility checks are not required
+2026-11-02T00:13:15.8678671Z INFO         |   Checking: hasSufficientSystem
+2026-11-02T00:13:15.8679635Z INFO         |      Ok: System requirements to run avd: `test` are met
+2026-11-02T00:13:15.8681663Z WARNING      | Feature QuickbootFileBacked is disabled due to stability issues, if you really want that, the environment variable ANDROID_EMU_FORCE_QUICKBOOT_FILE_BACKED need to set to 1
+2026-11-02T00:13:15.8683233Z ERROR        | Unable to connect to adb daemon on port: 5037
+2026-11-02T00:13:15.8718652Z INFO         | Storing crashdata in: /tmp/android-runner/emu-crash-37.2.13.db, detection is enabled for process: 2748
+2026-11-02T00:13:15.8720182Z INFO         | Initializing gfxstream backend
+2026-11-02T00:13:15.8730255Z INFO         | startOpenglesRendererImpl: gpu info
+2026-11-02T00:13:15.8730899Z INFO         | 
+2026-11-02T00:13:15.8733707Z INFO         | initIcdPaths: ICD set to 'swiftshader', using Swiftshader ICD
+2026-11-02T00:13:15.8735196Z INFO         | Setting ICD filenames for the loader = /usr/local/lib/android/sdk/emulator/lib64/vulkan/vk_swiftshader_icd.json
+2026-11-02T00:13:15.8736917Z INFO         | SharedLibrary::open for [/usr/local/lib/android/sdk/emulator/qemu/linux-x86_64/lib64/vulkan/libvulkan.so]
+2026-11-02T00:13:15.8738604Z INFO         | SharedLibrary::open for [/usr/local/lib/android/sdk/emulator/qemu/linux-x86_64/lib64/vulkan/libvulkan.so.1]
+2026-11-02T00:13:15.8740367Z INFO         | SharedLibrary::open for [/usr/local/lib/android/sdk/emulator/lib64/vulkan/libvulkan.so]
+2026-11-02T00:13:15.8741659Z INFO         | Added library: /usr/local/lib/android/sdk/emulator/lib64/vulkan/libvulkan.so
+2026-11-02T00:13:15.8789334Z INFO         | Selecting Vulkan device: SwiftShader Device (Subzero), Version: 1.3.0
+2026-11-02T00:13:15.8790689Z INFO         | Using Vulkan externalMemoryMode: OpaqueFd for VkEmulation
+2026-11-02T00:13:15.9486693Z INFO         | Format VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16 does not support YCbCr sampler conversion
+2026-11-02T00:13:15.9518372Z INFO         | SharedLibrary::open for [libX11]
+2026-11-02T00:13:15.9522551Z WARNING      | Could not open libX11.so, try libX11.so.6
+2026-11-02T00:13:15.9523149Z INFO         | SharedLibrary::open for [libX11.so.6]
+2026-11-02T00:13:15.9530934Z INFO         | SharedLibrary::open for [libX11-xcb]
+2026-11-02T00:13:15.9531705Z WARNING      | Could not open libX11-xcb.so, try libX11-xcb.so.1
+2026-11-02T00:13:15.9532470Z INFO         | SharedLibrary::open for [libX11-xcb.so.1]
+2026-11-02T00:13:15.9605531Z INFO         | Initializing VkEmulation features:
+2026-11-02T00:13:15.9605979Z INFO         |     glInteropSupported: false
+2026-11-02T00:13:15.9606379Z INFO         |     useDeferredCommands: true
+2026-11-02T00:13:15.9606792Z INFO         |     createResourceWithRequirements: true
+2026-11-02T00:13:15.9607231Z INFO         |     useVulkanComposition: false
+2026-11-02T00:13:15.9607614Z INFO         |     useVulkanNativeSwapchain: false
+2026-11-02T00:13:15.9608000Z INFO         |     enable guestRenderDoc: false
+2026-11-02T00:13:15.9608363Z INFO         |     ASTC LDR emulation mode: Gpu
+2026-11-02T00:13:15.9608766Z INFO         |     enable ETC2 emulation: true
+2026-11-02T00:13:15.9609132Z INFO         |     enable Ycbcr emulation: false
+2026-11-02T00:13:15.9609488Z INFO         |     guestVulkanOnly: false
+2026-11-02T00:13:15.9610217Z INFO         |     useDedicatedAllocations: false
+2026-11-02T00:13:15.9610611Z INFO         |     guestVulkanMaxApiVersion: 1.3.0
+2026-11-02T00:13:15.9611020Z INFO         |     enableProtectedMemoryEmulation: false
+2026-11-02T00:13:15.9615081Z INFO         | Graphics Adapter Vendor Google (Google Inc.)
+2026-11-02T00:13:15.9616634Z INFO         | Graphics Adapter Android Emulator OpenGL ES Translator (Google SwiftShader)
+2026-11-02T00:13:15.9618259Z INFO         | Graphics API Version OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+2026-11-02T00:13:15.9621914Z INFO         | Graphics API Extensions GL_OES_EGL_sync GL_OES_EGL_image GL_OES_EGL_image_external GL_OES_depth24 GL_OES_depth32 GL_OES_element_index_uint GL_OES_texture_float GL_OES_texture_float_linear GL_OES_compressed_paletted_texture GL_OES_compressed_ETC1_RGB8_texture GL_OES_depth_texture GL_OES_texture_half_float GL_OES_texture_half_float_linear GL_OES_packed_depth_stencil GL_OES_vertex_half_float GL_OES_standard_derivatives GL_OES_texture_npot GL_OES_rgb8_rgba8 GL_EXT_color_buffer_float GL_EXT_color_buffer_half_float GL_EXT_texture_format_BGRA8888 GL_APPLE_texture_format_BGRA8888 
+2026-11-02T00:13:15.9624655Z INFO         | Graphics Device Extensions N/A
+2026-11-02T00:13:15.9625497Z INFO         | Disabling sparse binding feature support
+2026-11-02T00:13:15.9697489Z INFO         | Sending adb public key [QAAAAHGOFVRvjeOt0O+EOZ/g5JLddf5YHy7oopPNVOg6XLJUOgscjaq/YWlVYSXH25XmA6xhOVUWiHwP5g+WPQ5dqbZgiWCvCHFO3MDg1vRunwVVKnxNQwMNpvFaPdrWbLBJWszH7MWdMOyATO2xdVnK6V06OIsGwR8NEPkiM8qCpcyqXGewulWa5o4rxIYQ+gGfCM6PUOd4JzDK/FJMFalmgFMxpt58mRA5g6em5uQUVeYCmOVx/4xDmPytUJ7XtWfkctdpDVbKw03/0Z2YDsCHXBqE276NVb4mjS27i9BL+fwZ8pGetyjl9QM+mOVkJjSDNgqsPS3qygndBwGs6+XcKwvFPz/FCaZxTMSLeZhpiIFr/ZT2QL/zrSOyCGs+abiSF6DbjKuEDtw4CovQoSUjzSBDxNyHChLcGcyeLzktGUZPlPL8SqyJDaR1zbPGKaBR+yu4r8Q6Smvuf8Pr2oMzLw1NaB6cCyR6VYmvnCQFPjuA65C9UieHZ78RHb0Hx5JRlBNPEr1tKTSCP5D4zK044r6q3n4hdWW+qAoNz5+naebYNhfNpg7oZO4eHgVt6EhkdvG+wmlC/fW+9EFyLkPabH36/a2QeEum76O2fgv7SRUzS1rWhybaZqIVVGvwSnja0kCjjLzUjd07CvT2tm1McgLfsIXo9chuqVwVnGipXzjm2MLQFQEAAQA= runner@unknown]
+2026-11-02T00:13:15.9704248Z INFO         | Userspace boot properties:
+2026-11-02T00:13:15.9705351Z INFO         |   androidboot.boot_devices=pci0000:00/0000:00:03.0 pci0000:00/0000:00:06.0
+2026-11-02T00:13:15.9706307Z INFO         |   androidboot.dalvik.vm.heapsize=576m
+2026-11-02T00:13:15.9707037Z INFO         |   androidboot.debug.hwui.renderer=skiagl
+2026-11-02T00:13:15.9707811Z INFO         |   androidboot.debug.sf.nobootanimation=1
+2026-11-02T00:13:15.9708500Z INFO         |   androidboot.hardware=ranchu
+2026-11-02T00:13:15.9708995Z INFO         |   androidboot.hardware.gltransport=pipe
+2026-11-02T00:13:15.9709402Z INFO         |   androidboot.hardware.vulkan=ranchu
+2026-11-02T00:13:15.9710119Z INFO         |   androidboot.logcat=*:V
+2026-11-02T00:13:15.9710516Z INFO         |   androidboot.opengles.version=196608
+2026-11-02T00:13:15.9710895Z INFO         |   androidboot.qemu=1
+2026-11-02T00:13:15.9714634Z INFO         |   androidboot.qemu.adb.pubkey=QAAAAHGOFVRvjeOt0O+EOZ/g5JLddf5YHy7oopPNVOg6XLJUOgscjaq/YWlVYSXH25XmA6xhOVUWiHwP5g+WPQ5dqbZgiWCvCHFO3MDg1vRunwVVKnxNQwMNpvFaPdrWbLBJWszH7MWdMOyATO2xdVnK6V06OIsGwR8NEPkiM8qCpcyqXGewulWa5o4rxIYQ+gGfCM6PUOd4JzDK/FJMFalmgFMxpt58mRA5g6em5uQUVeYCmOVx/4xDmPytUJ7XtWfkctdpDVbKw03/0Z2YDsCHXBqE276NVb4mjS27i9BL+fwZ8pGetyjl9QM+mOVkJjSDNgqsPS3qygndBwGs6+XcKwvFPz/FCaZxTMSLeZhpiIFr/ZT2QL/zrSOyCGs+abiSF6DbjKuEDtw4CovQoSUjzSBDxNyHChLcGcyeLzktGUZPlPL8SqyJDaR1zbPGKaBR+yu4r8Q6Smvuf8Pr2oMzLw1NaB6cCyR6VYmvnCQFPjuA65C9UieHZ78RHb0Hx5JRlBNPEr1tKTSCP5D4zK044r6q3n4hdWW+qAoNz5+naebYNhfNpg7oZO4eHgVt6EhkdvG+wmlC/fW+9EFyLkPabH36/a2QeEum76O2fgv7SRUzS1rWhybaZqIVVGvwSnja0kCjjLzUjd07CvT2tm1McgLfsIXo9chuqVwVnGipXzjm2MLQFQEAAQA= runner@unknown
+2026-11-02T00:13:15.9718475Z INFO         |   androidboot.qemu.avd_name=test
+2026-11-02T00:13:15.9718902Z INFO         |   androidboot.qemu.camera_hq_edge_processing=0
+2026-11-02T00:13:15.9719337Z INFO         |   androidboot.qemu.camera_protocol_ver=1
+2026-11-02T00:13:15.9720057Z INFO         |   androidboot.qemu.cpuvulkan.version=4206592
+2026-11-02T00:13:15.9720578Z INFO         |   androidboot.qemu.gltransport.drawFlushInterval=800
+2026-11-02T00:13:15.9721048Z INFO         |   androidboot.qemu.gltransport.name=pipe
+2026-11-02T00:13:15.9721459Z INFO         |   androidboot.qemu.hwcodec.avcdec=2
+2026-11-02T00:13:15.9721872Z INFO         |   androidboot.qemu.hwcodec.hevcdec=2
+2026-11-02T00:13:15.9722261Z INFO         |   androidboot.qemu.hwcodec.vpxdec=2
+2026-11-02T00:13:15.9722734Z INFO         |   androidboot.qemu.settings.system.screen_off_timeout=2147483647
+2026-11-02T00:13:15.9723220Z INFO         |   androidboot.qemu.skin=1440x3088
+2026-11-02T00:13:15.9723617Z INFO         |   androidboot.qemu.virtiowifi=1
+2026-11-02T00:13:15.9724246Z INFO         |   androidboot.qemu.vsync=60
+2026-11-02T00:13:15.9724788Z INFO         |   androidboot.serialno=EMULATOR37X2X13X0
+2026-11-02T00:13:15.9725448Z INFO         |   androidboot.vbmeta.digest=b3271ba499104f4631ae3723913d5c12574e01715fce5b82d60beed097ead264
+2026-11-02T00:13:15.9726030Z INFO         |   androidboot.vbmeta.hash_alg=sha256
+2026-11-02T00:13:15.9726414Z INFO         |   androidboot.vbmeta.size=6720
+2026-11-02T00:13:15.9726788Z INFO         |   androidboot.veritymode=enforcing
+2026-11-02T00:13:15.9907253Z WARNING: cannnot unmap ptr 0x7fa3ce601000 as it is in the protected range from 0x7fa2ce600000 to 0x7fa3ce800000
+2026-11-02T00:13:15.9950414Z pc_memory_init: above 4g size: 40000000
+2026-11-02T00:13:16.0249265Z INFO         | Monitoring duration of emulator setup.
+2026-11-02T00:13:17.0126548Z INFO         | Successfully initialized netsim WiFi
+2026-11-02T00:13:17.0127510Z INFO         | Activated packet streamer for bluetooth emulation
+2026-11-02T00:13:17.0188623Z INFO         | Setting display: 0 configuration to: 1440x3088, dpi: 500x500 
+2026-11-02T00:13:17.0189290Z INFO         | setDisplayActiveConfig: id:0, 1440x3088
+2026-11-02T00:13:17.0190216Z INFO         | emulatorSetupEnvironment: Environment scene is not required
+2026-11-02T00:13:17.0280909Z USER_INFO    | Emulator is performing a full startup. This may take upto two minutes, or more.
+2026-11-02T00:13:17.0286254Z WARNING      | Failed to process .ini file /home/runner/.android/emu-update-last-check.ini for reading.
+2026-11-02T00:13:17.2954751Z WARNING      | Failed to process .ini file /home/runner/.android/emu-update-last-check.ini for reading.
+2026-11-02T00:13:25.2327417Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-02T00:13:25.2350400Z * daemon not running; starting now at tcp:5037
+2026-11-02T00:13:25.3875534Z * daemon started successfully
+2026-11-02T00:13:25.3886981Z adb: device offline
+2026-11-02T00:13:25.3892129Z The process '/usr/local/lib/android/sdk/platform-tools/adb' failed with exit code 1
+2026-11-02T00:13:27.3951548Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-02T00:13:27.4002820Z adb: device offline
+2026-11-02T00:13:27.4009601Z The process '/usr/local/lib/android/sdk/platform-tools/adb' failed with exit code 1
+2026-11-02T00:13:29.4082068Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-02T00:13:29.4254373Z 
+2026-11-02T00:13:31.4361259Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-02T00:13:31.4660287Z 
+2026-11-02T00:13:33.4741547Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-02T00:13:33.5022495Z 
+2026-11-02T00:13:35.5087298Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-02T00:13:35.5382248Z 
+2026-11-02T00:13:37.5469658Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-02T00:13:37.5687823Z 
+2026-11-02T00:13:39.5753867Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-02T00:13:39.6003436Z 
+2026-11-02T00:13:41.6105477Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-02T00:13:41.6542376Z 
+2026-11-02T00:13:43.6601331Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-02T00:13:43.6823163Z 
+2026-11-02T00:13:45.6861736Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-02T00:13:45.7085065Z 
+2026-11-02T00:13:47.7131864Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-02T00:13:47.7368272Z 
+2026-11-02T00:13:49.7472110Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-02T00:13:49.7688671Z 
+2026-11-02T00:13:51.2297597Z INFO         | Boot completed in 35963 ms
+2026-11-02T00:13:51.2322281Z INFO         | Increasing screen off timeout, logcat buffer size to 2M.
+2026-11-02T00:13:51.7761309Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-02T00:13:51.8302875Z 1
+2026-11-02T00:13:51.8379243Z Emulator booted.
+2026-11-02T00:13:51.8429037Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell input keyevent 82
+2026-11-02T00:13:52.3071135Z Disabling animations.
+2026-11-02T00:13:52.3123871Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell settings put global window_animation_scale 0.0
+2026-11-02T00:13:52.4041579Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell settings put global transition_animation_scale 0.0
+2026-11-02T00:13:52.5474981Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell settings put global animator_duration_scale 0.0
+2026-11-02T00:13:52.6652413Z ##[endgroup]
+2026-11-02T00:13:52.6681376Z [command]/usr/bin/sh -c adb shell wm size 1440x3088
+2026-11-02T00:13:52.8552742Z [command]/usr/bin/sh -c adb shell wm density 500
+2026-11-02T00:13:52.9045716Z [command]/usr/bin/sh -c adb shell cmd overlay enable com.android.internal.display.cutout.emulation.hole
+2026-11-02T00:13:53.1010607Z [command]/usr/bin/sh -c adb shell cmd overlay list | tr -d '\r' | grep -E '\[x\].*com\.android\.internal\.display\.cutout\.emulation\.hole'
+2026-11-02T00:13:53.1271172Z [x] com.android.internal.display.cutout.emulation.hole
+2026-11-02T00:13:53.1300894Z [command]/usr/bin/sh -c adb shell wm size | tr -d '\r' | grep 1440x3088
+2026-11-02T00:13:53.1727710Z Physical size: 1440x3088
+2026-11-02T00:13:53.1757699Z [command]/usr/bin/sh -c adb shell wm density | tr -d '\r' | grep 500
+2026-11-02T00:13:53.4311443Z Physical density: 500
+2026-11-02T00:13:53.4432069Z [command]/usr/bin/sh -c echo PROFILE_RESOLUTION report=Android17/API35 booted_release=$(adb shell getprop ro.build.version.release | tr -d '\r') booted_sdk=$(adb shell getprop ro.build.version.sdk | tr -d '\r')
+2026-11-02T00:13:53.5191931Z PROFILE_RESOLUTION report=Android17/API35 booted_release=15 booted_sdk=35
+2026-11-02T00:13:53.5220954Z [command]/usr/bin/sh -c echo Android 17 is API 37. API 35 is Android 15. Booting the report numeric API at S23 Ultra geometry.
+2026-11-02T00:13:53.5246881Z Android 17 is API 37. API 35 is Android 15. Booting the report numeric API at S23 Ultra geometry.
+2026-11-02T00:13:53.5286368Z [command]/usr/bin/sh -c echo EMULATOR_BOOTED $(adb shell getprop ro.build.version.release | tr -d '\r') $(adb shell getprop ro.build.version.sdk | tr -d '\r') $(adb shell wm size | tr -d '\r') $(adb shell wm density | tr -d '\r') punch-hole=hole
+2026-11-02T00:13:53.6200851Z EMULATOR_BOOTED 15 35 Physical size: 1440x3088 Physical density: 500 punch-hole=hole
+2026-11-02T00:13:53.6266081Z [command]/usr/bin/sh -c cd android-app && chmod +x gradlew && ./gradlew :app:connectedDebugAndroidTest -PDO_API_BASE_URL=https://127.0.0.1:1/api/v1/ -Pandroid.testInstrumentationRunnerArguments.class=br.com.concursoprep.app.QuestionInsetCollisionTest,br.com.concursoprep.app.DurableStorageTest,br.com.concursoprep.app.AccountLinkSettingsTest,br.com.concursoprep.app.QuestionPracticeTest --no-daemon --console=plain
+2026-11-02T00:13:55.1351979Z To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.3.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+2026-11-02T00:13:58.0311579Z Daemon will be stopped at the end of the build 
+2026-11-02T00:14:10.7350840Z > Task :buildSrc:compileJava
+2026-11-02T00:14:10.7410984Z > Task :buildSrc:compileGroovy NO-SOURCE
+2026-11-02T00:14:10.7440569Z > Task :buildSrc:processResources NO-SOURCE
+2026-11-02T00:14:10.7441327Z > Task :buildSrc:classes
+2026-11-02T00:14:10.8403749Z > Task :buildSrc:jar
+2026-11-02T00:14:27.7360554Z 
+2026-11-02T00:14:27.7427067Z > Configure project :app
+2026-11-02T00:14:27.7469647Z w: file:///home/runner/work/cogniva/cogniva/android-app/app/build.gradle.kts:58:5: 'fun BaseAppModuleExtension.kotlinOptions(configure: Action<KotlinJvmOptions>): Unit' is deprecated. The kotlinOptions types are deprecated, please migrate to the compilerOptions types. More details are here: https://kotl.in/u1r8ln.
+2026-11-02T00:14:31.5380352Z 
+2026-11-02T00:14:31.5391369Z > Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+2026-11-02T00:14:31.5392537Z > Task :app:preBuild UP-TO-DATE
+2026-11-02T00:14:31.5393706Z > Task :app:preDebugBuild UP-TO-DATE
+2026-11-02T00:14:31.7320926Z > Task :app:generateDebugBuildConfig
+2026-11-02T00:14:32.5294735Z > Task :app:generateDebugResValues
+2026-11-02T00:14:32.6300918Z > Task :app:checkDebugAarMetadata
+2026-11-02T00:14:32.7362086Z > Task :app:mapDebugSourceSetPaths
+2026-11-02T00:14:32.7362975Z > Task :app:generateDebugResources
+2026-11-02T00:14:34.8347305Z > Task :app:packageDebugResources
+2026-11-02T00:14:35.8300828Z > Task :app:createDebugCompatibleScreenManifests
+2026-11-02T00:14:35.8330585Z > Task :app:extractDeepLinksDebug
+2026-11-02T00:14:36.0294148Z > Task :app:parseDebugLocalResources
+2026-11-02T00:14:36.0336278Z > Task :app:mergeDebugResources
+2026-11-02T00:14:36.5290988Z > Task :app:processDebugMainManifest
+2026-11-02T00:14:36.9307867Z > Task :app:processDebugManifest
+2026-11-02T00:14:37.1331703Z > Task :app:processDebugManifestForPackage
+2026-11-02T00:14:37.1351427Z > Task :app:javaPreCompileDebug
+2026-11-02T00:14:37.4291526Z > Task :app:preDebugAndroidTestBuild SKIPPED
+2026-11-02T00:14:37.7325831Z > Task :app:processDebugAndroidTestManifest
+2026-11-02T00:14:37.7360707Z > Task :app:generateDebugAndroidTestBuildConfig
+2026-11-02T00:14:37.7390490Z > Task :app:checkDebugAndroidTestAarMetadata
+2026-11-02T00:14:37.7417574Z > Task :app:generateDebugAndroidTestResValues
+2026-11-02T00:14:37.7451974Z > Task :app:mapDebugAndroidTestSourceSetPaths
+2026-11-02T00:14:37.8294129Z > Task :app:generateDebugAndroidTestResources
+2026-11-02T00:14:38.3293848Z > Task :app:processDebugResources
+2026-11-02T00:14:38.6291381Z > Task :app:mergeDebugAndroidTestResources
+2026-11-02T00:14:39.5291115Z > Task :app:javaPreCompileDebugAndroidTest
+2026-11-02T00:14:39.6323989Z > Task :app:mergeDebugShaders
+2026-11-02T00:14:39.6357655Z > Task :app:compileDebugShaders NO-SOURCE
+2026-11-02T00:14:39.6431323Z > Task :app:generateDebugAssets UP-TO-DATE
+2026-11-02T00:14:39.8341117Z > Task :app:mergeDebugAssets
+2026-11-02T00:14:39.8370589Z > Task :app:compressDebugAssets
+2026-11-02T00:14:39.8401383Z > Task :app:desugarDebugFileDependencies
+2026-11-02T00:14:40.0320792Z > Task :app:processDebugAndroidTestResources
+2026-11-02T00:14:40.0350403Z > Task :app:mergeDebugJniLibFolders
+2026-11-02T00:14:40.2293109Z > Task :app:checkDebugDuplicateClasses
+2026-11-02T00:14:40.3312667Z > Task :app:mergeDebugNativeLibs
+2026-11-02T00:14:40.5310981Z > Task :app:mergeLibDexDebug
+2026-11-02T00:14:40.5432488Z > Task :app:validateSigningDebug
+2026-11-02T00:14:40.5461774Z > Task :app:writeDebugAppMetadata
+2026-11-02T00:14:40.6361198Z 
+2026-11-02T00:14:40.6441353Z > Task :app:stripDebugDebugSymbols
+2026-11-02T00:14:40.6485228Z Unable to strip the following libraries, packaging them as they are: libandroidx.graphics.path.so, libdatastore_shared_counter.so. Run with --info option to learn more.
+2026-11-02T00:14:40.6548039Z 
+2026-11-02T00:14:40.6611401Z > Task :app:writeDebugSigningConfigVersions
+2026-11-02T00:14:40.6702312Z > Task :app:mergeDebugAndroidTestShaders
+2026-11-02T00:14:40.6721968Z > Task :app:compileDebugAndroidTestShaders NO-SOURCE
+2026-11-02T00:14:40.6817173Z > Task :app:generateDebugAndroidTestAssets UP-TO-DATE
+2026-11-02T00:14:40.7314241Z > Task :app:mergeDebugAndroidTestAssets
+2026-11-02T00:14:40.7423675Z > Task :app:compressDebugAndroidTestAssets
+2026-11-02T00:14:40.7452375Z > Task :app:desugarDebugAndroidTestFileDependencies
+2026-11-02T00:14:40.8351844Z > Task :app:checkDebugAndroidTestDuplicateClasses
+2026-11-02T00:14:40.8421072Z > Task :app:mergeDebugAndroidTestJniLibFolders
+2026-11-02T00:14:48.9310831Z > Task :app:mergeExtDexDebugAndroidTest
+2026-11-02T00:14:48.9334190Z > Task :app:mergeLibDexDebugAndroidTest
+2026-11-02T00:14:48.9388011Z > Task :app:mergeDebugAndroidTestNativeLibs NO-SOURCE
+2026-11-02T00:14:49.0329048Z > Task :app:stripDebugAndroidTestDebugSymbols NO-SOURCE
+2026-11-02T00:14:49.0410801Z > Task :app:validateSigningDebugAndroidTest
+2026-11-02T00:14:49.0506531Z > Task :app:writeDebugAndroidTestSigningConfigVersions
+2026-11-02T00:15:02.6338442Z > Task :app:mergeExtDexDebug
+2026-11-02T00:15:08.3290979Z > Task :app:kspDebugKotlin
+2026-11-02T00:15:38.9291676Z > Task :app:compileDebugKotlin
+2026-11-02T00:16:00.0302034Z w: file:///home/runner/work/cogniva/cogniva/android-app/app/src/main/java/br/com/concursoprep/app/ui/MainViewModel.kt:238:150 'static field GET_SIGNATURES: Int' is deprecated. Deprecated in Java.
+2026-11-02T00:16:01.8291998Z 
+2026-11-02T00:16:01.8319099Z > Task :app:compileDebugJavaWithJavac
+2026-11-02T00:16:01.9311069Z > Task :app:bundleDebugClassesToCompileJar
+2026-11-02T00:16:09.8292034Z > Task :app:dexBuilderDebug
+2026-11-02T00:16:10.5297886Z > Task :app:mergeDebugGlobalSynthetics
+2026-11-02T00:16:10.5330307Z > Task :app:processDebugJavaRes
+2026-11-02T00:16:11.3301448Z > Task :app:mergeProjectDexDebug
+2026-11-02T00:16:11.4304694Z > Task :app:kspDebugAndroidTestKotlin
+2026-11-02T00:16:12.7312895Z > Task :app:mergeDebugJavaResource
+2026-11-02T00:16:14.3302633Z > Task :app:packageDebug
+2026-11-02T00:16:14.3330730Z > Task :app:createDebugApkListingFileRedirect
+2026-11-02T00:16:15.0341808Z > Task :app:compileDebugAndroidTestKotlin
+2026-11-02T00:16:15.5296782Z > Task :app:compileDebugAndroidTestJavaWithJavac
+2026-11-02T00:16:15.7298760Z > Task :app:dexBuilderDebugAndroidTest
+2026-11-02T00:16:15.7307795Z > Task :app:mergeDebugAndroidTestGlobalSynthetics
+2026-11-02T00:16:15.7317281Z > Task :app:processDebugAndroidTestJavaRes
+2026-11-02T00:16:15.8307390Z > Task :app:mergeProjectDexDebugAndroidTest
+2026-11-02T00:16:15.8308438Z > Task :app:mergeDebugAndroidTestJavaResource
+2026-11-02T00:16:15.9316989Z > Task :app:packageDebugAndroidTest
+2026-11-02T00:16:15.9318328Z > Task :app:createDebugAndroidTestApkListingFileRedirect
+2026-11-02T00:16:16.2288177Z [EmulatorConsole]: Failed to start Emulator console for 5554
+2026-11-02T00:16:26.6340415Z 
+2026-11-02T00:16:26.6350725Z > Task :app:connectedDebugAndroidTest
+2026-11-02T00:16:26.6380390Z Starting 6 tests on emulator-5554 - 15
+2026-11-02T00:16:36.6325291Z 
+2026-11-02T00:16:36.6335005Z emulator-5554 - 15 Tests 3/6 completed. (0 skipped) (0 failed)
+2026-11-02T00:16:46.6292356Z emulator-5554 - 15 Tests 4/6 completed. (0 skipped) (0 failed)
+2026-11-02T00:16:54.8372728Z Finished 6 tests on emulator-5554 - 15
+2026-11-02T00:16:57.1361551Z gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/__reactivecircus_android-emulator-runner-1793578441953.json
+2026-11-02T00:16:57.2370282Z 
+2026-11-02T00:16:57.2401565Z [Incubating] Problems report is available at: file:///home/runner/work/cogniva/cogniva/android-app/build/reports/problems/problems-report.html
+2026-11-02T00:16:57.2420308Z 
+2026-11-02T00:16:57.2421188Z Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+2026-11-02T00:16:57.2422043Z 
+2026-11-02T00:16:57.2422936Z You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+2026-11-02T00:16:57.2423981Z 
+2026-11-02T00:16:57.2425002Z For more on this, please refer to https://docs.gradle.org/9.3.1/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+2026-11-02T00:16:57.2459120Z 
+2026-11-02T00:16:57.2466270Z BUILD SUCCESSFUL in 3m 3s
+2026-11-02T00:16:57.2467196Z 71 actionable tasks: 71 executed
+2026-11-02T00:16:57.3351795Z Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.3.1/userguide/configuration_cache_enabling.html
+2026-11-02T00:16:57.7623647Z [command]/usr/bin/sh -c sleep 2
+2026-11-02T00:16:59.7941308Z [command]/usr/bin/sh -c adb logcat -d -s INSET_CHECK:I
+2026-11-02T00:17:00.0040955Z --------- beginning of main
+2026-11-02T00:17:00.0042638Z 11-02 00:16:29.417  4225  4240 I INSET_CHECK: success topBar=136.0 obstacle=136 ctaBottom=2975.0 nav=75 window=3088.0
+2026-11-02T00:17:00.0072352Z [command]/usr/bin/sh -c adb logcat -d | tr -d '\r' | grep -E 'INSET_CHECK.*success'
+2026-11-02T00:17:00.3655551Z 11-02 00:16:29.417  4225  4240 I INSET_CHECK: success topBar=136.0 obstacle=136 ctaBottom=2975.0 nav=75 window=3088.0
+2026-11-02T00:17:00.3663039Z ##[group]Terminate Emulator
+2026-11-02T00:17:00.3675207Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 emu kill
+2026-11-02T00:17:00.3713260Z OK: killing emulator, bye bye
+2026-11-02T00:17:00.3713848Z OK
+2026-11-02T00:17:00.3720756Z ##[endgroup]
+2026-11-02T00:17:00.3722385Z INFO         | Wait for emulator (pid 2748) 20 seconds to shutdown gracefully before kill;you can set environment variable ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL(in seconds) to change the default value (20 seconds)
+2026-11-02T00:17:00.3723278Z 
+2026-11-02T00:17:00.4030225Z USER_INFO    | Snapshots have been disabled by the user, save request is ignored.
+2026-11-02T00:17:00.4031861Z INFO         | Saving snapshot 'default_boot' took 0 ms
+2026-11-02T00:17:01.1842311Z ERROR        | stop: Not implemented
+2026-11-02T00:17:01.1843383Z WARNING      | Emulator client has not yet been configured.. Call configure me first!
+2026-11-02T00:17:01.2061214Z INFO         | removeAll
+2026-11-02T00:17:01.2618475Z WARNING      | Netsim Wifi dns:///localhost:34113 is gone due to Stream removed (CANCELLED)
+2026-11-02T00:17:01.2659332Z INFO         | ipv6:%5B::1%5D:34113: Got goaway [2] err=UNAVAILABLE:GOAWAY received; Error code: 2; Debug Text: Cancelling all calls {http2_error:2}
+2026-11-02T00:17:01.7169389Z ##[group]Run actions/upload-artifact@v4
+2026-11-02T00:17:01.7170072Z with:
+2026-11-02T00:17:01.7170341Z   name: emulator-validation
+2026-11-02T00:17:01.7170753Z   path: android-app/app/build/outputs/androidTest-results/
+2026-11-02T00:17:01.7171154Z   retention-days: 5
+2026-11-02T00:17:01.7171439Z   if-no-files-found: warn
+2026-11-02T00:17:01.7171736Z   compression-level: 6
+2026-11-02T00:17:01.7172010Z   overwrite: false
+2026-11-02T00:17:01.7172287Z   include-hidden-files: false
+2026-11-02T00:17:01.7172583Z env:
+2026-11-02T00:17:01.7172939Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21.0.13-9/x64
+2026-11-02T00:17:01.7173497Z   JAVA_HOME_21_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/21.0.13-9/x64
+2026-11-02T00:17:01.7173995Z   GRADLE_ACTION_ID: gradle/actions/setup-gradle
+2026-11-02T00:17:01.7174352Z   GRADLE_USER_HOME: /home/runner/.gradle
+2026-11-02T00:17:01.7174698Z   GRADLE_BUILD_ACTION_SETUP_COMPLETED: true
+2026-11-02T00:17:01.7175085Z   GRADLE_BUILD_ACTION_CACHE_RESTORED: true
+2026-11-02T00:17:01.7175589Z   DEVELOCITY_INJECTION_INIT_SCRIPT_NAME: gradle-actions.inject-develocity.init.gradle
+2026-11-02T00:17:01.7176133Z   DEVELOCITY_INJECTION_CUSTOM_VALUE: gradle-actions
+2026-11-02T00:17:01.7176524Z   GITHUB_DEPENDENCY_GRAPH_ENABLED: false
+2026-11-02T00:17:01.7176874Z   ANDROID_AVD_HOME: /home/runner/.android/avd
+2026-11-02T00:17:01.7177216Z ##[endgroup]
+2026-11-02T00:17:01.8995054Z (node:3683) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-02T00:17:01.8996809Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-02T00:17:01.9123223Z With the provided path, there will be 19 files uploaded
+2026-11-02T00:17:01.9125215Z Artifact name is valid!
+2026-11-02T00:17:01.9126179Z Root directory input is valid!
+2026-11-02T00:17:02.2593411Z Beginning upload of artifact content to blob storage
+2026-11-02T00:17:02.3232100Z (node:3683) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-02T00:17:02.6143722Z Uploaded bytes 97360
+2026-11-02T00:17:02.6722179Z Finished uploading artifact content to blob storage!
+2026-11-02T00:17:02.6723361Z SHA256 digest of uploaded artifact zip is cf303d3b23fa48fb0a6da509a65d5f420176daabb5504674544bfb4ca4b47b6a
+2026-11-02T00:17:02.6725583Z Finalizing artifact upload
+2026-11-02T00:17:03.1704696Z Artifact emulator-validation.zip successfully finalized. Artifact ID 13106977824
+2026-11-02T00:17:03.1706404Z Artifact emulator-validation has been successfully uploaded! Final size is 97360 bytes. Artifact ID is 13106977824
+2026-11-02T00:17:03.1713708Z Artifact download URL: https://github.com/danielcdes-create/cogniva/actions/runs/41365834469/artifacts/13106977824
+2026-11-02T00:17:03.1977218Z Post job cleanup.
+2026-11-02T00:17:03.4511026Z In post-action step
+2026-11-02T00:17:03.4524566Z ##[group]Stopping Gradle daemons
+2026-11-02T00:17:03.4525756Z Stopping Gradle daemons for /home/runner/.gradle/wrapper/dists/gradle-9.3.1-bin/23ovyewtku6u96viwx3xl3oks/gradle-9.3.1
+2026-11-02T00:17:03.4543964Z [command]/home/runner/.gradle/wrapper/dists/gradle-9.3.1-bin/23ovyewtku6u96viwx3xl3oks/gradle-9.3.1/bin/gradle --stop
+2026-11-02T00:17:04.1636369Z No Gradle daemons are running.
+2026-11-02T00:17:04.1768168Z ##[endgroup]
+2026-11-02T00:17:04.1814931Z ##[group]Provision Gradle >= 9.3.1
+2026-11-02T00:17:09.0125939Z Gradle version 9.8.2 is available at /usr/bin/gradle and >= 9.3.1. Not installing.
+2026-11-02T00:17:09.0126844Z ##[endgroup]
+2026-11-02T00:17:09.0131599Z ##[group]Executing Gradle to clean up caches
+2026-11-02T00:17:09.0132348Z Cleaning up caches last used before 1793578321957
+2026-11-02T00:17:09.0135418Z [command]/usr/bin/gradle -g /home/runner/.gradle -I init.gradle --info --no-daemon --no-scan --build-cache -DGITHUB_DEPENDENCY_GRAPH_ENABLED=false -DGRADLE_ACTIONS_SKIP_BUILD_RESULT_CAPTURE=true noop
+2026-11-02T00:17:09.4485083Z Initialized native services in: /home/runner/.gradle/native
+2026-11-02T00:17:09.4521016Z Initialized jansi services in: /home/runner/.gradle/native
+2026-11-02T00:17:09.6824280Z The current JVM process isn't compatible with build requirement. The maximum heap size is insufficient.
+2026-11-02T00:17:09.6825302Z 
+2026-11-02T00:17:09.8828095Z To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.8.2/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+2026-11-02T00:17:10.0842634Z Starting process 'Gradle build daemon'. Working directory: /home/runner/.gradle/daemon/9.8.2 Command: /usr/lib/jvm/temurin-21-jdk-amd64/bin/java --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.prefs/java.util.prefs=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED --add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED --add-opens=java.base/java.nio.charset=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.xml/javax.xml.namespace=ALL-UNNAMED --add-opens=java.base/java.time=ALL-UNNAMED -XX:MaxMetaspaceSize=384m -XX:+HeapDumpOnOutOfMemoryError -Xms256m -Xmx512m -Dfile.encoding=UTF-8 -Duser.country -Duser.language=en -Duser.variant -cp /usr/share/gradle-9.8.2/lib/gradle-daemon-main-9.8.2.jar -javaagent:/usr/share/gradle-9.8.2/lib/agents/gradle-instrumentation-agent-9.8.2.jar org.gradle.launcher.daemon.bootstrap.GradleDaemon 9.8.2
+2026-11-02T00:17:10.0847214Z Successfully started process 'Gradle build daemon'
+2026-11-02T00:17:13.7824339Z An attempt to start the daemon took 3.833 secs.
+2026-11-02T00:17:13.8831729Z The client will now receive all logging from the daemon (pid: 3819). The daemon log file: /home/runner/.gradle/daemon/9.8.2/daemon-3819.out.log
+2026-11-02T00:17:13.8833060Z Daemon will be stopped at the end of the build 
+2026-11-02T00:17:14.7825807Z Using 4 worker leases.
+2026-11-02T00:17:14.9828950Z Operational build model parameters: {cachingModelBuilding=false, configurationCache=false, configurationCacheDisabledReason=null, configurationCacheParallelLoad=false, configurationCacheParallelStore=false, configureOnDemand=false, invalidateCoupledProjects=false, isolatedProjects=false, isolatedProjectsDiagnostics=false, isolatedProjectsDangerouslyIgnoreProblems=false, modelAsProjectDependency=false, modelBuilding=false, parallelModelBuilding=false, parallelProjectConfiguration=false, parallelProjectExecution=false, vintage=true}
+2026-11-02T00:17:15.6826472Z Received JVM installation metadata from '/usr/lib/jvm/temurin-21-jdk-amd64': {JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64, JAVA_VERSION=21.0.13, JAVA_VENDOR=Eclipse Adoptium, RUNTIME_NAME=OpenJDK Runtime Environment, RUNTIME_VERSION=21.0.13+9-LTS, VM_NAME=OpenJDK 64-Bit Server VM, VM_VERSION=21.0.13+9-LTS, VM_VENDOR=Eclipse Adoptium, OS_ARCH=amd64}
+2026-11-02T00:17:16.1824790Z Watching the file system is configured to be enabled if available
+2026-11-02T00:17:16.1826430Z Now considering [/home/runner/work/_temp/dummy-cleanup-project] as hierarchies to watch
+2026-11-02T00:17:16.1827947Z File system watching is active
+2026-11-02T00:17:16.8824390Z Caching disabled for Groovy DSL script compilation (cp_init) because:
+2026-11-02T00:17:16.8825243Z   Build cache is disabled
+2026-11-02T00:17:16.8825739Z   Not worth caching.
+2026-11-02T00:17:16.8826776Z Compiling initialization script '/home/runner/work/_temp/dummy-cleanup-project/init.gradle' using SubsetScriptTransformer.
+2026-11-02T00:17:17.8831198Z Caching disabled for Groovy DSL script compilation (init) because:
+2026-11-02T00:17:17.8850756Z   Build cache is disabled
+2026-11-02T00:17:17.8880479Z   Not worth caching.
+2026-11-02T00:17:17.8897105Z Compiling initialization script '/home/runner/work/_temp/dummy-cleanup-project/init.gradle' using BuildScriptTransformer.
+2026-11-02T00:17:18.5844713Z gradle/actions: Not capturing build results
+2026-11-02T00:17:18.7834815Z Starting Build
+2026-11-02T00:17:18.8823264Z Settings evaluated using settings file '/home/runner/work/_temp/dummy-cleanup-project/settings.gradle'.
+2026-11-02T00:17:18.8827444Z Using local directory build cache for the root build (location = /home/runner/.gradle/caches/build-cache-1, remove unused entries = older than 2026-11-02 00:12:01 UTC).
+2026-11-02T00:17:19.0825501Z Projects loaded. Root project using build file '/home/runner/work/_temp/dummy-cleanup-project/build.gradle'.
+2026-11-02T00:17:19.0831448Z Included projects: [root project 'dummy-cleanup-project']
+2026-11-02T00:17:19.3823853Z 
+2026-11-02T00:17:19.3842081Z > Configure project :
+2026-11-02T00:17:19.3843636Z Evaluating root project 'dummy-cleanup-project' using build file '/home/runner/work/_temp/dummy-cleanup-project/build.gradle'.
+2026-11-02T00:17:19.3845008Z All projects evaluated.
+2026-11-02T00:17:19.3845749Z Task name matched 'noop'
+2026-11-02T00:17:19.3846546Z Selected primary task 'noop' from project :
+2026-11-02T00:17:19.4824583Z Tasks to be executed: [task ':noop']
+2026-11-02T00:17:19.4825393Z Tasks that were excluded: []
+2026-11-02T00:17:19.4829403Z Resolve mutations for :noop (Thread[#51,Execution worker,5,main]) started.
+2026-11-02T00:17:19.4830679Z :noop (Thread[#51,Execution worker,5,main]) started.
+2026-11-02T00:17:19.4831165Z 
+2026-11-02T00:17:19.4831372Z > Task :noop UP-TO-DATE
+2026-11-02T00:17:19.4831902Z Skipping task ':noop' as it has no actions.
+2026-11-02T00:17:19.4832321Z 
+2026-11-02T00:17:19.4832523Z BUILD SUCCESSFUL in 10s
+2026-11-02T00:17:19.4833626Z Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.8.2/userguide/configuration_cache_enabling.html
+2026-11-02T00:17:19.5828521Z Build cache (/home/runner/.gradle/caches/build-cache-1) removing files not accessed on or after Mon Nov 02 00:12:01 UTC 2026.
+2026-11-02T00:17:19.5832521Z Build cache (/home/runner/.gradle/caches/build-cache-1) cleanup deleted 0 files/directories.
+2026-11-02T00:17:19.5835620Z Build cache (/home/runner/.gradle/caches/build-cache-1) cleaned up in 0.002 secs.
+2026-11-02T00:17:19.5838762Z groovy-dsl removing files not accessed on or after Mon Nov 02 00:12:01 UTC 2026.
+2026-11-02T00:17:19.5840216Z groovy-dsl cleanup deleted 0 files/directories.
+2026-11-02T00:17:19.5841090Z groovy-dsl cleaned up in 0.007 secs.
+2026-11-02T00:17:19.5842083Z jars (/home/runner/.gradle/caches/jars-9) cleanup deleted 0 files/directories.
+2026-11-02T00:17:19.5843302Z jars (/home/runner/.gradle/caches/jars-9) removing files not accessed on or after Mon Nov 02 00:12:01 UTC 2026.
+2026-11-02T00:17:19.5844588Z jars (/home/runner/.gradle/caches/jars-9) cleanup deleted 1 files/directories.
+2026-11-02T00:17:19.5845554Z jars (/home/runner/.gradle/caches/jars-9) cleaned up in 0.014 secs.
+2026-11-02T00:17:19.5847004Z artifact cache (/home/runner/.gradle/caches/modules-2) cleanup deleted 0 files/directories.
+2026-11-02T00:17:19.5848607Z artifact cache (/home/runner/.gradle/caches/modules-2) [subdir: /home/runner/.gradle/caches/modules-2/resources-2.1] cleanup deleted 0 files/directories.
+2026-11-02T00:17:19.5851004Z artifact cache (/home/runner/.gradle/caches/modules-2) [subdir: /home/runner/.gradle/caches/modules-2/resources-2.1] removing files not accessed on or after Mon Nov 02 00:12:01 UTC 2026.
+2026-11-02T00:17:19.5852426Z artifact cache (/home/runner/.gradle/caches/modules-2) [subdir: /home/runner/.gradle/caches/modules-2/resources-2.1] cleanup deleted 0 files/directories.
+2026-11-02T00:17:19.5854197Z artifact cache (/home/runner/.gradle/caches/modules-2) [subdir: /home/runner/.gradle/caches/modules-2/files-2.1] cleanup deleted 0 files/directories.
+2026-11-02T00:17:19.5855591Z artifact cache (/home/runner/.gradle/caches/modules-2) [subdir: /home/runner/.gradle/caches/modules-2/files-2.1] removing files not accessed on or after Mon Nov 02 00:12:01 UTC 2026.
+2026-11-02T00:17:19.7353154Z artifact cache (/home/runner/.gradle/caches/modules-2) [subdir: /home/runner/.gradle/caches/modules-2/files-2.1] cleanup deleted 0 files/directories.
+2026-11-02T00:17:19.7357460Z artifact cache (/home/runner/.gradle/caches/modules-2) [subdir: /home/runner/.gradle/caches/modules-2/metadata-2.107] cleanup deleted 0 files/directories.
+2026-11-02T00:17:19.7358448Z artifact cache (/home/runner/.gradle/caches/modules-2) cleanup deleted 0 files/directories.
+2026-11-02T00:17:19.7359129Z artifact cache (/home/runner/.gradle/caches/modules-2) cleaned up in 0.179 secs.
+2026-11-02T00:17:19.8503327Z ##[endgroup]
+2026-11-02T00:17:19.8506146Z ##[group]Caching Gradle state
+2026-11-02T00:17:20.3189581Z [command]/usr/bin/tar --posix -cf cache.tzst --exclude cache.tzst -P -C /home/runner/work/cogniva/cogniva --files-from manifest.txt --use-compress-program zstdmt
+2026-11-02T00:17:20.3342036Z [command]/usr/bin/tar --posix -cf cache.tzst --exclude cache.tzst -P -C /home/runner/work/cogniva/cogniva --files-from manifest.txt --use-compress-program zstdmt
+2026-11-02T00:17:20.3830299Z [command]/usr/bin/tar --posix -cf cache.tzst --exclude cache.tzst -P -C /home/runner/work/cogniva/cogniva --files-from manifest.txt --use-compress-program zstdmt
+2026-11-02T00:17:20.7477094Z Failed to save cache entry with path '/home/runner/.gradle/caches/*/kotlin-dsl/accessors/*/,/home/runner/.gradle/caches/*/kotlin-dsl/scripts/*/' and key: gradle-kotlin-dsl-v1-3ea8bb7eba2a93651ee78245fa05a10d: ReserveCacheError: Unable to reserve cache with key gradle-kotlin-dsl-v1-3ea8bb7eba2a93651ee78245fa05a10d, another job may be creating this cache.
+2026-11-02T00:17:20.8653533Z Sent 69368 of 69368 (100.0%), 0.2 MBs/sec
+2026-11-02T00:17:21.0060089Z Sent 110539 of 110539 (100.0%), 0.3 MBs/sec
+2026-11-02T00:17:21.0873169Z Saved cache entry with key gradle-instrumented-jars-v1-25e074925fdc8f2507631499ae850625 from /home/runner/.gradle/caches/jars-*/*/ in 800ms
+2026-11-02T00:17:21.2222549Z Saved cache entry with key gradle-groovy-dsl-v1-a9a528212f4fc995b9401ea8824ebf9c from /home/runner/.gradle/caches/*/groovy-dsl/*/ in 892ms
+2026-11-02T00:17:21.6222053Z [command]/usr/bin/tar --posix -cf cache.tzst --exclude cache.tzst -P -C /home/runner/work/cogniva/cogniva --files-from manifest.txt --use-compress-program zstdmt
+2026-11-02T00:17:25.5291313Z Sent 4406927 of 205733519 (2.1%), 4.2 MBs/sec
+2026-11-02T00:17:26.1701001Z Sent 205733519 of 205733519 (100.0%), 119.1 MBs/sec
+2026-11-02T00:17:26.4011758Z Saved cache entry with key gradle-transforms-v1-7e48b80ee569d93f749d27e4c5436a21 from /home/runner/.gradle/caches/transforms-4/*/,/home/runner/.gradle/caches/*/transforms/*/ in 5441ms
+2026-11-02T00:17:27.3241417Z [command]/usr/bin/tar --posix -cf cache.tzst --exclude cache.tzst -P -C /home/runner/work/cogniva/cogniva --files-from manifest.txt --use-compress-program zstdmt
+2026-11-02T00:17:28.7145017Z Sent 10458465 of 10458465 (100.0%), 12.7 MBs/sec
+2026-11-02T00:17:28.9290936Z Saved cache entry with key gradle-home-v1|Linux-X64|s23-ultra-insets[0d0d60652b11b112b164b30571ca3e82]-7d623102e17723e4f2eeff82f1e191f08348b189 from /home/runner/.gradle/caches,/home/runner/.gradle/notifications,/home/runner/.gradle/.setup-gradle in 1619ms
+2026-11-02T00:17:28.9292434Z ##[endgroup]
+2026-11-02T00:17:28.9300460Z Generating Job Summary
+2026-11-02T00:17:28.9314856Z Completed post-action step
+2026-11-02T00:17:28.9590351Z Post job cleanup.
+2026-11-02T00:17:29.1004440Z (node:3928) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-02T00:17:29.1005405Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-02T00:17:29.1361327Z Post job cleanup.
+2026-11-02T00:17:29.2330141Z [command]/usr/bin/git version
+2026-11-02T00:17:29.2379907Z git version 2.56.0
+2026-11-02T00:17:29.2421839Z Temporarily overriding HOME='/home/runner/work/_temp/e707e1bf-3586-4797-bacf-1f3d6c646eb8' before making global git config changes
+2026-11-02T00:17:29.2423374Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-02T00:17:29.2426619Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/cogniva/cogniva
+2026-11-02T00:17:29.2487237Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-02T00:17:29.2540335Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-02T00:17:29.2842559Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-02T00:17:29.2875966Z http.https://github.com/.extraheader
+2026-11-02T00:17:29.2888537Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-11-02T00:17:29.2944363Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-02T00:17:29.3228459Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-02T00:17:29.3276622Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-02T00:17:29.3712944Z Cleaning up orphan processes
+2026-11-02T00:17:29.4206005Z Terminate orphan process: pid (2909) (adb)
+2026-11-02T00:17:29.4289402Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-java@v4, actions/upload-artifact@v4, gradle/actions/setup-gradle@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

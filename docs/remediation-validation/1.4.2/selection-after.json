@@ -1,0 +1,200 @@
+{
+  "captured_at": "2026-11-02T00:27:21.977902+00:00",
+  "access": "read-only; no attempts submitted",
+  "health": {
+    "status": "ok",
+    "service": "api-rust-core",
+    "version": "1.4.2",
+    "revision": "7d623102e17723e4f2eeff82f1e191f08348b189",
+    "contract_version": 2
+  },
+  "cases": [
+    {
+      "case": "standard_general",
+      "mode": "STANDARD",
+      "scope": "general",
+      "status": 200,
+      "count": 10,
+      "subjects": {
+        "Sociologia e Psicologia Aplicadas": 2,
+        "Políticas Públicas": 2,
+        "Direito do Trabalho": 5,
+        "Administração Pública Federal": 1
+      },
+      "valid_dtos": true
+    },
+    {
+      "case": "standard_archived_context",
+      "mode": "STANDARD",
+      "scope": "ARQUIVADO",
+      "status": 400,
+      "message": "Requisição inválida: Concurso arquivado; revise sua seleção de estudo"
+    },
+    {
+      "case": "shuffle_general",
+      "mode": "SHUFFLE",
+      "scope": "general",
+      "status": 200,
+      "count": 10,
+      "subjects": {
+        "Administração Pública Federal": 1,
+        "Sociologia e Psicologia Aplicadas": 2,
+        "Direito do Trabalho": 2,
+        "Políticas Públicas": 2,
+        "Ética e Integridade": 1,
+        "Desafios do Estado de Direito": 2
+      },
+      "valid_dtos": true
+    },
+    {
+      "case": "shuffle_archived_context",
+      "mode": "SHUFFLE",
+      "scope": "ARQUIVADO",
+      "status": 200,
+      "count": 10,
+      "subjects": {
+        "Direito do Trabalho": 4,
+        "Administração Pública Federal": 1,
+        "Desafios do Estado de Direito": 2,
+        "Segurança e Saúde do Trabalhador": 1,
+        "Ética e Integridade": 1,
+        "Políticas Públicas": 1
+      },
+      "valid_dtos": true
+    },
+    {
+      "case": "error_notebook_general",
+      "mode": "ERROR_NOTEBOOK",
+      "scope": "general",
+      "status": 200,
+      "count": 3,
+      "subjects": {
+        "Segurança e Saúde do Trabalhador": 3
+      },
+      "valid_dtos": true
+    },
+    {
+      "case": "error_notebook_archived_context",
+      "mode": "ERROR_NOTEBOOK",
+      "scope": "ARQUIVADO",
+      "status": 200,
+      "count": 3,
+      "subjects": {
+        "Segurança e Saúde do Trabalhador": 3
+      },
+      "valid_dtos": true
+    },
+    {
+      "case": "srs_review_general",
+      "mode": "SRS_REVIEW",
+      "scope": "general",
+      "status": 200,
+      "count": 3,
+      "subjects": {
+        "Segurança e Saúde do Trabalhador": 3
+      },
+      "valid_dtos": true
+    },
+    {
+      "case": "srs_review_archived_context",
+      "mode": "SRS_REVIEW",
+      "scope": "ARQUIVADO",
+      "status": 200,
+      "count": 3,
+      "subjects": {
+        "Segurança e Saúde do Trabalhador": 3
+      },
+      "valid_dtos": true
+    },
+    {
+      "case": "most_badass_general",
+      "mode": "MOST_BADASS",
+      "scope": "general",
+      "status": 200,
+      "count": 4,
+      "subjects": {
+        "Segurança e Saúde do Trabalhador": 4
+      },
+      "valid_dtos": true
+    },
+    {
+      "case": "most_badass_archived_context",
+      "mode": "MOST_BADASS",
+      "scope": "ARQUIVADO",
+      "status": 200,
+      "count": 4,
+      "subjects": {
+        "Segurança e Saúde do Trabalhador": 4
+      },
+      "valid_dtos": true
+    },
+    {
+      "case": "common_trunk_general",
+      "mode": "COMMON_TRUNK",
+      "scope": "general",
+      "status": 200,
+      "count": 0,
+      "subjects": {},
+      "valid_dtos": true
+    },
+    {
+      "case": "common_trunk_archived_context",
+      "mode": "COMMON_TRUNK",
+      "scope": "ARQUIVADO",
+      "status": 200,
+      "count": 0,
+      "subjects": {},
+      "valid_dtos": true
+    },
+    {
+      "case": "simulado_active_grade",
+      "mode": "SIMULADO",
+      "scope": "RUMOR_PREVISTO",
+      "status": 400,
+      "message": "Requisição inválida: Questões canônicas válidas insuficientes em Direito Tributário: 0/15. Revise a grade ou o mapeamento do banco."
+    },
+    {
+      "case": "discipline:Direito Tributário",
+      "mode": "STANDARD",
+      "scope": "RUMOR_PREVISTO",
+      "status": 200,
+      "count": 0,
+      "subjects": {},
+      "valid_dtos": true
+    },
+    {
+      "case": "discipline:Finanças Públicas",
+      "mode": "STANDARD",
+      "scope": "RUMOR_PREVISTO",
+      "status": 200,
+      "count": 0,
+      "subjects": {},
+      "valid_dtos": true
+    },
+    {
+      "case": "discipline:Contabilidade Geral",
+      "mode": "STANDARD",
+      "scope": "RUMOR_PREVISTO",
+      "status": 200,
+      "count": 0,
+      "subjects": {},
+      "valid_dtos": true
+    },
+    {
+      "case": "discipline:Língua Portuguesa",
+      "mode": "STANDARD",
+      "scope": "RUMOR_PREVISTO",
+      "status": 200,
+      "count": 0,
+      "subjects": {},
+      "valid_dtos": true
+    }
+  ],
+  "learning": {
+    "records_preserved": 8,
+    "availability_known": true,
+    "available_records": 4,
+    "actionable_srs": 3,
+    "actionable_errors": 3
+  }
+}

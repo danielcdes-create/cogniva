@@ -32,13 +32,15 @@ Durante a troca e o ensaio de rollback, Nginx bloqueia rotas de dados com 503 e 
 
 O pipeline provoca uma falha de smoke controlada, confirma imagem, ponteiro, Compose e saúde anteriores, e depois promove efetivamente. Falhas reais não contam como sucesso do ensaio. Entre protocolos incompatíveis, rollback mantém as rotas de dados fechadas até nova promoção válida; as filas ficam preservadas.
 
-Release operacional atual de 01/11/2026: **1.4.1/build 8**, `22bd6027acfe277ea2d1e425578d4d4709620f1d`, run `41347592566`, todos os jobs aprovados. Aceite repetível:
+Release operacional atual de 01/11/2026: **1.4.2/build 9**, `7d623102e17723e4f2eeff82f1e191f08348b189`, run `41365834469`, todos os jobs aprovados. Aceite repetível:
 
 ```powershell
-python -X utf8 scripts/verify-production-release.py 22bd6027acfe277ea2d1e425578d4d4709620f1d --version-name 1.4.1 --version-code 8 --baseline docs/remediation-validation/1.4.1/before/production-release.json --evidence-dir docs/remediation-validation/1.4.1
+python -X utf8 scripts/verify-production-release.py 7d623102e17723e4f2eeff82f1e191f08348b189 --version-name 1.4.2 --version-code 9 --baseline docs/remediation-validation/1.4.2/before/production-release.json --evidence-dir docs/remediation-validation/1.4.2
 ```
 
-Faz somente leituras, baixa o APK para `%LOCALAPPDATA%/Cogniva/releases` e grava evidência sanitizada em `docs/remediation-validation/1.4.1/production-release.json`. As evidências da primeira release, revisão `d8716db8c12653a726c9284b9e28e7ba1c30df64`, permanecem preservadas no diretório pai.
+Faz somente leituras, baixa o APK para `%LOCALAPPDATA%/Cogniva/releases` e grava evidência sanitizada em `docs/remediation-validation/1.4.2/production-release.json`. As evidências das releases anteriores permanecem preservadas.
+
+Diagnóstico de questões para uma conta cujo proprietário foi comprovado: `python -X utf8 scripts/probe-question-selection.py ID --output caminho-do-relatorio.json`. O operador assina sessão diagnóstica temporária em memória na VPS; o relatório contém somente contagens, disciplinas e estados HTTP. Não envia tentativas, tutores pagos ou comandos de edição. `--assert-fixed` verifica os casos conhecidos da conta investigada nesta recuperação. Referências históricas indisponíveis devem ser revisadas por identidade/proveniência, sem apagá-las nem criar enunciados para preencher IDs. Quatro referências foram identificadas como exemplos locais antigos, com evidência na reconciliação da 1.4.2.
 
 ## Recuperação e TLS
 

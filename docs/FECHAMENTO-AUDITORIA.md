@@ -1,6 +1,6 @@
 # Tratamento dos 39 achados
 
-Fechamento inicial em 01/11/2026: tratamento de C01–C39 implementado e release 1.4.0/build 7 entregue. Gates, assinatura, rollback controlado, promoção e aceite externo concluídos na revisão `d8716db8c12653a726c9284b9e28e7ba1c30df64`. A versão atual é **1.4.1/build 8**, com a [correção adicional de Ajustes](CORRECAO-VINCULO-1.4.1.md), cinco testes de emulador e novo aceite operacional concluído. As fronteiras de dados e de aparelho físico abaixo permanecem explícitas. O diagnóstico original e seus bytes permanecem em `auditoria/2026-11-01`.
+Fechamento inicial em 01/11/2026: tratamento de C01–C39 implementado e release 1.4.0/build 7 entregue. Gates, assinatura, rollback controlado, promoção e aceite externo concluídos na revisão `d8716db8c12653a726c9284b9e28e7ba1c30df64`. A versão atual é **1.4.2/build 9**, com as correções adicionais de [Ajustes](CORRECAO-VINCULO-1.4.1.md) e [acesso às questões](CORRECAO-QUESTOES-1.4.2.md), seis testes de emulador e aceite na API real concluído. As fronteiras de dados e de aparelho físico abaixo permanecem explícitas. O diagnóstico original e seus bytes permanecem em `auditoria/2026-11-01`.
 
 ## Resultado operacional da primeira release (1.4.0)
 
@@ -28,7 +28,7 @@ Fechamento inicial em 01/11/2026: tratamento de C01–C39 implementado e release
 | C12 | Catálogo único compartilhado; rotas antigas projetam o mesmo agregado; revisão canônica explícita com dry-run | Catálogo/fixtures compartilhados e teste de dry-run, CAS e replay do mapeamento |
 | C13 | Seleção persistida da escada, foco por conta e exclusão de concursos arquivados | Motores de prioridade/foco e projeções do mesmo perfil |
 | C14 | Métricas locais usam histórico persistido e eventos pendentes reais | Histórico vazio produz zero, sem conquistas/tarefas simuladas |
-| C15 | SRS, erros, desafio e tronco comum usam seus conjuntos elegíveis também offline | Conjuntos vazios permanecem vazios; tronco comum consulta todas as grades ativas |
+| C15 | SRS, erros e desafio usam histórico global elegível, sem herdar a aba arquivada; disponibilidade e revisão pendente convergem no pull/cache | Mongo real sintético, escopos online/offline e API real: 3 SRS, 3 erros, 4 desafio; conjuntos vazios não viram treino comum |
 | C16 | Sem inferência de tópico por substring; alias exato serve somente à seleção de treino livre | `inferCanonical` retorna ausência; cache antigo não alimenta vínculos inventados |
 | C17 | Política comum de domínio, confiança, acurácia e evidência SRS | Mesmas fixtures JSON executadas em Rust e Kotlin |
 | C18 | Prática decorre da presença do registro, incluindo domínio zero | Cálculo de cobertura por presença; arquivo de aprendizagem preservado |
@@ -52,7 +52,7 @@ Fechamento inicial em 01/11/2026: tratamento de C01–C39 implementado e release
 | C36 | JVM declara cobertura de fonte/tema em PIXEL; geometria/cutout pertencem ao emulador | Duplo verify, negativo 1×1 restaurado por hash, API 35/Android 15 a 1440×3088/500dpi |
 | C37 | Contratos atuais separados da visão e da baseline histórica | README, operação, recuperação e fontes congeladas; renomes das sete notas preservados integralmente |
 | C38 | Revisões, quantidades, pesos, catálogo e datas validados antes de gravar | Revisão negativa/máxima, soma sem overflow e data UTF-8 sem panic |
-| C39 | DTO completo no cache; ACK atualiza aprendizagem antes de remover fila; pull converge histórico | Roundtrip semântico, ACK parcial e base incompleta sem zerar pontos confirmados |
+| C39 | DTO completo no cache; ACK atualiza aprendizagem antes de remover fila; pull converge histórico e disponibilidade sem apagar referências antigas | Roundtrip, ACK parcial, base incompleta e abertura/resposta de questão legada no emulador; oito registros mantidos, quatro questões disponíveis |
 
 ## Fronteiras de aceite
 

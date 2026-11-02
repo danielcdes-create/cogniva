@@ -4,12 +4,12 @@ Aplicativo Android de estudo para concursos, com cliente Kotlin/Compose e API Ru
 
 ## Estado da recuperação de 2026-11-01
 
-Versão em produção: **1.4.1 / Android build 8 / contrato de sincronização 2**, revisão `22bd6027acfe277ea2d1e425578d4d4709620f1d`, promovida em 01/11/2026 às 17:55 (UTC−03:00). O [pipeline completo](https://github.com/danielcdes-create/cogniva/actions/runs/41347592566) passou gates, assinatura, ensaio de rollback e promoção. HTTPS, prontidão com Mongo, download público e preservação do histórico foram conferidos externamente. A [correção de Ajustes](docs/CORRECAO-VINCULO-1.4.1.md) adiciona confirmação junto ao código e separa vínculo de conta de salvar nome/metas. Consulte [FECHAMENTO-AUDITORIA.md](docs/FECHAMENTO-AUDITORIA.md) para C01–C39 e os limites de aceite; [REMEDIACAO.md](docs/REMEDIACAO.md) preserva o registro da execução.
+Versão em produção: **1.4.2 / Android build 9 / contrato de sincronização 2**, revisão `7d623102e17723e4f2eeff82f1e191f08348b189`, promovida em 01/11/2026 às 21:26 (UTC−03:00). O [pipeline completo](https://github.com/danielcdes-create/cogniva/actions/runs/41365834469) passou gates, assinatura, ensaio de rollback e promoção. HTTPS, prontidão com Mongo, download público e preservação do acervo/histórico foram conferidos externamente. A [correção de questões](docs/CORRECAO-QUESTOES-1.4.2.md) recupera o acesso ao acervo sem herdar concursos arquivados; a [correção de Ajustes](docs/CORRECAO-VINCULO-1.4.1.md) mantém confirmação junto ao código. Consulte [FECHAMENTO-AUDITORIA.md](docs/FECHAMENTO-AUDITORIA.md) para C01–C39 e os limites de aceite; [REMEDIACAO.md](docs/REMEDIACAO.md) preserva o registro da execução.
 
 - API: `https://198.199.65.103/api/v1/`.
 - Metadados públicos medidos do APK: `GET /api/app/latest-apk`.
 - APK: `GET /api/v1/apk/download`. O arquivo servido só muda durante promoção validada.
-- [Baixar APK 1.4.1/build 8](https://198.199.65.103/api/v1/apk/download): 12.725.237 bytes; SHA-256 `7b45bc089623ea29e7c33bf2c72319796c34f48050e73c1e2332cf6af455d4f7`.
+- [Baixar APK 1.4.2/build 9](https://198.199.65.103/api/v1/apk/download): 12.725.237 bytes; SHA-256 `7f89a88d56d1790bab06274e539b59336c94586fafbdd889520fc4e5c2ff209a`.
 - Saúde do processo: `/api/v1/health`; prontidão com MongoDB e revisão: `/api/v1/ready` no backend novo.
 - Não se afirma instalação nem validação física no S23 Ultra sem evidência ADB.
 
@@ -20,6 +20,8 @@ Versão em produção: **1.4.1 / Android build 8 / contrato de sincronização 2
 **Histórico.** Cada tentativa possui `attempt_id`, revisão da questão e instante de ocorrência com offset. O servidor calcula o acerto pelo gabarito validado. Evento, projeção e recibo são gravados atomicamente no mesmo documento MongoDB, com compare-and-swap e write concern majority/journal. O cliente só remove identidades confirmadas, depois de persistir a projeção. Reenvios idênticos devolvem o mesmo recibo; conteúdos diferentes com o mesmo ID são rejeitados. Campos legados desconhecidos e arrays históricos são preservados.
 
 **Offline.** Room 3 recebe migrações aditivas. Bancos e filas são separados por proprietário; trocar de conta não reatribui eventos. Pendências anteriores ao protocolo novo são preservadas para revisão, pois a entrega antiga pode ter ocorrido sem ACK confiável. Há revisão/exportação explícita. Não há números de demonstração quando faltam dados locais. Um ACK parcial não permite reconstruir como zero um histórico ainda não baixado.
+
+**Acesso ao acervo.** Shuffle geral e filas pessoais de SRS/erros/desafio independem da aba aberta no planner. Treino explicitamente filtrado e simulado respeitam a grade. Concursos arquivados saem das abas de treino e continuam preservados em Ajustes. O pull conserva referências históricas indisponíveis, mas informa quais questões podem entrar nas ações; contadores e seleção usam a mesma marcação de revisão pendente. O acervo atual não contém questões classificadas nos quatro componentes da grade fiscal investigada. Quatro referências antigas foram reconciliadas com exemplos locais do código anterior; não foram inseridas no Mongo nem apresentadas como acervo recuperado.
 
 **Concurso e catálogo.** `shared/canonical-catalog.json` é o catálogo comum aos dois runtimes. Templates são configuráveis pelo usuário e não constituem edital oficial: datas indefinidas, corte zero e banca não confirmada não são preenchidos por adivinhação. Concursos do usuário são persistidos por proprietário e revisão, com pull/push e conflito explícito. Omissões de tópicos arquivam suas identidades; histórico e revisões anteriores continuam preservados. Nome de disciplina não é prova de tópico canônico.
 

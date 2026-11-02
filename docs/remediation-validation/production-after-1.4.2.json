@@ -1,0 +1,35 @@
+{
+  "captured_at": "20261102T002727Z",
+  "database": "CNU",
+  "access": "read-only",
+  "collections": {
+    "concursos": 3,
+    "dataLogger": 32,
+    "dataLoggerUpdatedV": "view definition preserved in private backup",
+    "documentsWithExplanation": "view definition preserved in private backup",
+    "documentsWithExplanationRate": "view definition preserved in private backup",
+    "editais_topicos": 5,
+    "getAnswedQuestionsRatioByUserAndAxis": "view definition preserved in private backup",
+    "getAnswedQuestionsRatioByUserGlobal": "view definition preserved in private backup",
+    "getDominatedQuestionsRatioByUserAndAxis": "view definition preserved in private backup",
+    "getDominatedQuestionsRatioByUserAndAxisAndmainTopic": "view definition preserved in private backup",
+    "getDominatedQuestionsRatioByUserGlobal": "view definition preserved in private backup",
+    "native_accounts": 1,
+    "reportedQuestoes": 1,
+    "todasQuestoes": 618,
+    "used_link_codes": 1,
+    "userActivityLog": 15,
+    "user_exams": 4,
+    "user_questions": 60,
+    "user_questionsUpdatedV": "view definition preserved in private backup",
+    "usuarios": 5
+  },
+  "protected_history": {
+    "documents": 15,
+    "events": 27,
+    "sha256": "a34574d29433a312c494026a3c9fc84291bde7fbe05783675caf79a10caf50c7"
+  },
+  "canonical_questions": 0,
+  "jwt_matches_public_example": false,
+  "private_backup_directory": "C:\\Users\\danie\\AppData\\Local\\Cogniva\\production-backups\\20261102T002727Z"
+}

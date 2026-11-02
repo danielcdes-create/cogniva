@@ -13,7 +13,7 @@ As notas renomeadas pelo usuário e o histórico de produção são preservados.
 - [x] TLS/distribuição, CI com gates, promoção/rollback e documentação.
 - [x] Suítes atuais, cenários adversariais e build Android verificados.
 
-Resultado atual: **1.4.1/build 8 implantado e conferido externamente**, run [41347592566](https://github.com/danielcdes-create/cogniva/actions/runs/41347592566), revisão `22bd6027acfe277ea2d1e425578d4d4709620f1d`. A [matriz de fechamento](FECHAMENTO-AUDITORIA.md) contém o resultado por achado e os limites de aceite; a [correção posterior de Ajustes](CORRECAO-VINCULO-1.4.1.md) registra o formulário de vínculo. As seções abaixo são o registro cronológico; afirmações de trabalho pendente descrevem aquela etapa, não o estado final.
+Resultado atual: **1.4.2/build 9 implantado e conferido externamente**, run [41365834469](https://github.com/danielcdes-create/cogniva/actions/runs/41365834469), revisão `7d623102e17723e4f2eeff82f1e191f08348b189`. A [matriz de fechamento](FECHAMENTO-AUDITORIA.md) contém o resultado por achado e os limites de aceite; as correções posteriores de [Ajustes](CORRECAO-VINCULO-1.4.1.md) e [questões](CORRECAO-QUESTOES-1.4.2.md) registram as reproduções adicionais. As seções abaixo são o registro cronológico; afirmações de trabalho pendente descrevem aquela etapa, não o estado final.
 
 Não executar os antigos probes como testes de aceite: eles afirmam o comportamento defeituoso. Os cenários serão incorporados à suíte com os resultados corrigidos. Testes de banco usam apenas uma instância isolada/sintética.
 
@@ -77,3 +77,11 @@ As chaves existentes de IA autenticaram em consultas de modelos. Gemini 1.5 não
 A captura do aparelho revelou compressão de ID/username pela linha ocupada pelo código, além da confirmação genérica distante, depois das metas. Os campos agora são empilhados e **Confirmar vínculo** tem envio/erro/sucesso próprios. O vínculo não grava rascunhos de nome/metas/concursos na conta de destino; **Salvar nome e metas** não consome o código.
 
 Build/lint locais, dois verifies reais com nove imagens e controle negativo restaurado por hash passaram. O CI aprovou backend, Android e cinco testes instrumentados, incluindo os dois cenários de Ajustes com fonte normal/200%. Ensaio de rollback e promoção concluídos; o APK baixado externamente corresponde ao bundle assinado. Inventários antes/depois preservaram os mesmos 15 documentos/27 eventos e hash protegido, Compose e outros containers. Evidências e limites em `CORRECAO-VINCULO-1.4.1.md`.
+
+## Recuperação das questões — 1.4.2/build 9
+
+Pedidos reais reproduziram o bloqueio: Android herdava concurso arquivado até no shuffle e nas filas pessoais; HTTP 400 era convertido em mensagem genérica de grade insuficiente. O escopo foi corrigido em cliente/servidor, a seleção obsoleta é substituída no planner e os erros específicos são preservados. Aprendizagem passou a informar revisão pendente e disponibilidade da questão, alinhando contadores e seleção sem apagar referências.
+
+25 testes Rust, 47 JVM, lint/nove imagens e seis instrumentados aprovados. O novo teste abre a tela real com uma questão de fixture e grava resposta/fila Room com contexto arquivado inicial. Na API de produção: shuffle 10, SRS 3, erros 3, desafio 4, também recebendo o contexto arquivado antigo. Rollback/promoção, download/hash/assinatura e prontidão aprovados. Acervo de 618 documentos e histórico global de 15 documentos/27 eventos mantiveram seus hashes antes/depois.
+
+Quatro referências históricas sem documento no Mongo foram reconciliadas com IDs dos exemplos locais do código anterior; sete eventos preservados, sem reinserir esses exemplos como acervo de banca. A grade fiscal atual continua sem questões classificadas/vinculadas correspondentes; não se substitui matéria nem se infere tópico para preencher simulado/tronco. Relatório e evidências em `CORRECAO-QUESTOES-1.4.2.md` e `remediation-validation/1.4.2/`.

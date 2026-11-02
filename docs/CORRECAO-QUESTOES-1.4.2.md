@@ -1,6 +1,6 @@
 # Recuperação e uso do banco de questões — 1.4.2/build 9
 
-Estado: 25 testes Rust aprovados no Mongo sintético e 47 testes JVM aprovados; build release, lint e compilação dos instrumentados concluídos. Gates de emulador/publicação em acompanhamento. O aceite operacional será registrado após a promoção.
+Estado: **1.4.2/build 9 em produção**, revisão `7d623102e17723e4f2eeff82f1e191f08348b189`, promovida em 01/11/2026 às 21:26 (UTC−03:00). [Run 41365834469](https://github.com/danielcdes-create/cogniva/actions/runs/41365834469) com todos os cinco jobs aprovados. Aceite externo e consultas de seleção na API real concluídos.
 
 ## Diagnóstico confirmado
 
@@ -25,3 +25,26 @@ O teste Rust usa Mongo real isolado: documentos legados sem tópico canônico, u
 Os testes Android verificam escopo global, preservação do erro real, revisão marcada antes do vencimento, exclusão de referências indisponíveis das ações e retenção das métricas históricas. O teste instrumentado percorre busca → cache Room → sessão persistida → tela real da questão → resposta na fila, com concurso arquivado na seleção original e questão sem tópico canônico. Usa somente fixtures locais.
 
 `scripts/probe-question-selection.py` consulta a API real com credencial diagnóstica temporária mantida em memória na VPS. Não envia tentativas nem publica tokens, enunciados ou eventos. O relatório anterior está em `remediation-validation/1.4.2/selection-before.json`; o inventário sanitizado das coleções em `mongo-question-inventory.json`. Backups BSON privados ficam fora do Git; fingerprints em `production-before-1.4.2.json`.
+
+## Resultado operacional
+
+25 testes Rust com Mongo isolado, 47 testes JVM, lint e nove screenshots aprovados. Emulador API 35/Android 15: seis testes aprovados. `QuestionPracticeTest` abriu a questão legada na tela real e persistiu uma resposta na fila Room, com concurso arquivado no contexto original e retorno menor que a quantidade solicitada. Não houve instalação física por ADB.
+
+Consultas reais para a conta investigada, sem enviar respostas:
+
+| Modalidade | Sem filtro de concurso | Contexto arquivado enviado pelo app antigo |
+|---|---|---|
+| Shuffle | HTTP 200, 10 questões | HTTP 200, 10 questões (antes: 400) |
+| SRS | HTTP 200, 3 questões | HTTP 200, 3 questões (antes: 400) |
+| Caderno de erros | HTTP 200, 3 questões | HTTP 200, 3 questões (antes: 400) |
+| Desafio | HTTP 200, 4 questões | HTTP 200, 4 questões (antes: 400) |
+
+Os oito registros de aprendizagem da conta continuam disponíveis no pull; quatro têm questão disponível no acervo. Os contadores acionáveis SRS/erros agora coincidem com as três questões que a seleção oferece. Os registros indisponíveis permanecem nas métricas e no histórico.
+
+Quatro IDs sem documento em `todasQuestoes` correspondem exatamente aos quatro exemplos de `buildOfflineSeedQuestions()` na fonte histórica congelada (linhas 890–961). Seus sete eventos foram preservados. `dataLogger.questoes_detalhadas` contém somente referências/acertos, sem enunciados; a origem desses quatro exemplos foi encontrada no código, não em um acervo Mongo perdido. Não foram importados como questões de banca nem receberam vínculos inferidos. Evidência: `legacy-example-reconciliation.json`.
+
+As quatro disciplinas da grade fiscal ativa retornam zero questões. Simulado retorna insuficiência específica, por exemplo Tributário 0/15; tronco comum retorna conjunto vazio por ausência de questões com vínculo confirmado para as grades ativas. Esses limites são de acervo/classificação, não indisponibilidade geral do banco. Os seis gabaritos ambíguos do acervo continuam preservados para revisão.
+
+O ensaio registrou `CONTROLLED_ROLLBACK_VERIFIED` e promoção efetiva. Runtime: 25.814.263 bytes, dentro do limite de 50 MB. HTTPS/readiness/Mongo/revisão conferidos, rota anônima protegida retorna 401, metadados repetíveis e APK baixado idêntico ao bundle assinado. Pacote/versão/assinatura conferidos; sem `debuggable`. APK: 12.725.237 bytes, SHA-256 `7f89a88d56d1790bab06274e539b59336c94586fafbdd889520fc4e5c2ff209a`. A inspeção do DEX confirma o novo escopo e os campos de aprendizagem no artefato servido; testes nativos não entram no APK release.
+
+Antes/depois: mesmos 618 documentos do banco de questões, BSON SHA-256 `5fdf9ef5772a1a50d7501b30dd5158e0f441d8efb69e41af6ae56c2af36f4d0a`. Os 15 documentos/27 eventos globais mantiveram o hash protegido `a34574d29433a312c494026a3c9fc84291bde7fbe05783675caf79a10caf50c7`. Compose e demais containers preservados; renovação TLS ativa. Teste Mongo local encerrado após verificar executável/porta. Evidências adicionais em `selection-after.json`, `native-summary.json`, `production-release.json`, `question-bank-preservation.json`, logs `ci-*.log` e inventários `production-pre-promotion-1.4.2.json`/`production-after-1.4.2.json` no diretório pai.

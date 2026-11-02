@@ -1,0 +1,31 @@
+{
+  "source": "docs/auditoria/2026-11-01/source-snapshot/android-app/app/src/main/java/br/com/concursoprep/app/data/repository/ConcursoRepository.kt",
+  "function": "buildOfflineSeedQuestions",
+  "function_line": 892,
+  "source_sha256": "af4a659b9c6e809a9b356f6d51200e0ff04ae4339438cbae082c620d47809770",
+  "primary_bank_documents": 618,
+  "primary_bank_missing_historical_references": [
+    {
+      "question_id": "66afca336caf9b5d37185cdd",
+      "source_line": 894,
+      "historical_events_preserved": 2
+    },
+    {
+      "question_id": "66afca336caf9b5d37185cde",
+      "source_line": 917,
+      "historical_events_preserved": 3
+    },
+    {
+      "question_id": "66afca336caf9b5d37185cdf",
+      "source_line": 937,
+      "historical_events_preserved": 1
+    },
+    {
+      "question_id": "66afca336caf9b5d37185ce0",
+      "source_line": 961,
+      "historical_events_preserved": 1
+    }
+  ],
+  "provenance": "IDs exactly match the archived local example seed; absent from current primary Mongo question collection",
+  "action": "History preserved; no example question imported or relabeled as a real bank question"
+}
