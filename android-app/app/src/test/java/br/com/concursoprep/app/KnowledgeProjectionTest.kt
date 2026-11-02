@@ -9,7 +9,14 @@ import org.junit.Test
 import java.time.LocalDate
 
 class KnowledgeProjectionTest {
-    private fun question()=QuestionDto(id="q",questionRevision="body-v1",question="Synthetic",answers=listOf("A","B","C","D","E"),correctAnswerIndices=listOf(1),disciplina="Old textual label",source="Synthetic",level="Médio",canonicalSubjectId="MAT",canonicalTopicId="MAT_01_001",knowledgeProjectionVersion=1)
+    private fun question()=QuestionDto(id="q",questionRevision="body-v1",question="Synthetic",answers=listOf("A","B","C","D","E"),correctAnswerIndices=listOf(1),disciplina="Old textual label",source="Synthetic",level="Médio",canonicalSubjectId="MAT",canonicalTopicId="MAT_01_001",knowledgeProjectionVersion=1,knowledgeBindingVerified=true)
+
+    @Test fun legacyIdsWithoutVerifiedReviewCannotEarnOfflineKnowledge(){
+        val projected=LearningProjection.project(null,question().copy(knowledgeBindingVerified=false),listOf(event("a")))
+        assertEquals(1,projected.attempts);assertNull(projected.knowledgeEvidence)
+        assertTrue(LearningProjection.masteryByTopic(listOf(projected)).isEmpty())
+        assertTrue(LearningProjection.masteryByTopic(listOf(projected.copy(knowledgeProjectionVersion=0))).isEmpty())
+    }
     private fun event(id:String,revision:String="body-v1")=LearningEvent(id,"2026-10-01T12:00:00Z",true,3,10,revision)
 
     @Test fun projectionReusesOneEventWithoutChangingItsIdentityOrCreditingAParent(){

@@ -57,7 +57,7 @@ data class LearningPage(val records: List<LearningRecord>, @SerialName("next_cur
 object LearningProjection {
     val studyZone: ZoneOffset = ZoneOffset.ofHours(-3)
     fun knowledgeRows(rows:List<LearningRecord>):List<LearningRecord> = rows.distinctBy { it.questionId }.mapNotNull { r ->
-        if(r.knowledgeProjectionVersion==0) r else r.knowledgeEvidence?.takeIf { e -> e.reviewDueOn?.let { runCatching { !java.time.LocalDate.parse(it).isBefore(java.time.LocalDate.now(studyZone)) }.getOrDefault(false) }?:true }?.let { e ->
+        if(r.knowledgeProjectionVersion==0) null else r.knowledgeEvidence?.takeIf { e -> e.reviewDueOn?.let { runCatching { !java.time.LocalDate.parse(it).isBefore(java.time.LocalDate.now(studyZone)) }.getOrDefault(false) }?:true }?.let { e ->
             r.copy(canonicalSubjectId=e.canonicalSubjectId,canonicalTopicId=e.canonicalTopicId,attempts=e.attempts,correct=e.correct,accuracyPct=e.accuracyPct,confidenceAvg=e.confidenceAvg,isMastered=e.mastered,highConfidenceError=e.highConfidenceError)
         }
     }
@@ -73,7 +73,7 @@ object LearningProjection {
         val history=projectHistory(base,question,pending)
         if(question.knowledgeProjectionVersion==0)return history
         val subject=question.canonicalSubjectId;val topic=question.canonicalTopicId
-        if(subject==null || topic==null || br.com.concursoprep.app.domain.exam.ExamCatalog.catalogTopics(subject).none { it.canonicalTopicId==topic } || !br.com.concursoprep.app.data.local.QuestionCacheMapping.withinReviewDate(question,java.time.LocalDate.now(studyZone)))return history.copy(knowledgeProjectionVersion=1,knowledgeEvidence=null)
+        if(!question.knowledgeBindingVerified || subject==null || topic==null || br.com.concursoprep.app.domain.exam.ExamCatalog.catalogTopics(subject).none { it.canonicalTopicId==topic } || !br.com.concursoprep.app.data.local.QuestionCacheMapping.withinReviewDate(question,java.time.LocalDate.now(studyZone)))return history.copy(knowledgeProjectionVersion=1,knowledgeEvidence=null)
         val previous=base?.knowledgeEvidence?.takeIf { it.questionRevision==question.questionRevision }
         val confirmed=base?.events.orEmpty().map { it.attemptId }.toSet()
         val fresh=pending.filter { it.attemptId !in confirmed && it.questionRevision==question.questionRevision }.distinctBy { it.attemptId }.sortedWith(compareBy<LearningEvent> { Instant.parse(it.occurredAt) }.thenBy { it.attemptId })

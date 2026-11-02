@@ -197,7 +197,8 @@ data class QuestionDto(
     @SerialName("user_stats") val userStats: UserQuestionBriefStats? = null,
     @SerialName("exam_component_id") val examComponentId: String? = null,
     @SerialName("knowledge_projection_version") val knowledgeProjectionVersion: Int = 0,
-    @SerialName("practice_review_due_on") val practiceReviewDueOn: String? = null
+    @SerialName("practice_review_due_on") val practiceReviewDueOn: String? = null,
+    @SerialName("knowledge_binding_verified") val knowledgeBindingVerified:Boolean=false
 )
 
 @Serializable

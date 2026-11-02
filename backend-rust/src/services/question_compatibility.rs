@@ -170,7 +170,10 @@ pub fn decode(mut raw: Document) -> Result<QuestionDocument, AppError> {
             raw.insert("canonical_topic_id", bson::Bson::Null);
         }
     }
-    bson::from_document(raw).map_err(|_| AppError::Conflict("Documento de questão inválido".into()))
+    let mut q: QuestionDocument = bson::from_document(raw.clone())
+        .map_err(|_| AppError::Conflict("Documento de questão inválido".into()))?;
+    q.knowledge_binding_verified = crate::services::knowledge::reviewed_binding(&raw, &q);
+    Ok(q)
 }
 
 #[cfg(test)]

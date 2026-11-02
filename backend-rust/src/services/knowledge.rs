@@ -29,47 +29,8 @@ pub fn project(activity: &Document, question: &Document) -> Option<Evidence> {
         return None;
     }
     let revision = q.revision().ok()?;
-    if !question.contains_key("classification") {
-        // Singular legacy IDs remain readable, but coverage requires the
-        // operator's original review receipt for this exact content/mapping.
-        let mapping_revision = question
-            .get_i64("canonical_mapping_revision")
-            .ok()
-            .or_else(|| {
-                question
-                    .get_i32("canonical_mapping_revision")
-                    .ok()
-                    .map(i64::from)
-            })?;
-        if mapping_revision < 1 {
-            return None;
-        }
-        let review = question
-            .get_array("canonical_mapping_history")
-            .ok()?
-            .last()?
-            .as_document()?;
-        let reviewer = review
-            .get_i64("reviewed_by")
-            .ok()
-            .or_else(|| review.get_i32("reviewed_by").ok().map(i64::from))?;
-        if reviewer < 1 {
-            return None;
-        }
-        let entry = crate::routes::canonical_mapping::MappingEntry {
-            operation_id: review.get_str("operation_id").ok()?.into(),
-            question_id: q.id.to_hex(),
-            question_revision: revision.clone(),
-            expected_mapping_revision: mapping_revision - 1,
-            canonical_subject_id: subject.clone(),
-            canonical_topic_id: topic.clone(),
-            reviewed_reason: review.get_str("reviewed_reason").ok()?.into(),
-        };
-        use sha2::{Digest, Sha256};
-        let digest = format!("{:x}", Sha256::digest(serde_json::to_vec(&entry).ok()?));
-        if review.get_str("payload_sha256").ok() != Some(digest.as_str()) {
-            return None;
-        }
+    if !q.knowledge_binding_verified {
+        return None;
     }
     let mut seen = HashSet::new();
     let mut events: Vec<_> = activity
@@ -268,4 +229,63 @@ mod tests {
         q.insert("question", "Edited content");
         assert!(project(&row, &q).is_none());
     }
+}
+
+/// Called only after the read adapter validates structured classification.
+pub fn reviewed_binding(
+    question: &Document,
+    q: &crate::models::question::QuestionDocument,
+) -> bool {
+    (|| -> Option<()> {
+        let subject = q.canonical_subject_id.as_ref()?;
+        let topic = q.canonical_topic_id.as_ref()?;
+        if !super::question_contracts::known_topic(subject, topic) {
+            return None;
+        }
+        let revision = q.revision().ok()?;
+        if !question.contains_key("classification") {
+            // Singular legacy IDs remain readable, but coverage requires the
+            // operator's original review receipt for this exact content/mapping.
+            let mapping_revision = question
+                .get_i64("canonical_mapping_revision")
+                .ok()
+                .or_else(|| {
+                    question
+                        .get_i32("canonical_mapping_revision")
+                        .ok()
+                        .map(i64::from)
+                })?;
+            if mapping_revision < 1 {
+                return None;
+            }
+            let review = question
+                .get_array("canonical_mapping_history")
+                .ok()?
+                .last()?
+                .as_document()?;
+            let reviewer = review
+                .get_i64("reviewed_by")
+                .ok()
+                .or_else(|| review.get_i32("reviewed_by").ok().map(i64::from))?;
+            if reviewer < 1 {
+                return None;
+            }
+            let entry = crate::routes::canonical_mapping::MappingEntry {
+                operation_id: review.get_str("operation_id").ok()?.into(),
+                question_id: q.id.to_hex(),
+                question_revision: revision.clone(),
+                expected_mapping_revision: mapping_revision - 1,
+                canonical_subject_id: subject.clone(),
+                canonical_topic_id: topic.clone(),
+                reviewed_reason: review.get_str("reviewed_reason").ok()?.into(),
+            };
+            use sha2::{Digest, Sha256};
+            let digest = format!("{:x}", Sha256::digest(serde_json::to_vec(&entry).ok()?));
+            if review.get_str("payload_sha256").ok() != Some(digest.as_str()) {
+                return None;
+            }
+        }
+        Some(())
+    })()
+    .is_some()
 }

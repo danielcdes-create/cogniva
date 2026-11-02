@@ -3,6 +3,16 @@
   "$id": "https://cogniva.local/schemas/knowledge-projection-v1.json",
   "title": "Projeção de conhecimento e elegibilidade de cache, versão 1",
   "$defs": {
+    "question_binding": {
+      "type": "object", "additionalProperties": true,
+      "required": ["question_revision", "knowledge_projection_version", "knowledge_binding_verified"],
+      "properties": {
+        "question_revision": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "knowledge_projection_version": {"const": 1},
+        "knowledge_binding_verified": {"type": "boolean"}
+      },
+      "$comment": "Flag calculada no servidor a partir da revisão estruturada ou do recibo legado. IDs reconhecidos com flag false continuam legíveis, mas não concedem crédito de conhecimento em tentativas offline."
+    },
     "evidence": {
       "type": "object", "additionalProperties": false,
       "required": ["canonical_subject_id", "canonical_topic_id", "question_revision", "attempts", "correct", "accuracy_pct", "confidence_avg", "recent_confidences", "high_confidence_error", "mastered", "review_due_on"],
