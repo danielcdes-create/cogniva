@@ -57,6 +57,13 @@ for name in ["todasQuestoes", "question_classification_suggestions", "question_e
     validated.append(name)
 assert receipts["question-v2:ready"]["ready"] is True
 assert receipts["question-v2:ready"]["version"] == 2
+guard = receipts.get("legacy-cohort-guard/1")
+if guard:
+    assert guard["state"] == "APPLIED" and guard["cohort_id"] == "legacy-618/2026-11-02"
+    assert guard["after"] == options["todasQuestoes"]["options"]["validator"]
+    cohort = json.loads((pathlib.Path(__file__).resolve().parents[1] / "shared/legacy-classification-cohort.json").read_text(encoding="utf-8"))
+    guarded_ids = guard["after"]["$and"][1]["$or"][1]["_id"]["$in"]
+    assert {str(identifier) for identifier in guarded_ids} == {m["question_id"] for m in cohort["members"]}
 
 expected = {
     "todasQuestoes": ["qv2_legacy_topic", "qv2_classification_validity", "qv2_validity_type"],
@@ -82,6 +89,7 @@ result = {
     "installation_ready": True, "indexes_verified": expected,
     "index_count": sum(map(len, expected.values())),
     "catalog_snapshot_matches_source": True, "catalog_version": catalog["catalog_version"],
+    "legacy_cohort_guard_verified": bool(guard),
     "no_question_reclassification": data(old_root,"todasQuestoes") == data(new_root,"todasQuestoes"),
 }
 a.output.parent.mkdir(parents=True, exist_ok=True)

@@ -439,9 +439,22 @@ pub async fn tick(state: &AppState) -> Result<(), AppError> {
     if !enabled(&state.config) {
         return Ok(());
     }
-    recover_jobs(&state.db).await?;
-    control(&state.db).await?;
     let commands = collection(&state.db, "question_commands");
+    // Idle/exhausted queues do not continuously write leases or daily counters.
+    let Some(pending) = commands.find_one(doc! {"_id":CONTROL}).await? else {
+        return Ok(());
+    };
+    let today = super::exam_engine::study_today().to_string();
+    if pending
+        .get_array("queue")
+        .map(|q| q.is_empty())
+        .unwrap_or(true)
+        || (pending.get_str("day").ok() == Some(today.as_str())
+            && pending.get_i64("daily_reserved").unwrap_or(DAILY_LIMIT) >= DAILY_LIMIT)
+    {
+        return Ok(());
+    }
+    recover_jobs(&state.db).await?;
     let now = bson::DateTime::now();
     let owner = uuid::Uuid::new_v4().to_string();
     let locked=commands.find_one_and_update(doc!{"_id":CONTROL,"lease_until":{"$lt":now}},doc!{"$set":{"lease_until":bson::DateTime::from_millis(now.timestamp_millis()+120_000),"owner":&owner}}).return_document(ReturnDocument::After).await?;
