@@ -14,6 +14,7 @@ p.add_argument("before", type=pathlib.Path)
 p.add_argument("after", type=pathlib.Path)
 p.add_argument("--output", type=pathlib.Path, required=True)
 p.add_argument("--authorized-classification", action="store_true")
+p.add_argument("--authorized-legacy-auto-classification", action="store_true")
 a = p.parse_args()
 before, after = [json.loads(path.read_text(encoding="utf-8-sig")) for path in [a.before, a.after]]
 old_root, new_root = [pathlib.Path(v["private_backup_directory"]) for v in [before, after]]
@@ -30,7 +31,11 @@ def indexes(name):
 preserved = {}
 for name in ["todasQuestoes", "user_exams"]:
     old, new = data(old_root, name), data(new_root, name)
-    if name == "todasQuestoes" and a.authorized_classification:
+    if name == "todasQuestoes" and a.authorized_legacy_auto_classification:
+        import legacy_classification_preservation
+        check = legacy_classification_preservation.compare(decode_all(old), decode_all(new))
+        preserved[name] = {"documents": after["collections"][name], "sha256": hashlib.sha256(new).hexdigest(), "authorized_legacy_auto_only": True, **check}
+    elif name == "todasQuestoes" and a.authorized_classification:
         import classification_preservation
         classification_preservation.compare_snapshots(decode_all(old), decode_all(new), [], [], [], [])
         preserved[name] = {"documents": after["collections"][name], "sha256": hashlib.sha256(new).hexdigest(), "authorized_classification_only": True}
@@ -77,7 +82,7 @@ result = {
     "installation_ready": True, "indexes_verified": expected,
     "index_count": sum(map(len, expected.values())),
     "catalog_snapshot_matches_source": True, "catalog_version": catalog["catalog_version"],
-    "no_question_reclassification": True,
+    "no_question_reclassification": data(old_root,"todasQuestoes") == data(new_root,"todasQuestoes"),
 }
 a.output.parent.mkdir(parents=True, exist_ok=True)
 a.output.write_text(json.dumps(result, indent=2), encoding="utf-8")

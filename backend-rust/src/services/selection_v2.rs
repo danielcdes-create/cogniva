@@ -154,7 +154,19 @@ pub async fn generate(
         filter.insert("canonical_topic_id", topic);
     }
     let mut components = HashMap::new();
+    // Demand only, bounded globally; no provider wait on the request path.
+    if exam.is_some() || matches!(req.mode,QuizMode::CommonTrunk) {
+        let labels:Vec<String>=exam.map(|e|e.subjects.iter().map(|s|s.display_name.clone()).collect()).unwrap_or_else(||exams.iter().filter(|e|e.is_active_in_ladder && !matches!(e.status,ExamLifecycleStatus::Arquivado|ExamLifecycleStatus::Excluido)).flat_map(|e|e.subjects.iter().map(|s|s.display_name.clone())).collect());
+        if !labels.is_empty() {if let Err(error)=super::legacy_classification::seed(state,&labels).await {tracing::warn!("Fila legada indisponível: {}",error);}}
+    }
     let questions = match req.mode {
+        QuizMode::Shuffle => {
+            let mut candidates=pool(state,filter,10000).await?;
+            if state.config.legacy_auto_classification_enabled {
+                if let Err(error)=super::legacy_classification::prioritize(&state.db,&mut candidates).await {tracing::warn!("Prioridade legada indisponível: {}",error);}
+            }
+            candidates.truncate(quantity);candidates
+        }
         QuizMode::Simulado => {
             let exam =
                 exam.ok_or_else(|| AppError::BadRequest("Selecione a grade do simulado".into()))?;
@@ -286,6 +298,9 @@ pub async fn generate(
         if let Some(exam)=exam {let mut q=crate::services::practice_context::filter(state,req.user_id,exam,None,questions).await?;q.truncate(quantity);q}else{questions}
     }else{questions};
     let mut result = enrich_questions_with_user_stats(&state.db, req.user_id, questions).await?;
+    if req.mode==QuizMode::Shuffle {
+        if let Err(error)=super::legacy_classification::enqueue(state,&result.iter().filter_map(|q|ObjectId::parse_str(&q.id).ok()).collect::<Vec<_>>()).await {tracing::warn!("Fila legada indisponível: {}",error);}
+    }
     for q in &mut result { q.exam_component_id = req.component_id.clone().or_else(||components.get(&q.id).cloned()); }
     Ok(result)
 }

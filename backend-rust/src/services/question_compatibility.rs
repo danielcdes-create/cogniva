@@ -172,6 +172,11 @@ pub fn decode(mut raw: Document) -> Result<QuestionDocument, AppError> {
     }
     let mut q: QuestionDocument = bson::from_document(raw.clone())
         .map_err(|_| AppError::Conflict("Documento de questão inválido".into()))?;
+    if raw.contains_key("legacy_auto_classification") && !raw.contains_key("classification")
+        && !raw.contains_key("canonical_mapping_revision")
+        && crate::services::legacy_classification::binding(&raw).is_none() {
+        return Err(AppError::Conflict("Classificação automática legada desatualizada; exige revisão".into()));
+    }
     q.knowledge_binding_verified = crate::services::knowledge::reviewed_binding(&raw, &q);
     Ok(q)
 }

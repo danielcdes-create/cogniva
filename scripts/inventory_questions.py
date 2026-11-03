@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 STATES = (
     "legacy_unclassified",
+    "legacy_auto_applied",
     "existing_singular_canonical",
     "v2_confirmed",
     "v2_partial",
@@ -130,6 +131,13 @@ def classify_document(document, catalog):
     subject_id = document.get("canonical_subject_id")
     if _answer_key_ambiguous(document):
         return "invalid_ambiguous"
+    if "legacy_auto_classification" in document and not classification:
+        from legacy_classification_preservation import validate_auto
+        try:
+            validate_auto(document)
+            return "legacy_auto_applied"
+        except (ValueError, KeyError, TypeError, StopIteration):
+            return "invalid_ambiguous"
     topic_id = document.get("canonical_topic_id")
     labels = _labels(catalog)
     if isinstance(subject_id, str) and subject_id.casefold() in labels and subject_id not in _subjects(catalog):

@@ -107,6 +107,7 @@ pub fn mongo_schema(kind: &str) -> Document {
     bson_doc(expanded).expect("converted schema")
 }
 pub async fn prepare(db: &Database) -> Result<Value, AppError> {
+    super::legacy_classification::recover_guard(db).await?;
     let specs = [
         ("todasQuestoes", "question"),
         ("question_classification_suggestions", "suggestion"),

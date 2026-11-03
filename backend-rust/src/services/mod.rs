@@ -21,3 +21,4 @@ pub mod question_storage;
 pub mod classification;
 pub mod knowledge;
 pub mod practice_context;
+pub mod legacy_classification;

@@ -4,6 +4,8 @@ Aplicativo Android de estudo para concursos, com cliente Kotlin/Compose e API Ru
 
 ## Estado da recuperação de 2026-11-01
 
+Classificação automática restrita ao acervo antigo: [política de shuffle e fila para editais/tronco](docs/CLASSIFICACAO-LEGADO-SOB-DEMANDA.md), em validação para 1.4.7/build 14. O fluxo preserva a distinção entre aplicação automática autorizada e revisão humana.
+
 O [catálogo compartilhado](docs/CATALOGO-CONHECIMENTOS.md) e os [contratos de questões](docs/SCHEMA-QUESTOES-V2.md) estão integrados à API/Mongo desde 1.4.5. Incluem validade atual/obsoleta, classificações com proveniência e armazenamento de abertas com rubrica. A execução/correção de abertas ainda não está habilitada no cliente objetivo. [Consulta do catálogo](docs/catalogo/CONHECIMENTOS.md).
 
 A entrega 1.4.6/build 13 está publicada: [classificação, seleção e progresso](docs/ETAPAS-5-7-CLASSIFICACAO-SELECAO.md), com projeção separada do histórico, contexto por componente e atualização de elegibilidade no cache. O inventário real tem 612 questões sem classificação e seis com gabarito ambíguo. O fluxo de revisão está disponível, mas nenhum lote real foi confirmado nesta entrega.

@@ -243,6 +243,8 @@ pub fn reviewed_binding(
             return None;
         }
         let revision = q.revision().ok()?;
+        if !question.contains_key("classification") && !question.contains_key("canonical_mapping_revision")
+            && super::legacy_classification::binding(question).is_some() {return Some(());}
         if !question.contains_key("classification") {
             // Singular legacy IDs remain readable, but coverage requires the
             // operator's original review receipt for this exact content/mapping.

@@ -215,6 +215,7 @@ fn config(uri: &str) -> AppConfig {
         gemini_model: "unused".into(),
         xai_api_key: None,
         xai_base_url: "https://api.x.ai/v1".into(),
+            legacy_auto_classification_enabled: false,
         xai_model: "grok-4.7".into(),
         jwt_secret: "synthetic-only-secret-at-least-thirty-two-characters".into(),
         apk_storage_path: PathBuf::from("missing"),

@@ -1,5 +1,7 @@
 # Operação e recuperação do Cogniva
 
+Automação finita do legado: [shuffle, fila limitada, orçamento persistente, monitoramento e pausa](CLASSIFICACAO-LEGADO-SOB-DEMANDA.md). O aceite autenticado que sorteia questões pode acionar classificação paga quando `COGNIVA_LEGACY_AUTO_CLASSIFY=1`; executar os probes gerais antes da ativação. `--legacy-classification-status` apenas lê contagens e configuração.
+
 ## Limites e credenciais
 
 A VPS executa somente imagens prontas. Não compilar Rust, Docker, npm ou JVM nela. O Compose deste repositório é um exemplo independente; não substitui o arquivo compartilhado `/opt/apps/docker-compose.yml`.

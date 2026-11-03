@@ -1,5 +1,7 @@
 # Nota técnica para Grok Build — etapas 5, 6 e 7
 
+Decisão posterior do proprietário: automatizar sob demanda exclusivamente o acervo legado de 618 IDs. [Política e operação](CLASSIFICACAO-LEGADO-SOB-DEMANDA.md). Essa exceção tem origem AI explícita e contrato separado; não altera a exigência de revisão humana para `classification.CONFIRMED` em documentos v2 novos. Não refazer o fluxo geral nem executar uma classificação irrestrita do banco.
+
 Atualização da implementação: **1.4.6/build 13**, revisão `51fd03cf1f0db334000ec4435f52f8ae62bf2380`, promovida em 02/11/2026 às 21:55:36 (UTC−03:00). Fluxo do passo 5 auditado, seleção/projeção do passo 6 e validação/publicação do passo 7 conferidos. [Estado e evidências](ETAPAS-5-7-CLASSIFICACAO-SELECAO.md). O inventário tem 612 legadas sem classificação e seis gabaritos ambíguos; zero lotes reais confirmados. Publicar o código não conclui a revisão do acervo. Histórico e documentos originais preservados.
 
 ## Plano e dependências

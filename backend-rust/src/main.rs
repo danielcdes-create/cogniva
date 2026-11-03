@@ -90,20 +90,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let client = Client::with_uri_str(&config.mongodb_uri).await?;
     let db = client.database(&config.mongodb_db);
+    if std::env::args().nth(1).as_deref()==Some("--legacy-classification-status") {
+        println!("{}",services::legacy_classification::status(&db,&config).await?);return Ok(());
+    }
 
     if std::env::args().nth(1).as_deref()==Some("--prepare-question-storage") {
         let result=services::question_storage::prepare(&db).await?;
+        services::legacy_classification::prepare_guard(&db).await?;
         services::question_storage::recover_audit(&db).await?;
         services::classification::recover(&db).await?;
         println!("{}",result);return Ok(());
     }
 
+    services::legacy_classification::recover_guard(&db).await?;
+    services::legacy_classification::recover_jobs(&db).await?;
     services::question_storage::recover_audit(&db).await?;
     services::classification::recover(&db).await?;
     // Inicia agendador diário em background (substitui schedule do AFTBot.py + countdown.py)
     spawn_background_daily_scheduler(db.clone());
 
     let state = Arc::new(AppState::new(db, config.clone()));
+    services::legacy_classification::spawn(state.clone());
 
     let app = build_router(state);
 
@@ -260,6 +267,7 @@ mod latest_apk_tests {
             gemini_model: "gemini-1.5-flash".to_string(),
             xai_api_key: None,
             xai_base_url: "https://api.x.ai/v1".into(),
+            legacy_auto_classification_enabled: false,
             xai_model: "grok-4.7".into(),
             jwt_secret: "test".to_string(),
             apk_storage_path: apk_path.clone(),

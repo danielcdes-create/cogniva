@@ -544,7 +544,7 @@ pub async fn generate(
     Ok(receipt)
 }
 
-async fn generate_one(
+pub(crate) async fn generate_one(
     db: &Database,
     config: &AppConfig,
     question_id: &str,
