@@ -4,18 +4,18 @@ Aplicativo Android de estudo para concursos, com cliente Kotlin/Compose e API Ru
 
 ## Estado da recuperação de 2026-11-01
 
-Classificação automática restrita ao acervo antigo: [política de shuffle e fila para editais/tronco](docs/CLASSIFICACAO-LEGADO-SOB-DEMANDA.md), em validação para 1.4.7/build 14. O fluxo preserva a distinção entre aplicação automática autorizada e revisão humana.
+Classificação automática do acervo antigo ativa em produção: [shuffle e fila para editais/tronco](docs/CLASSIFICACAO-LEGADO-SOB-DEMANDA.md), até oito itens na fila e 20 reservas globais por dia, sem repetição automática de falhas. Apenas os 618 IDs congelados participam; seis continuam bloqueados por gabarito ambíguo. A aplicação AI tem proveniência própria e não inventa revisão humana.
 
 O [catálogo compartilhado](docs/CATALOGO-CONHECIMENTOS.md) e os [contratos de questões](docs/SCHEMA-QUESTOES-V2.md) estão integrados à API/Mongo desde 1.4.5. Incluem validade atual/obsoleta, classificações com proveniência e armazenamento de abertas com rubrica. A execução/correção de abertas ainda não está habilitada no cliente objetivo. [Consulta do catálogo](docs/catalogo/CONHECIMENTOS.md).
 
-A entrega 1.4.6/build 13 está publicada: [classificação, seleção e progresso](docs/ETAPAS-5-7-CLASSIFICACAO-SELECAO.md), com projeção separada do histórico, contexto por componente e atualização de elegibilidade no cache. O inventário real tem 612 questões sem classificação e seis com gabarito ambíguo. O fluxo de revisão está disponível, mas nenhum lote real foi confirmado nesta entrega.
+A [entrega 1.4.6](docs/ETAPAS-5-7-CLASSIFICACAO-SELECAO.md) acrescentou seleção/progresso por revisão e cache verificado. A [1.4.7](docs/CLASSIFICACAO-LEGADO-SOB-DEMANDA.md) habilita a exceção automática autorizada. No aceite, a primeira proposta ficou pendente por confiança de 0,80: 612 legadas ainda sem classificação, incluindo essa pendência, e seis gabaritos ambíguos. Esses números são uma captura, não classificação integral do acervo.
 
-Versão em produção: **1.4.6/build 13**, revisão `51fd03cf1f0db334000ec4435f52f8ae62bf2380`, promovida em 02/11/2026 às 21:55:36 (UTC−03:00); contrato de sincronização 2. O [pipeline completo](https://github.com/danielcdes-create/cogniva/actions/runs/41553999544) passou os seis jobs, assinatura, ensaio de rollback e promoção: 37 testes Rust, 42 contratos Python, JVM/lint, nove imagens golden e 11 testes instrumentados. HTTPS, prontidão, catálogo autenticado, cache/projeção e bytes do APK servido foram conferidos. As 618 questões, quatro cadastros e todos os 20 documentos/32 eventos protegidos permaneceram preservados. Seleção e cobertura usam vínculos revisados, sem conceder crédito canônico a partir de propostas pendentes. Consulte [a entrega 5–7](docs/ETAPAS-5-7-CLASSIFICACAO-SELECAO.md) e [o fechamento da auditoria](docs/FECHAMENTO-AUDITORIA.md) para resultados e limites; [REMEDIACAO.md](docs/REMEDIACAO.md) preserva a execução.
+Versão em produção: **1.4.7/build 14**, revisão `41d976ee7bf0bab77ea216dc53980c08d01c1ac6`, promovida em 02/11/2026 às 22:59:25 (UTC−03:00); contrato de sincronização 2. [Pipeline completo](https://github.com/danielcdes-create/cogniva/actions/runs/41561247262) com seis jobs aprovados: 40 testes Rust, 47 contratos Python, JVM/lint, nove imagens golden e 11 testes instrumentados. Assinatura, rollback, prontidão, catálogo/cache e bytes do APK servidos foram conferidos. No aceite real, a proposta ficou pendente e nenhuma questão foi reescrita; originais, concursos e histórico protegido preservados. [Política e evidências](docs/CLASSIFICACAO-LEGADO-SOB-DEMANDA.md).
 
 - API: `https://198.199.65.103/api/v1/`.
 - Metadados públicos medidos do APK: `GET /api/app/latest-apk`.
 - APK: `GET /api/v1/apk/download`. O arquivo servido só muda durante promoção validada.
-- [Baixar APK 1.4.6/build 13](https://198.199.65.103/api/v1/apk/download): 12.813.192 bytes; SHA-256 `f15b6905137c5a414214de7a237bb0947844de3d2427d37b90535c987bf1cf56`.
+- [Baixar APK 1.4.7/build 14](https://198.199.65.103/api/v1/apk/download): 12.842.035 bytes; SHA-256 `1549916af29398b02094af0356e0c5b8c835a3988574507bcc129c6a05383d61`.
 - Saúde do processo: `/api/v1/health`; prontidão com MongoDB e revisão: `/api/v1/ready` no backend novo.
 - Não se afirma instalação nem validação física no S23 Ultra sem evidência ADB.
 

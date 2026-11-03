@@ -34,13 +34,13 @@ Durante a troca e o ensaio de rollback, Nginx bloqueia rotas de dados com 503 e 
 
 O pipeline provoca uma falha de smoke controlada, confirma imagem, ponteiro, Compose e saúde anteriores, e depois promove efetivamente. Falhas reais não contam como sucesso do ensaio. Entre protocolos incompatíveis, rollback mantém as rotas de dados fechadas até nova promoção válida; as filas ficam preservadas.
 
-Release operacional atual: **1.4.6/build 13**, revisão `51fd03cf1f0db334000ec4435f52f8ae62bf2380`, promovida em 02/11/2026 às 21:55:36 (UTC−03:00); run `41553999544`, todos os seis jobs aprovados. Aceite repetível:
+Release operacional atual: **1.4.7/build 14**, revisão `41d976ee7bf0bab77ea216dc53980c08d01c1ac6`, promovida em 02/11/2026 às 22:59:25 (UTC−03:00); run `41561247262`, seis jobs aprovados. Aceite repetível:
 
 ```powershell
-python -X utf8 scripts/verify-production-release.py 51fd03cf1f0db334000ec4435f52f8ae62bf2380 --version-name 1.4.6 --version-code 13 --xai-model grok-4.3 --baseline docs/remediation-validation/1.4.6/before-final/production-release.json --evidence-dir docs/remediation-validation/1.4.6
+python -X utf8 scripts/verify-production-release.py 41d976ee7bf0bab77ea216dc53980c08d01c1ac6 --version-name 1.4.7 --version-code 14 --xai-model grok-4.3 --baseline docs/remediation-validation/1.4.7/before-final/production-release.json --evidence-dir docs/remediation-validation/1.4.7
 ```
 
-Faz somente leituras, baixa o APK para `%LOCALAPPDATA%/Cogniva/releases` e grava evidência sanitizada no diretório solicitado. As evidências anteriores permanecem preservadas. A entrega 1.4.6 tem 37 testes Rust, 42 contratos Python, JVM/lint, nove imagens golden e 11 testes instrumentados aprovados. Quatro validadores, oito índices e catálogo conferidos, com questões/concursos e histórico preservados. [Detalhes da entrega](ETAPAS-5-7-CLASSIFICACAO-SELECAO.md).
+Faz somente leituras, baixa o APK para `%LOCALAPPDATA%/Cogniva/releases` e grava evidência sanitizada. As evidências anteriores permanecem preservadas. A entrega 1.4.7 tem 40 testes Rust, 47 contratos Python, JVM/lint, nove imagens golden e 11 testes instrumentados aprovados, quatro validadores/oito índices/catálogo conferidos e guard adicional restringindo documentos legados aos 618 IDs. [Aceite e automação ativa](CLASSIFICACAO-LEGADO-SOB-DEMANDA.md). Probes de seleção podem gerar custo com a automação ativa; a verificação de release acima não seleciona questões.
 
 Diagnóstico de questões para uma conta cujo proprietário foi comprovado: `python -X utf8 scripts/probe-question-selection.py ID --output caminho-do-relatorio.json`. O operador assina sessão diagnóstica temporária em memória na VPS; o relatório contém somente contagens, disciplinas e estados HTTP. Não envia tentativas, tutores pagos ou comandos de edição. `--assert-fixed` verifica os casos conhecidos da conta investigada nesta recuperação. Referências históricas indisponíveis devem ser revisadas por identidade/proveniência, sem apagá-las nem criar enunciados para preencher IDs. Quatro referências foram identificadas como exemplos locais antigos, com evidência na reconciliação da 1.4.2.
 
@@ -101,3 +101,9 @@ python -X utf8 scripts/probe-question-selection.py ID --expected-version 1.4.6 -
 `knowledge_evidence` é uma projeção separada dos totais globais: exige tentativa identificada, revisão de conteúdo correspondente e principal direto revisado. IDs singulares antigos precisam de recibo verificável do operador. Secundários não concedem domínio integral. Decisões de compatibilidade são vinculadas a proprietário, componente e revisões; exclusão não apaga aprendizagem global.
 
 Room 4→5 acrescenta apenas `pending_attempts.examComponentId` nullable; o protocolo de tentativa permanece 2. Não limpar filas ou banco para atualizar. Uma tentativa da mesma versão de conteúdo permanece válida quando só a classificação muda; o servidor calcula a taxonomia vigente. Instruções completas e limites em [ETAPAS-5-7-CLASSIFICACAO-SELECAO.md](ETAPAS-5-7-CLASSIFICACAO-SELECAO.md).
+
+## Aceite da automação finita
+
+`python scripts/probe-legacy-classification.py ID --output RELATORIO` lê somente contagens. `--trigger-one` envia um único pedido shuffle e pode reservar uma chamada paga; não repetir para produzir um resultado favorável. `--check-reuse ID_DA_QUESTAO` verifica reaproveitamento de um vínculo já aplicado. Essas opções são exclusivas e requerem uma conta cujo proprietário foi comprovado. Não enviam tentativas, tutores ou conteúdo de questão para o relatório.
+
+A preparação `--prepare-question-storage` instala também `legacy-cohort-guard/1`, recuperável e sem reescrita das questões. `verify-question-storage-backup.py --authorized-legacy-auto-classification` é o modo específico de preservação após aplicações autorizadas; não amplia a permissão do comparador de revisão humana. Não zerar recibos ou orçamento para repetir a prova. Estado e evidências reais na [nota de operação](CLASSIFICACAO-LEGADO-SOB-DEMANDA.md).

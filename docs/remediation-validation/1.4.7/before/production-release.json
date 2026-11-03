@@ -1,0 +1,127 @@
+{
+  "captured_at": "2026-11-03T01:37:47.598027+00:00",
+  "health": {
+    "status": "ok",
+    "service": "api-rust-core",
+    "version": "1.4.6",
+    "revision": "51fd03cf1f0db334000ec4435f52f8ae62bf2380",
+    "contract_version": 2
+  },
+  "ready": {
+    "status": "ready",
+    "contract_version": 2,
+    "revision": "51fd03cf1f0db334000ec4435f52f8ae62bf2380"
+  },
+  "metadata_twice_equal": true,
+  "anonymous_protected_status": 401,
+  "apk": {
+    "version_code": 13,
+    "version_name": "1.4.6",
+    "size_bytes": 12813192,
+    "sha256_checksum": "f15b6905137c5a414214de7a237bb0947844de3d2427d37b90535c987bf1cf56",
+    "download_path": "/api/v1/apk/download"
+  },
+  "local_apk": "C:\\Users\\danie\\AppData\\Local\\Cogniva\\releases\\51fd03cf1f0db334000ec4435f52f8ae62bf2380\\cogniva-1.4.6-13.apk",
+  "compose_and_other_containers_preserved": true,
+  "server": {
+    "manifest": {
+      "revision": "51fd03cf1f0db334000ec4435f52f8ae62bf2380",
+      "image": "ghcr.io/danielcdes-create/api-rust-core@sha256:4bf4afc9e64db0914fcac78946dbdc7b04afe6f3a206970492182062578e520b",
+      "version_code": 13,
+      "version_name": "1.4.6",
+      "apk_sha256": "f15b6905137c5a414214de7a237bb0947844de3d2427d37b90535c987bf1cf56",
+      "apk_size_bytes": 12813192,
+      "signing_policy": "Private rotated signer on API 28+; original signer retained only for API 26-27 upgrade compatibility",
+      "contract_version": 2,
+      "runtime_size_bytes": 30272160,
+      "previous_image_id": "sha256:872a4f11d5fd7264cdbcf8972788d0925262ddc48ee0f1cad7d4cd7236f5afd2",
+      "previous_image": "ghcr.io/danielcdes-create/api-rust-core@sha256:872a4f11d5fd7264cdbcf8972788d0925262ddc48ee0f1cad7d4cd7236f5afd2"
+    },
+    "compose_sha256": "ae0f543998b6bb3972e32a7942a73e8c269a4ac16af773c5c01e3fcfe531dcc2",
+    "containers": [
+      {
+        "name": "/api-rust-core",
+        "id": "87707368bc2ff0505d9c0f1340eb23d9c4558039ed5a5870a9f4299b12d15db9",
+        "image_id": "sha256:4bf4afc9e64db0914fcac78946dbdc7b04afe6f3a206970492182062578e520b"
+      },
+      {
+        "name": "/financial-twin-server",
+        "id": "ff32c5849f62c6d5b32b8c7bdd62a11d9351fc689e0d5c84bef8f93b5d627703",
+        "image_id": "sha256:7e72faaca6f3ac843c08265af79c2f9469de238308a3a4e03da5895ad50bb482"
+      },
+      {
+        "name": "/asbuildo-server",
+        "id": "ba879ad18169909c528d85aee1494a276a1013eea196eb6cdce5d5ad61f152f4",
+        "image_id": "sha256:367a4f0c518ad77c42e21be187d1d4c4fd0b3284268bd9ff02a850ffac119bf6"
+      },
+      {
+        "name": "/spamshield-server",
+        "id": "edda480723c75f16a10e9a27a7a3e7512e06056c29fbb5baaf19131a474bc37c",
+        "image_id": "sha256:9fdd460f985fe6793867e8dda9a7f7e760c3084b6c768a3da5421d235c3e7190"
+      }
+    ],
+    "core": {
+      "user": "65532",
+      "read_only": true,
+      "memory_bytes": 167772160,
+      "nano_cpus": 750000000,
+      "cap_drop": [
+        "ALL"
+      ],
+      "health": "healthy",
+      "gemini_model": "gemini-2.5-flash-lite",
+      "xai_model": "grok-4.3",
+      "xai_base_url": "https://api.x.ai/v1",
+      "xai_key_configured": true
+    },
+    "gate": "set $cogniva_maintenance 0;",
+    "stats": [
+      {
+        "BlockIO": "28.5MB / 0B",
+        "CPUPerc": "0.03%",
+        "Container": "87707368bc2ff0505d9c0f1340eb23d9c4558039ed5a5870a9f4299b12d15db9",
+        "ID": "87707368bc2f",
+        "MemPerc": "7.19%",
+        "MemUsage": "11.51MiB / 160MiB",
+        "Name": "api-rust-core",
+        "NetIO": "5.55MB / 30.3MB",
+        "PIDs": "4"
+      },
+      {
+        "BlockIO": "110MB / 47.9MB",
+        "CPUPerc": "0.41%",
+        "Container": "ff32c5849f62c6d5b32b8c7bdd62a11d9351fc689e0d5c84bef8f93b5d627703",
+        "ID": "ff32c5849f62",
+        "MemPerc": "7.27%",
+        "MemUsage": "69.51MiB / 956.3MiB",
+        "Name": "financial-twin-server",
+        "NetIO": "20.4MB / 5.35MB",
+        "PIDs": "14"
+      },
+      {
+        "BlockIO": "480MB / 64.1MB",
+        "CPUPerc": "0.25%",
+        "Container": "ba879ad18169909c528d85aee1494a276a1013eea196eb6cdce5d5ad61f152f4",
+        "ID": "ba879ad18169",
+        "MemPerc": "1.67%",
+        "MemUsage": "16.01MiB / 956.3MiB",
+        "Name": "asbuildo-server",
+        "NetIO": "251MB / 51.9MB",
+        "PIDs": "49"
+      },
+      {
+        "BlockIO": "89.5MB / 721kB",
+        "CPUPerc": "0.04%",
+        "Container": "edda480723c75f16a10e9a27a7a3e7512e06056c29fbb5baaf19131a474bc37c",
+        "ID": "edda480723c7",
+        "MemPerc": "0.62%",
+        "MemUsage": "5.938MiB / 956.3MiB",
+        "Name": "spamshield-server",
+        "NetIO": "296MB / 57.3MB",
+        "PIDs": "3"
+      }
+    ],
+    "renewal_timer": "ActiveState=active\nLastTriggerUSec=Mon 2026-11-02 22:04:15 -03\n",
+    "renewal_service": "Result=success\nExecMainStatus=0\n"
+  }
+}

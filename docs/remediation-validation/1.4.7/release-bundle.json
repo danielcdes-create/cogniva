@@ -1,0 +1,10 @@
+{
+  "revision": "41d976ee7bf0bab77ea216dc53980c08d01c1ac6",
+  "image": "ghcr.io/danielcdes-create/api-rust-core@sha256:6fd788955e52d8c508514a2c9e5ca1005a14b0840e7384260044b058c767293c",
+  "version_code": 14,
+  "version_name": "1.4.7",
+  "apk_sha256": "1549916af29398b02094af0356e0c5b8c835a3988574507bcc129c6a05383d61",
+  "apk_size_bytes": 12842035,
+  "signing_policy": "Private rotated signer on API 28+; original signer retained only for API 26-27 upgrade compatibility",
+  "contract_version": 2
+}

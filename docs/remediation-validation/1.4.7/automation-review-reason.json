@@ -1,0 +1,19 @@
+{
+  "question_id": "663e320d719a7d19170efb65",
+  "job_status": "PENDING_REVIEW",
+  "proposal_status": "PENDING",
+  "roles_and_confidences": [
+    {
+      "role": "PRIMARY",
+      "coverage": "DIRECT",
+      "confidence": 0.8
+    }
+  ],
+  "automatic_threshold": 0.9,
+  "original_snapshot_matches_unchanged_question": true,
+  "provider_reservations_marked_paid": 1,
+  "daily_reserved_after": 1,
+  "same_reservations_in_later_read_only_observation": true,
+  "automatic_calls_retried": 0,
+  "new_learning_attempts_submitted": 0
+}

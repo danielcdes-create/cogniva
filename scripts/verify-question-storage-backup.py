@@ -7,7 +7,7 @@ import hashlib
 import json
 import pathlib
 import zipfile
-from bson import decode_all
+from bson import decode_all, json_util
 
 p = argparse.ArgumentParser()
 p.add_argument("before", type=pathlib.Path)
@@ -44,7 +44,7 @@ for name in ["todasQuestoes", "user_exams"]:
         preserved[name] = {"documents": after["collections"][name], "sha256": hashlib.sha256(new).hexdigest(), "byte_identical": True}
 assert before["protected_history"] == after["protected_history"], "Learning history changed"
 
-options = json.loads((new_root / "collection-options.json").read_text(encoding="utf-8"))
+options = json_util.loads((new_root / "collection-options.json").read_text(encoding="utf-8"))
 receipts = {row["_id"]: row for row in decode_all(data(new_root, "cogniva_schema_versions"))}
 validated = []
 for name in ["todasQuestoes", "question_classification_suggestions", "question_exam_compatibility", "answer_evaluations"]:

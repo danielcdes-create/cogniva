@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="br.com.concursoprep.app.QuestionPreviewMatrixScreenshotTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-11-03T01:43:39.584Z" hostname="runnervm48cm3" time="1.14">
+  <properties/>
+  <testcase name="matchesApprovedBaseline[0]" classname="br.com.concursoprep.app.QuestionPreviewMatrixScreenshotTest" time="0.328"/>
+  <testcase name="matchesApprovedBaseline[1]" classname="br.com.concursoprep.app.QuestionPreviewMatrixScreenshotTest" time="0.149"/>
+  <testcase name="matchesApprovedBaseline[2]" classname="br.com.concursoprep.app.QuestionPreviewMatrixScreenshotTest" time="0.136"/>
+  <testcase name="matchesApprovedBaseline[3]" classname="br.com.concursoprep.app.QuestionPreviewMatrixScreenshotTest" time="0.132"/>
+  <testcase name="matchesApprovedBaseline[4]" classname="br.com.concursoprep.app.QuestionPreviewMatrixScreenshotTest" time="0.168"/>
+  <testcase name="matchesApprovedBaseline[5]" classname="br.com.concursoprep.app.QuestionPreviewMatrixScreenshotTest" time="0.125"/>
+  <testcase name="matchesApprovedBaseline[6]" classname="br.com.concursoprep.app.QuestionPreviewMatrixScreenshotTest" time="0.101"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[Nov 03, 2026 1:43:39 AM app.cash.paparazzi.internal.PaparazziLogger logAndroidFramework
+INFO: Settings [3]: Can't get key animator_duration_scale from content://settings/global
+Nov 03, 2026 1:43:39 AM app.cash.paparazzi.internal.PaparazziLogger logAndroidFramework
+INFO: Settings [3]: Can't get key animator_duration_scale from content://settings/global
+Nov 03, 2026 1:43:40 AM app.cash.paparazzi.internal.PaparazziLogger logAndroidFramework
+INFO: Settings [3]: Can't get key animator_duration_scale from content://settings/global
+Nov 03, 2026 1:43:40 AM app.cash.paparazzi.internal.PaparazziLogger logAndroidFramework
+INFO: Settings [3]: Can't get key animator_duration_scale from content://settings/global
+Nov 03, 2026 1:43:40 AM app.cash.paparazzi.internal.PaparazziLogger logAndroidFramework
+INFO: Settings [3]: Can't get key animator_duration_scale from content://settings/global
+Nov 03, 2026 1:43:40 AM app.cash.paparazzi.internal.PaparazziLogger logAndroidFramework
+INFO: Settings [3]: Can't get key animator_duration_scale from content://settings/global
+Nov 03, 2026 1:43:40 AM app.cash.paparazzi.internal.PaparazziLogger logAndroidFramework
+INFO: Settings [3]: Can't get key animator_duration_scale from content://settings/global
+]]></system-err>
+</testsuite>

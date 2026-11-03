@@ -1,0 +1,51 @@
+{
+  "captured_at": "2026-11-03T02:04:30.169548+00:00",
+  "action": "status",
+  "before": {
+    "enabled": true,
+    "policy_version": "legacy-618-auto/1",
+    "cohort_id": "legacy-618/2026-11-02",
+    "cohort_total": 618,
+    "cohort_eligible": 612,
+    "blocked": 6,
+    "day": "2026-11-02",
+    "daily_limit": 20,
+    "daily_reserved": 1,
+    "queue_limit": 8,
+    "queued": 0,
+    "attempted": 1,
+    "jobs": {
+      "RESERVED": 0,
+      "AUTO_APPLIED": 0,
+      "PENDING_REVIEW": 1,
+      "STALE": 0,
+      "FAILED_NO_RETRY": 0,
+      "UNKNOWN_NO_RETRY": 0
+    },
+    "mongo_guard_installed": true
+  },
+  "attempts_submitted": 0,
+  "after": {
+    "enabled": true,
+    "policy_version": "legacy-618-auto/1",
+    "cohort_id": "legacy-618/2026-11-02",
+    "cohort_total": 618,
+    "cohort_eligible": 612,
+    "blocked": 6,
+    "day": "2026-11-02",
+    "daily_limit": 20,
+    "daily_reserved": 1,
+    "queue_limit": 8,
+    "queued": 0,
+    "attempted": 1,
+    "jobs": {
+      "RESERVED": 0,
+      "AUTO_APPLIED": 0,
+      "PENDING_REVIEW": 1,
+      "STALE": 0,
+      "FAILED_NO_RETRY": 0,
+      "UNKNOWN_NO_RETRY": 0
+    },
+    "mongo_guard_installed": true
+  }
+}

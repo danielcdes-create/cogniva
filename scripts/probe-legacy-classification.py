@@ -55,7 +55,7 @@ elif action=='check-reuse':
 else:report['after']=status()
 print(json.dumps(report,ensure_ascii=False))
 '''
-result=subprocess.run(['ssh','-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-o','ConnectTimeout=5','root@198.199.65.103','python3','-',str(a.user_id),'trigger-one' if a.trigger_one else 'check-reuse' if a.check_reuse else 'status',a.check_reuse or ''],input=remote,text=True,encoding='utf-8',capture_output=True,check=True)
+result=subprocess.run(['ssh','-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-o','ConnectTimeout=5','root@198.199.65.103','python3','-',str(a.user_id),'trigger-one' if a.trigger_one else 'check-reuse' if a.check_reuse else 'status',a.check_reuse or 'none'],input=remote,text=True,encoding='utf-8',capture_output=True,check=True)
 report=json.loads(result.stdout)
 a.output.parent.mkdir(parents=True,exist_ok=True)
 a.output.write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')

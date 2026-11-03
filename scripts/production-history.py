@@ -3,7 +3,7 @@ Credentials stay in process memory. Private BSON backups live outside the repo.
 """
 import argparse,datetime,hashlib,json,os,pathlib,socket,subprocess,time,zipfile
 import socks
-from bson import BSON
+from bson import BSON, json_util
 from pymongo import MongoClient
 
 p=argparse.ArgumentParser();p.add_argument('--backup',action='store_true');p.add_argument('--label',default='before');a=p.parse_args()
@@ -32,7 +32,7 @@ try:
     result={'captured_at':now,'database':'CNU','access':'read-only','collections':{},'protected_history':{},'canonical_questions':0,
         'jwt_matches_public_example':env.get('JWT_SECRET') in ['gere_uma_string_aleatoria_forte_para_producao','cogniva-super-secret-change-in-production','super-secret-jwt-key-change-me']}
     descriptions={item['name']:item for item in db.list_collections()}
-    if a.backup:(backup_dir/'collection-options.json').write_text(json.dumps(descriptions,default=str,indent=2),encoding='utf-8')
+    if a.backup:(backup_dir/'collection-options.json').write_text(json_util.dumps(descriptions,indent=2),encoding='utf-8')
     for name in sorted(descriptions):
         if descriptions[name].get('type')=='view':
             result['collections'][name]='view definition preserved in private backup'

@@ -1,0 +1,297 @@
+verify / knowledge-contracts / contracts	UNKNOWN STEP	﻿2026-11-03T01:40:24.3654305Z Current runner version: '2.338.2'
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:24.3680048Z ##[group]Runner Image Provisioner
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:24.3680932Z Hosted Compute Agent
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:24.3681666Z Version: 20261021.618
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:24.3682315Z Commit: 21505ad2541d5be6135ed84fc33697146cf75b8e
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:24.3683062Z Build Date: 2026-10-21T00:45:21Z
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:24.3683827Z Worker ID: {fc7047a9-5651-4b5b-832f-9f10bcc9a008}
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:24.3684592Z Region: westus2
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:24.3685181Z Cloud: Azure
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:24.3686206Z ##[endgroup]
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:24.3687806Z ##[group]Operating System
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:24.3688566Z Ubuntu
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:24.3689102Z 24.04.5
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:24.3689691Z LTS
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:24.3690225Z ##[endgroup]
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:24.3690825Z ##[group]Runner Image
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:24.3691472Z Image: ubuntu-24.04
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:24.3692046Z Version: 20261025.353.1
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:24.3693359Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261025.353/images/ubuntu/Ubuntu2404-Readme.md
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:24.3694988Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261025.353
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:24.3696531Z ##[endgroup]
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:24.3697697Z ##[group]GITHUB_TOKEN Permissions
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:24.3699680Z Contents: read
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:24.3700380Z Metadata: read
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:24.3700944Z ##[endgroup]
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:24.3703097Z Secret source: Actions
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:24.3704048Z Cache mode: write
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:24.3705326Z Prepare workflow directory
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:24.4051599Z Prepare all required actions
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:24.4103451Z Getting action download info
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:24.7657048Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:24.8849450Z Download action repository 'actions/setup-python@v5' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.0676249Z Uses: danielcdes-create/cogniva/.github/workflows/knowledge-contracts.yml@refs/heads/codex/auditoria-convergencia (41d976ee7bf0bab77ea216dc53980c08d01c1ac6)
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.0681711Z ##[group] Inputs
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.0682603Z   promote: true
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.0683073Z ##[endgroup]
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.0683625Z Complete job name: verify / knowledge-contracts / contracts
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.1561285Z ##[group]Run actions/checkout@v4
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.1562168Z with:
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.1562626Z   repository: danielcdes-create/cogniva
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.1566848Z   token: ***
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.1567281Z   ssh-strict: true
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.1567714Z   ssh-user: git
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.1568153Z   persist-credentials: true
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.1568638Z   clean: true
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.1569074Z   sparse-checkout-cone-mode: true
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.1569592Z   fetch-depth: 1
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.1570008Z   fetch-tags: false
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.1570452Z   show-progress: true
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.1570884Z   lfs: false
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.1571294Z   submodules: false
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.1571755Z   set-safe-directory: true
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.1572245Z   allow-unsafe-pr-checkout: false
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.1573035Z ##[endgroup]
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4354350Z Syncing repository: danielcdes-create/cogniva
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4357366Z ##[group]Getting Git version info
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4358658Z Working directory is '/home/runner/work/cogniva/cogniva'
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4360850Z [command]/usr/bin/git version
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4499582Z git version 2.56.0
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4544603Z ##[endgroup]
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4576965Z Temporarily overriding HOME='/home/runner/work/_temp/ac75be89-4d01-4986-8484-5124263e9135' before making global git config changes
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4578805Z Adding repository directory to the temporary git global config as a safe directory
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4580201Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/cogniva/cogniva
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4643968Z Deleting the contents of '/home/runner/work/cogniva/cogniva'
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4663974Z ##[group]Initializing the repository
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4667531Z [command]/usr/bin/git init /home/runner/work/cogniva/cogniva
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4794409Z hint: Using 'master' as the name for the initial branch. This default branch name
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4796492Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4797631Z hint: to use in all of your new repositories, which will suppress this warning,
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4798531Z hint: call:
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4799031Z hint:
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4799660Z hint: 	git config --global init.defaultBranch <name>
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4800427Z hint:
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4801112Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4802166Z hint: 'development'. The just-created branch can be renamed via this command:
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4803190Z hint:
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4804005Z hint: 	git branch -m <name>
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4804621Z hint:
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4805635Z hint: Disable this message with "git config set advice.defaultBranchName false"
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4811613Z Initialized empty Git repository in /home/runner/work/cogniva/cogniva/.git/
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4837743Z [command]/usr/bin/git remote add origin https://github.com/danielcdes-create/cogniva
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4888010Z ##[endgroup]
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4890119Z ##[group]Disabling automatic garbage collection
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4891516Z [command]/usr/bin/git config --local gc.auto 0
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4923616Z ##[endgroup]
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4925328Z ##[group]Setting up auth
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4933278Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.4998959Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.5453977Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.5501936Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.5749551Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.5795964Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.6037361Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.6086107Z ##[endgroup]
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.6087419Z ##[group]Fetching the repository
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:25.6099527Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +41d976ee7bf0bab77ea216dc53980c08d01c1ac6:refs/remotes/origin/codex/auditoria-convergencia
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.2334711Z From https://github.com/danielcdes-create/cogniva
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.2338278Z  * [new ref]         41d976ee7bf0bab77ea216dc53980c08d01c1ac6 -> origin/codex/auditoria-convergencia
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.2345074Z ##[endgroup]
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.2347819Z ##[group]Determining the checkout info
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.2350786Z ##[endgroup]
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.2352672Z [command]/usr/bin/git sparse-checkout disable
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.2412442Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.2453834Z ##[group]Checking out the ref
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.2459865Z [command]/usr/bin/git checkout --progress --force -B codex/auditoria-convergencia refs/remotes/origin/codex/auditoria-convergencia
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.2994128Z Switched to a new branch 'codex/auditoria-convergencia'
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.3000664Z branch 'codex/auditoria-convergencia' set up to track 'origin/codex/auditoria-convergencia'.
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.3011257Z ##[endgroup]
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.3063120Z [command]/usr/bin/git log -1 --format=%H
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.3098282Z 41d976ee7bf0bab77ea216dc53980c08d01c1ac6
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.3505354Z ##[group]Run actions/setup-python@v5
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.3506843Z with:
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.3507748Z   python-version: 3.12
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.3508771Z   cache: pip
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.3510033Z   cache-dependency-path: scripts/requirements-contracts.txt
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.3511638Z   check-latest: false
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.3522780Z   token: ***
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.3523756Z   update-environment: true
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.3524941Z   allow-prereleases: false
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.3526188Z   freethreaded: false
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.3527187Z ##[endgroup]
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.4933093Z ##[group]Installed versions
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.5070897Z (node:2646) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.5074602Z (Use `node --trace-deprecation ...` to show where the warning was created)
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.5076743Z Successfully set up CPython (3.12.15)
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.5078804Z ##[endgroup]
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.5393219Z [command]/opt/hostedtoolcache/Python/3.12.15/x64/bin/pip cache dir
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:26.8606668Z /home/runner/.cache/pip
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:27.1419442Z Cache hit for: setup-python-Linux-x64-24.04-Ubuntu-python-3.12.15-pip-be461ac1725de8eb621f17b72fa388a3d46b3e51431c975e9530904809d859bf
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:27.1534985Z (node:2646) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:27.9205989Z Received 1365373 of 1365373 (100.0%), 2.6 MBs/sec
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:27.9207704Z Cache Size: ~1 MB (1365373 B)
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:27.9236552Z [command]/usr/bin/tar -xf /home/runner/work/_temp/20639c59-1cc3-4ff9-b0fa-ffb28aa9c992/cache.tzst -P -C /home/runner/work/cogniva/cogniva --use-compress-program unzstd
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:27.9373815Z Cache restored successfully
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:27.9453760Z Cache restored from key: setup-python-Linux-x64-24.04-Ubuntu-python-3.12.15-pip-be461ac1725de8eb621f17b72fa388a3d46b3e51431c975e9530904809d859bf
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:27.9552620Z ##[group]Run python -m pip install -r scripts/requirements-contracts.txt
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:27.9553301Z ^[[36;1mpython -m pip install -r scripts/requirements-contracts.txt^[[0m
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:27.9580606Z shell: /usr/bin/bash -e {0}
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:27.9580952Z env:
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:27.9581352Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:27.9581886Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:27.9582390Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:27.9582856Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:27.9583333Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:27.9583814Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:27.9584263Z ##[endgroup]
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:28.9531899Z Collecting jsonschema==4.26.0 (from -r scripts/requirements-contracts.txt (line 2))
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:28.9547425Z   Using cached jsonschema-4.26.0-py3-none-any.whl.metadata (7.6 kB)
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:28.9727379Z Collecting rfc8785==0.1.4 (from -r scripts/requirements-contracts.txt (line 3))
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:28.9742115Z   Using cached rfc8785-0.1.4-py3-none-any.whl.metadata (3.4 kB)
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:28.9902711Z Collecting attrs>=22.2.0 (from jsonschema==4.26.0->-r scripts/requirements-contracts.txt (line 2))
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:28.9916505Z   Using cached attrs-26.1.0-py3-none-any.whl.metadata (8.8 kB)
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.0057294Z Collecting jsonschema-specifications>=2023.03.6 (from jsonschema==4.26.0->-r scripts/requirements-contracts.txt (line 2))
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.0069314Z   Using cached jsonschema_specifications-2025.9.1-py3-none-any.whl.metadata (2.9 kB)
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.0293371Z Collecting referencing>=0.28.4 (from jsonschema==4.26.0->-r scripts/requirements-contracts.txt (line 2))
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.0310068Z   Using cached referencing-0.37.0-py3-none-any.whl.metadata (2.8 kB)
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.3049942Z Collecting rpds-py>=0.25.0 (from jsonschema==4.26.0->-r scripts/requirements-contracts.txt (line 2))
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.3063803Z   Using cached rpds_py-2026.9.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.1 kB)
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.3276615Z Collecting typing-extensions>=4.4.0 (from referencing>=0.28.4->jsonschema==4.26.0->-r scripts/requirements-contracts.txt (line 2))
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.3288814Z   Using cached typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.3321190Z Using cached jsonschema-4.26.0-py3-none-any.whl (90 kB)
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.3333559Z Using cached rfc8785-0.1.4-py3-none-any.whl (9.2 kB)
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.3345388Z Using cached attrs-26.1.0-py3-none-any.whl (67 kB)
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.3357671Z Using cached jsonschema_specifications-2025.9.1-py3-none-any.whl (18 kB)
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.3369147Z Using cached referencing-0.37.0-py3-none-any.whl (26 kB)
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.3381431Z Using cached rpds_py-2026.9.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (371 kB)
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.3393952Z Using cached typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.4005067Z Installing collected packages: typing-extensions, rpds-py, rfc8785, attrs, referencing, jsonschema-specifications, jsonschema
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.6014884Z
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.6031285Z Successfully installed attrs-26.1.0 jsonschema-4.26.0 jsonschema-specifications-2025.9.1 referencing-0.37.0 rfc8785-0.1.4 rpds-py-2026.9.1 typing-extensions-4.16.0
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.6564004Z ##[group]Run python scripts/knowledge_catalog.py --check
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.6564465Z ^[[36;1mpython scripts/knowledge_catalog.py --check^[[0m
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.6586059Z shell: /usr/bin/bash -e {0}
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.6586314Z env:
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.6586593Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.6587062Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.6587511Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.6587897Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.6588278Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.6588665Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.6588992Z ##[endgroup]
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.9037155Z {
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.9037577Z   "catalog_version": 1,
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.9037952Z   "trunks": 7,
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.9038394Z   "subjects": 35,
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.9038715Z   "topics": 49,
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.9039027Z   "subtopics": 174,
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.9039354Z   "subject_aliases": 41,
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.9039750Z   "legacy_subjects_preserved": 24,
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.9040166Z   "legacy_topics_preserved": 26,
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.9040872Z   "runtime_catalog_sha256": "d9258c4921b0233dbd2abadf1b2f23605a0dfef9a5d069664e7336ee4648343e",
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.9041840Z   "catalog_sha256": "f941cae8cafd51cb49492e1843a300d34c3a6b90c445a616670dc9a0dd2881bb",
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.9042524Z   "runtime_transition": "NOT_APPLIED"
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.9042925Z }
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.9222179Z ##[group]Run python scripts/question_contracts.py --examples
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.9222653Z ^[[36;1mpython scripts/question_contracts.py --examples^[[0m
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.9243426Z shell: /usr/bin/bash -e {0}
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.9243674Z env:
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.9243949Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.9244407Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.9244866Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.9245253Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.9245968Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.9246388Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:29.9246901Z ##[endgroup]
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:30.6591811Z {
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:30.6592324Z   "contract": "STAGED_NOT_DEPLOYED",
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:30.6592778Z   "examples_validated": {
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:30.6593216Z     "questions": 7,
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:30.6593565Z     "suggestion": 1,
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:30.6593899Z     "compatibility": 1,
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:30.6594242Z     "evaluation": 4
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:30.6594548Z   }
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:30.6594813Z }
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:30.6775021Z ##[group]Run python -m unittest discover -s scripts/tests -p 'test_*.py' -v
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:30.6776037Z ^[[36;1mpython -m unittest discover -s scripts/tests -p 'test_*.py' -v^[[0m
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:30.6796698Z shell: /usr/bin/bash -e {0}
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:30.6796943Z env:
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:30.6797213Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:30.6797661Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:30.6798113Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:30.6798496Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:30.6798882Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:30.6799273Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:30.6799596Z ##[endgroup]
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:31.0760906Z test_legacy_components_and_same_subject_in_two_stages (test_exam_components_contract.ExamComponentContractTest.test_legacy_components_and_same_subject_in_two_stages) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:31.0770264Z test_pending_custom_component_and_invalid_weight (test_exam_components_contract.ExamComponentContractTest.test_pending_custom_component_and_invalid_weight) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:31.2326375Z test_dry_run_keeps_fixture_bytes_and_omits_private_content (test_inventory_and_preservation.InventoryTest.test_dry_run_keeps_fixture_bytes_and_omits_private_content) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:31.2394566Z test_each_state_is_distinct_and_a_label_is_not_a_canonical_reference (test_inventory_and_preservation.InventoryTest.test_each_state_is_distinct_and_a_label_is_not_a_canonical_reference) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:31.2460411Z test_open_questions_are_inventoryable_and_invalid_v2_is_not_confirmed (test_inventory_and_preservation.InventoryTest.test_open_questions_are_inventoryable_and_invalid_v2_is_not_confirmed) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:31.2466054Z test_authorized_classification_fields_may_change_and_history_may_not (test_inventory_and_preservation.PreservationTest.test_authorized_classification_fields_may_change_and_history_may_not) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:31.3884772Z test_invented_catalog_id_and_lost_provenance_are_rejected (test_inventory_and_preservation.SuggestionBoundaryTest.test_invented_catalog_id_and_lost_provenance_are_rejected) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:31.5148787Z test_alias_collision_ignores_case_accents_and_punctuation (test_knowledge_catalog.KnowledgeCatalogTest.test_alias_collision_ignores_case_accents_and_punctuation) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:31.6420298Z test_duplicate_identity_is_rejected_even_with_different_content (test_knowledge_catalog.KnowledgeCatalogTest.test_duplicate_identity_is_rejected_even_with_different_content) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:31.8984346Z test_invalid_shape_and_changed_runtime_are_rejected (test_knowledge_catalog.KnowledgeCatalogTest.test_invalid_shape_and_changed_runtime_are_rejected) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:32.1535174Z test_no_silent_equivalence_or_reverse_duplicate_relation (test_knowledge_catalog.KnowledgeCatalogTest.test_no_silent_equivalence_or_reverse_duplicate_relation) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:32.4147155Z test_original_name_may_change_only_if_preserved_as_alias (test_knowledge_catalog.KnowledgeCatalogTest.test_original_name_may_change_only_if_preserved_as_alias) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:32.5461507Z test_preserves_every_legacy_subject_topic_and_trunk_link (test_knowledge_catalog.KnowledgeCatalogTest.test_preserves_every_legacy_subject_topic_and_trunk_link) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:32.5503264Z test_readable_export_matches_the_machine_catalog (test_knowledge_catalog.KnowledgeCatalogTest.test_readable_export_matches_the_machine_catalog) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:32.6809848Z test_same_subject_reparenting_cannot_repurpose_registered_id (test_knowledge_catalog.KnowledgeCatalogTest.test_same_subject_reparenting_cannot_repurpose_registered_id) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:32.9355226Z test_self_parent_and_cycle_are_rejected (test_knowledge_catalog.KnowledgeCatalogTest.test_self_parent_and_cycle_are_rejected) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:33.3176063Z test_unknown_subject_parent_and_cross_subject_parent_are_rejected (test_knowledge_catalog.KnowledgeCatalogTest.test_unknown_subject_parent_and_cross_subject_parent_are_rejected) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:33.7036396Z test_unregistered_ids_unknown_sources_and_removed_legacy_links_fail (test_knowledge_catalog.KnowledgeCatalogTest.test_unregistered_ids_unknown_sources_and_removed_legacy_links_fail) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:33.7167422Z test_projection_and_cache_request_shapes (test_knowledge_projection_schema.KnowledgeProjectionSchemaTest.test_projection_and_cache_request_shapes) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:33.7333420Z test_automatic_extension_is_distinct_from_human_confirmation (test_legacy_auto_classification.LegacyAutomaticContractTest.test_automatic_extension_is_distinct_from_human_confirmation) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:33.7344448Z test_changed_content_unknown_cohort_and_ambiguous_answers_are_rejected (test_legacy_auto_classification.LegacyAutomaticContractTest.test_changed_content_unknown_cohort_and_ambiguous_answers_are_rejected) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:33.7346806Z test_frozen_cohort_has_exactly_618_distinct_members_and_six_blocked (test_legacy_auto_classification.LegacyAutomaticContractTest.test_frozen_cohort_has_exactly_618_distinct_members_and_six_blocked) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:33.7381206Z test_low_confidence_unknown_topic_and_stale_catalog_remain_unapplied (test_legacy_auto_classification.LegacyAutomaticContractTest.test_low_confidence_unknown_topic_and_stale_catalog_remain_unapplied) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:33.7385805Z test_preservation_rejects_deleted_null_extra_fields_and_original_answer_changes (test_legacy_auto_classification.LegacyAutomaticContractTest.test_preservation_rejects_deleted_null_extra_fields_and_original_answer_changes) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:33.7416995Z test_acceptance_requires_human_revision_increment_and_proposal_trace (test_question_contracts.QuestionContractsTest.test_acceptance_requires_human_revision_increment_and_proposal_trace) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:33.8840895Z test_ai_provisional_result_cannot_be_a_confirmed_hit (test_question_contracts.QuestionContractsTest.test_ai_provisional_result_cannot_be_a_confirmed_hit) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:33.9041598Z test_all_question_formats_and_obsolete_unknown_examples (test_question_contracts.QuestionContractsTest.test_all_question_formats_and_obsolete_unknown_examples) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:33.9106052Z test_ambiguous_options_and_contradictory_answer_keys_fail (test_question_contracts.QuestionContractsTest.test_ambiguous_options_and_contradictory_answer_keys_fail) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:33.9148138Z test_content_hash_ignores_classification_and_ai_but_includes_rubric (test_question_contracts.QuestionContractsTest.test_content_hash_ignores_classification_and_ai_but_includes_rubric) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:33.9176380Z test_essential_criterion_cannot_be_bypassed_by_total_score (test_question_contracts.QuestionContractsTest.test_essential_criterion_cannot_be_bypassed_by_total_score) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:33.9188288Z test_evaluation_cannot_change_the_owner_or_submitted_text (test_question_contracts.QuestionContractsTest.test_evaluation_cannot_change_the_owner_or_submitted_text) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:33.9237059Z test_evaluation_examples_cover_exact_manual_semantic_and_ai (test_question_contracts.QuestionContractsTest.test_evaluation_examples_cover_exact_manual_semantic_and_ai) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:33.9296476Z test_five_options_and_one_correct_option_are_required (test_question_contracts.QuestionContractsTest.test_five_options_and_one_correct_option_are_required) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:33.9333666Z test_historical_context_is_distinct_from_current_legislation (test_question_contracts.QuestionContractsTest.test_historical_context_is_distinct_from_current_legislation) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:33.9388857Z test_incomplete_evaluation_is_not_an_incorrect_answer_and_counters_cannot_overflow (test_question_contracts.QuestionContractsTest.test_incomplete_evaluation_is_not_an_incorrect_answer_and_counters_cannot_overflow) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:33.9450783Z test_normative_review_needs_evidence_and_expires_without_erasing_history (test_question_contracts.QuestionContractsTest.test_normative_review_needs_evidence_and_expires_without_erasing_history) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:33.9462665Z test_obsolete_and_review_pending_stay_out_of_current_practice (test_question_contracts.QuestionContractsTest.test_obsolete_and_review_pending_stay_out_of_current_practice) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:33.9566215Z test_open_rubric_totals_and_engine_contracts_are_enforced (test_question_contracts.QuestionContractsTest.test_open_rubric_totals_and_engine_contracts_are_enforced) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.0988167Z test_origin_does_not_establish_exam_compatibility_or_bypass_owner (test_question_contracts.QuestionContractsTest.test_origin_does_not_establish_exam_compatibility_or_bypass_owner) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.1112929Z test_primary_secondary_links_need_review_and_consistent_taxonomy (test_question_contracts.QuestionContractsTest.test_primary_secondary_links_need_review_and_consistent_taxonomy) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.1126753Z test_regrading_appends_a_result_for_the_same_attempt (test_question_contracts.QuestionContractsTest.test_regrading_appends_a_result_for_the_same_attempt) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.1158398Z test_scores_cannot_exceed_rubric_or_omit_a_criterion (test_question_contracts.QuestionContractsTest.test_scores_cannot_exceed_rubric_or_omit_a_criterion) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.1176573Z test_secondary_content_cannot_be_promoted_to_direct_compatibility (test_question_contracts.QuestionContractsTest.test_secondary_content_cannot_be_promoted_to_direct_compatibility) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.1217928Z test_stale_rubric_model_provenance_and_objective_spoofing_fail (test_question_contracts.QuestionContractsTest.test_stale_rubric_model_provenance_and_objective_spoofing_fail) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.1273106Z test_stale_validity_and_unknown_without_review_cannot_claim_current (test_question_contracts.QuestionContractsTest.test_stale_validity_and_unknown_without_review_cannot_claim_current) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.1301234Z test_suggestion_is_pending_not_confirmed_and_cannot_target_stale_revision (test_question_contracts.QuestionContractsTest.test_suggestion_is_pending_not_confirmed_and_cannot_target_stale_revision) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.1365272Z test_true_false_uses_explicit_order_and_open_has_no_fake_options (test_question_contracts.QuestionContractsTest.test_true_false_uses_explicit_order_and_open_has_no_fake_options) ... ok
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.1366724Z
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.1367039Z ----------------------------------------------------------------------
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.1367623Z Ran 47 tests in 3.065s
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.1367863Z
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.1367989Z OK
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.1681778Z Post job cleanup.
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.2906974Z Cache hit occurred on the primary key setup-python-Linux-x64-24.04-Ubuntu-python-3.12.15-pip-be461ac1725de8eb621f17b72fa388a3d46b3e51431c975e9530904809d859bf, not saving cache.
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.2909101Z (node:2709) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.2909892Z (Use `node --trace-deprecation ...` to show where the warning was created)
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.3087882Z Post job cleanup.
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.4007162Z [command]/usr/bin/git version
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.4053637Z git version 2.56.0
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.4129859Z Temporarily overriding HOME='/home/runner/work/_temp/64829b9b-9ae9-4812-8ce1-e10d01eb74ee' before making global git config changes
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.4132002Z Adding repository directory to the temporary git global config as a safe directory
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.4136248Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/cogniva/cogniva
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.4181672Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.4222598Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.4514674Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.4547906Z http.https://github.com/.extraheader
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.4564059Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.4617760Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.4933531Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.4981024Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.5372075Z Cleaning up orphan processes
+verify / knowledge-contracts / contracts	UNKNOWN STEP	2026-11-03T01:40:34.5764164Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-python@v5. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

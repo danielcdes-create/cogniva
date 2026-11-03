@@ -1,6 +1,6 @@
 # Classificação automática do legado sob demanda
 
-Entrega 1.4.7/build 14 em validação. Este documento registra a exceção autorizada pelo proprietário para o acervo antigo; publicação e aceite serão registrados ao concluir os gates.
+Publicada e ativada: **1.4.7/build 14**, revisão `41d976ee7bf0bab77ea216dc53980c08d01c1ac6`, promovida em 02/11/2026 às 22:59:25 (UTC−03:00). O aceite e a prova real abaixo foram executados com orçamento limitado. A exceção continua restrita ao inventário congelado, sem revisão humana fictícia.
 
 ## Escopo fechado
 
@@ -48,3 +48,17 @@ O resultado contém contagens, política, teto diário, reservas, fila e estados
 O aceite de release é feito inicialmente com a automação desligada, comparando questões/concursos em bytes e o histórico protegido. Depois da ativação, uma seleção controlada pode gerar custo real autorizado. A captura posterior deve usar `verify-question-storage-backup.py --authorized-legacy-auto-classification`: esse modo admite apenas a nova extensão e os dois espelhos, valida associação ao inventário e exige todos os demais campos, concursos e histórico preservados. Não usar igualdade total após uma aplicação autorizada nem relaxar o comparador de classificação humana.
 
 Testes usam exclusivamente Mongo sintético e xAI simulada: lista fechada, seis bloqueadas, qualidade da proposta, fila concorrente, limite persistente, reinício, erro sem repetição, recibo recuperável, prioridade, seed, preservação e instalação/recovery do guard Mongo.
+
+## Aceite executado em produção
+
+- [Pipeline 41561247262](https://github.com/danielcdes-create/cogniva/actions/runs/41561247262): seis jobs aprovados na mesma revisão; 40 testes Rust, 47 contratos Python, JVM/lint, nove imagens golden e 11 testes instrumentados. Imagem/APK construídos e assinados no CI, ensaio controlado de rollback aprovado e promoção conferida externamente. O run anterior `41560821631` foi cancelado antes do build/promoção para corrigir gravações ociosas da fila; não é a evidência desta publicação.
+- APK: 12.842.035 bytes, SHA-256 `1549916af29398b02094af0356e0c5b8c835a3988574507bcc129c6a05383d61`, versão 1.4.7/build 14; bytes do download público idênticos ao bundle, assinante privado API 28–35 e lineage preservados, sem debuggable. Runtime: 30.722.984 bytes, abaixo de 50 MB. Sem dispositivo ADB conectado; não se afirma instalação física.
+- Aceite inicial com automação desligada: 618 questões e quatro concursos idênticos em bytes, histórico protegido preservado e guard Mongo instalado. Catálogo, cache/projeção, modos pessoais, health/readiness e 401 anônimo conferidos, sem chamada paga nessa fase.
+- Ativação explícita no ambiente privado, com cópia privada da configuração anterior; somente Cogniva recriado, mantendo imagem, Compose e demais containers. A evidência `automation-activation.json` comprova flag ativa e guard instalado.
+- Prova real: a única chamada real gerou e persistiu uma proposta com confiança 0,80, abaixo do limiar 0,90: ficou PENDING_REVIEW. A observação posterior manteve uma única reserva, sem repetição automática; não foi forçado um novo sorteio para obter aplicação favorável. Reservas no dia da captura: **1 de 20**; não foram enviadas tentativas de aprendizagem. O limite diário é conservador e não equivale a uma cobrança monetária apurada.
+- Inventário após o aceite: **0 aplicações automáticas**, **612 legadas sem classificação** e **6 gabaritos ambíguos**. Aplicação automática não é confirmação humana nem significa que todo o acervo foi classificado. A evolução posterior depende de demanda, orçamento e revisão das ambiguidades.
+- Comparação após ativação: mudanças admitidas apenas na extensão automática e nos dois espelhos canônicos, com inventário, hashes e schema verificados. Todos os demais campos originais, quatro concursos e o histórico protegido permaneceram preservados. O recibo guarda o original completo no Mongo; backups BSON ficam privados fora do Git.
+
+As opções de coleção passaram a ser exportadas como Extended JSON, preservando os ObjectIds introduzidos pelo guard. A primeira captura `post-promotion-1.4.7-disabled` usava a antiga serialização em texto e não serviu à comparação tipada do validador. A nova captura `post-promotion-1.4.7-disabled-typed` resolveu a divergência de representação, sem alterar banco ou recibos; ambas foram preservadas para rastreabilidade.
+
+Evidências: `remediation-validation/1.4.7/`; baseline imediatamente anterior em `before-final/`; inventários privados de backup referenciados pelos relatórios de preservação. O commit posterior de documentação não altera o runtime `41d976ee7bf0bab77ea216dc53980c08d01c1ac6`.
