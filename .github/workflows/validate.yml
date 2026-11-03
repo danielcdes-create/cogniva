@@ -64,9 +64,9 @@ jobs:
           ./gradlew :app:verifyPaparazziDebug --tests br.com.concursoprep.app.QuestionPreviewMatrixScreenshotTest --tests br.com.concursoprep.app.AccountLinkScreenshotTest --no-daemon --console=plain
           git diff --exit-code -- app/src/test/snapshots
       - uses: actions/upload-artifact@v4
-        if: failure()
+        if: always()
         with:
-          name: android-validation-failure
+          name: android-validation
           path: |
             android-app/app/build/test-results/
             android-app/app/build/paparazzi/failures/

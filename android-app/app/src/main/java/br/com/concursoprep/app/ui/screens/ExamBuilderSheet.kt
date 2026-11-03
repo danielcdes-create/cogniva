@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -36,6 +37,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import br.com.concursoprep.app.domain.exam.ExamCatalog
@@ -57,6 +60,8 @@ fun ExamFormBottomSheet(
     onDismiss: () -> Unit,
     onSave: (ExamDraft) -> Unit
 ) {
+    val focusManager=LocalFocusManager.current
+    val keyboard=LocalSoftwareKeyboardController.current
     val trunks = remember { ExamCatalog.trunks() }
     var step by androidx.compose.runtime.saveable.rememberSaveable { mutableIntStateOf(1) }
     var trunkSlug by rememberSaveable { mutableStateOf(editingExam?.trunkSlug ?: trunks.firstOrNull()?.slug ?: "fiscal") }
@@ -93,6 +98,7 @@ fun ExamFormBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .imePadding()
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
                 .verticalScroll(rememberScrollState())
                 .padding(20.dp),
@@ -274,6 +280,7 @@ fun ExamFormBottomSheet(
                     }
                     OutlinedTextField(customName,{customName=it.take(150)},label={Text("Nome de outra disciplina")},modifier=Modifier.fillMaxWidth())
                     OutlinedButton(enabled=customName.isNotBlank(),onClick={
+                        focusManager.clearFocus();keyboard?.hide()
                         val id="custom-${UUID.randomUUID()}"
                         subjects=subjects+StoredSubject(id,id,customName.trim(),"CONHECIMENTOS_ESPECIFICOS",1.0,0,"SPECIFIC",emptyList())
                         customName=""
