@@ -1,0 +1,168 @@
+promote	Set up job	﻿2026-11-03T00:54:32.3060345Z Current runner version: '2.338.2'
+promote	Set up job	2026-11-03T00:54:32.3089410Z ##[group]Runner Image Provisioner
+promote	Set up job	2026-11-03T00:54:32.3090707Z Hosted Compute Agent
+promote	Set up job	2026-11-03T00:54:32.3091638Z Version: 20261021.618
+promote	Set up job	2026-11-03T00:54:32.3092589Z Commit: 21505ad2541d5be6135ed84fc33697146cf75b8e
+promote	Set up job	2026-11-03T00:54:32.3093967Z Build Date: 2026-10-21T00:45:21Z
+promote	Set up job	2026-11-03T00:54:32.3095056Z Worker ID: {8587d6fb-13fd-4dd5-be52-a8ba5b0bbaf7}
+promote	Set up job	2026-11-03T00:54:32.3096000Z Region: westus
+promote	Set up job	2026-11-03T00:54:32.3096857Z Cloud: Azure
+promote	Set up job	2026-11-03T00:54:32.3097660Z ##[endgroup]
+promote	Set up job	2026-11-03T00:54:32.3099470Z ##[group]Operating System
+promote	Set up job	2026-11-03T00:54:32.3100366Z Ubuntu
+promote	Set up job	2026-11-03T00:54:32.3101219Z 24.04.5
+promote	Set up job	2026-11-03T00:54:32.3101922Z LTS
+promote	Set up job	2026-11-03T00:54:32.3102903Z ##[endgroup]
+promote	Set up job	2026-11-03T00:54:32.3104240Z ##[group]Runner Image
+promote	Set up job	2026-11-03T00:54:32.3105189Z Image: ubuntu-24.04
+promote	Set up job	2026-11-03T00:54:32.3106011Z Version: 20261025.353.1
+promote	Set up job	2026-11-03T00:54:32.3107378Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261025.353/images/ubuntu/Ubuntu2404-Readme.md
+promote	Set up job	2026-11-03T00:54:32.3109468Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261025.353
+promote	Set up job	2026-11-03T00:54:32.3110743Z ##[endgroup]
+promote	Set up job	2026-11-03T00:54:32.3112348Z ##[group]GITHUB_TOKEN Permissions
+promote	Set up job	2026-11-03T00:54:32.3114764Z Contents: read
+promote	Set up job	2026-11-03T00:54:32.3115717Z Metadata: read
+promote	Set up job	2026-11-03T00:54:32.3116499Z Packages: write
+promote	Set up job	2026-11-03T00:54:32.3117327Z ##[endgroup]
+promote	Set up job	2026-11-03T00:54:32.3119604Z Secret source: Actions
+promote	Set up job	2026-11-03T00:54:32.3121053Z Cache mode: write
+promote	Set up job	2026-11-03T00:54:32.3122018Z Prepare workflow directory
+promote	Set up job	2026-11-03T00:54:32.3482162Z Prepare all required actions
+promote	Set up job	2026-11-03T00:54:32.3537227Z Getting action download info
+promote	Set up job	2026-11-03T00:54:32.6985896Z Download action repository 'actions/download-artifact@v4' (SHA:d3f86a106a0bac45b974a628896c90dbdf5c8093)
+promote	Set up job	2026-11-03T00:54:33.2198411Z Complete job name: promote
+promote	Run actions/download-artifact@v4	﻿2026-11-03T00:54:33.3091160Z ##[group]Run actions/download-artifact@v4
+promote	Run actions/download-artifact@v4	2026-11-03T00:54:33.3092297Z with:
+promote	Run actions/download-artifact@v4	2026-11-03T00:54:33.3093062Z   name: cogniva-release-51fd03cf1f0db334000ec4435f52f8ae62bf2380
+promote	Run actions/download-artifact@v4	2026-11-03T00:54:33.3094180Z   path: release-bundle
+promote	Run actions/download-artifact@v4	2026-11-03T00:54:33.3094811Z   merge-multiple: false
+promote	Run actions/download-artifact@v4	2026-11-03T00:54:33.3095458Z   repository: danielcdes-create/cogniva
+promote	Run actions/download-artifact@v4	2026-11-03T00:54:33.3096159Z   run-id: 41553999544
+promote	Run actions/download-artifact@v4	2026-11-03T00:54:33.3097001Z ##[endgroup]
+promote	Run actions/download-artifact@v4	2026-11-03T00:54:33.7212553Z Downloading single artifact
+promote	Run actions/download-artifact@v4	2026-11-03T00:54:33.7405969Z (node:2199) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+promote	Run actions/download-artifact@v4	2026-11-03T00:54:33.7408825Z (Use `node --trace-deprecation ...` to show where the warning was created)
+promote	Run actions/download-artifact@v4	2026-11-03T00:54:34.0387623Z Preparing to download the following artifacts:
+promote	Run actions/download-artifact@v4	2026-11-03T00:54:34.0389877Z - cogniva-release-51fd03cf1f0db334000ec4435f52f8ae62bf2380 (ID: 13194187788, Size: 12381654, Expected Digest: sha256:9122dc8a51f596db54073284ac844264fc2fd2380123965fe13b14b2b9a8478a)
+promote	Run actions/download-artifact@v4	2026-11-03T00:54:34.2907850Z Redirecting to blob download url: https://productionresultssa32.blob.core.windows.net/actions-results/caaed7b2-e928-4c2b-938a-8eb9efc0782e/workflow-job-run-8d67d67a-f9de-5548-9022-7c1a4b9749dc/artifacts/64c4600a510fee671d8c0e650d2207cb696e6f006be2c76155303fb25748ea7d.zip
+promote	Run actions/download-artifact@v4	2026-11-03T00:54:34.2912424Z Starting download of artifact to: /home/runner/work/cogniva/cogniva/release-bundle
+promote	Run actions/download-artifact@v4	2026-11-03T00:54:34.6006014Z (node:2199) [DEP0005] DeprecationWarning: Buffer() is deprecated due to security and usability issues. Please use the Buffer.alloc(), Buffer.allocUnsafe(), or Buffer.from() methods instead.
+promote	Run actions/download-artifact@v4	2026-11-03T00:54:35.6228501Z SHA256 digest of downloaded artifact is 9122dc8a51f596db54073284ac844264fc2fd2380123965fe13b14b2b9a8478a
+promote	Run actions/download-artifact@v4	2026-11-03T00:54:35.6230154Z Artifact download completed successfully.
+promote	Run actions/download-artifact@v4	2026-11-03T00:54:35.6231068Z Total of 1 artifact(s) downloaded
+promote	Run actions/download-artifact@v4	2026-11-03T00:54:35.6234243Z Download artifact has finished successfully
+promote	Install trusted SSH credentials	﻿2026-11-03T00:54:35.6512380Z ##[group]Run set -euo pipefail
+promote	Install trusted SSH credentials	2026-11-03T00:54:35.6513000Z ^[[36;1mset -euo pipefail^[[0m
+promote	Install trusted SSH credentials	2026-11-03T00:54:35.6514326Z ^[[36;1mtest -n "$SSH_KEY" && test -n "$KNOWN_HOSTS"^[[0m
+promote	Install trusted SSH credentials	2026-11-03T00:54:35.6514809Z ^[[36;1mumask 077^[[0m
+promote	Install trusted SSH credentials	2026-11-03T00:54:35.6515171Z ^[[36;1mmkdir -p ~/.ssh^[[0m
+promote	Install trusted SSH credentials	2026-11-03T00:54:35.6515599Z ^[[36;1mprintf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519^[[0m
+promote	Install trusted SSH credentials	2026-11-03T00:54:35.6516130Z ^[[36;1mprintf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts^[[0m
+promote	Install trusted SSH credentials	2026-11-03T00:54:35.6541229Z shell: /usr/bin/bash -e {0}
+promote	Install trusted SSH credentials	2026-11-03T00:54:35.6541680Z env:
+promote	Install trusted SSH credentials	2026-11-03T00:54:35.6544173Z   SSH_KEY: ***
+promote	Install trusted SSH credentials	2026-11-03T00:54:35.6548396Z   KNOWN_HOSTS: ***
+promote	Install trusted SSH credentials	2026-11-03T00:54:35.6548756Z ##[endgroup]
+promote	Stage versioned bundle and promote only Cogniva	﻿2026-11-03T00:54:35.6673995Z ##[group]Run set -euo pipefail
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:54:35.6674565Z ^[[36;1mset -euo pipefail^[[0m
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:54:35.6674970Z ^[[36;1mtarget="$DO_USER@$DO_HOST"^[[0m
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:54:35.6675693Z ^[[36;1mincoming="/opt/apps/cogniva-incoming/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"^[[0m
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:54:35.6676460Z ^[[36;1mssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" "mkdir -p $incoming"^[[0m
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:54:35.6677243Z ^[[36;1mscp -o BatchMode=yes -o StrictHostKeyChecking=yes release-bundle/* "$target:$incoming/"^[[0m
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:54:35.6678084Z ^[[36;1mssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" "python3 $incoming/stage_bundle.py"^[[0m
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:54:35.6679455Z ^[[36;1mprintf '%s' "$REGISTRY_TOKEN" | ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" "install -d -m 700 /run/cogniva-registry-$REVISION; docker --config /run/cogniva-registry-$REVISION login ghcr.io -u $REGISTRY_USER --password-stdin"^[[0m
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:54:35.6681233Z ^[[36;1mssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" "DOCKER_CONFIG=/run/cogniva-registry-$REVISION python3 /opt/apps/cogniva-releases/$REVISION/promote.py /opt/apps/cogniva-releases/$REVISION --exercise-rollback"^[[0m
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:54:35.6683271Z ^[[36;1mssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" "trap 'rm -f /run/cogniva-registry-$REVISION/config.json; rmdir /run/cogniva-registry-$REVISION' EXIT; DOCKER_CONFIG=/run/cogniva-registry-$REVISION python3 /opt/apps/cogniva-releases/$REVISION/promote.py /opt/apps/cogniva-releases/$REVISION"^[[0m
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:54:35.6704017Z shell: /usr/bin/bash -e {0}
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:54:35.6704429Z env:
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:54:35.6704826Z   DO_HOST: ***
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:54:35.6705161Z   DO_USER: ***
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:54:35.6705549Z   REVISION: 51fd03cf1f0db334000ec4435f52f8ae62bf2380
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:54:35.6708296Z   REGISTRY_TOKEN: ***
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:54:35.6708693Z   REGISTRY_USER: danielcdes-create
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:54:35.6709090Z ##[endgroup]
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:54:44.2361786Z IMMUTABLE_BUNDLE_STAGED 51fd03cf1f0db334000ec4435f52f8ae62bf2380
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:54:45.6258302Z
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:54:45.6259826Z WARNING! Your credentials are stored unencrypted in '/run/cogniva-registry-51fd03cf1f0db334000ec4435f52f8ae62bf2380/config.json'.
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:54:45.6337441Z Configure a credential helper to remove this warning. See
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:54:45.6338373Z https://docs.docker.com/go/credential-store/
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:54:45.6338932Z
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:54:45.6339176Z Login Succeeded
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4883020Z ghcr.io/danielcdes-create/api-rust-core@sha256:4bf4afc9e64db0914fcac78946dbdc7b04afe6f3a206970492182062578e520b: Pulling from danielcdes-create/api-rust-core
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4884877Z 8b1e671f4b92: Pulling fs layer
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4885516Z a5789fc40e82: Pulling fs layer
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4886133Z 990a9c434e5e: Pulling fs layer
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4886743Z 39dc083afc39: Pulling fs layer
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4887326Z bf7a4185f015: Pulling fs layer
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4887893Z 2780920e5dbf: Pulling fs layer
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4888463Z 7c12895b777b: Pulling fs layer
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4889110Z 3214acf345c0: Pulling fs layer
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4889678Z 52630fc75a18: Pulling fs layer
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4890198Z dd64bf2dd177: Pulling fs layer
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4890582Z b839dfae01f6: Pulling fs layer
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4890952Z dcaa5a89b0cc: Pulling fs layer
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4891334Z 96ed2737ae31: Pulling fs layer
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4891704Z a63b1f5600b7: Pulling fs layer
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4892544Z 2780920e5dbf: Already exists
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4892914Z 3214acf345c0: Already exists
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4893283Z dd64bf2dd177: Already exists
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4893967Z b839dfae01f6: Already exists
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4894321Z dcaa5a89b0cc: Already exists
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4894689Z bf7a4185f015: Already exists
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4895023Z 7c12895b777b: Already exists
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4895386Z 52630fc75a18: Already exists
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4895735Z 96ed2737ae31: Already exists
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4896073Z a5789fc40e82: Already exists
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4896698Z 990a9c434e5e: Already exists
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4897040Z 39dc083afc39: Already exists
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4897378Z 8b1e671f4b92: Download complete
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4897738Z a63b1f5600b7: Download complete
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4898104Z 8b1e671f4b92: Pull complete
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4898551Z a63b1f5600b7: Pull complete
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4899066Z Digest: sha256:4bf4afc9e64db0914fcac78946dbdc7b04afe6f3a206970492182062578e520b
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4900084Z Status: Downloaded newer image for ghcr.io/danielcdes-create/api-rust-core@sha256:4bf4afc9e64db0914fcac78946dbdc7b04afe6f3a206970492182062578e520b
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4901301Z ghcr.io/danielcdes-create/api-rust-core@sha256:4bf4afc9e64db0914fcac78946dbdc7b04afe6f3a206970492182062578e520b
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4901886Z
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4902047Z  Container api-rust-core Recreate
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4902440Z  Container api-rust-core Recreated
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4902817Z  Container api-rust-core Starting
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4903156Z  Container api-rust-core Started
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4903702Z
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4903865Z  Container api-rust-core Recreate
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4904218Z  Container api-rust-core Recreated
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4904570Z  Container api-rust-core Starting
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4904911Z  Container api-rust-core Started
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4905113Z
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4905234Z ROLLBACK_HEALTHY
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:16.4905559Z CONTROLLED_ROLLBACK_VERIFIED
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:36.4725219Z ghcr.io/danielcdes-create/api-rust-core@sha256:4bf4afc9e64db0914fcac78946dbdc7b04afe6f3a206970492182062578e520b: Pulling from danielcdes-create/api-rust-core
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:36.4726959Z Digest: sha256:4bf4afc9e64db0914fcac78946dbdc7b04afe6f3a206970492182062578e520b
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:36.4728235Z Status: Image is up to date for ghcr.io/danielcdes-create/api-rust-core@sha256:4bf4afc9e64db0914fcac78946dbdc7b04afe6f3a206970492182062578e520b
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:36.4729464Z ghcr.io/danielcdes-create/api-rust-core@sha256:4bf4afc9e64db0914fcac78946dbdc7b04afe6f3a206970492182062578e520b
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:36.4730541Z
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:36.4730828Z  Container api-rust-core Recreate
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:36.4731509Z  Container api-rust-core Recreated
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:36.4732107Z  Container api-rust-core Starting
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:36.4732699Z  Container api-rust-core Started
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:36.4733021Z
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:36.4820743Z ^[[2m2026-11-03T00:55:34.968439Z^[[0m ^[[32m INFO^[[0m ^[[2mapi_rust_core^[[0m^[[2m:^[[0m Conectando ao MongoDB Atlas (database: CNU)...
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:36.4821786Z {"ready":true,"schema_version":2,"question_documents_rewritten":0,"indexes":8,"catalog_version":1}
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:36.4822284Z
+promote	Stage versioned bundle and promote only Cogniva	2026-11-03T00:55:36.4822784Z {"promoted": "51fd03cf1f0db334000ec4435f52f8ae62bf2380", "runtime_size_bytes": 30272160, "other_containers_preserved": true}
+promote	Keep registry within the free storage budget	﻿2026-11-03T00:55:36.5323757Z ##[group]Run set -euo pipefail
+promote	Keep registry within the free storage budget	2026-11-03T00:55:36.5324198Z ^[[36;1mset -euo pipefail^[[0m
+promote	Keep registry within the free storage budget	2026-11-03T00:55:36.5324896Z ^[[36;1mssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$DO_USER@$DO_HOST" 'cat /opt/apps/cogniva-current-release.json' > current-release.json^[[0m
+promote	Keep registry within the free storage budget	2026-11-03T00:55:36.5325719Z ^[[36;1mpython3 release-bundle/cleanup-registry.py current-release.json^[[0m
+promote	Keep registry within the free storage budget	2026-11-03T00:55:36.5346563Z shell: /usr/bin/bash -e {0}
+promote	Keep registry within the free storage budget	2026-11-03T00:55:36.5346887Z env:
+promote	Keep registry within the free storage budget	2026-11-03T00:55:36.5347267Z   DO_HOST: ***
+promote	Keep registry within the free storage budget	2026-11-03T00:55:36.5347550Z   DO_USER: ***
+promote	Keep registry within the free storage budget	2026-11-03T00:55:36.5349904Z   GH_TOKEN: ***
+promote	Keep registry within the free storage budget	2026-11-03T00:55:36.5350370Z ##[endgroup]
+promote	Keep registry within the free storage budget	2026-11-03T00:55:38.4415738Z {"retained_recent": 5, "protected_current_and_rollback": true, "deleted_old_versions": [1484153242]}
+promote	Remove runner SSH credentials	﻿2026-11-03T00:55:38.4548505Z ##[group]Run rm -f ~/.ssh/id_ed25519
+promote	Remove runner SSH credentials	2026-11-03T00:55:38.4548928Z ^[[36;1mrm -f ~/.ssh/id_ed25519^[[0m
+promote	Remove runner SSH credentials	2026-11-03T00:55:38.4569601Z shell: /usr/bin/bash -e {0}
+promote	Remove runner SSH credentials	2026-11-03T00:55:38.4569936Z ##[endgroup]
+promote	Complete job	﻿2026-11-03T00:55:38.4710492Z Cleaning up orphan processes
+promote	Complete job	2026-11-03T00:55:38.5123989Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/download-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

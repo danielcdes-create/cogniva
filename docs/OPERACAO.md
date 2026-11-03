@@ -32,13 +32,13 @@ Durante a troca e o ensaio de rollback, Nginx bloqueia rotas de dados com 503 e 
 
 O pipeline provoca uma falha de smoke controlada, confirma imagem, ponteiro, Compose e saúde anteriores, e depois promove efetivamente. Falhas reais não contam como sucesso do ensaio. Entre protocolos incompatíveis, rollback mantém as rotas de dados fechadas até nova promoção válida; as filas ficam preservadas.
 
-Release operacional atual de 02/11/2026 às 17:02:53 (UTC−03:00): **1.4.5/build 12**, `9dee93673f2e170e06f2d77ca378df973449414d`, run `41512550219`, todos os jobs aprovados. Aceite repetível:
+Release operacional atual: **1.4.6/build 13**, revisão `51fd03cf1f0db334000ec4435f52f8ae62bf2380`, promovida em 02/11/2026 às 21:55:36 (UTC−03:00); run `41553999544`, todos os seis jobs aprovados. Aceite repetível:
 
 ```powershell
-python -X utf8 scripts/verify-production-release.py 9dee93673f2e170e06f2d77ca378df973449414d --version-name 1.4.5 --version-code 12 --xai-model grok-4.3 --baseline docs/remediation-validation/1.4.5/before/production-release.json --evidence-dir docs/remediation-validation/1.4.5
+python -X utf8 scripts/verify-production-release.py 51fd03cf1f0db334000ec4435f52f8ae62bf2380 --version-name 1.4.6 --version-code 13 --xai-model grok-4.3 --baseline docs/remediation-validation/1.4.6/before-final/production-release.json --evidence-dir docs/remediation-validation/1.4.6
 ```
 
-Faz somente leituras, baixa o APK para `%LOCALAPPDATA%/Cogniva/releases` e grava evidência sanitizada no diretório solicitado. As evidências das releases anteriores permanecem preservadas. A entrega 1.4.5 tem 32 testes Rust, 36 contratos Python, 50 JVM, lint/nove imagens e dez instrumentados aprovados; instalação de quatro validadores, oito índices e catálogo verificada, com questões/concursos e histórico preservados. [Detalhes da etapa 4](ETAPA-4-CADASTRO-CATALOGO.md).
+Faz somente leituras, baixa o APK para `%LOCALAPPDATA%/Cogniva/releases` e grava evidência sanitizada no diretório solicitado. As evidências anteriores permanecem preservadas. A entrega 1.4.6 tem 37 testes Rust, 42 contratos Python, JVM/lint, nove imagens golden e 11 testes instrumentados aprovados. Quatro validadores, oito índices e catálogo conferidos, com questões/concursos e histórico preservados. [Detalhes da entrega](ETAPAS-5-7-CLASSIFICACAO-SELECAO.md).
 
 Diagnóstico de questões para uma conta cujo proprietário foi comprovado: `python -X utf8 scripts/probe-question-selection.py ID --output caminho-do-relatorio.json`. O operador assina sessão diagnóstica temporária em memória na VPS; o relatório contém somente contagens, disciplinas e estados HTTP. Não envia tentativas, tutores pagos ou comandos de edição. `--assert-fixed` verifica os casos conhecidos da conta investigada nesta recuperação. Referências históricas indisponíveis devem ser revisadas por identidade/proveniência, sem apagá-las nem criar enunciados para preencher IDs. Quatro referências foram identificadas como exemplos locais antigos, com evidência na reconciliação da 1.4.2.
 
@@ -67,9 +67,9 @@ A partir de 1.4.4/build 11, Ajustes → Gerenciar concursos e registros reúne e
 
 ## Catálogo e preparação de questões v2
 
-As etapas [3](ETAPA-3-BACKEND-MONGO.md) e [4](ETAPA-4-CADASTRO-CATALOGO.md) acrescentam o catálogo compartilhado, componentes em etapas distintas, validação v2 e escrita administrativa com dry-run por padrão. Questões abertas podem ser armazenadas, mas continuam fora do protocolo objetivo atual. A [nota para Grok Build — etapas 5–7](NOTA-TECNICA-GROK-BUILD-PASSO-5.md) orienta classificação assistida, seleção/progresso e validação/publicação posteriores; não executar classificação como migração implícita do deploy.
+As etapas [3](ETAPA-3-BACKEND-MONGO.md) e [4](ETAPA-4-CADASTRO-CATALOGO.md) acrescentam o catálogo compartilhado, componentes em etapas distintas, validação v2 e escrita administrativa com dry-run por padrão. Questões abertas podem ser armazenadas, mas continuam fora do protocolo objetivo atual. A [nota para Grok Build — etapas 5–7](NOTA-TECNICA-GROK-BUILD-PASSO-5.md) registra os requisitos de classificação assistida, seleção/progresso e validação/publicação, com estado executado na [entrega 1.4.6](ETAPAS-5-7-CLASSIFICACAO-SELECAO.md); não executar classificação como migração implícita do deploy.
 
-A etapa 5 expõe, para administrador, `POST /api/v1/admin/classification/proposals`, `POST /api/v1/admin/classification/decisions` e `POST /api/v1/admin/classification/compatibility`. O modelo de classificação é o `grok-4.3` já configurado, com o prompt `classify-question` versão 1; a chave não entra no repositório. Toda geração exige `limit` e `max_paid_calls`. Proposta pendente não muda treino nem SRS. O inventário `scripts/inventory_questions.py --dry-run` só conta estados e não grava o banco. A comparação `scripts/classification_preservation.py` permite diferença apenas nos campos de classificação autorizados e continua exigindo histórico idêntico. Nesta entrega não houve lote real: quantidade revisada em produção é 0 e o acervo não está classificado.
+A etapa 5 expõe, para administrador, `POST /api/v1/admin/classification/proposals`, `POST /api/v1/admin/classification/decisions` e `POST /api/v1/admin/classification/compatibility`. O modelo de classificação é o `grok-4.3` já configurado, com o prompt `classify-question` versão 2, incluindo nomes e aliases dos candidatos; a chave não entra no repositório. Toda geração exige `limit` e `max_paid_calls`. Proposta pendente não muda treino nem SRS. O inventário `scripts/inventory_questions.py --dry-run` só conta estados e não grava o banco. A comparação `scripts/classification_preservation.py` permite diferença apenas nos campos de classificação autorizados e continua exigindo histórico idêntico. Nesta entrega não houve lote real: quantidade revisada em produção é 0 e o acervo não está classificado.
 
 Antes de cada promoção, capturar as identidades atuais do servidor compartilhado, sem comparar eternamente com a primeira instalação:
 
@@ -85,3 +85,17 @@ O promotor executa o binário já compilado com `--prepare-question-storage` ant
 Backups privados de antes/depois podem ser confrontados com `scripts/verify-question-storage-backup.py INVENTARIO_ANTES INVENTARIO_DEPOIS --output RELATORIO.json`. O verificador lê apenas os arquivos privados, compara bytes de questões e concursos, fingerprint do histórico, quatro validadores/recibos, oito índices e snapshot do catálogo. Emite hashes e contagens. Uma diferença legítima de atividade exige investigação e relato; não sobrescrever a referência para produzir um resultado verde.
 
 Não reexecutar classificação nem gerar textos de IA para verificar o deploy. Usar testes sintéticos com provedor falso. A chave xAI continua privada no servidor; nunca copiá-la para ferramentas de migração, exemplos, APK ou evidência pública.
+
+## Seleção e progresso confirmado — 1.4.6
+
+O aceite autenticado pode verificar os contratos novos sem gravar tentativas:
+
+```powershell
+python -X utf8 scripts/probe-question-selection.py ID --expected-version 1.4.6 --assert-fixed --assert-catalog --assert-knowledge --output caminho-do-relatorio.json
+```
+
+`--assert-fixed` aplica os casos conhecidos da conta investigada; outras contas podem legitimamente não possuir filas de erro/SRS. `--assert-knowledge` verifica projeção versão 1 e a resposta de `POST /api/v1/questions/cache-state`, operação de leitura. O cache aceita até 200 IDs distintos por página. Uma questão indisponível retorna null e fica preservada, sem entrar em ações. Nenhum tutor é chamado.
+
+`knowledge_evidence` é uma projeção separada dos totais globais: exige tentativa identificada, revisão de conteúdo correspondente e principal direto revisado. IDs singulares antigos precisam de recibo verificável do operador. Secundários não concedem domínio integral. Decisões de compatibilidade são vinculadas a proprietário, componente e revisões; exclusão não apaga aprendizagem global.
+
+Room 4→5 acrescenta apenas `pending_attempts.examComponentId` nullable; o protocolo de tentativa permanece 2. Não limpar filas ou banco para atualizar. Uma tentativa da mesma versão de conteúdo permanece válida quando só a classificação muda; o servidor calcula a taxonomia vigente. Instruções completas e limites em [ETAPAS-5-7-CLASSIFICACAO-SELECAO.md](ETAPAS-5-7-CLASSIFICACAO-SELECAO.md).

@@ -1,0 +1,13 @@
+{
+  "revision": "51fd03cf1f0db334000ec4435f52f8ae62bf2380",
+  "version_name": "1.4.6",
+  "version_code": 13,
+  "apk_size_bytes": 12813192,
+  "apk_sha256": "f15b6905137c5a414214de7a237bb0947844de3d2427d37b90535c987bf1cf56",
+  "ci_bundle_and_public_download_identical": true,
+  "expected_private_signer_api_28_35_verified": true,
+  "debuggable": false,
+  "emulator_tests": 11,
+  "golden_tests": 9,
+  "physical_device_verified": false
+}

@@ -14,6 +14,7 @@ p.add_argument('--output', type=pathlib.Path, required=True)
 p.add_argument('--assert-fixed', action='store_true')
 p.add_argument('--expected-version')
 p.add_argument('--assert-catalog', action='store_true')
+p.add_argument('--assert-knowledge', action='store_true')
 a = p.parse_args()
 assert a.user_id > 0
 remote = r'''
@@ -75,7 +76,21 @@ learning={'records_preserved':len(records),'availability_known':availability_kno
  'available_records':len(available) if availability_known else None,
  'actionable_srs':sum(r.get('review_required',False) or datetime.datetime.fromisoformat(r['next_review_at'])<=now for r in available) if availability_known else None,
  'actionable_errors':sum(r['in_error_notebook'] for r in available) if availability_known else None}
-print(json.dumps({'captured_at':now.isoformat(),'access':'read-only; no attempts submitted','health':health,'catalog':catalog,'cases':cases,'learning':learning},ensure_ascii=False))
+learning['knowledge_versions']=sorted(set(r.get('knowledge_projection_version',0) for r in records))
+learning['historical_attempts']=sum(r['attempts'] for r in records)
+learning['knowledge_records']=sum(r.get('knowledge_evidence') is not None for r in records)
+learning['knowledge_attempts']=sum((r.get('knowledge_evidence') or {}).get('attempts',0) for r in records)
+for r in records:
+    e=r.get('knowledge_evidence')
+    if e is not None:assert 0<=e['correct']<=e['attempts']<=r['attempts'] and len(e['question_revision'])==64
+cache_ids=list(dict.fromkeys(r['question_id'] for r in records))[:200]
+cache_status,cache=request('/api/v1/questions/cache-state',{'question_ids':cache_ids})
+cache_report={'status':cache_status,'requested_count':len(cache_ids)}
+if cache_status==200:
+    rows=cache['questions'];cache_report.update(returned_count=len(rows),available_count=sum(r['question'] is not None for r in rows),verified_bindings=sum(bool((r['question'] or {}).get('knowledge_binding_verified')) for r in rows),decisions=len(cache['decisions']),projection_version=cache['projection_version'])
+    assert set(r['question_id'] for r in rows)==set(cache_ids)
+    assert all(r['question'] is None or (r['question']['id']==r['question_id'] and isinstance(r['question']['knowledge_binding_verified'],bool) and r['question']['knowledge_projection_version']==1) for r in rows)
+print(json.dumps({'captured_at':now.isoformat(),'access':'read-only; no attempts submitted','health':health,'catalog':catalog,'cases':cases,'learning':learning,'cache':cache_report},ensure_ascii=False))
 '''
 result = subprocess.run([
     'ssh', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=yes',
@@ -102,3 +117,7 @@ if a.assert_catalog:
     assert catalog['subjects']==catalog['projected_subjects']==35
     assert catalog['trunks']==catalog['projected_trunks']==7
     assert catalog['topics']==223 and catalog['preserved_templates']==3
+if a.assert_knowledge:
+    assert report['learning']['knowledge_versions']==[1]
+    assert report['cache']['status']==200 and report['cache']['projection_version']==1
+    assert report['cache']['returned_count']==report['cache']['requested_count']

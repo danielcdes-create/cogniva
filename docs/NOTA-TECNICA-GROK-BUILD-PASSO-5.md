@@ -1,6 +1,6 @@
 # Nota técnica para Grok Build — etapas 5, 6 e 7
 
-Atualização da implementação: a entrega 1.4.6/build 13 implementa e está validando o fluxo de classificação recebido e a seleção/projeção do passo 6. O estado e as evidências atuais estão em [ETAPAS-5-7-CLASSIFICACAO-SELECAO.md](ETAPAS-5-7-CLASSIFICACAO-SELECAO.md) e `remediation-validation/1.4.6/`. O roteiro abaixo continua descrevendo requisitos; não equivale a dizer que as questões reais foram revisadas em lote. A leitura e os totais históricos são preservados.
+Atualização da implementação: **1.4.6/build 13**, revisão `51fd03cf1f0db334000ec4435f52f8ae62bf2380`, promovida em 02/11/2026 às 21:55:36 (UTC−03:00). Fluxo do passo 5 auditado, seleção/projeção do passo 6 e validação/publicação do passo 7 conferidos. [Estado e evidências](ETAPAS-5-7-CLASSIFICACAO-SELECAO.md). O inventário tem 612 legadas sem classificação e seis gabaritos ambíguos; zero lotes reais confirmados. Publicar o código não conclui a revisão do acervo. Histórico e documentos originais preservados.
 
 ## Plano e dependências
 
@@ -18,7 +18,7 @@ A preparação das três etapas pode avançar em paralelo no código, mas uma pr
 
 Executar as etapas 5–7 após as etapas 1–4: classificar questões existentes pelo catálogo compartilhado, com propostas revisáveis e aplicação auditável; completar seleção/progresso; validar e publicar a entrega. A origem da questão, o conteúdo cobrado e a compatibilidade com um edital são entidades distintas. Não transformar semelhança de nome, confiança de IA ou participação em um tronco em classificação confirmada. Não iniciar uma migração em massa ao abrir o aplicativo nem incluir chamadas pagas de IA na inicialização ou em testes.
 
-Esta nota define o trabalho seguinte; não afirma que endpoints de geração, decisão ou filas de revisão de sugestões já existam. Conferir o estado de publicação e as evidências da entrega 1.4.5 em `docs/remediation-validation/1.4.5/` antes de partir para produção. Base de implementação das etapas 3–4: `9dee93673f2e170e06f2d77ca378df973449414d`, [pipeline 41512550219](https://github.com/danielcdes-create/cogniva/actions/runs/41512550219). A documentação e as ferramentas de aceite podem ter commits posteriores sem alterar esse runtime. O banco real não foi reclassificado pelas etapas anteriores.
+Este roteiro foi usado para implementar a entrega 1.4.6; consultar o [registro executado](ETAPAS-5-7-CLASSIFICACAO-SELECAO.md) antes de repetir trabalho. Endpoints de geração, decisão e compatibilidade já estão publicados. A base histórica das etapas 3–4 permanece `9dee93673f2e170e06f2d77ca378df973449414d`; a implementação operacional aceita das etapas 5–7 é `51fd03cf1f0db334000ec4435f52f8ae62bf2380`, [pipeline 41553999544](https://github.com/danielcdes-create/cogniva/actions/runs/41553999544). Commits posteriores de documentação não alteram esse runtime. Os lotes reais continuam exigindo revisão humana e não devem ser aplicados automaticamente pelo deploy.
 
 ## Leitura obrigatória do repositório
 

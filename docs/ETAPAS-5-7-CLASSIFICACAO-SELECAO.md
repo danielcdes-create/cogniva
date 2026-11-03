@@ -1,6 +1,6 @@
 # Classificação, seleção e progresso — entrega 1.4.6/build 13
 
-Implementação em validação. A versão operacional anterior é 1.4.5. Estado de publicação e aceite desta entrega: `remediation-validation/1.4.6/`. A [nota para Grok Build](NOTA-TECNICA-GROK-BUILD-PASSO-5.md) continua como roteiro e fronteira de escopo.
+Entrega publicada e conferida: **1.4.6/build 13**, revisão `51fd03cf1f0db334000ec4435f52f8ae62bf2380`, promovida em 02/11/2026 às 21:55:36 (UTC−03:00). Evidências em `remediation-validation/1.4.6/`. A [nota para Grok Build](NOTA-TECNICA-GROK-BUILD-PASSO-5.md) continua como roteiro e fronteira de escopo; classificação do acervo real permanece pendente.
 
 ## Conferência do passo 5
 
@@ -44,4 +44,16 @@ Room 4→5 acrescenta apenas `pending_attempts.examComponentId` nullable. Migra�
 
 Testes cobrem IA falsa, limites e reutilização de geração, aceitação/rejeição/adiamento, recuperação e concorrência; seleção por componente, exclusão e analogia; uma tentativa reutilizada em dois concursos; histórico sem revisão; edição de conteúdo, cache obsoleto e reenvio/ACK. JVM cobre projeção, contexto, prazo e deduplicação. Emulador cobre migração desde Room 2, reabertura e persistência do componente, além dos fluxos já existentes.
 
-Antes/depois de produção devem comparar questões e concursos em bytes, pois esta publicação não classifica lotes reais, e comparar o histórico protegido. Validadores/índices/snapshot permanecem conferidos. O pipeline existente executa gates, build e assinatura fora da VPS, ensaio de rollback e promoção somente do Cogniva. Saúde, revisão, catálogo, modos pessoais, APK servido versus bundle e serviços vizinhos precisam passar no aceite externo. Evidências finais serão registradas após a conclusão; testes em emulador não comprovam instalação no telefone físico.
+A comparação antes/depois e o aceite externo foram executados conforme o registro abaixo. O deploy não classificou lotes reais. Testes em emulador não comprovam instalação no telefone físico.
+
+## Aceite executado
+
+- [Pipeline 41553999544](https://github.com/danielcdes-create/cogniva/actions/runs/41553999544): seis jobs aprovados na mesma revisão; 37 testes Rust, 42 contratos Python, JVM/lint, nove imagens golden e 11 testes instrumentados. Os XML instrumentados registram 11 testes, zero falhas/erros; os dois XML golden registram nove testes. O segundo comando Gradle filtra os testes golden e substitui os XML do primeiro comando JVM; o sucesso da suíte JVM completa e do lint está no log Android, sem atribuir ao artifact uma contagem que ele não conserva.
+- Produção: **1.4.6/build 13**, revisão `51fd03cf1f0db334000ec4435f52f8ae62bf2380`, promovida em 02/11/2026 às 21:55:36 (UTC−03:00). Ensaio controlado de rollback aprovado antes da promoção; preparação Mongo pronta, zero questões reescritas, quatro validadores, oito índices e snapshot do catálogo versão 1.
+- Aceite externo: HTTPS health/readiness na revisão esperada, 401 sem autenticação, catálogo normalizado/projetado, modos pessoais e cache/projeção versão 1. Nenhuma tentativa foi enviada e nenhuma chamada paga foi feita. Os zero vínculos verificados retornados são coerentes com o acervo ainda não classificado; não foram fabricadas evidências canônicas.
+- APK assinado servido: 12.813.192 bytes, SHA-256 `f15b6905137c5a414214de7a237bb0947844de3d2427d37b90535c987bf1cf56`, idêntico ao bundle do CI; pacote `br.com.concursoprep.app`, build 13, minSdk 26/target 35, sem debuggable. Assinante privado API 28–35 e lineage preservados. Runtime: 30.272.160 bytes, inferior ao gate de 50 MB.
+- Comparação privada antes/depois: 618 questões e quatro concursos idênticos em bytes; 20 documentos/32 eventos com hash protegido `b52793dfe1eb3fb77a9e7aad1047ae78e5c9b19cd829791e8fa0ee80acf8da90`. Compose compartilhado e identidades dos demais containers preservados. Baseline imediatamente anterior em `before-final/`; backups BSON ficam fora do Git.
+- Inventário somente leitura: 612 legadas sem classificação e seis documentos com gabarito ambíguo; zero classificações confirmadas ou lotes reais aplicados. O fluxo do passo 5 está publicado e testado, mas a revisão do acervo real continua pendente. Não transformar esta publicação em declaração de classificação concluída.
+- Não havia aparelho conectado ao ADB. Os testes no emulador comprovam o perfil API 35/1440×3088/500dpi e os fluxos exercitados, incluindo fonte ampliada e migração Room, sem comprovar instalação física no S23 Ultra. Questões abertas continuam armazenáveis/classificáveis, com execução/correção ainda fora do cliente objetivo.
+
+Evidências sanitizadas: `remediation-validation/1.4.6/` (run, logs, XML, manifest do bundle, assinatura, pacote, aceite externo, seleção/cache, inventário e comparação de preservação). Documentação posterior pode ter commit diferente; o runtime aceito continua `51fd03cf1f0db334000ec4435f52f8ae62bf2380`.
