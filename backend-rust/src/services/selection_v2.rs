@@ -18,6 +18,82 @@ use rand::seq::SliceRandom;
 use std::collections::HashMap;
 pub const INVALID_REPORTS: [&str;6]=["Questão com Erros de Conteúdo","Alternativas Corretas em Duplicidade","Alternativas Mal Formuladas","Enunciado c/ Erros de Conteúdo","Alternativas Incorretas","Questão Completamente Problemática"];
 
+#[derive(Default)]
+struct UserHistoryBuckets {
+    mastered_ids: std::collections::HashSet<ObjectId>,
+    all_attempted_ids: std::collections::HashSet<ObjectId>,
+    recent_attempted_ids: std::collections::HashSet<ObjectId>,
+}
+
+async fn fetch_user_history_buckets(
+    db: &mongodb::Database,
+    user_id: i64,
+    recent_window: usize,
+) -> Result<UserHistoryBuckets, AppError> {
+    let mut buckets = UserHistoryBuckets::default();
+    let mut cursor = db
+        .collection::<Document>("userActivityLog")
+        .find(doc! { "user_id": user_id })
+        .sort(doc! { "datas.ultima_sessao": -1 })
+        .await?;
+
+    let mut idx = 0usize;
+    while let Some(doc) = cursor.try_next().await? {
+        if let Ok(qid) = doc.get_object_id("question_id") {
+            buckets.all_attempted_ids.insert(qid);
+            if idx < recent_window {
+                buckets.recent_attempted_ids.insert(qid);
+            }
+            if doc.get_bool("dominada").unwrap_or(false) {
+                buckets.mastered_ids.insert(qid);
+            }
+            idx += 1;
+        }
+    }
+    Ok(buckets)
+}
+
+fn apply_anti_repetition_tiers(
+    candidates: Vec<QuestionDocument>,
+    buckets: &UserHistoryBuckets,
+    quantity: usize,
+) -> Vec<QuestionDocument> {
+    let mut rng = rand::thread_rng();
+
+    let mut tier1 = Vec::new();
+    let mut tier2 = Vec::new();
+    let mut tier3 = Vec::new();
+    let mut tier4 = Vec::new();
+
+    for q in candidates {
+        if buckets.mastered_ids.contains(&q.id) {
+            tier4.push(q);
+        } else if !buckets.all_attempted_ids.contains(&q.id) {
+            tier1.push(q);
+        } else if !buckets.recent_attempted_ids.contains(&q.id) {
+            tier2.push(q);
+        } else {
+            tier3.push(q);
+        }
+    }
+
+    tier1.shuffle(&mut rng);
+    tier2.shuffle(&mut rng);
+    tier3.shuffle(&mut rng);
+    tier4.shuffle(&mut rng);
+
+    let mut selected = Vec::with_capacity(quantity);
+    for tier in [tier1, tier2, tier3, tier4] {
+        for q in tier {
+            selected.push(q);
+            if selected.len() >= quantity {
+                return selected;
+            }
+        }
+    }
+    selected
+}
+
 pub(crate) async fn pool(
     state: &AppState,
     filter: Document,
@@ -132,15 +208,40 @@ pub async fn generate(
         if req.component_id.is_some(){filter.insert("canonical_topic_id",doc!{"$in":exam.subjects.iter().flat_map(|s|&s.topics).filter(|t|t.diff_status!=CanonicalTopicStatus::Arquivado).map(|t|t.canonical_topic_id.clone()).collect::<Vec<_>>()});}
     }
     if let Some(disc) = req.disciplina.as_ref().filter(|d| !d.is_empty()) {
-        let known = canonical_subjects()
-            .into_iter()
-            .find(|s| s.name == *disc || s.aliases.contains(disc));
+        let trimmed = disc.trim();
+        let base = trimmed
+            .split('(')
+            .next()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .unwrap_or(trimmed);
+        let known = canonical_subjects().into_iter().find(|s| {
+            s.name == trimmed
+                || s.name == base
+                || s.aliases.iter().any(|a| a == trimmed || a == base)
+        });
         if let Some(subject) = known {
             let mut labels = subject.aliases;
             labels.push(subject.name);
-            filter.insert("$and",vec![doc!{"$or":[{"canonical_subject_id":subject.canonical_subject_id},{"canonical_topic_id":bson::Bson::Null,"disciplina":{"$in":labels}}]}]);
+            if base != trimmed {
+                labels.push(trimmed.to_string());
+                labels.push(base.to_string());
+            }
+            labels.sort();
+            labels.dedup();
+            filter.insert(
+                "$and",
+                vec![doc! {
+                    "$or": [
+                        { "canonical_subject_id": subject.canonical_subject_id },
+                        { "canonical_topic_id": bson::Bson::Null, "disciplina": { "$in": labels } }
+                    ]
+                }],
+            );
+        } else if base != trimmed {
+            filter.insert("disciplina", doc! { "$in": [trimmed, base] });
         } else {
-            filter.insert("disciplina", disc);
+            filter.insert("disciplina", trimmed);
         }
     }
     if let Some(source) = req
@@ -161,11 +262,15 @@ pub async fn generate(
     }
     let questions = match req.mode {
         QuizMode::Shuffle => {
-            let mut candidates=pool(state,filter,10000).await?;
+            let mut candidates = pool(state, filter, 10000).await?;
             if state.config.legacy_auto_classification_enabled {
-                if let Err(error)=super::legacy_classification::prioritize(&state.db,&mut candidates).await {tracing::warn!("Prioridade legada indisponível: {}",error);}
+                if let Err(error) = super::legacy_classification::prioritize(&state.db, &mut candidates).await {
+                    tracing::warn!("Prioridade legada indisponível: {}", error);
+                }
             }
-            candidates.truncate(quantity);candidates
+            let recent_window = (quantity * 4).clamp(40, 150);
+            let buckets = fetch_user_history_buckets(&state.db, req.user_id, recent_window).await?;
+            apply_anti_repetition_tiers(candidates, &buckets, if exam.is_some() { 10000 } else { quantity })
         }
         QuizMode::Simulado => {
             let exam =
@@ -271,12 +376,49 @@ pub async fn generate(
                     eligible.push(row);
                 }
             }
-            eligible.sort_by(|a, b| a.percentual_acertos.total_cmp(&b.percentual_acertos));
+            match req.mode {
+                QuizMode::ErrorNotebook => {
+                    eligible.sort_by(|a, b| {
+                        b.high_confidence_error_flag
+                            .cmp(&a.high_confidence_error_flag)
+                            .then_with(|| a.datas.ultima_sessao.cmp(&b.datas.ultima_sessao))
+                            .then_with(|| a.percentual_acertos.total_cmp(&b.percentual_acertos))
+                    });
+                }
+                QuizMode::SrsReview => {
+                    eligible.sort_by(|a, b| {
+                        a.datas.ultima_sessao
+                            .cmp(&b.datas.ultima_sessao)
+                            .then_with(|| a.points_with_decay.total_cmp(&b.points_with_decay))
+                            .then_with(|| a.percentual_acertos.total_cmp(&b.percentual_acertos))
+                    });
+                }
+                _ => {
+                    eligible.sort_by(|a, b| {
+                        a.percentual_acertos
+                            .total_cmp(&b.percentual_acertos)
+                            .then_with(|| a.datas.ultima_sessao.cmp(&b.datas.ultima_sessao))
+                            .then_with(|| b.quantidade_erros.cmp(&a.quantidade_erros))
+                    });
+                }
+            }
             let ids: Vec<_> = eligible.iter().map(|a| a.question_id).collect();
             filter.insert("_id", doc! {"$in":ids});
             let candidates = pool(state, filter, 10000).await?;
             let mut by_id: HashMap<_, _> = candidates.into_iter().map(|q| (q.id, q)).collect();
-            eligible
+            let mut available: Vec<_> = eligible
+                .into_iter()
+                .filter(|a| by_id.contains_key(&a.question_id))
+                .collect();
+
+            let window_size = (quantity * 2).clamp(quantity, available.len());
+            if window_size > 1 && window_size <= available.len() {
+                let mut top_slice = available[..window_size].to_vec();
+                top_slice.shuffle(&mut rand::thread_rng());
+                available[..window_size].clone_from_slice(&top_slice);
+            }
+
+            available
                 .iter()
                 .filter_map(|a| by_id.remove(&a.question_id))
                 .take(quantity)
@@ -292,7 +434,12 @@ pub async fn generate(
                 ));
             }
         }
-        _ => pool(state, filter, if exam.is_some(){10000}else{quantity}).await?,
+        _ => {
+            let candidates = pool(state, filter, 10000).await?;
+            let recent_window = (quantity * 4).clamp(40, 150);
+            let buckets = fetch_user_history_buckets(&state.db, req.user_id, recent_window).await?;
+            apply_anti_repetition_tiers(candidates, &buckets, if exam.is_some() { 10000 } else { quantity })
+        },
     };
     let questions=if req.mode!=QuizMode::Simulado {
         if let Some(exam)=exam {let mut q=crate::services::practice_context::filter(state,req.user_id,exam,None,questions).await?;q.truncate(quantity);q}else{questions}
@@ -303,4 +450,119 @@ pub async fn generate(
     }
     for q in &mut result { q.exam_component_id = req.component_id.clone().or_else(||components.get(&q.id).cloned()); }
     Ok(result)
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::activity::ActivityDates;
+    use chrono::Utc;
+
+    #[test]
+    fn anti_repetition_prioritizes_ineditas_over_recent_and_mastered() {
+        let q_inedita = QuestionDocument {
+            id: ObjectId::new(),
+            knowledge_binding_verified: false,
+            validity: None,
+            question: "Inedita".into(),
+            question_type: Default::default(),
+            answers: vec!["A".into(), "B".into()],
+            correct_answers: vec!["A".into()],
+            correct_answer_indices: vec![0],
+            disciplina: "Direito".into(),
+            concursos: bson::Bson::Null,
+            source: None,
+            exam_year: None,
+            level: None,
+            syllabus_topic_ids: vec![],
+            common_trunk_id: None,
+            canonical_subject_id: None,
+            canonical_topic_id: None,
+            is_borrowed_analogous: false,
+            legal_validity: None,
+            explanation: None,
+            contextual_hint: vec![],
+            dr_sincero: None,
+            ajuda_infantil: None,
+            explicacao_infantil: None,
+            explanation_extra: None,
+            mnemonico: None,
+            plausibility_analysis: None,
+            plausibility_markdown: None,
+        };
+
+        let mut q_recente = q_inedita.clone();
+        q_recente.id = ObjectId::new();
+        q_recente.question = "Recente".into();
+
+        let mut q_dominada = q_inedita.clone();
+        q_dominada.id = ObjectId::new();
+        q_dominada.question = "Dominada".into();
+
+        let mut buckets = UserHistoryBuckets::default();
+        buckets.all_attempted_ids.insert(q_recente.id);
+        buckets.recent_attempted_ids.insert(q_recente.id);
+        buckets.all_attempted_ids.insert(q_dominada.id);
+        buckets.mastered_ids.insert(q_dominada.id);
+
+        let candidates = vec![q_dominada.clone(), q_recente.clone(), q_inedita.clone()];
+        let selected = apply_anti_repetition_tiers(candidates, &buckets, 2);
+
+        assert_eq!(selected.len(), 2);
+        assert_eq!(selected[0].id, q_inedita.id, "Tier 1 (Inedita) deve vir primeiro");
+        assert_eq!(selected[1].id, q_recente.id, "Tier 3 (Recente nao dominada) deve vir antes de Dominada");
+    }
+
+    #[test]
+    fn error_notebook_graduates_on_streak_or_mastery() {
+        let now = Utc::now();
+        let mut act = UserActivityDocument {
+            id: None,
+            user_id: 1,
+            question_id: ObjectId::new(),
+            datas: ActivityDates {
+                ultima_sessao: now,
+                ultima_revisao: None,
+                data_primeira_sessao: now,
+                data_primeiro_acerto: None,
+            },
+            tempos: Default::default(),
+            disciplina: "Direito".into(),
+            past_sessions: vec![],
+            quantidade_praticas: 3,
+            quantidade_acertos: 2,
+            quantidade_erros: 1,
+            percentual_acertos: 66.6,
+            percentual_revisoes_sucesso: None,
+            var_alternativa_escolhida: 0.0,
+            frequencia_estudo_mes: 0.0,
+            spaced_repetition_interval: 1,
+            spaced_repetition_score: 0.0,
+            streak_atual: 2,
+            streak_max: 2,
+            points: 50.0,
+            points_with_decay: 50.0,
+            dominada: false,
+            nivel_confianca_med_rec: Some(2),
+            revisao_necessaria: false,
+            in_error_notebook: false,
+            high_confidence_error_flag: false,
+            user_note: None,
+            canonical_subject_id: None,
+            canonical_topic_id: None,
+        };
+
+        // Com in_error_notebook = false e streak_atual = 2, nao deve estar no caderno de erros
+        assert!(!act.error_notebook());
+
+        // Se errar de novo (in_error_notebook = true, streak_atual = 0)
+        act.in_error_notebook = true;
+        act.streak_atual = 0;
+        assert!(act.error_notebook());
+
+        // Se dominada for true, sempre sai do caderno
+        act.dominada = true;
+        assert!(!act.error_notebook());
+    }
 }

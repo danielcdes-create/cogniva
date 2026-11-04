@@ -81,9 +81,13 @@ pub async fn get_today_dashboard(
     let error_notebook_count = act_coll
         .count_documents(doc! {
             "user_id": query.user_id,
+            "dominada": false,
             "$or": [
                 { "in_error_notebook": true },
-                { "quantidade_erros": { "$gt": 0 }, "dominada": false }
+                {
+                    "in_error_notebook": { "$exists": false },
+                    "$expr": { "$gt": ["$quantidade_erros", "$quantidade_acertos"] }
+                }
             ]
         })
         .await?;

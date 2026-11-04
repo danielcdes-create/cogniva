@@ -210,13 +210,17 @@ fn project(
     activity.spaced_repetition_score = score;
     activity.spaced_repetition_interval = interval;
     activity.revisao_necessaria = Utc::now() >= last.data + Duration::days(interval as i64);
-    activity.high_confidence_error_flag = !last.status && last.nivel_confianca >= 2;
+    activity.high_confidence_error_flag = if !last.status {
+        last.nivel_confianca >= 2
+    } else {
+        false
+    };
     activity.in_error_notebook = if !last.status {
         true
-    } else if activity.dominada {
+    } else if activity.dominada || activity.streak_atual >= 2 || last.nivel_confianca >= 2 {
         false
     } else {
-        activity.in_error_notebook || !correct
+        activity.in_error_notebook
     };
     activity.var_alternativa_escolhida = calculate_alternative_variation(&activity.past_sessions);
     activity.frequencia_estudo_mes =
