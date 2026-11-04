@@ -411,8 +411,8 @@ pub async fn generate(
                 .filter(|a| by_id.contains_key(&a.question_id))
                 .collect();
 
-            let window_size = (quantity * 2).clamp(quantity, available.len());
-            if window_size > 1 && window_size <= available.len() {
+            let window_size = (quantity * 2).min(available.len());
+            if window_size > 1 {
                 let mut top_slice = available[..window_size].to_vec();
                 top_slice.shuffle(&mut rand::thread_rng());
                 available[..window_size].clone_from_slice(&top_slice);
