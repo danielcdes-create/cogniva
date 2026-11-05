@@ -456,7 +456,7 @@ pub async fn generate(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::activity::ActivityDates;
+    use crate::models::activity::{ActivityDates, PastSessionEntry};
     use chrono::Utc;
 
     #[test]
@@ -564,5 +564,71 @@ mod tests {
         // Se dominada for true, sempre sai do caderno
         act.dominada = true;
         assert!(!act.error_notebook());
+    }
+
+    #[test]
+    fn two_wrongs_then_a_confident_correct_leave_the_error_notebook() {
+        let now = Utc::now();
+        let mut act = UserActivityDocument {
+            id: None,
+            user_id: 1,
+            question_id: ObjectId::new(),
+            datas: ActivityDates {
+                ultima_sessao: now,
+                ultima_revisao: None,
+                data_primeira_sessao: now,
+                data_primeiro_acerto: Some(now),
+            },
+            tempos: Default::default(),
+            disciplina: "Direito".into(),
+            past_sessions: vec![PastSessionEntry {
+                attempt_id: "third".into(),
+                data: now,
+                status: true,
+                alternativa_escolhida: "A".into(),
+                tempo_gasto_segundos: 10,
+                session_uuid: "s".into(),
+                modo_sessao: "STANDARD".into(),
+                modo_prova: None,
+                concurso: None,
+                canonical_subject_id: None,
+                canonical_topic_id: None,
+                dias_desde_ultima_sessao: 0,
+                dias_desde_ultima_revisao: None,
+                percentual_acertos_acumulado: 33.0,
+                tempo_medio_acumulado: 10.0,
+                nivel_confianca: 2,
+                spaced_repetition_interval: 7,
+                spaced_repetition_score: 0.0,
+                streak_atual: 1,
+                points_session: 0.2,
+                is_revision: false,
+            }],
+            quantidade_praticas: 3,
+            quantidade_acertos: 1,
+            quantidade_erros: 2,
+            percentual_acertos: 33.3,
+            percentual_revisoes_sucesso: None,
+            var_alternativa_escolhida: 0.0,
+            frequencia_estudo_mes: 0.0,
+            spaced_repetition_interval: 7,
+            spaced_repetition_score: 0.0,
+            streak_atual: 1,
+            streak_max: 1,
+            points: 0.2,
+            points_with_decay: 0.2,
+            dominada: false,
+            nivel_confianca_med_rec: Some(2),
+            revisao_necessaria: false,
+            in_error_notebook: true,
+            high_confidence_error_flag: false,
+            user_note: None,
+            canonical_subject_id: None,
+            canonical_topic_id: None,
+        };
+        assert!(!act.error_notebook());
+        act.past_sessions[0].nivel_confianca = 0;
+        act.streak_atual = 1;
+        assert!(act.error_notebook());
     }
 }

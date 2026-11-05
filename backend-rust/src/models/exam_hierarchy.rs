@@ -153,9 +153,11 @@ impl ExamBlueprint {
         self.owner_user_id = Some(user_id.to_string());
     }
 
-    pub fn retain_published_summary(&mut self, previous: &ExamBlueprint) {
-        if self.status == ExamLifecycleStatus::EditalPublicado && self.revision == previous.revision {
-            self.edital_diff_summary = previous.edital_diff_summary.clone();
+    /// Restores the summary taken from storage before `apply_publish`.
+    /// That call rewrites `published_at_iso`; this function puts the captured value back.
+    pub fn keep_summary_captured_before_publish(&mut self, captured: Option<EditalDiffSummary>) {
+        if self.status == ExamLifecycleStatus::EditalPublicado {
+            self.edital_diff_summary = captured;
         }
     }
 }
@@ -186,7 +188,19 @@ mod owner_summary_tests {
             archived_count: 0,
             published_at_iso: "2026-11-02T12:00:00-03:00".into(),
         });
-        incoming.retain_published_summary(&previous);
+        let captured = previous.edital_diff_summary.clone();
+        let rewritten = PublishEditalRequest {
+            expected_revision: previous.revision,
+            published_topics: vec![],
+            practiced_canonical_topic_ids: vec![],
+            published_at_iso: Some("2026-11-05T03:00:00Z".into()),
+        };
+        let _diff = crate::services::exam_engine::apply_publish(&mut previous, &rewritten);
+        assert_eq!(
+            previous.edital_diff_summary.as_ref().unwrap().published_at_iso,
+            "2026-11-05T03:00:00Z"
+        );
+        incoming.keep_summary_captured_before_publish(captured);
         incoming.assign_session_owner(77);
         assert_eq!(incoming.owner_user_id.as_deref(), Some("77"));
         assert_eq!(

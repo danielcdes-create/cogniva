@@ -138,9 +138,14 @@ impl UserActivityDocument {
     }
     pub fn error_notebook(&self) -> bool {
         if self.dominada {
-            false
-        } else {
-            self.in_error_notebook || (self.quantidade_erros > self.quantidade_acertos && self.streak_atual < 2)
+            return false;
         }
+        if let Some(last) = self.past_sessions.last() {
+            if last.status && (self.streak_atual >= 2 || last.nivel_confianca >= 2) {
+                return false;
+            }
+        }
+        self.in_error_notebook
+            || (self.quantidade_erros > self.quantidade_acertos && self.streak_atual < 2)
     }
 }

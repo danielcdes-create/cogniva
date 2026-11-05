@@ -128,6 +128,7 @@ pub async fn update_exam(
                 .collect(),
             published_at_iso: Some(Utc::now().to_rfc3339()),
         };
+        let captured_summary = previous.edital_diff_summary.clone();
         let diff = apply_publish(&mut previous, &request);
         for topic in payload.subjects.iter_mut().flat_map(|s| &mut s.topics) {
             if let Some(classified) = diff
@@ -138,7 +139,7 @@ pub async fn update_exam(
                 topic.diff_status = classified.diff_status.clone();
             }
         }
-        payload.retain_published_summary(&previous);
+        payload.keep_summary_captured_before_publish(captured_summary);
     }
     payload.id = id;
     exam_store::save_command(&state, user.0, payload, false, Some(command_hash))

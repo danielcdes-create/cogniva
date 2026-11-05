@@ -117,6 +117,18 @@ class AuditFindingsTest {
         assertFalse(graduated.inErrorNotebook)
         val confident = LearningProjection.project(null, q, listOf(event("ok", true, 2, "2026-11-04T12:00:00Z")))
         assertFalse(confident.inErrorNotebook)
+        val twoWrongsThenConfident = LearningProjection.project(
+            null,
+            q,
+            listOf(
+                event("w1", false, 1, "2026-11-01T12:00:00Z"),
+                event("w2", false, 1, "2026-11-02T12:00:00Z"),
+                event("c1", true, 2, "2026-11-03T12:00:00Z"),
+            ),
+        )
+        assertFalse(twoWrongsThenConfident.inErrorNotebook)
+        assertEquals(1, twoWrongsThenConfident.correct)
+        assertEquals(3, twoWrongsThenConfident.attempts)
         val intervalDays = Duration.between(
             Instant.parse("2026-11-04T12:00:00Z"),
             Instant.parse(confident.nextReviewAt),
