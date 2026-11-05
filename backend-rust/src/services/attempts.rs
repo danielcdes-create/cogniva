@@ -12,6 +12,22 @@ use chrono::{DateTime, Duration, Utc};
 use mongodb::options::{CollectionOptions, WriteConcern};
 use sha2::{Digest, Sha256};
 
+pub fn next_error_notebook(
+    previous: bool,
+    last_correct: bool,
+    mastered: bool,
+    streak: i32,
+    confidence: i32,
+) -> bool {
+    if !last_correct {
+        true
+    } else if mastered || streak >= 2 || confidence >= 2 {
+        false
+    } else {
+        previous
+    }
+}
+
 fn payload_hash(item: &AnswerAttemptItem) -> String {
     let mut core=item.clone();core.exam_component_id=None;
     let mut payload = serde_json::to_value(core).expect("serializable attempt");
@@ -215,13 +231,13 @@ fn project(
     } else {
         false
     };
-    activity.in_error_notebook = if !last.status {
-        true
-    } else if activity.dominada || activity.streak_atual >= 2 || last.nivel_confianca >= 2 {
-        false
-    } else {
-        activity.in_error_notebook
-    };
+    activity.in_error_notebook = next_error_notebook(
+        activity.in_error_notebook,
+        last.status,
+        activity.dominada,
+        activity.streak_atual,
+        last.nivel_confianca,
+    );
     activity.var_alternativa_escolhida = calculate_alternative_variation(&activity.past_sessions);
     activity.frequencia_estudo_mes =
         calculate_monthly_study_frequency(&activity.past_sessions, Utc::now());
@@ -423,5 +439,14 @@ mod tests {
         let mut changed = item.clone();
         changed.confidence_level = 1;
         assert!(receipt(&raw, &changed, &payload_hash(&changed)).is_err());
+    }
+
+    #[test]
+    fn full_history_graduates_or_keeps_the_notebook() {
+        assert!(!next_error_notebook(true, true, true, 1, 0));
+        assert!(!next_error_notebook(true, true, false, 2, 0));
+        assert!(!next_error_notebook(true, true, false, 1, 2));
+        assert!(next_error_notebook(true, true, false, 1, 0));
+        assert!(next_error_notebook(false, false, false, 0, 3));
     }
 }

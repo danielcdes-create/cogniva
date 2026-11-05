@@ -29,8 +29,12 @@ enum class TopicDiffStatus {
 @Serializable
 enum class QuestionType {
     MULTIPLE_CHOICE,
-    TRUE_FALSE // Estilo Cebraspe (Certo/Errado com penalidade)
+    TRUE_FALSE, // Estilo Cebraspe (Certo/Errado com penalidade)
+    OPEN_ENDED
 }
+
+fun objectivePracticeQuestions(questions: List<QuestionDto>): List<QuestionDto> =
+    questions.filter { it.questionType != QuestionType.OPEN_ENDED }
 
 @Serializable
 enum class QuizMode {
@@ -225,7 +229,6 @@ data class AnswerAttemptPayload(
 @Serializable
 data class SubmitBatchPayload(
     @SerialName("user_id") val userId: Long,
-    @SerialName("use_simplified_srs") val useSimplifiedSrs: Boolean = false,
     val attempts: List<AnswerAttemptPayload>
 )
 

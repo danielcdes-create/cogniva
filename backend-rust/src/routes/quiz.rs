@@ -43,7 +43,6 @@ pub struct AnswerAttemptItem {
 #[derive(Debug, Clone, Deserialize)]
 pub struct SubmitBatchRequest {
     pub user_id: i64,
-    pub use_simplified_srs: Option<bool>,
     pub attempts: Vec<AnswerAttemptItem>,
 }
 

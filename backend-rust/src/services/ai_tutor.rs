@@ -199,9 +199,7 @@ pub async fn get_or_generate_ai_assist_budget(db:&Database,config:&AppConfig,que
     let correct_index = questao.answer_indices()?.into_iter().next().ok_or_else(|| AppError::BadRequest("Questão sem gabarito válido".into()))?;
     let correct_answer = questao.answers[correct_index].clone();
 
-    if let Some(user)=budget_user { crate::services::rate_limit::reserve_tutor(db,user).await?; }
-
-    // 2. Conteúdo ausente: xAI com os prompts existentes.
+    // 2. Conteúdo ausente: xAI com os prompts existentes. A cota só é reservada depois de um texto utilizável.
     let generated_result = match &kind {
         AiAssistKind::Explanation => {
             call_xai_text(config, EXPLANATION_SYSTEM_INSTRUCTION, &json!({"question":questao.question,"choices":questao.answers,"correct_answer":correct_answer}).to_string()).await
@@ -294,6 +292,13 @@ pub async fn get_or_generate_ai_assist_budget(db:&Database,config:&AppConfig,que
     };
 
     let generated_text = generated_result?;
+    if crate::services::rate_limit::charges_tutor_budget(false, Some(&generated_text)) {
+        if let Some(user) = budget_user {
+            crate::services::rate_limit::reserve_tutor(db, user).await?;
+        }
+    } else {
+        return Err(AppError::ExternalAiError("xAI devolveu conteúdo vazio".into()));
+    }
 
     // 3. Persistir no MongoDB para nunca gastar tokens duas vezes na mesma questão
     let update_doc = match &kind {

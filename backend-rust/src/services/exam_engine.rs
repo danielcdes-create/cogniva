@@ -583,6 +583,10 @@ pub fn quotas_from_blueprint(exam: &ExamBlueprint) -> Vec<SubjectQuota> {
         .collect()
 }
 
+pub fn subject_archived_only(topics_empty: bool, all_archived: bool) -> bool {
+    !topics_empty && all_archived
+}
+
 pub fn blueprint_to_leverage(exam: &ExamBlueprint) -> LeverageExam {
     LeverageExam {
         exam_id: exam.id.clone(),
@@ -598,11 +602,13 @@ pub fn blueprint_to_leverage(exam: &ExamBlueprint) -> LeverageExam {
             .subjects
             .iter()
             .map(|subject| {
-                let archived_only = !subject.topics.is_empty()
-                    && subject
+                let archived_only = subject_archived_only(
+                    subject.topics.is_empty(),
+                    subject
                         .topics
                         .iter()
-                        .all(|topic| topic.diff_status == CanonicalTopicStatus::Arquivado);
+                        .all(|topic| topic.diff_status == CanonicalTopicStatus::Arquivado),
+                );
                 LeverageSubject {
                     canonical_subject_id: subject.canonical_subject_id.clone(),
                     name: subject.display_name.clone(),
@@ -1251,6 +1257,42 @@ mod tests {
             select_common_trunk_for_focuses(&exams, &HashMap::new(), &focuses, 8, today).unwrap();
         assert!(card.canonical_subject_id == "DIR_PEN" || card.canonical_subject_id == "DIR_TRIB");
         assert_eq!(card.contest_names.len(), 1);
+    }
+
+    #[test]
+    fn empty_topics_stay_live_and_deleted_or_archived_exams_leave_the_trunk_pool() {
+        assert!(!subject_archived_only(true, true));
+        assert!(subject_archived_only(false, true));
+        assert!(!subject_archived_only(false, false));
+        let live = |id: &str, subject: &str| LeverageExam {
+            exam_id: id.to_string(),
+            short_name: id.to_string(),
+            trunk_slug: "fiscal".to_string(),
+            status: ExamLifecycleStatus::RumorPrevisto,
+            exact_date_iso: None,
+            is_active_in_ladder: true,
+            subjects: vec![LeverageSubject {
+                canonical_subject_id: subject.to_string(),
+                name: subject.to_string(),
+                weight: 1.0,
+                archived_only: false,
+            }],
+        };
+        let mut excluded = live("gone", "ONLY_EXCLUDED");
+        excluded.status = ExamLifecycleStatus::Excluido;
+        let mut archived = live("old", "ONLY_ARCHIVED");
+        archived.status = ExamLifecycleStatus::Arquivado;
+        let today = NaiveDate::from_ymd_opt(2026, 11, 4).unwrap();
+        let card = select_common_trunk_for_focuses(
+            &[live("a", "FIN"), live("b", "FIN"), excluded, archived],
+            &HashMap::new(),
+            &[],
+            8,
+            today,
+        )
+        .unwrap();
+        assert_eq!(card.canonical_subject_id, "FIN");
+        assert!(card.contest_names.iter().all(|name| name == "a" || name == "b"));
     }
 
     #[test]

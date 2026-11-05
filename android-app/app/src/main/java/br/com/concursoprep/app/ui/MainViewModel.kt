@@ -108,12 +108,8 @@ class MainViewModel(private val repository:ConcursoRepository,private val appCon
             } catch(e:CancellationException){_accountLinkState.value=AccountLinkUiState();throw e}
             catch(e:Exception){
                 val message=when(e){
-                    is retrofit2.HttpException->when(e.code()){
-                        401->"Código inválido ou expirado. Solicite um novo código e tente novamente."
-                        409->"Este código já foi usado por outra instalação. Solicite um novo código."
-                        else->"Não foi possível confirmar o vínculo. Confira os dados e tente novamente."
-                    }
-                    is java.io.IOException->"Sem conexão com o servidor. O vínculo não foi confirmado; tente novamente."
+                    is retrofit2.HttpException->br.com.concursoprep.app.domain.model.AccountLinkMessages.fromHttp(e.code(), runCatching { e.response()?.errorBody()?.string().orEmpty() }.getOrDefault(""))
+                    is java.io.IOException->br.com.concursoprep.app.domain.model.AccountLinkMessages.OFFLINE
                     else->"Não foi possível concluir o vínculo. Seus registros foram preservados."
                 }
                 _accountLinkState.value=AccountLinkUiState(message=message,isError=true)

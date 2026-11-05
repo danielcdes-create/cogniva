@@ -98,10 +98,16 @@ object LearningProjection {
                 isMastered=base.isMastered&&fresh.none { !it.isCorrect },
                 inErrorNotebook=base.inErrorNotebook||fresh.any { !it.isCorrect },events=events,reviewRequired=false,practiceAvailable=true)
         }
-        var points = 0.0; var streak = 0; var errors = 0
+        var points = 0.0; var streak = 0; var errors = 0; var notebook = false
+        val recentWindow = ArrayDeque<Int>()
         events.forEach { event ->
             if (event.isCorrect) { streak++; errors = 0; points += listOf(.2,.3,.5,.1)[(streak-1).coerceAtMost(3)] }
             else { streak = 0; errors++; points = (points + listOf(-.2,-.3,-.5,-.1)[(errors-1).coerceAtMost(3)]).coerceAtLeast(0.0) }
+            recentWindow.addLast(event.confidenceLevel.coerceIn(0, 3))
+            if (recentWindow.size > 3) recentWindow.removeFirst()
+            val confidenceNow = kotlin.math.floor(recentWindow.average() + 0.5).toInt()
+            val masteredNow = points >= 1.0 - 1e-6 && confidenceNow >= 2
+            notebook = if (!event.isCorrect) true else if (masteredNow || streak >= 2 || event.confidenceLevel >= 2) false else notebook
         }
         points = kotlin.math.round(points * 1000.0) / 1000.0
         val last = events.lastOrNull()
@@ -111,7 +117,7 @@ object LearningProjection {
         val interval = if (last == null || !last.isCorrect || last.confidenceLevel <= 1) 1 else if (streak <= 2) 7 else 30
         return LearningRecord(question.id, question.disciplina, question.canonicalSubjectId, question.canonicalTopicId,
             attempts, correct, if (attempts > 0) correct * 100.0 / attempts else 0.0, mastered,
-            if (last?.isCorrect == false) true else if (mastered) false else base?.inErrorNotebook == true || fresh.any { !it.isCorrect },
+            notebook,
             last?.let { !it.isCorrect && it.confidenceLevel >= 2 } ?: false, points,
             last?.let { Instant.parse(it.occurredAt).plusSeconds(interval * 86400L).toString() } ?: Instant.EPOCH.toString(),
             base?.revision ?: 0, events,confidence,reviewRequired=false,practiceAvailable=true)

@@ -26,12 +26,20 @@ pub fn apk_info_value(version_code: i64, version_name: &str, apk_bytes: &[u8]) -
 
 type ApkError = (StatusCode, String);
 
+fn apk_missing() -> ApkError {
+    (StatusCode::NOT_FOUND, "APK indisponível".into())
+}
+
+pub async fn read_apk_bytes(configured: &std::path::Path) -> Result<(std::path::PathBuf, Vec<u8>), ApkError> {
+    let apk = tokio::fs::canonicalize(configured).await.map_err(|_| apk_missing())?;
+    let bytes = tokio::fs::read(&apk).await.map_err(|_| apk_missing())?;
+    Ok((apk, bytes))
+}
+
 async fn read_release(state: &AppState) -> Result<(Vec<u8>, i64, String), ApkError> {
     // Resolve current once. Bytes and metadata come from the same immutable
     // release directory even if a promotion swaps the symlink concurrently.
-    let apk = tokio::fs::canonicalize(&state.config.apk_storage_path)
-        .await
-        .map_err(|_| (StatusCode::NOT_FOUND, "APK indisponível".into()))?;
+    let (apk, bytes) = read_apk_bytes(&state.config.apk_storage_path).await?;
     let metadata =
         if state.config.apk_storage_path.parent() == state.config.apk_metadata_path.parent() {
             apk.parent()
@@ -40,9 +48,6 @@ async fn read_release(state: &AppState) -> Result<(Vec<u8>, i64, String), ApkErr
         } else {
             state.config.apk_metadata_path.clone()
         };
-    let bytes = tokio::fs::read(apk)
-        .await
-        .map_err(|_| (StatusCode::NOT_FOUND, "APK indisponível".into()))?;
     let invalid = || {
         (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -86,9 +91,7 @@ pub async fn get_latest_apk(state: State<Arc<AppState>>) -> Result<Json<Value>, 
 pub async fn download_apk(
     State(state): State<Arc<AppState>>,
 ) -> Result<Response, (StatusCode, String)> {
-    let bytes = tokio::fs::read(&state.config.apk_storage_path)
-        .await
-        .map_err(|e| (StatusCode::NOT_FOUND, format!("APK not found: {}", e)))?;
+    let (_path, bytes) = read_apk_bytes(&state.config.apk_storage_path).await?;
 
     Response::builder()
         .status(StatusCode::OK)
@@ -103,4 +106,26 @@ pub async fn download_apk(
         .header(header::CONTENT_LENGTH, bytes.len())
         .body(axum::body::Body::from(bytes))
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn info_and_download_read_the_same_file_and_hide_os_errors() {
+        let dir = std::env::temp_dir().join(format!("cogniva-apk-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("cogniva.apk");
+        std::fs::write(&file, b"same-bytes").unwrap();
+        let (first_path, first) = read_apk_bytes(&file).await.unwrap();
+        let (second_path, second) = read_apk_bytes(&file).await.unwrap();
+        assert_eq!(first, second);
+        assert_eq!(first_path, second_path);
+        assert_eq!(first, b"same-bytes");
+        let missing = read_apk_bytes(&dir.join("absent.apk")).await.unwrap_err();
+        assert_eq!(missing.0, StatusCode::NOT_FOUND);
+        assert_eq!(missing.1, "APK indisponível");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

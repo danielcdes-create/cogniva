@@ -26,7 +26,7 @@ O hash protegido cobre identidade, proprietário, questão, `pastSessions` e not
 
 `deploy.yml`: manual ou tags `v*`, respeitando `[skip ci]`. Domínio/router, JVM/golden, lint e emulador precisam passar na mesma revisão. Build e assinatura acontecem no CI, com JDK 21 e caches. Runtime maior ou igual a 50.000.000 bytes bloqueia promoção. Artifacts expiram em cinco dias; limpeza GHCR conserva cinco versões recentes e digests atual/anterior.
 
-Release Android exige assinatura verificada, ausência de `debuggable`, hash/tamanho e versão medida do output Gradle. Rotação usa chave privada em API 28+. API 26–27 mantém o assinante antigo para permitir atualização sem reinstalar, conservando essa limitação de segurança nesses sistemas.
+Release Android exige assinatura verificada, ausência de `debuggable`, hash/tamanho e versão medida do output Gradle. O `minSdk` é 28. A assinatura de produção usa somente a chave privada. A keystore de depuração versionada não entra nessa assinatura; ela fica restrita ao build local de debug.
 
 O bundle é movido para `/opt/apps/cogniva-releases/SHA`; bytes diferentes sob uma revisão existente são recusados. Imagem é referenciada por digest. Um symlink `/opt/apps/apk/current` troca APK e metadados juntos; o router resolve a release uma vez por leitura.
 

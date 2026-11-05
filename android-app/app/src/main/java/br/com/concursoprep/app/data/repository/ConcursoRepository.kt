@@ -175,7 +175,7 @@ class ConcursoRepository(
         val scope=PracticeScope.contest(mode,contestId)
         try {
             auth?.ensureSession(api,ownerUserId)
-            val remote=api.generateQuizQuestions(QuizGeneratePayload(userId,mode,count,trunkFocusSlugs=focusedTrunkSlugs().toList(),contestId=scope,disciplina=disciplina,componentId=componentId)).map(QuestionCacheMapping::withRevision)
+            val remote=objectivePracticeQuestions(api.generateQuizQuestions(QuizGeneratePayload(userId,mode,count,trunkFocusSlugs=focusedTrunkSlugs().toList(),contestId=scope,disciplina=disciplina,componentId=componentId)).map(QuestionCacheMapping::withRevision))
             require(componentId==null || remote.all { it.examComponentId==componentId }){"O servidor precisa confirmar o componente selecionado. Atualize e tente novamente."}
             if(remote.isNotEmpty()) dao.insertQuestions(remote.map { QuestionCacheMapping.toEntity(it,json) })
             return decorateQuestions(remote)
@@ -226,7 +226,7 @@ class ConcursoRepository(
             val expected=rows.values.any { r->r.practiceAvailable!=false&&(disciplina==null||r.disciplina in ExamCatalog.equivalentLabels(disciplina))&&when(mode){QuizMode.SRS_REVIEW->r.reviewRequired||Instant.parse(r.nextReviewAt)<=Instant.now();QuizMode.ERROR_NOTEBOOK->r.inErrorNotebook;else->!r.isMastered&&r.attempts>0} }
             require(!expected){"Seu histórico contém registros para este modo, mas as questões não estão disponíveis no cache. Conecte-se para recuperá-las."}
         }
-        return decorateQuestions(if(componentId==null)selected else selected.map { it.copy(examComponentId=componentId) })
+        return objectivePracticeQuestions(decorateQuestions(if(componentId==null)selected else selected.map { it.copy(examComponentId=componentId) }))
     }
 
     suspend fun recordAttemptOfflineFirst(userId: Long,attempt: PendingAttemptEntity, session: SessionSnapshot? = null) {
@@ -255,7 +255,7 @@ class ConcursoRepository(
             val pending=dao.getAllPendingAttempts().filter { it.ownerUserId==userId&&it.syncError==null }.take(120)
             if(pending.isEmpty()) break
             if(pending.isNotEmpty()){
-                val payload=SubmitBatchPayload(userId,true,pending.map { it.payload() })
+                val payload=SubmitBatchPayload(userId,pending.map { it.payload() })
                 val response=api.submitAttemptsBatch(payload)
                 val byId=pending.associateBy { it.attemptId }
                 require(response.results.map { it.attemptId }.distinct().size==response.results.size && response.results.all { byId[it.attemptId]?.questionId==it.questionId }){"Recibos inválidos; fila preservada."}

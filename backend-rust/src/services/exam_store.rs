@@ -192,7 +192,7 @@ pub async fn save_command(
             "Use a edição da sua cópia do template".into(),
         ));
     }
-    exam.owner_user_id = Some(user_id.to_string());
+    exam.assign_session_owner(user_id);
     let key = format!("{user_id}:{}", exam.id);
     let hash = original_hash.unwrap_or_else(|| command_hash(user_id, &exam));
     let coll = collection(state);

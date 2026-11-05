@@ -138,7 +138,7 @@ pub async fn update_exam(
                 topic.diff_status = classified.diff_status.clone();
             }
         }
-        payload.edital_diff_summary = previous.edital_diff_summary;
+        payload.retain_published_summary(&previous);
     }
     payload.id = id;
     exam_store::save_command(&state, user.0, payload, false, Some(command_hash))

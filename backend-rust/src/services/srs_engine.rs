@@ -214,6 +214,23 @@ mod tests {
     }
 
     #[test]
+    fn new_attempt_intervals_are_only_one_seven_or_thirty_days() {
+        for streak in 0..=6 {
+            for confidence in 0..=3 {
+                for correct in [true, false] {
+                    let (_, interval) = calculate_spaced_repetition_interval(
+                        streak, 40.0, 20, confidence, correct, true,
+                    );
+                    assert!(
+                        interval == 1 || interval == 7 || interval == 30,
+                        "interval {interval}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
     fn test_high_confidence_error_quadrant() {
         assert_eq!(
             classify_confidence_quadrant(false, 3),

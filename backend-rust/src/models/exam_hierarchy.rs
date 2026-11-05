@@ -128,6 +128,7 @@ pub struct ExamBlueprint {
     pub revision: i64,
     #[serde(default)]
     pub wrong_answer_penalty: f64,
+    #[serde(default)]
     pub owner_user_id: Option<String>,
     pub title: String,
     pub short_name: String,
@@ -141,9 +142,58 @@ pub struct ExamBlueprint {
     pub is_active_in_ladder: bool,
     pub ladder_priority: i32,
     pub subjects: Vec<ExamSubjectConfig>,
+    #[serde(default)]
     pub edital_diff_summary: Option<EditalDiffSummary>,
     #[serde(default)]
     pub sync_status: String,
+}
+
+impl ExamBlueprint {
+    pub fn assign_session_owner(&mut self, user_id: i64) {
+        self.owner_user_id = Some(user_id.to_string());
+    }
+
+    pub fn retain_published_summary(&mut self, previous: &ExamBlueprint) {
+        if self.status == ExamLifecycleStatus::EditalPublicado && self.revision == previous.revision {
+            self.edital_diff_summary = previous.edital_diff_summary.clone();
+        }
+    }
+}
+
+#[cfg(test)]
+mod owner_summary_tests {
+    use super::*;
+
+    fn blueprint(raw: &str) -> ExamBlueprint {
+        serde_json::from_str(raw).unwrap()
+    }
+
+    #[test]
+    fn omitted_owner_and_summary_default_and_a_published_update_keeps_the_previous_summary() {
+        let body = r#"{
+            "id":"exam-1","title":"T","short_name":"T","institution":"I","role":"R",
+            "trunk_slug":"fiscal","status":"EDITAL_PUBLICADO","exam_boards":[],
+            "target_date":{"type":"UNDEFINED"},"historical_cutoff_score":0,
+            "is_active_in_ladder":true,"ladder_priority":1,"subjects":[],"revision":4
+        }"#;
+        let mut incoming = blueprint(body);
+        assert_eq!(incoming.owner_user_id, None);
+        assert_eq!(incoming.edital_diff_summary, None);
+        let mut previous = incoming.clone();
+        previous.edital_diff_summary = Some(EditalDiffSummary {
+            confirmed_count: 2,
+            new_count: 1,
+            archived_count: 0,
+            published_at_iso: "2026-11-02T12:00:00-03:00".into(),
+        });
+        incoming.retain_published_summary(&previous);
+        incoming.assign_session_owner(77);
+        assert_eq!(incoming.owner_user_id.as_deref(), Some("77"));
+        assert_eq!(
+            incoming.edital_diff_summary.unwrap().published_at_iso,
+            "2026-11-02T12:00:00-03:00"
+        );
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

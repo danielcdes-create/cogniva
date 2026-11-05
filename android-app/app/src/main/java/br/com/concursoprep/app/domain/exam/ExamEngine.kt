@@ -314,7 +314,7 @@ object ExamEngine {
         val focuses = listOfNotNull(trunkFocus) + additionalFocus
         val slugs = focuses.map { it.slug }.toSet()
         val cores = focuses.flatMap { it.coreSubjectIds }.toSet()
-        val pool = exams.filter { it.isActiveInLadder&&it.status!="ARQUIVADO" }.filter { exam ->
+        val pool = exams.filter { it.isActiveInLadder && it.status !in setOf("ARQUIVADO", "EXCLUIDO") }.filter { exam ->
             slugs.isEmpty() || slugs.contains(exam.trunkSlug)
         }
         val presence = linkedMapOf<String, MutableList<String>>()
@@ -471,7 +471,7 @@ object ExamEngine {
             exactDateIso = if (exam.dateType == "EXACT_DATE") exam.exactDateIso else null,
             isActiveInLadder = exam.isActiveInLadder,
             subjects = exam.subjects.map { subject ->
-                val archivedOnly = subject.topics.isEmpty() ||
+                val archivedOnly = subject.topics.isNotEmpty() &&
                     subject.topics.all { it.diffStatus == CanonicalTopicStatus.ARQUIVADO.name }
                 LeverageSubject(
                     canonicalSubjectId = subject.canonicalSubjectId,

@@ -43,25 +43,23 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew :app:assembleRelease --no-daemon --console=plain
-      - name: Private signing with upgrade lineage
+      - name: Private release signing
         env:
           KEYSTORE: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
-          LINEAGE: ${{ secrets.ANDROID_SIGNING_LINEAGE_BASE64 }}
           RELEASE_PASSWORD: ${{ secrets.ANDROID_RELEASE_PASSWORD }}
         run: |
           set -euo pipefail
-          test -n "$KEYSTORE" && test -n "$LINEAGE" && test -n "$RELEASE_PASSWORD"
+          test -n "$KEYSTORE" && test -n "$RELEASE_PASSWORD"
           umask 077
           printf '%s' "$KEYSTORE" | base64 --decode > "$RUNNER_TEMP/cogniva.p12"
-          printf '%s' "$LINEAGE" | base64 --decode > "$RUNNER_TEMP/cogniva.lineage"
           mkdir -p release-bundle
           signer="$ANDROID_HOME/build-tools/35.0.0/apksigner"
-          "$signer" sign --out release-bundle/cogniva.apk --lineage "$RUNNER_TEMP/cogniva.lineage" --rotation-min-sdk-version 28 --ks android-app/app/debug.keystore --ks-key-alias androiddebugkey --ks-pass pass:android --next-signer --ks "$RUNNER_TEMP/cogniva.p12" --ks-key-alias cogniva --ks-pass env:RELEASE_PASSWORD android-app/app/build/outputs/apk/release/app-release-unsigned.apk
+          "$signer" sign --out release-bundle/cogniva.apk --ks "$RUNNER_TEMP/cogniva.p12" --ks-key-alias cogniva --ks-pass env:RELEASE_PASSWORD android-app/app/build/outputs/apk/release/app-release-unsigned.apk
           "$signer" verify --verbose --print-certs release-bundle/cogniva.apk > release-bundle/signature.txt
           "$signer" verify --min-sdk-version 28 --max-sdk-version 35 release-bundle/cogniva.apk
           if "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging release-bundle/cogniva.apk | grep -q application-debuggable; then exit 1; fi
           cp android-app/app/build/outputs/apk/release/output-metadata.json release-bundle/
-          rm -f "$RUNNER_TEMP/cogniva.p12" "$RUNNER_TEMP/cogniva.lineage"
+          rm -f "$RUNNER_TEMP/cogniva.p12"
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:

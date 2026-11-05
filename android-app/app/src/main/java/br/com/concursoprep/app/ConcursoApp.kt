@@ -3,6 +3,8 @@ package br.com.concursoprep.app
 import android.app.Application
 import androidx.room.Room
 import br.com.concursoprep.app.data.AuthStore
+import br.com.concursoprep.app.data.local.AccountDatabaseOpener
+import br.com.concursoprep.app.data.local.AccountDatabaseSession
 import br.com.concursoprep.app.data.local.AppDatabase
 import br.com.concursoprep.app.data.local.ExamMigrations
 import br.com.concursoprep.app.data.remote.ConcursoApiService
@@ -27,6 +29,8 @@ class ConcursoApp : Application() {
     lateinit var authStore: AuthStore
         private set
 
+    private var accountDatabases: AccountDatabaseSession<AppDatabase>? = null
+
     fun selectAccount(userId: Long) { authStore.select(userId); openAccount(userId) }
 
     override fun onCreate() {
@@ -34,8 +38,13 @@ class ConcursoApp : Application() {
         instance = this
         authStore = AuthStore(this)
         val prefs = getSharedPreferences("cogniva_prefs", MODE_PRIVATE)
-        if (getDatabasePath("concurso_prep.db").exists() && !prefs.contains("legacy_database_owner")) {
-            check(prefs.edit().putLong("legacy_database_owner", prefs.getLong("user_id", 1001L)).commit())
+        val legacyOwner = AccountDatabaseOpener.legacyOwnerToStore(
+            databaseExists = getDatabasePath("concurso_prep.db").exists(),
+            alreadyStored = prefs.contains("legacy_database_owner"),
+            storedUserId = if (prefs.contains("user_id")) prefs.getLong("user_id", 0L) else null,
+        )
+        if (legacyOwner != null) {
+            check(prefs.edit().putLong("legacy_database_owner", legacyOwner).commit())
         }
         authStore.select(authStore.selectedUserId)
         openAccount(authStore.selectedUserId)
@@ -44,16 +53,16 @@ class ConcursoApp : Application() {
 
     private fun openAccount(ownerUserId: Long) {
         val prefs = getSharedPreferences("cogniva_prefs", MODE_PRIVATE)
-        val databaseName = if (prefs.getLong("legacy_database_owner",0)==ownerUserId) "concurso_prep.db" else "cogniva-$ownerUserId.db"
-
-        // 1. Inicializa o Room DB Offline-First
-        database = Room.databaseBuilder(
-            applicationContext,
-            AppDatabase::class.java,
-            databaseName
-        )
-            .addMigrations(ExamMigrations.MIGRATION_1_2,ExamMigrations.MIGRATION_2_3,ExamMigrations.MIGRATION_3_4,ExamMigrations.MIGRATION_4_5)
-            .build()
+        val databaseName = AccountDatabaseOpener.fileName(prefs.getLong("legacy_database_owner", 0L), ownerUserId)
+        val session = accountDatabases ?: AccountDatabaseSession(
+            openNamed = { name ->
+                Room.databaseBuilder(applicationContext, AppDatabase::class.java, name)
+                    .addMigrations(ExamMigrations.MIGRATION_1_2, ExamMigrations.MIGRATION_2_3, ExamMigrations.MIGRATION_3_4, ExamMigrations.MIGRATION_4_5)
+                    .build()
+            },
+            close = { it.close() },
+        ).also { accountDatabases = it }
+        database = session.open(databaseName)
 
         // 2. Configura OkHttp com timeouts generosos para LLMs (Gemini / OpenAI)
         val loggingInterceptor = HttpLoggingInterceptor().apply {
