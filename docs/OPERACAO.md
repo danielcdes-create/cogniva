@@ -28,7 +28,7 @@ O hash protegido cobre identidade, proprietário, questão, `pastSessions` e not
 
 Release Android exige assinatura verificada, ausência de `debuggable`, hash/tamanho e versão medida do output Gradle. O `minSdk` é 28. A assinatura de produção usa somente a chave privada. A keystore de depuração versionada não entra nessa assinatura; ela fica restrita ao build local de debug.
 
-O bundle é movido para `/opt/apps/cogniva-releases/SHA`; bytes diferentes sob uma revisão existente são recusados. Imagem é referenciada por digest. Um symlink `/opt/apps/apk/current` troca APK e metadados juntos; o router resolve a release uma vez por leitura.
+O bundle é movido para `/opt/apps/cogniva-releases/SHA`; bytes diferentes sob uma revisão existente são recusados. Imagem é referenciada por digest. Um symlink `/opt/apps/apk/current` troca APK e metadados juntos; o router resolve a release uma vez por leitura. As rotas binárias de APK (`/api/v1/apk/download`, `/apk`, `/cogniva.apk`) não devem passar por middleware de compressão dinâmica (gzip/brotli), mantendo `Content-Length` exato, `Cache-Control: no-store, no-transform`, `X-Accel-Buffering: no` e `proxy_buffering off` no Nginx. Detalhes do incidente e checklist de verificação: [LICAO-APRENDIDA-OTA-APK.md](LICAO-APRENDIDA-OTA-APK.md).
 
 Durante a troca e o ensaio de rollback, Nginx bloqueia rotas de dados com 503 e mantém health disponível. Isso impede envio do protocolo novo ao backend antigo. O candidato precisa passar readiness/Mongo, revisão, APK e HTTPS. Ao abrir o gate, uma rota protegida deve rejeitar acesso anônimo com 401.
 
