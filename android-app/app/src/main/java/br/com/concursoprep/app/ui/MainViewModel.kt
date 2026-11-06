@@ -254,10 +254,15 @@ class MainViewModel(private val repository:ConcursoRepository,private val appCon
             @Suppress("DEPRECATION") val installed=context.packageManager.getPackageInfo(context.packageName,flags)
             @Suppress("DEPRECATION") val incoming=context.packageManager.getPackageArchiveInfo(file.absolutePath,flags)?:error("Pacote inválido")
             @Suppress("DEPRECATION") val installedCerts=if(Build.VERSION.SDK_INT>=28)installed.signingInfo?.apkContentsSigners.orEmpty()else installed.signatures.orEmpty()
-            @Suppress("DEPRECATION") val incomingHistory=if(Build.VERSION.SDK_INT>=28)incoming.signingInfo?.signingCertificateHistory.orEmpty()else incoming.signatures.orEmpty()
+            @Suppress("DEPRECATION") val incomingHistory=if(Build.VERSION.SDK_INT>=28)(incoming.signingInfo?.signingCertificateHistory?:incoming.signingInfo?.apkContentsSigners).orEmpty()else incoming.signatures.orEmpty()
             @Suppress("DEPRECATION") val version=if(Build.VERSION.SDK_INT>=28)incoming.longVersionCode else incoming.versionCode.toLong()
             require(incoming.packageName==context.packageName&&version>BuildConfig.VERSION_CODE&&installedCerts.isNotEmpty()&&installedCerts.all{old->incomingHistory.any{it==old}}){"O pacote não corresponde à identidade e à versão esperadas do aplicativo."}
+            _apkUpdateState.value=_apkUpdateState.value.copy(statusMessage="Atualização verificada. Abrindo instalador…")
             _apkInstallEvents.emit(ApkInstallEvent.ReadyToInstall(file))
+        }catch(e:CancellationException){throw e}catch(e:Exception){
+            val msg=e.message?.takeIf{it.isNotBlank()}?:"Não foi possível baixar ou validar a atualização. Tente novamente."
+            _apkUpdateState.value=_apkUpdateState.value.copy(statusMessage=msg)
+            throw IllegalStateException(msg,e)
         }finally{_apkUpdateState.value=_apkUpdateState.value.copy(isDownloading=false)}
     }}
 }

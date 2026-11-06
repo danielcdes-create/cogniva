@@ -194,6 +194,8 @@ pub async fn download_apk(
             "attachment; filename=\"cogniva.apk\"",
         )
         .header(header::CONTENT_LENGTH, meta.size_bytes)
+        .header(header::CACHE_CONTROL, "no-store, no-transform")
+        .header("X-Accel-Buffering", "no")
         .body(Body::from_stream(stream))
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }

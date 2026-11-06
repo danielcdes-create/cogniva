@@ -16,8 +16,8 @@ android {
         applicationId = "br.com.concursoprep.app"
         minSdk = 28
         targetSdk = 35
-        versionCode = 17
-        versionName = "1.4.10"
+        versionCode = 18
+        versionName = "1.4.11"
 
         val doApiBaseUrl = (project.findProperty("DO_API_BASE_URL") as? String)
             ?: "https://198.199.65.103/api/v1/"

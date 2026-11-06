@@ -204,11 +204,14 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             .route("/api/v1/auth/native-session", post(routes::auth::handle_native_session))
             .route("/api/v1/auth/telegram-link", post(routes::auth::handle_telegram_link_or_login))
             .route("/api/v1/apk/info", get(routes::apk_ota::get_apk_info))
-            .route("/api/v1/apk/download", get(routes::apk_ota::download_apk))
-            .route("/api/app/latest-apk", get(routes::apk_ota::get_latest_apk))
-            .route("/apk", get(routes::apk_ota::download_apk))
-            .route("/cogniva.apk", get(routes::apk_ota::download_apk)))
+            .route("/api/app/latest-apk", get(routes::apk_ota::get_latest_apk)))
         .layer(CompressionLayer::new())
+        .merge(
+            Router::new()
+                .route("/api/v1/apk/download", get(routes::apk_ota::download_apk))
+                .route("/apk", get(routes::apk_ota::download_apk))
+                .route("/cogniva.apk", get(routes::apk_ota::download_apk)),
+        )
         .layer(TraceLayer::new_for_http())
         .layer(cors)
         .with_state(state)
@@ -232,7 +235,7 @@ async fn readiness(
 mod latest_apk_tests {
     use super::*;
     use axum::body::Body;
-    use axum::http::Request;
+    use axum::http::{header, Request};
     use sha2::{Digest, Sha256};
     use tower::ServiceExt;
 
@@ -305,6 +308,41 @@ mod latest_apk_tests {
             json["sha256_checksum"].as_str().unwrap(),
             sha256_hex(apk_bytes)
         );
+
+        let download = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/apk/download")
+                    .header(header::ACCEPT_ENCODING, "gzip")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(download.status(), axum::http::StatusCode::OK);
+        assert!(
+            download.headers().get(header::CONTENT_ENCODING).is_none(),
+            "APK download must not be re-compressed with gzip"
+        );
+        assert_eq!(
+            download
+                .headers()
+                .get(header::CONTENT_LENGTH)
+                .and_then(|v| v.to_str().ok()),
+            Some(apk_bytes.len().to_string().as_str())
+        );
+        assert_eq!(
+            download
+                .headers()
+                .get("x-accel-buffering")
+                .and_then(|v| v.to_str().ok()),
+            Some("no")
+        );
+        let downloaded = axum::body::to_bytes(download.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(downloaded.as_ref(), apk_bytes);
 
         if let Ok(path) = std::env::var("COGNIVA_LATEST_APK_CAPTURE") {
             std::fs::write(path, format!("{}\n{}\n", bodies[0], bodies[1])).unwrap();

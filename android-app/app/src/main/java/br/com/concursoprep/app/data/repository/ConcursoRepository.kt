@@ -445,7 +445,7 @@ class ConcursoRepository(
         val client=OkHttpClient.Builder().connectTimeout(15,TimeUnit.SECONDS).readTimeout(120,TimeUnit.SECONDS).build()
         targetDir.mkdirs();val partial=File(targetDir,"${UUID.randomUUID()}.part")
         try{
-            client.newCall(Request.Builder().url(BuildConfig.API_BASE_URL.trimEnd('/')+"/apk/download").build()).execute().use { response ->
+            client.newCall(Request.Builder().url(BuildConfig.API_BASE_URL.trimEnd('/')+"/apk/download").header("Accept-Encoding","identity").build()).execute().use { response ->
                 if(!response.isSuccessful) return@withContext null
                 val body=response.body?:return@withContext null
                 body.byteStream().use { input->partial.outputStream().use { input.copyTo(it) } }
@@ -455,7 +455,7 @@ class ConcursoRepository(
             val destination=File(targetDir,"cogniva-${info.versionCode}.apk")
             java.nio.file.Files.move(partial.toPath(),destination.toPath(),java.nio.file.StandardCopyOption.REPLACE_EXISTING,java.nio.file.StandardCopyOption.ATOMIC_MOVE)
             destination
-        }finally{partial.delete()}
+        }catch(e:java.io.IOException){throw java.io.IOException("Falha de conexão durante o download da atualização. Tente novamente.",e)}finally{partial.delete()}
     }
 }
 
