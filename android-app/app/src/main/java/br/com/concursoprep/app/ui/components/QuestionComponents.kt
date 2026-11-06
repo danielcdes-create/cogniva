@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -314,6 +315,7 @@ private fun ConfidenceButton(
         Button(
             onClick = onClick,
             shape = RoundedCornerShape(10.dp),
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = cs.primary,
                 contentColor = cs.onPrimary
@@ -323,7 +325,7 @@ private fun ConfidenceButton(
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelLarge,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center
             )
@@ -332,6 +334,7 @@ private fun ConfidenceButton(
         OutlinedButton(
             onClick = onClick,
             shape = RoundedCornerShape(10.dp),
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
             colors = ButtonDefaults.outlinedButtonColors(
                 contentColor = cs.onSurface
             ),
@@ -341,7 +344,7 @@ private fun ConfidenceButton(
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelLarge,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center
             )

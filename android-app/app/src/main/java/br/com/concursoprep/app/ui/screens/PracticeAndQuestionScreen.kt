@@ -886,7 +886,7 @@ fun QuestionSessionScreen(
                                 val expText = question.explanation
                                     ?: "Toque em 'Análise das Alternativas' abaixo para ver o comentário pedagógico detalhado."
                                 Text(
-                                    text = MarkdownParser.parseSimpleMarkdownToAnnotatedString(expText),
+                                    text = remember(expText) { MarkdownParser.parse(expText) },
                                     style = MaterialTheme.typography.bodyMedium
                                 )
 
@@ -1011,7 +1011,7 @@ fun QuestionSessionScreen(
                     )
                 }
                 Text(
-                    text = MarkdownParser.parseSimpleMarkdownToAnnotatedString(aiTutorMarkdown),
+                    text = remember(aiTutorMarkdown) { MarkdownParser.parse(aiTutorMarkdown) },
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface
                 )

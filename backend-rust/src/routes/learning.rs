@@ -104,7 +104,7 @@ pub async fn get_state(
             disciplina: activity.disciplina,
             canonical_subject_id: activity.canonical_subject_id,
             canonical_topic_id: activity.canonical_topic_id,
-            attempts: activity.quantidade_praticas,
+            attempts: activity.quantidade_praticas.max(activity.past_sessions.len() as i32),
             correct: activity.quantidade_acertos,
             accuracy_pct: activity.percentual_acertos,
             is_mastered: activity.dominada,

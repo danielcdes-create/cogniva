@@ -65,7 +65,12 @@ class QuestionPreviewMatrixScreenshotTest(
         fun deviceConfigFor(preview: ComposablePreview<AndroidPreviewInfo>): DeviceConfig {
             val info = preview.previewInfo
             val night = (info.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+            val densityScale = DeviceConfig.PIXEL.density.dpiValue / 160f
+            val widthPx = if (info.widthDp > 0) (info.widthDp * densityScale).toInt() else DeviceConfig.PIXEL.screenWidth
+            val heightPx = if (info.heightDp > 0) (info.heightDp * densityScale).toInt() else DeviceConfig.PIXEL.screenHeight
             return DeviceConfig.PIXEL.copy(
+                screenWidth = widthPx,
+                screenHeight = heightPx,
                 fontScale = info.fontScale,
                 nightMode = if (night) NightMode.NIGHT else NightMode.NOTNIGHT,
             )

@@ -197,28 +197,42 @@ class MainViewModel(private val repository:ConcursoRepository,private val appCon
     private fun showSession(session:SessionSnapshot){dismissAiSheet();_activeSession.value=session;_activeQuizQuestions.value=session.questions;_isSimuladoSession.value=session.mode==QuizMode.SIMULADO;_pausedDiscipline.value=session.questions.firstOrNull()?.disciplina}
     fun resumeSession(){operation {repository.pausedSession()?.let(::showSession)?:_userFeedbackMessage.emit("Não há sessão pausada neste aparelho.")}}
     fun updateSession(incoming:SessionSnapshot){
-        val current=_activeSession.value?:return
-        if(current.sessionId!=incoming.sessionId)return
-        val answers=incoming.answers.toMutableMap();current.answers.filterValues { it.submitted }.forEach{(id,answer)->answers[id]=answer}
-        val next=incoming.copy(revision=current.revision+1,answers=answers);_activeSession.value=next
-        operation {repository.saveSession(next)}
+        operation {
+            repository.withMutationLock {
+                val current=_activeSession.value?:return@withMutationLock
+                if(current.sessionId!=incoming.sessionId)return@withMutationLock
+                val answers=incoming.answers.toMutableMap();current.answers.filterValues { it.submitted }.forEach{(id,answer)->answers[id]=answer}
+                val next=incoming.copy(revision=current.revision+1,answers=answers);_activeSession.value=next
+                repository.saveSession(next)
+            }
+        }
     }
     suspend fun submitAnswer(question:QuestionDto,chosenIndex:Int,confidenceLevel:Int,timeSpentSeconds:Int=60):Boolean{
-        val session=_activeSession.value?:return false
         return try{
             require(chosenIndex in question.answers.indices&&question.correctAnswerIndices.size==1)
-            val attempt=PendingAttemptEntity(questionId=question.id,chosenIndex=chosenIndex,chosenText=question.answers[chosenIndex],isCorrect=chosenIndex in question.correctAnswerIndices,timeSpentSeconds=timeSpentSeconds.coerceIn(1,86400),confidenceLevel=confidenceLevel,sessionUuid=session.sessionId,quizMode=session.mode.name,examBlock=null,contestId=session.exam?.examId,userNote=null,canonicalSubjectId=question.canonicalSubjectId,canonicalTopicId=question.canonicalTopicId,ownerUserId=session.ownerUserId,
-                attemptId=UUID.nameUUIDFromBytes("${session.sessionId}:${question.id}".toByteArray()).toString(),questionRevision=question.questionRevision,examComponentId=question.examComponentId)
-            val next=session.copy(answers=session.answers+(question.id to SessionAnswer(chosenIndex,confidenceLevel,timeSpentSeconds,true)),revision=session.revision+1)
-            repository.recordAttemptOfflineFirst(session.ownerUserId,attempt,next)
-            if(_activeSession.value?.sessionId==session.sessionId)_activeSession.value=next
+            val saved=repository.withMutationLock {
+                val session=_activeSession.value?:return@withMutationLock false
+                val attempt=PendingAttemptEntity(questionId=question.id,chosenIndex=chosenIndex,chosenText=question.answers[chosenIndex],isCorrect=chosenIndex in question.correctAnswerIndices,timeSpentSeconds=timeSpentSeconds.coerceIn(1,86400),confidenceLevel=confidenceLevel,sessionUuid=session.sessionId,quizMode=session.mode.name,examBlock=null,contestId=session.exam?.examId,userNote=null,canonicalSubjectId=question.canonicalSubjectId,canonicalTopicId=question.canonicalTopicId,ownerUserId=session.ownerUserId,
+                    attemptId=UUID.nameUUIDFromBytes("${session.sessionId}:${question.id}".toByteArray()).toString(),questionRevision=question.questionRevision,examComponentId=question.examComponentId)
+                val next=session.copy(answers=session.answers+(question.id to SessionAnswer(chosenIndex,confidenceLevel,timeSpentSeconds,true)),revision=session.revision+1)
+                repository.recordAttemptUnlocked(session.ownerUserId,attempt,next)
+                if(_activeSession.value?.sessionId==session.sessionId)_activeSession.value=next
+                true
+            }
+            if(!saved)return false
             localStats();appContext?.let{OfflineSyncWorker.enqueueNow(it)};true
         }catch(e:CancellationException){throw e}catch(e:Exception){_userFeedbackMessage.emit(e.message?:"A resposta não foi salva. Tente novamente antes de sair.");false}
     }
-    fun exitSession(completed:Boolean=false){val current=_activeSession.value?:return;operation {
-        repository.saveSession(current)
-        if(completed)repository.completeSession(current.sessionId)
-        _activeSession.value=null;_activeQuizQuestions.value=null;_isSimuladoSession.value=false;dismissAiSheet();refreshAllData()
+    fun exitSession(completed:Boolean=false){operation {
+        val closed=repository.withMutationLock {
+            val current=_activeSession.value?:return@withMutationLock false
+            repository.saveSession(current)
+            if(completed)repository.completeSession(current.sessionId)
+            _activeSession.value=null;_activeQuizQuestions.value=null;_isSimuladoSession.value=false
+            true
+        }
+        if(!closed)return@operation
+        dismissAiSheet();refreshAllData()
     }}
     fun reportProblem(id:String,category:String){operation {check(repository.reportQuestionProblem(repository.ownerUserId,id,category)){"O reporte não pôde ser salvo; tente novamente."};appContext?.let{OfflineSyncWorker.enqueueNow(it)};localStats();_userFeedbackMessage.emit("Reporte salvo neste aparelho e aguardando confirmação de envio.")}}
     fun requestAiTutor(id:String,kind:String,title:String,hintIndex:Int?=null){

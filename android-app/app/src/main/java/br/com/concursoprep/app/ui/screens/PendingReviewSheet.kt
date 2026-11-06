@@ -13,7 +13,14 @@ import br.com.concursoprep.app.domain.model.PendingReviewItem
 @Composable
 fun PendingReviewSheet(items:List<PendingReviewItem>,onDismiss:()->Unit,onExport:()->Unit){
     ModalBottomSheet(onDismissRequest=onDismiss){
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
+                .verticalScroll(rememberScrollState())
+                .padding(20.dp),
+            verticalArrangement=Arrangement.spacedBy(12.dp)
+        ){
             Text("Registros preservados",style=MaterialTheme.typography.titleLarge)
             Text("Os itens abaixo não foram descartados. Registros da versão anterior exigem conferir o recebimento no histórico antes de qualquer reenvio.")
             items.forEach { item ->

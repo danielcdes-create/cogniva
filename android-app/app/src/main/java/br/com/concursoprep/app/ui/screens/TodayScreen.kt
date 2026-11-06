@@ -481,6 +481,6 @@ private fun deadlineLabel(exam: UpcomingExamCard): String {
         exactDateIso = exam.exactDateIso,
         windowLabel = exam.estimatedWindow,
         fallbackDays = exam.daysRemaining,
-        today = LocalDate.now()
+        today = LocalDate.now(br.com.concursoprep.app.domain.model.LearningProjection.studyZone)
     )
 }

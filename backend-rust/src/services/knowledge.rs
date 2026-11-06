@@ -72,7 +72,8 @@ pub fn project(activity: &Document, question: &Document) -> Option<Evidence> {
         .collect();
     let confidence =
         Some((recent.iter().sum::<i32>() as f64 / recent.len() as f64 + 0.5).floor() as i32);
-    let last = events.last()?;
+        let recorded_practices = activity.get_i32("quantidade_praticas").unwrap_or(0) as usize;
+        let last = events.last()?;
     Some(Evidence {
         canonical_subject_id: subject.clone(),
         canonical_topic_id: topic.clone(),
@@ -85,7 +86,17 @@ pub fn project(activity: &Document, question: &Document) -> Option<Evidence> {
         high_confidence_error: last.get_bool("status").ok() == Some(false)
             && last.get_i32("nivel_confianca").unwrap_or(0) >= 2,
         mastered: activity.get_bool("dominada").unwrap_or(false)
-            && activity.get_i32("quantidade_praticas").unwrap_or(0) == events.len() as i32,
+            && recorded_practices >= events.len()
+            && super::srs_engine::is_mastered(
+                super::srs_engine::calculate_streak_and_points(
+                    &events
+                        .iter()
+                        .map(|e| e.get_bool("status").unwrap_or(false))
+                        .collect::<Vec<_>>(),
+                )
+                .points_total,
+            )
+            && confidence.unwrap_or(0) >= 2,
         review_due_on: q
             .validity
             .as_ref()
@@ -226,6 +237,42 @@ mod tests {
         assert_eq!(evidence.canonical_topic_id, "MAT_01_001");
         assert!(!evidence.mastered);
         assert_eq!(row, before);
+        q.insert("question", "Edited content");
+        assert!(project(&row, &q).is_none());
+    }
+
+    #[test]
+    fn legacy_practice_count_above_events_len_allows_mastery_when_current_revision_is_mastered() {
+        let value: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../shared/examples/question-contracts/question-multiple-choice.json"
+        ))
+        .unwrap();
+        let mut q = bson::Bson::try_from(value)
+            .unwrap()
+            .as_document()
+            .unwrap()
+            .clone();
+        let revision = question_compatibility::decode(q.clone())
+            .unwrap()
+            .revision()
+            .unwrap();
+        let ev1 = doc! {"attempt_id":"a1","question_revision":&revision,"status":true,"nivel_confianca":3,"data":bson::DateTime::from_millis(1000)};
+        let ev2 = doc! {"attempt_id":"a2","question_revision":&revision,"status":true,"nivel_confianca":3,"data":bson::DateTime::from_millis(2000)};
+        let ev3 = doc! {"attempt_id":"a3","question_revision":&revision,"status":true,"nivel_confianca":3,"data":bson::DateTime::from_millis(3000)};
+        let row = doc! {
+            "quantidade_praticas": 6,
+            "dominada": true,
+            "pastSessions": [
+                {"attempt_id": "legacy-unversioned", "status": false},
+                ev1,
+                ev2,
+                ev3
+            ]
+        };
+        let evidence = project(&row, &q).unwrap();
+        assert_eq!(evidence.attempts, 3);
+        assert_eq!(evidence.correct, 3);
+        assert!(evidence.mastered);
         q.insert("question", "Edited content");
         assert!(project(&row, &q).is_none());
     }

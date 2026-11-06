@@ -183,7 +183,8 @@ fn project(
         .sort_by_key(|s| (s.data, s.attempt_id.clone(), s.session_uuid.clone()));
     let statuses: Vec<bool> = activity.past_sessions.iter().map(|s| s.status).collect();
     let streak = calculate_streak_and_points(&statuses);
-    activity.quantidade_praticas += 1;
+    activity.quantidade_praticas =
+        activity.quantidade_praticas.saturating_add(1).max(activity.past_sessions.len() as i32);
     if correct {
         activity.quantidade_acertos += 1;
     } else {
@@ -448,5 +449,41 @@ mod tests {
         assert!(!next_error_notebook(true, true, false, 1, 2));
         assert!(next_error_notebook(true, true, false, 1, 0));
         assert!(next_error_notebook(false, false, false, 0, 3));
+    }
+
+    #[test]
+    fn attempts_total_reconciles_legacy_practice_count_and_session_len() {
+        let q: QuestionDocument = bson::from_document(doc! {
+            "_id": ObjectId::new(),
+            "question": "Q",
+            "answers": ["A", "B"],
+            "correct_answers": ["B"],
+            "disciplina": "D"
+        })
+        .unwrap();
+        let now = Utc::now();
+        let mut act = empty(123, &q, now);
+        act.quantidade_praticas = 5;
+        let item = AnswerAttemptItem {
+            exam_component_id: None,
+            attempt_id: uuid::Uuid::new_v4().to_string(),
+            occurred_at: now.to_rfc3339(),
+            question_revision: q.revision().unwrap(),
+            question_id: q.id.to_hex(),
+            chosen_index: 1,
+            chosen_text: "B".into(),
+            is_correct: true,
+            time_spent_seconds: 10,
+            confidence_level: 3,
+            session_uuid: "s".into(),
+            quiz_mode: "STANDARD".into(),
+            exam_block: None,
+            contest_id: None,
+            user_note: None,
+            canonical_subject_id: None,
+            canonical_topic_id: None,
+        };
+        let (_, _, ack) = project(act, &q, &item, now).unwrap();
+        assert_eq!(ack.attempts_total, 6);
     }
 }

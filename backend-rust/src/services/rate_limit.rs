@@ -18,6 +18,21 @@ pub async fn reserve_tutor(db: &Database, user_id: i64) -> Result<(), AppError> 
     reserve_tutor_at(db, user_id, Utc::now()).await
 }
 
+pub async fn release_tutor(db: &Database, user_id: i64) {
+    release_tutor_at(db, user_id, Utc::now()).await;
+}
+
+pub async fn release_tutor_at(db: &Database, user_id: i64, at: DateTime<Utc>) {
+    let day = tutor_budget_day(at);
+    let _ = db
+        .collection::<Document>("tutor_budgets")
+        .update_one(
+            doc! { "_id": user_id, "day": &day, "count": { "$gt": 0 } },
+            doc! { "$inc": { "count": -1 } },
+        )
+        .await;
+}
+
 pub async fn reserve_tutor_at(db: &Database, user_id: i64, at: DateTime<Utc>) -> Result<(), AppError> {
     let day = tutor_budget_day(at);
     let result = db

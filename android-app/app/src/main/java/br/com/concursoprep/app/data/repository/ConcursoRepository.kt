@@ -119,7 +119,7 @@ class ConcursoRepository(
         }
         return base.values.toList()
     }
-    suspend fun canonicalMasteryBySubject(): Map<String,Double> = LearningProjection.masteryBySubject(projectedLearning())
+    suspend fun canonicalMasteryBySubject(): Map<String,Double> = LearningProjection.masteryBySubject(projectedLearning(), loadStoredExams().filter { it.isActiveInLadder && it.lifecycleStatus !in setOf("ARQUIVADO","EXCLUIDO") }.minByOrNull { it.ladderPriority })
     suspend fun getContestSyllabus(contestId: String,userId: Long): List<DisciplineSyllabusGroupDto> {
         owner(userId)
         val exam=loadStoredExams().firstOrNull { it.examId==contestId } ?: return emptyList()
@@ -159,7 +159,7 @@ class ConcursoRepository(
         val since=LocalDate.now(LearningProjection.studyZone).minusDays(89)
         val events=rows.flatMap { it.events }.filter { Instant.parse(it.occurredAt).atOffset(LearningProjection.studyZone).toLocalDate()>=since }
         val days=events.groupBy { Instant.parse(it.occurredAt).atOffset(LearningProjection.studyZone).toLocalDate() }
-        return ProgressAnalyticsDto(userId,if(attempts==0)0.0 else correct*100.0/attempts,attempts,rows.count { it.isMastered },
+        return ProgressAnalyticsDto(userId,if(attempts==0)0.0 else correct*100.0/attempts,rows.count { it.attempts>0 },rows.count { it.isMastered },
             ExamEngine.readinessForStoredExams(loadStoredExams(),LearningProjection.masteryByTopic(rows)),cutoff,
             rows.groupBy { it.disciplina }.map { (name,items) ->val count=items.sumOf { it.attempts };DisciplineMasteryBarDto(name,if(count==0)0.0 else items.sumOf { it.correct }*100.0/count,count,items.count { it.isMastered },items.sumOf { it.points }) }.sortedBy { it.accuracyPct },
             ConfidenceMatrixSummaryDto(events.count { it.isCorrect&&it.confidenceLevel>=2 },events.count { it.isCorrect&&it.confidenceLevel<2 },events.count { !it.isCorrect&&it.confidenceLevel<2 },events.count { !it.isCorrect&&it.confidenceLevel>=2 }),
@@ -203,7 +203,7 @@ class ConcursoRepository(
         val boardFilter=exam?.examBoards.orEmpty().filter { it!="A definir"&&it.isNotBlank() }.flatMap { if(it=="Cebraspe")listOf("Cebraspe","CEBRASPE","CESPE")else listOf(it) }.toSet()
         val pool=all.filter { mode!=QuizMode.SIMULADO||boardFilter.isEmpty()||it.source in boardFilter }.filter { q ->
             (disciplina==null || if(q.canonicalSubjectId!=null)q.canonicalSubjectId==ExamCatalog.subjectIdForLabel(disciplina) else q.disciplina in ExamCatalog.equivalentLabels(disciplina)) &&
-            if(mode==QuizMode.COMMON_TRUNK)q.canonicalTopicId in commonTopics else (exam==null || q.canonicalTopicId in topics.orEmpty() || (componentId==null && q.canonicalTopicId==null && exam.subjects.any { it.topics.any { t->t.diffStatus!="ARQUIVADO" } && (it.displayName==q.disciplina || q.disciplina in ExamCatalog.legacyLabels(it.canonicalSubjectId)) }))
+            if(mode==QuizMode.COMMON_TRUNK)q.canonicalTopicId in commonTopics else (exam==null || q.canonicalTopicId in topics.orEmpty() || (q.canonicalTopicId==null && exam.subjects.any { it.topics.any { t->t.diffStatus!="ARQUIVADO" } && (it.displayName==q.disciplina || q.disciplina in ExamCatalog.legacyLabels(it.canonicalSubjectId)) }))
         }.filter { q -> exam==null || mode==QuizMode.SIMULADO || exam.subjects.any { s -> (q.canonicalTopicId==null || s.topics.any { it.diffStatus!="ARQUIVADO" && it.canonicalTopicId==q.canonicalTopicId }) && QuizSelection.allowed(decisions,exam,s,q.id,q.questionRevision) } }
         val selected=when(mode){
             QuizMode.SRS_REVIEW->pool.filter { rows[it.id]?.let { r->r.practiceAvailable!=false&&(r.reviewRequired||Instant.parse(r.nextReviewAt)<=Instant.now()) }==true }.sortedBy { rows[it.id]?.nextReviewAt }.take(count)
@@ -229,6 +229,17 @@ class ConcursoRepository(
         return objectivePracticeQuestions(decorateQuestions(if(componentId==null)selected else selected.map { it.copy(examComponentId=componentId) }))
     }
 
+    suspend fun <T> withMutationLock(block: suspend () -> T): T = mutationMutex.withLock { block() }
+    internal suspend fun recordAttemptUnlocked(userId: Long,attempt: PendingAttemptEntity, session: SessionSnapshot? = null) {
+        owner(userId);require(attempt.ownerUserId==userId);require(attempt.questionRevision.isNotEmpty()){ "A versão desta questão precisa ser atualizada antes de responder." }
+        transaction {
+            val previous=dao.findPendingAttemptInSession(attempt.sessionUuid,attempt.questionId)
+            if(previous!=null){require(previous.attemptId==attempt.attemptId&&previous.chosenIndex==attempt.chosenIndex&&previous.confidenceLevel==attempt.confidenceLevel){"Resposta já registrada nesta sessão."};return@transaction}
+            val confirmed=baseLearning().any { row->row.events.any { it.attemptId==attempt.attemptId } }
+            if(!confirmed) dao.enqueuePendingAttempt(attempt)
+            if(session!=null) durable?.saveSession(session.sessionId,ownerUserId,json.encodeToString(session),session.revision,System.currentTimeMillis())
+        }
+    }
     suspend fun recordAttemptOfflineFirst(userId: Long,attempt: PendingAttemptEntity, session: SessionSnapshot? = null) {
         owner(userId);require(attempt.ownerUserId==userId);require(attempt.questionRevision.isNotEmpty()){ "A versão desta questão precisa ser atualizada antes de responder." }
         mutationMutex.withLock {

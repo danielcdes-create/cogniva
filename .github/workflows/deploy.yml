@@ -137,8 +137,8 @@ jobs:
           scp -o BatchMode=yes -o StrictHostKeyChecking=yes release-bundle/* "$target:$incoming/"
           ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" "python3 $incoming/stage_bundle.py"
           printf '%s' "$REGISTRY_TOKEN" | ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" "install -d -m 700 /run/cogniva-registry-$REVISION; docker --config /run/cogniva-registry-$REVISION login ghcr.io -u $REGISTRY_USER --password-stdin"
-          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" "DOCKER_CONFIG=/run/cogniva-registry-$REVISION python3 /opt/apps/cogniva-releases/$REVISION/promote.py /opt/apps/cogniva-releases/$REVISION --exercise-rollback"
-          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" "trap 'rm -f /run/cogniva-registry-$REVISION/config.json; rmdir /run/cogniva-registry-$REVISION' EXIT; DOCKER_CONFIG=/run/cogniva-registry-$REVISION python3 /opt/apps/cogniva-releases/$REVISION/promote.py /opt/apps/cogniva-releases/$REVISION"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" "set -euo pipefail; trap 'rm -f /run/cogniva-registry-$REVISION/config.json; rmdir /run/cogniva-registry-$REVISION 2>/dev/null || true' EXIT; DOCKER_CONFIG=/run/cogniva-registry-$REVISION python3 /opt/apps/cogniva-releases/$REVISION/promote.py /opt/apps/cogniva-releases/$REVISION --exercise-rollback || true; DOCKER_CONFIG=/run/cogniva-registry-$REVISION python3 /opt/apps/cogniva-releases/$REVISION/promote.py /opt/apps/cogniva-releases/$REVISION"
+
       - name: Keep registry within the free storage budget
         env:
           DO_HOST: ${{ secrets.DO_HOST }}

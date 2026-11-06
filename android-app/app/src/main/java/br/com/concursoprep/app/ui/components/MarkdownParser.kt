@@ -24,6 +24,11 @@ object MarkdownParser {
         return MULTI_NEWLINE_REGEX.replace(withoutPrefix.trim(), "\n\n")
     }
 
+    fun parse(
+        raw: String,
+        codeBackgroundColor: Color = Color.Unspecified
+    ): AnnotatedString = parseSimpleMarkdownToAnnotatedString(raw, codeBackgroundColor)
+
     fun parseSimpleMarkdownToAnnotatedString(
         raw: String,
         codeBackgroundColor: Color = Color.Unspecified

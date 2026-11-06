@@ -224,6 +224,7 @@ pub async fn prepare(db: &Database) -> Result<Value, AppError> {
             .await?;
     }
     let payload = contracts::catalog();
+    let _ = ensure_indexes(db).await?;
     let catalogs = collection(db, "knowledge_catalog_versions");
     catalogs
         .create_index(
@@ -262,6 +263,90 @@ pub async fn prepare(db: &Database) -> Result<Value, AppError> {
     Ok(
         json!({"ready":true,"schema_version":2,"question_documents_rewritten":0,"indexes":8,"catalog_version":catalog_version}),
     )
+}
+pub async fn ensure_indexes(db: &Database) -> Result<Vec<String>, AppError> {
+    let mut created = Vec::new();
+    for (name, keys, label) in [
+        (
+            "todasQuestoes",
+            doc! {"canonical_topic_id":1},
+            "qv2_legacy_topic",
+        ),
+        (
+            "todasQuestoes",
+            doc! {"classification.links.subject_id":1,"classification.links.topic_id":1,"validity.status":1},
+            "qv2_classification_validity",
+        ),
+        (
+            "todasQuestoes",
+            doc! {"validity.status":1,"validity.review_due_on":1,"question_type":1},
+            "qv2_validity_type",
+        ),
+        (
+            "question_classification_suggestions",
+            doc! {"question_id":1,"status":1,"question_content_revision":1},
+            "qv2_pending_classification",
+        ),
+        (
+            "question_exam_compatibility",
+            doc! {"owner_user_id":1,"exam_id":1,"component_id":1,"question_id":1},
+            "qv2_owner_exam_question",
+        ),
+        (
+            "answer_evaluations",
+            doc! {"user_id":1,"attempt_id":1,"created_at":1},
+            "qv2_owner_attempt",
+        ),
+        (
+            "question_revision_events",
+            doc! {"question_id":1,"revision":1},
+            "qv2_question_audit",
+        ),
+    ] {
+        collection(db, name)
+            .create_index(
+                IndexModel::builder()
+                    .keys(keys)
+                    .options(IndexOptions::builder().name(label.to_string()).build())
+                    .build(),
+            )
+            .await?;
+        created.push(label.to_string());
+    }
+    for (name, keys, label) in [
+        (
+            "userActivityLog",
+            doc! {"user_id":1,"question_id":1},
+            "idx_activity_user_question",
+        ),
+        (
+            "attempt_receipts",
+            doc! {"user_id":1,"attempt_id":1},
+            "idx_receipt_user_attempt",
+        ),
+        (
+            "user_exams",
+            doc! {"owner_user_id":1,"exam_id":1},
+            "idx_user_exams_owner_exam",
+        ),
+    ] {
+        collection(db, name)
+            .create_index(
+                IndexModel::builder()
+                    .keys(keys)
+                    .options(
+                        IndexOptions::builder()
+                            .name(label.to_string())
+                            .unique(true)
+                            .sparse(true)
+                            .build(),
+                    )
+                    .build(),
+            )
+            .await?;
+        created.push(label.to_string());
+    }
+    Ok(created)
 }
 pub async fn flush_audit(db: &Database, id: ObjectId) -> Result<(), AppError> {
     let coll = collection(db, "todasQuestoes");

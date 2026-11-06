@@ -74,13 +74,24 @@ pub async fn get_user_progress_analytics(
     let act_coll = state.db.collection::<Document>("userActivityLog");
 
     // 1. Agregação por Disciplina (ordenada por pior desempenho para foco tático)
+    let effective_attempts = doc! {
+        "$max": [
+            "$quantidade_praticas",
+            { "$size": { "$ifNull": ["$pastSessions", []] } }
+        ]
+    };
     let disc_pipeline = vec![
         doc! { "$match": { "user_id": query.user_id } },
         doc! {
             "$group": {
                 "_id": "$disciplina",
                 "correct_count": { "$sum": "$quantidade_acertos" },
-                "total_attempts": { "$sum": "$quantidade_praticas" },
+                "total_attempts": { "$sum": effective_attempts.clone() },
+                "questions_practiced": {
+                    "$sum": {
+                        "$cond": [{ "$gt": [effective_attempts, 0] }, 1, 0]
+                    }
+                },
                 "mastered_count": {
                     "$sum": { "$cond": [{ "$eq": ["$dominada", true] }, 1, 0] }
                 },
@@ -93,6 +104,7 @@ pub async fn get_user_progress_analytics(
     let mut disc_cursor = act_coll.aggregate(disc_pipeline).await?;
     let mut disciplines = Vec::new();
     let mut total_questions_practiced = 0;
+    let mut total_attempts_all = 0;
     let mut total_mastered_questions = 0;
     let mut weighted_acc_sum = 0.0;
 
@@ -114,10 +126,12 @@ pub async fn get_user_progress_analytics(
             0.0
         };
         let attempts = number(&d, "total_attempts").clamp(0.0, i32::MAX as f64) as i32;
+        let practiced = number(&d, "questions_practiced").clamp(0.0, i32::MAX as f64) as i32;
         let mastered = number(&d, "mastered_count").clamp(0.0, i32::MAX as f64) as i32;
         let points = (number(&d, "points_sum") * 100.0).round() / 100.0;
 
-        total_questions_practiced += attempts;
+        total_questions_practiced += practiced;
+        total_attempts_all += attempts;
         total_mastered_questions += mastered;
         weighted_acc_sum += accuracy_pct * (attempts as f64);
 
@@ -135,14 +149,14 @@ pub async fn get_user_progress_analytics(
             .total_cmp(&b.accuracy_pct)
             .then(a.discipline.cmp(&b.discipline))
     });
-    let global_accuracy_pct = if total_questions_practiced > 0 {
-        ((weighted_acc_sum / (total_questions_practiced as f64)) * 100.0).round() / 100.0
+    let global_accuracy_pct = if total_attempts_all > 0 {
+        ((weighted_acc_sum / (total_attempts_all as f64)) * 100.0).round() / 100.0
     } else {
         0.0
     };
 
     // 2. Matriz Confiança × Acerto + Heatmap diário a partir de `pastSessions`
-    let zone = chrono::FixedOffset::west_opt(10800).unwrap();
+    let zone = chrono::FixedOffset::west_opt(3 * 3600).unwrap();
     let today = chrono::Utc::now().with_timezone(&zone).date_naive();
     let since = today - chrono::Duration::days(89);
     let start = zone

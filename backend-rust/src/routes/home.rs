@@ -1,7 +1,7 @@
 use crate::{
     error::AppError,
     models::contest::ContestStatus,
-    services::exam_engine::{card_from_canonical_activity, load_canonical_slices},
+    services::exam_engine::{load_canonical_slices, select_common_trunk_for_focuses},
     AppState,
 };
 use axum::{
@@ -159,14 +159,53 @@ pub async fn get_today_dashboard(
         })
         .collect();
 
-    let leverage_inputs = crate::services::exam_store::list(state.as_ref(), query.user_id)
-        .await?
+    let leverage_inputs = blueprints
         .iter()
         .map(crate::services::exam_engine::blueprint_to_leverage)
         .collect::<Vec<_>>();
     let activity = load_canonical_slices(db, query.user_id).await?;
+    let mut subject_mastery = crate::services::exam_engine::mastery_by_canonical_subject(&activity);
+    if let Some(active_exam) = blueprints
+        .iter()
+        .filter(|e| {
+            e.is_active_in_ladder
+                && !matches!(
+                    e.status,
+                    crate::models::exam_hierarchy::ExamLifecycleStatus::Arquivado
+                        | crate::models::exam_hierarchy::ExamLifecycleStatus::Excluido
+                )
+        })
+        .min_by_key(|e| e.ladder_priority)
+    {
+        let by_topic = crate::services::exam_engine::mastery_by_canonical_topic(&activity);
+        let mut topics_by_subject: std::collections::HashMap<String, Vec<String>> =
+            std::collections::HashMap::new();
+        for subject in &active_exam.subjects {
+            let entry = topics_by_subject
+                .entry(subject.canonical_subject_id.clone())
+                .or_default();
+            for topic in &subject.topics {
+                if topic.diff_status
+                    != crate::models::exam_hierarchy::CanonicalTopicStatus::Arquivado
+                    && !topic.canonical_topic_id.is_empty()
+                    && !entry.contains(&topic.canonical_topic_id)
+                {
+                    entry.push(topic.canonical_topic_id.clone());
+                }
+            }
+        }
+        for (subject_id, active_topics) in topics_by_subject {
+            if !active_topics.is_empty() {
+                let sum: f64 = active_topics
+                    .iter()
+                    .map(|tid| by_topic.get(tid).copied().unwrap_or(0.0))
+                    .sum();
+                subject_mastery.insert(subject_id, sum / active_topics.len() as f64);
+            }
+        }
+    }
     let common_trunk_suggestion =
-        card_from_canonical_activity(&leverage_inputs, &activity, &[], 15, local_day)
+        select_common_trunk_for_focuses(&leverage_inputs, &subject_mastery, &[], 15, local_day)
             .map(|card| CommonTrunkSuggestion {
                 discipline: card.subject_name,
                 shared_contests: card.contest_names,

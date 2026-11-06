@@ -287,4 +287,36 @@ class RepositoryContractTest {
         for(kind in listOf("contextual-hint","child-friendly-pre"))assertFalse(repo.requestAiTutor(q.id,kind).contains("ANSWER_REFERENCE_DO_NOT_REVEAL"))
         assertTrue(repo.requestAiTutor(q.id,"explanation").contains("ANSWER_REFERENCE_DO_NOT_REVEAL"))
     }
+    @Test fun componentScopedPracticeSelectsLegacyQuestionsForTheComponentSubject()=runBlocking {
+        val store=Store();val template=ExamCatalog.systemExams().find { it.examId=="CPNU" }!!
+        val component=template.subjects.first { it.canonicalSubjectId=="SOC_TRAB" }
+        store.putExam(template.copy(subjects=listOf(component)))
+        val q=question().copy(disciplina="Sociologia e Psicologia Aplicadas",canonicalSubjectId=null,canonicalTopicId=null)
+        store.questions[q.id]=QuestionCacheMapping.toEntity(q,json)
+        val selected=store.repository().fetchOrGetOfflineQuiz(123,QuizMode.STANDARD,1,contestId="CPNU",componentId=component.localSubjectId).single()
+        assertEquals(q.id,selected.id);assertNull(selected.canonicalTopicId);assertNull(selected.canonicalSubjectId)
+        assertEquals(component.localSubjectId,selected.examComponentId)
+    }
+    @Test fun subjectMasteryAccountsForUnpracticedActiveTopicsInActiveExamAndProjectsReviewRequired(){
+        val q=QuestionCacheMapping.withRevision(question().copy(canonicalSubjectId="FIN_PUB",canonicalTopicId="FIN_PUB_01",knowledgeProjectionVersion=1,knowledgeBindingVerified=true))
+        val pastEvent=LearningEvent("ev-1","2020-01-01T12:00:00Z",true,3,15,q.questionRevision)
+        val projected=LearningProjection.project(null,q,listOf(pastEvent))
+        assertTrue(projected.reviewRequired)
+        val futureEvent=LearningEvent("ev-2","2099-01-01T12:00:00Z",true,3,15,q.questionRevision)
+        val futureProjected=LearningProjection.project(null,q,listOf(futureEvent))
+        assertFalse(futureProjected.reviewRequired)
+        val exam=ExamCatalog.systemExams().find { it.examId=="CPNU" }!!.let { base ->
+            val fin=base.subjects.first { it.canonicalSubjectId=="FIN_PUB" }.copy(
+                topics=listOf(
+                    StoredTopic("t1","FIN_PUB_01","FIN_PUB","Tópico 1","OFICIAL_CONFIRMADO"),
+                    StoredTopic("t2","FIN_PUB_02","FIN_PUB","Tópico 2","OFICIAL_NOVO"),
+                    StoredTopic("t3","FIN_PUB_03","FIN_PUB","Tópico Arquivado","ARQUIVADO")
+                )
+            )
+            base.copy(subjects=listOf(fin))
+        }
+        val withoutExam=LearningProjection.masteryBySubject(listOf(projected)).getValue("FIN_PUB")
+        val withExam=LearningProjection.masteryBySubject(listOf(projected),exam).getValue("FIN_PUB")
+        assertEquals(withoutExam / 2.0,withExam,1e-9)
+    }
 }

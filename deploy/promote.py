@@ -25,7 +25,9 @@ def compose_up():
     print(run('docker','compose','-p','apps','-f',str(COMPOSE),'-f',str(OVERRIDE),'up','-d','--no-deps','--force-recreate',SERVICE))
 def gate(paused):
     path=pathlib.Path('/etc/nginx/cogniva-gate.conf')
-    path.write_text('set $cogniva_maintenance '+('1' if paused else '0')+';\n')
+    temp=path.with_name(path.name+'.tmp')
+    temp.write_text('set $cogniva_maintenance '+('1' if paused else '0')+';\n',encoding='utf-8')
+    os.replace(temp,path)
     run('nginx','-t');run('systemctl','reload','nginx')
     for _ in range(20):
         try:urllib.request.urlopen('https://198.199.65.103/api/v1/exams',timeout=3)
@@ -99,22 +101,26 @@ try:
     atomic_json(ROOT/'cogniva-current-release.json',{**manifest,'runtime_size_bytes':size,'previous_image_id':old_image,'previous_image':before['Config']['Image']})
     print(json.dumps({'promoted':release.name,'runtime_size_bytes':size,'other_containers_preserved':True}))
 except BaseException:
-    gate(True)
-    if old_target is not None:symlink(old_target,current)
-    else:current.unlink(missing_ok=True)
-    if old_override is not None:OVERRIDE.write_bytes(old_override)
-    else:atomic_json(OVERRIDE,{'services':{SERVICE:{'image':old_runtime_ref}}})
-    compose_up()
-    # Old baseline has health but not readiness. Test actual HTTP recovery.
-    for retry in range(30):
-        try:
-            with urllib.request.urlopen('http://127.0.0.1:8001/api/v1/health',timeout=5) as response:
-                assert response.status==200
-            print('ROLLBACK_HEALTHY');break
-        except Exception:
-            if retry==29:raise RuntimeError('Rollback requires operator attention')
-            time.sleep(2)
-    if not protocol_migration:gate(False)
+    restored_previous=False
+    try:
+        gate(True)
+        if old_target is not None:symlink(old_target,current)
+        else:current.unlink(missing_ok=True)
+        if old_override is not None:OVERRIDE.write_bytes(old_override)
+        else:atomic_json(OVERRIDE,{'services':{SERVICE:{'image':old_runtime_ref}}})
+        compose_up()
+        # Old baseline has health but not readiness. Test actual HTTP recovery.
+        for retry in range(30):
+            try:
+                with urllib.request.urlopen('http://127.0.0.1:8001/api/v1/health',timeout=5) as response:
+                    assert response.status==200
+                restored_previous=True
+                print('ROLLBACK_HEALTHY');break
+            except Exception:
+                if retry==29:raise RuntimeError('Rollback requires operator attention')
+                time.sleep(2)
+    finally:
+        if restored_previous or not protocol_migration:gate(False)
     if controlled_failure:
         assert inspect()['Image']==old_image,'Rollback did not restore the previous image'
         assert (os.readlink(current) if current.is_symlink() else None)==old_target

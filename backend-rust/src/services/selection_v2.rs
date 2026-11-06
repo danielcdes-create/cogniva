@@ -205,7 +205,7 @@ pub async fn generate(
                 doc! {"canonical_topic_id":bson::Bson::Null,"disciplina":{"$in":subjects}},
             ],
         );
-        if req.component_id.is_some(){filter.insert("canonical_topic_id",doc!{"$in":exam.subjects.iter().flat_map(|s|&s.topics).filter(|t|t.diff_status!=CanonicalTopicStatus::Arquivado).map(|t|t.canonical_topic_id.clone()).collect::<Vec<_>>()});}
+        // Component scope is already applied on `exam` above; preserve the `$or` legacy fallback.
     }
     if let Some(disc) = req.disciplina.as_ref().filter(|d| !d.is_empty()) {
         let trimmed = disc.trim();
@@ -251,7 +251,7 @@ pub async fn generate(
     {
         filter.insert("source", source);
     }
-    if let Some(topic) = req.syllabus_topic_id.as_ref() {
+    if let Some(topic) = req.syllabus_topic_id.as_ref().filter(|s| !s.trim().is_empty()) {
         filter.insert("canonical_topic_id", topic);
     }
     let mut components = HashMap::new();
@@ -561,6 +561,7 @@ mod tests {
         act.streak_atual = 0;
         assert!(act.error_notebook());
 
+
         // Se dominada for true, sempre sai do caderno
         act.dominada = true;
         assert!(!act.error_notebook());
@@ -628,7 +629,63 @@ mod tests {
         };
         assert!(!act.error_notebook());
         act.past_sessions[0].nivel_confianca = 0;
-        act.streak_atual = 1;
         assert!(act.error_notebook());
+        act.streak_atual = 1;
+
+    }
+
+    #[test]
+    fn component_scoped_exam_filter_preserves_legacy_null_topic_fallback_and_ignores_blank_syllabus_topic() {
+        let mut exam = crate::services::exam_engine::system_exam_blueprints().remove(0);
+        let target_component = exam.subjects[0].local_subject_id.clone();
+        exam.subjects.retain(|s| s.local_subject_id == target_component);
+        assert_eq!(exam.subjects.len(), 1);
+
+        let topics: Vec<_> = exam
+            .subjects
+            .iter()
+            .flat_map(|s| &s.topics)
+            .filter(|t| t.diff_status != CanonicalTopicStatus::Arquivado)
+            .map(|t| t.canonical_topic_id.clone())
+            .collect();
+        let mut subjects: Vec<_> = exam
+            .subjects
+            .iter()
+            .map(|s| s.display_name.clone())
+            .collect();
+        let catalog = canonical_subjects();
+        for subject in &exam.subjects {
+            if let Some(known) = catalog
+                .iter()
+                .find(|s| s.canonical_subject_id == subject.canonical_subject_id)
+            {
+                subjects.extend(known.aliases.clone());
+            }
+        }
+
+        let mut filter = Document::new();
+        filter.insert(
+            "$or",
+            vec![
+                doc! {"canonical_topic_id":{"$in":&topics}},
+                doc! {"canonical_topic_id":bson::Bson::Null,"disciplina":{"$in":&subjects}},
+            ],
+        );
+        let blank_syllabus = Some("   ".to_string());
+        if let Some(topic) = blank_syllabus.as_ref().filter(|s| !s.trim().is_empty()) {
+            filter.insert("canonical_topic_id", topic);
+        }
+
+        assert!(
+            !filter.contains_key("canonical_topic_id"),
+            "Component filter must not overwrite top-level canonical_topic_id and kill the legacy $or branch"
+        );
+        let or_clauses = filter.get_array("$or").unwrap();
+        assert_eq!(or_clauses.len(), 2);
+        assert_eq!(
+            or_clauses[1].as_document().unwrap().get("canonical_topic_id"),
+            Some(&bson::Bson::Null)
+        );
+
     }
 }

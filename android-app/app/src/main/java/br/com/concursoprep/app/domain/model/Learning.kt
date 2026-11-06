@@ -3,6 +3,7 @@ package br.com.concursoprep.app.domain.model
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerialName
 import br.com.concursoprep.app.domain.exam.ExamEngine
+import br.com.concursoprep.app.domain.exam.StoredExam
 import java.time.Instant
 import java.time.ZoneOffset
 
@@ -65,10 +66,27 @@ object LearningProjection {
         .filter { !it.canonicalTopicId.isNullOrBlank() }
         .groupBy { it.canonicalTopicId!! }
         .mapValues { (_, records) -> records.map { ExamEngine.masteryFraction(it.accuracyPct, it.isMastered, it.highConfidenceError,it.confidenceAvg) }.average() }
-    fun masteryBySubject(rows: List<LearningRecord>): Map<String, Double> = knowledgeRows(rows)
-        .filter { !it.canonicalSubjectId.isNullOrBlank() }
-        .groupBy { it.canonicalSubjectId!! }
-        .mapValues { (_, records) -> records.map { ExamEngine.masteryFraction(it.accuracyPct, it.isMastered, it.highConfidenceError,it.confidenceAvg) }.average() }
+    fun masteryBySubject(rows: List<LearningRecord>, activeExam: StoredExam? = null): Map<String, Double> {
+        val base = knowledgeRows(rows)
+            .filter { !it.canonicalSubjectId.isNullOrBlank() }
+            .groupBy { it.canonicalSubjectId!! }
+            .mapValues { (_, records) -> records.map { ExamEngine.masteryFraction(it.accuracyPct, it.isMastered, it.highConfidenceError,it.confidenceAvg) }.average() }
+        if (activeExam == null) return base
+        val byTopic = masteryByTopic(rows)
+        val result = base.toMutableMap()
+        activeExam.subjects
+            .groupBy { it.canonicalSubjectId }
+            .forEach { (subjectId, components) ->
+                val activeTopics = components.flatMap { it.topics }
+                    .filter { it.diffStatus != "ARQUIVADO" && it.canonicalTopicId.isNotBlank() }
+                    .map { it.canonicalTopicId }
+                    .distinct()
+                if (activeTopics.isNotEmpty()) {
+                    result[subjectId] = activeTopics.sumOf { byTopic[it] ?: 0.0 } / activeTopics.size.toDouble()
+                }
+            }
+        return result
+    }
     fun project(base: LearningRecord?, question: QuestionDto, pending: List<LearningEvent>): LearningRecord {
         val history=projectHistory(base,question,pending)
         if(question.knowledgeProjectionVersion==0)return history
@@ -94,9 +112,12 @@ object LearningProjection {
         if(base!=null&&base.events.size<base.attempts){
             // An ACK can precede a full pull. Unknown older events must never
             // be replaced with an invented streak starting at zero.
+            val nextReviewMillis = runCatching { Instant.parse(base.nextReviewAt).toEpochMilli() }.getOrDefault(Long.MAX_VALUE)
             return base.copy(attempts=attempts,correct=correct,accuracyPct=correct*100.0/attempts,
                 isMastered=base.isMastered&&fresh.none { !it.isCorrect },
-                inErrorNotebook=base.inErrorNotebook||fresh.any { !it.isCorrect },events=events,reviewRequired=false,practiceAvailable=true)
+                inErrorNotebook=base.inErrorNotebook||fresh.any { !it.isCorrect },events=events,
+                reviewRequired=if (events.isEmpty()) base.reviewRequired else System.currentTimeMillis() >= nextReviewMillis,
+                practiceAvailable=true)
         }
         var points = 0.0; var streak = 0; var errors = 0; var notebook = false
         val recentWindow = ArrayDeque<Int>()
@@ -115,11 +136,14 @@ object LearningProjection {
         val confidence=if(recent.isEmpty())null else kotlin.math.floor(recent.map { it.confidenceLevel }.average()+0.5).toInt()
         val mastered = points >= 1.0 - 1e-6 && (confidence?:0)>=2
         val interval = if (last == null || !last.isCorrect || last.confidenceLevel <= 1) 1 else if (streak <= 2) 7 else 30
+        val nextReviewAt = last?.let { Instant.parse(it.occurredAt).plusSeconds(interval * 86400L).toString() } ?: Instant.EPOCH.toString()
+        val nextReviewMillis = runCatching { Instant.parse(nextReviewAt).toEpochMilli() }.getOrDefault(Long.MAX_VALUE)
+        val reviewRequired = if (events.isEmpty()) (base?.reviewRequired ?: false) else System.currentTimeMillis() >= nextReviewMillis
         return LearningRecord(question.id, question.disciplina, question.canonicalSubjectId, question.canonicalTopicId,
             attempts, correct, if (attempts > 0) correct * 100.0 / attempts else 0.0, mastered,
             notebook,
             last?.let { !it.isCorrect && it.confidenceLevel >= 2 } ?: false, points,
-            last?.let { Instant.parse(it.occurredAt).plusSeconds(interval * 86400L).toString() } ?: Instant.EPOCH.toString(),
-            base?.revision ?: 0, events,confidence,reviewRequired=false,practiceAvailable=true)
+            nextReviewAt,
+            base?.revision ?: 0, events,confidence,reviewRequired=reviewRequired,practiceAvailable=true)
     }
 }

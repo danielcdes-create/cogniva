@@ -3,14 +3,10 @@ package br.com.concursoprep.app.data.remote
 import br.com.concursoprep.app.domain.model.AiAssistResponseDto
 import br.com.concursoprep.app.domain.model.ApkInfoDto
 import br.com.concursoprep.app.domain.model.AuthSessionDto
-import br.com.concursoprep.app.domain.model.ContestDiffScreenDto
-import br.com.concursoprep.app.domain.model.DisciplineSyllabusGroupDto
-import br.com.concursoprep.app.domain.model.ProgressAnalyticsDto
 import br.com.concursoprep.app.domain.model.QuestionDto
 import br.com.concursoprep.app.domain.model.QuizMode
 import br.com.concursoprep.app.domain.model.SubmitBatchPayload
 import br.com.concursoprep.app.domain.model.SubmitBatchResponseDto
-import br.com.concursoprep.app.domain.model.TodayDashboardDto
 import br.com.concursoprep.app.domain.model.UserProfileDto
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -141,7 +137,6 @@ interface ConcursoApiService {
     @GET("auth/profile")
     suspend fun profile(): UserProfileDto
 
-
     @POST("auth/native-session")
     suspend fun nativeSession(@Body payload: NativeSessionPayload): AuthSessionDto
 
@@ -167,22 +162,6 @@ interface ConcursoApiService {
         @Body payload: OnboardingPayload
     ): UserProfileDto
 
-    @GET("home/today")
-    suspend fun getTodayDashboard(
-        @Query("user_id") userId: Long
-    ): TodayDashboardDto
-
-    @GET("contests/{contestId}/syllabus")
-    suspend fun getContestSyllabus(
-        @Path("contestId") contestId: String,
-        @Query("user_id") userId: Long
-    ): List<DisciplineSyllabusGroupDto>
-
-    @GET("contests/{contestId}/diff")
-    suspend fun getContestEditalDiff(
-        @Path("contestId") contestId: String
-    ): ContestDiffScreenDto
-
     @POST("quiz/generate")
     suspend fun generateQuizQuestions(
         @Body payload: QuizGeneratePayload
@@ -205,11 +184,6 @@ interface ConcursoApiService {
         @Path("id") questionId: String,
         @Body payload: ReportProblemPayload
     )
-
-    @GET("analytics/progress")
-    suspend fun getProgressAnalytics(
-        @Query("user_id") userId: Long
-    ): ProgressAnalyticsDto
 
     @GET("apk/info")
     suspend fun getApkInfo(): ApkInfoDto
