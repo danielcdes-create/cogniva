@@ -1,6 +1,6 @@
 # 📱 COGNIVA Android App (`android-app`)
 
-> **Registro histórico de 2026-10-31.** As seções abaixo descrevem a baseline anterior à recuperação. Para comportamento atual, versão, autenticação, preservação de filas e evidências, usar o [README principal](../README.md), [REMEDIACAO](../docs/REMEDIACAO.md) e [operação](../docs/OPERACAO.md). O cliente novo exige HTTPS e vínculo comprovado; ID/@username não autenticam. Build local não publica automaticamente. Não considerar os exemplos e garantias históricos abaixo como estado atual.
+> **Registro histórico de 2026-10-31.** As seções abaixo descrevem a baseline anterior à recuperação. Para comportamento atual, versão, autenticação, preservação de filas e evidências, usar o [README principal](../README.md), [REMEDIACAO](../docs/historico/auditoria-2026-11-01/REMEDIACAO.md), [operação](../docs/OPERACAO.md) e o [mapa da documentação](../docs/README.md). O cliente novo exige HTTPS e vínculo comprovado; ID/@username não autenticam. Build local não publica automaticamente. Não considerar os exemplos e garantias históricos abaixo como estado atual.
 
 Aplicativo nativo Android construído em **Kotlin + Jetpack Compose (Material 3)** para o ecossistema **COGNIVA** (*Conhecimento em evolução · LEARN · PRACTICE · EVOLVE*).
 
@@ -74,5 +74,5 @@ Sempre que realizar alterações em telas, regras de negócio ou recursos do app
 
 O endereço do backend de produção é configurado em `gradle.properties`:
 ```properties
-DO_API_BASE_URL=http://198.199.65.103/api/v1/
+DO_API_BASE_URL=https://198.199.65.103/api/v1/
 ```

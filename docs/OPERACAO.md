@@ -34,7 +34,7 @@ Durante a troca e o ensaio de rollback, Nginx bloqueia rotas de dados com 503 e 
 
 O pipeline provoca uma falha de smoke controlada, confirma imagem, ponteiro, Compose e saúde anteriores, e depois promove efetivamente. Falhas reais não contam como sucesso do ensaio. Entre protocolos incompatíveis, rollback mantém as rotas de dados fechadas até nova promoção válida; as filas ficam preservadas.
 
-Release operacional atual: **1.4.7/build 14**, revisão `41d976ee7bf0bab77ea216dc53980c08d01c1ac6`, promovida em 02/11/2026 às 22:59:25 (UTC−03:00); run `41561247262`, seis jobs aprovados. Aceite repetível:
+Release operacional atual: **1.4.11/build 18**, revisão `4d790fca6838a1bb4021200508a28795da28ad2a`, promovida em 06/11/2026; run `42153099016`, jobs aprovados (verify backend, verify android, emulator, contracts, build e promote). Incorpora remediações profundas AUD-01 a AUD-12 e correção de recompressão gzip do APK OTA. Hash SHA-256 do APK: `f020d1f6ecba659b323257468647657fc1cd9af8ba63c4171e9b81f5156bf049` (46.101.553 bytes). Aceite repetível:
 
 ```powershell
 python -X utf8 scripts/verify-production-release.py 41d976ee7bf0bab77ea216dc53980c08d01c1ac6 --version-name 1.4.7 --version-code 14 --xai-model grok-4.3 --baseline docs/remediation-validation/1.4.7/before-final/production-release.json --evidence-dir docs/remediation-validation/1.4.7
@@ -65,11 +65,11 @@ A prova `scripts/verify-xai-cache.py ID` faz **uma geração real paga**, soment
 
 ## Gestão de concursos
 
-A partir de 1.4.4/build 11, Ajustes → Gerenciar concursos e registros reúne edição, arquivamento, restauração, exclusão e registros preservados. `EXCLUIDO` é um marcador por proprietário, sincronizado e oculto da prática; não executar `deleteMany` para reproduzir a ação. Remover componentes altera a grade atual sem reintroduzi-los no pull; `revision_history` guarda revisões anteriores já sincronizadas. A migração Room 3→4 adiciona somente a etapa da disciplina. Provas e preservação: [GESTAO-CONCURSOS-1.4.4.md](GESTAO-CONCURSOS-1.4.4.md).
+A partir de 1.4.4/build 11, Ajustes → Gerenciar concursos e registros reúne edição, arquivamento, restauração, exclusão e registros preservados. `EXCLUIDO` é um marcador por proprietário, sincronizado e oculto da prática; não executar `deleteMany` para reproduzir a ação. Remover componentes altera a grade atual sem reintroduzi-los no pull; `revision_history` guarda revisões anteriores já sincronizadas. A migração Room 3→4 adiciona somente a etapa da disciplina. Provas e preservação: [GESTAO-CONCURSOS-1.4.4.md](historico/releases/GESTAO-CONCURSOS-1.4.4.md).
 
 ## Catálogo e preparação de questões v2
 
-As etapas [3](ETAPA-3-BACKEND-MONGO.md) e [4](ETAPA-4-CADASTRO-CATALOGO.md) acrescentam o catálogo compartilhado, componentes em etapas distintas, validação v2 e escrita administrativa com dry-run por padrão. Questões abertas podem ser armazenadas, mas continuam fora do protocolo objetivo atual. A [nota para Grok Build — etapas 5–7](NOTA-TECNICA-GROK-BUILD-PASSO-5.md) registra os requisitos de classificação assistida, seleção/progresso e validação/publicação, com estado executado na [entrega 1.4.6](ETAPAS-5-7-CLASSIFICACAO-SELECAO.md); não executar classificação como migração implícita do deploy.
+As etapas [3](historico/etapas/ETAPA-3-BACKEND-MONGO.md) e [4](historico/etapas/ETAPA-4-CADASTRO-CATALOGO.md) acrescentam o catálogo compartilhado, componentes em etapas distintas, validação v2 e escrita administrativa com dry-run por padrão. Questões abertas podem ser armazenadas, mas continuam fora do protocolo objetivo atual. A [nota para Grok Build — etapas 5–7](historico/etapas/NOTA-TECNICA-GROK-BUILD-PASSO-5.md) registra os requisitos de classificação assistida, seleção/progresso e validação/publicação, com estado executado na [entrega 1.4.6](historico/etapas/ETAPAS-5-7-CLASSIFICACAO-SELECAO.md); não executar classificação como migração implícita do deploy.
 
 A etapa 5 expõe, para administrador, `POST /api/v1/admin/classification/proposals`, `POST /api/v1/admin/classification/decisions` e `POST /api/v1/admin/classification/compatibility`. O modelo de classificação é o `grok-4.3` já configurado, com o prompt `classify-question` versão 2, incluindo nomes e aliases dos candidatos; a chave não entra no repositório. Toda geração exige `limit` e `max_paid_calls`. Proposta pendente não muda treino nem SRS. O inventário `scripts/inventory_questions.py --dry-run` só conta estados e não grava o banco. A comparação `scripts/classification_preservation.py` permite diferença apenas nos campos de classificação autorizados e continua exigindo histórico idêntico. Nesta entrega não houve lote real: quantidade revisada em produção é 0 e o acervo não está classificado.
 
@@ -100,7 +100,7 @@ python -X utf8 scripts/probe-question-selection.py ID --expected-version 1.4.6 -
 
 `knowledge_evidence` é uma projeção separada dos totais globais: exige tentativa identificada, revisão de conteúdo correspondente e principal direto revisado. IDs singulares antigos precisam de recibo verificável do operador. Secundários não concedem domínio integral. Decisões de compatibilidade são vinculadas a proprietário, componente e revisões; exclusão não apaga aprendizagem global.
 
-Room 4→5 acrescenta apenas `pending_attempts.examComponentId` nullable; o protocolo de tentativa permanece 2. Não limpar filas ou banco para atualizar. Uma tentativa da mesma versão de conteúdo permanece válida quando só a classificação muda; o servidor calcula a taxonomia vigente. Instruções completas e limites em [ETAPAS-5-7-CLASSIFICACAO-SELECAO.md](ETAPAS-5-7-CLASSIFICACAO-SELECAO.md).
+Room 4→5 acrescenta apenas `pending_attempts.examComponentId` nullable; o protocolo de tentativa permanece 2. Não limpar filas ou banco para atualizar. Uma tentativa da mesma versão de conteúdo permanece válida quando só a classificação muda; o servidor calcula a taxonomia vigente. Instruções completas e limites em [ETAPAS-5-7-CLASSIFICACAO-SELECAO.md](historico/etapas/ETAPAS-5-7-CLASSIFICACAO-SELECAO.md).
 
 ## Aceite da automação finita
 
