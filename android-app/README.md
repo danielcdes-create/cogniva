@@ -79,3 +79,8 @@ DO_API_BASE_URL=https://198.199.65.103/api/v1/
 # Inserção de questões
 
 Em **Ajustes → Inserir questões**, o módulo oferece formulário individual, JSON/JSONL em lote, rascunho local por conta, exportação/restauração, revisão e assistência opcional de Grok 4.7. O envio exige conta administrativa e backend com as novas rotas. Consulte [o contrato do módulo](../docs/INSERCAO-QUESTOES.md), incluindo retentativas com os comandos preservados. Disponível desde **1.4.13/build 20**, com [publicação e aceite registrados](../docs/RELEASE-1.4.13.md).
+
+
+## Ampliação 1.4.15/build 22
+
+A [release 1.4.15](../docs/RELEASE-1.4.15.md) acrescenta o guia da [estrutura de estudos](../docs/ESTRUTURA-ESTUDOS.md), metadados documentais de origem e explicação no cadastro individual de questões, além de sessões web de 30 dias. A classificação por conteúdo continua independente da origem e da validade; comandos, rascunhos antigos e histórico são preservados. [Contrato de inserção](../docs/INSERCAO-QUESTOES.md) e [administração web](../docs/ADMIN-WEB.md).

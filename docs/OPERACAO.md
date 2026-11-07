@@ -34,12 +34,12 @@ Durante a troca e o ensaio de rollback, Nginx bloqueia rotas de dados com 503 e 
 
 O pipeline provoca uma falha de smoke controlada, confirma imagem, ponteiro, Compose e saúde anteriores, e depois promove efetivamente. Falhas reais não contam como sucesso do ensaio. Entre protocolos incompatíveis, rollback mantém as rotas de dados fechadas até nova promoção válida; as filas ficam preservadas.
 
-Release operacional **1.4.14/build 21**, revisão `184f44f6dd9a7995d1a5a094b52637f31a8ee6c4`, promovida e conferida em 07/11/2026 pela [run 42381079294](https://github.com/danielcdes-create/cogniva/actions/runs/42381079294), com todos os gates e ensaio de rollback aprovados. APK de **46.363.697 bytes**, SHA-256 `775ddbe216a0129ded4c77f476cba602aba76b085c50dda7d1c90411efacd4e8`. Runtime de 31.959.451 bytes. Modelo efetivo `grok-4.7`. [Conteúdo e evidências](RELEASE-1.4.14.md).
+Release operacional **1.4.15/build 22**, revisão `bc9451ff5b1584249440df3d9b7e4d28455ea3b8`, promovida e conferida em 07/11/2026 pela [run 42397102944](https://github.com/danielcdes-create/cogniva/actions/runs/42397102944), com todos os gates e ensaio de rollback aprovados. APK de **46.429.233 bytes**, SHA-256 `1a32c1c333372ad19e63162ab18518b163b360f5f41c1351476cf6b40accd42c`. Runtime de 31.985.720 bytes. Sessões web novas duram 30 dias; sessão e logout foram conferidos em produção. Modelo efetivo `grok-4.7`. [Conteúdo e evidências](RELEASE-1.4.15.md).
 
 A tentativa **1.4.12/build 19**, commit `1ca40910902e437f0e5414349b5c2ceafdfcc31b`, não foi publicada pela [run 42331321184](https://github.com/danielcdes-create/cogniva/actions/runs/42331321184): o job backend falhou na expectativa `tombstone.subjects.is_empty()`; `build` e `promote` foram pulados. As correções desse commit foram conciliadas e publicadas na 1.4.13 com o painel/importador. O teste local passou a exigir a preservação da última grade, conforme o comportamento do backend. [Conciliação e evidências](CONCILIACAO-ANTIGRAVITY-2026-11-07.md). Aceite repetível:
 
 ```powershell
-python -X utf8 scripts/verify-production-release.py 184f44f6dd9a7995d1a5a094b52637f31a8ee6c4 --version-name 1.4.14 --version-code 21 --xai-model grok-4.7 --baseline docs/remediation-validation/1.4.14/before/server-baseline.json --evidence-dir docs/remediation-validation/1.4.14
+python -X utf8 scripts/verify-production-release.py bc9451ff5b1584249440df3d9b7e4d28455ea3b8 --version-name 1.4.15 --version-code 22 --xai-model grok-4.7 --baseline docs/remediation-validation/1.4.15/before/server-baseline.json --evidence-dir docs/remediation-validation/1.4.15
 ```
 
 Faz somente leituras, baixa o APK para `%LOCALAPPDATA%/Cogniva/releases` e grava evidência sanitizada. As evidências anteriores permanecem preservadas. A entrega 1.4.13 aprovou 69 testes Rust no CI, contratos/web, JVM/lint/golden e emulador API 35. A preparação registrou zero questões reescritas; o aceite conferiu quatro validadores, oito índices, guard dos 618 IDs e catálogo v1. Os backups mostram 618 questões e cinco concursos da conta idênticos, com 47 documentos/83 eventos de aprendizagem preservados. [Aceite e automação ativa](CLASSIFICACAO-LEGADO-SOB-DEMANDA.md). Probes de seleção podem gerar custo com a automação ativa; a verificação de release acima não seleciona questões.
@@ -112,3 +112,6 @@ A preparação `--prepare-question-storage` instala também `legacy-cohort-guard
 # Painel web administrativo
 
 O novo painel `/admin/` é incorporado ao binário Rust e usa as rotas existentes de concursos/questões, mais sessão web e propostas editoriais. Disponível na [release 1.4.13](RELEASE-1.4.13.md), após promoção do backend e atualização validada do vhost Cogniva; seus assets foram comparados ao commit publicado. Novas promoções seguem os gates deste manual. Login, emissão de código de acesso, escopo de alterações do catálogo e recuperação estão em [ADMIN-WEB.md](ADMIN-WEB.md).
+
+
+Aceite do painel 1.4.15: `scripts/verify-web-admin-assets.py REVISAO --output RELATORIO.json` compara os quatro arquivos públicos com o Git e confere CSP/cache. `scripts/verify-web-session-lifetime.py --output RELATORIO.json` usa somente o administrador já comprovado/configurado, emite e revoga uma sessão diagnóstica, confirma 30 dias e logout e não grava credenciais no relatório. [Resultados medidos](RELEASE-1.4.15.md).

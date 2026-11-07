@@ -6,15 +6,15 @@ Aplicativo Android de estudo para concursos, com cliente Kotlin/Compose e API Ru
 
 ## 🚀 Versão em Produção
 
-Versão atual: **1.4.14 / build 21**, revisão `184f44f6dd9a7995d1a5a094b52637f31a8ee6c4`, promovida e conferida em 07/11/2026; contrato de sincronização 2. [Conteúdo e aceite da release](docs/RELEASE-1.4.14.md).
+Versão atual: **1.4.15 / build 22**, revisão `bc9451ff5b1584249440df3d9b7e4d28455ea3b8`, promovida e conferida em 07/11/2026; contrato de sincronização 2. [Conteúdo e aceite da release](docs/RELEASE-1.4.15.md).
 
-- **Pipeline CI/CD:** [Run #42381079294](https://github.com/danielcdes-create/cogniva/actions/runs/42381079294) — todos os jobs aprovados: web, Rust, Android/JVM/golden, contratos, emulador, build e promoção com ensaio de rollback.
+- **Pipeline CI/CD:** [Run #42397102944](https://github.com/danielcdes-create/cogniva/actions/runs/42397102944) — todos os jobs aprovados: web, Rust, Android/JVM/golden, contratos, emulador, build e promoção com ensaio de rollback.
 - **Endpoint da API:** `https://198.199.65.103/api/v1/`.
 - **Saúde e Prontidão:** `/api/v1/health` (processo) e `/api/v1/ready` (validação com MongoDB e revisão ativa).
 - **Metadados Públicos do APK:** `GET /api/app/latest-apk` e `GET /api/v1/apk/info`.
-- **Download do APK de Produção:** [Baixar APK v1.4.14 / build 21](https://198.199.65.103/api/v1/apk/download)
-  - **Tamanho:** 46.363.697 bytes
-  - **SHA-256:** `775ddbe216a0129ded4c77f476cba602aba76b085c50dda7d1c90411efacd4e8`
+- **Download do APK de Produção:** [Baixar APK v1.4.15 / build 22](https://198.199.65.103/api/v1/apk/download)
+  - **Tamanho:** 46.429.233 bytes
+  - **SHA-256:** `1a32c1c333372ad19e63162ab18518b163b360f5f41c1351476cf6b40accd42c`
   - **Assinatura:** Chave de release privada com APK Signature Scheme v3 (API 28+).
   - **Streaming:** Entrega direta sem compressão dinâmica intermediária (`no-transform`, `proxy_buffering off`). Detalhes em [docs/LICAO-APRENDIDA-OTA-APK.md](docs/LICAO-APRENDIDA-OTA-APK.md).
 
@@ -27,9 +27,10 @@ A documentação do ecossistema está organizada no diretório [`docs/`](docs/RE
 - **[Mapa Completo da Documentação](docs/README.md):** Índice mestre e catálogo de referências ativas.
 - **[Manual de Operação e Produção](docs/OPERACAO.md):** Guia de deployment na VPS, monitoramento, rollback atômico, gates de manutenção e renovação de certificados TLS.
 - **[Lições Aprendidas — Pipeline OTA de APK](docs/LICAO-APRENDIDA-OTA-APK.md):** Diagnóstico de falha de download truncado, incompatibilidade de gzip em binários pré-comprimidos e novas invariantes de engenharia.
+- **[Estrutura de Estudos](docs/ESTRUTURA-ESTUDOS.md):** Relações entre troncos, concursos, editais, grades, componentes, disciplinas, assuntos, subassuntos e questões, com guia nas interfaces web e Android.
 - **[Catálogo Compartilhado de Conhecimentos](docs/CATALOGO-CONHECIMENTOS.md):** Hierarquia de disciplinas, tópicos, troncos de carreira e aliases editoriais (`shared/knowledge-catalog.json`). [Visualização formatada](docs/catalogo/CONHECIMENTOS.md).
 - **[Contratos e Schema de Questões v2](docs/SCHEMA-QUESTOES-V2.md):** Validação JSON Schema 2020-12, regras BSON no Mongo, outbox transacional e suporte a questões objetivas e discursivas.
-- **[Inserção de Questões](docs/INSERCAO-QUESTOES.md):** Módulo Android individual e em lote, JSON/JSONL, rascunhos locais, revisão, recibos idempotentes e preparação opcional com Grok 4.7. Disponível desde 1.4.13/build 20.
+- **[Inserção de Questões](docs/INSERCAO-QUESTOES.md):** Módulo Android individual e em lote, JSON/JSONL, rascunhos locais, revisão, recibos idempotentes e preparação opcional com Grok 4.7. Disponível desde 1.4.13/build 20; campos de prova, fonte e explicação ampliados na 1.4.15/build 22.
 - **[Administração Web](docs/ADMIN-WEB.md):** Painel para computador em `/admin/`, com concursos, editais/grades, questões e edição/ativação versionada de troncos, disciplinas e assuntos globais. Mesma API do Android, login administrativo e recuperação de rascunhos. Disponível em [198.199.65.103/admin/](https://198.199.65.103/admin/), com acesso administrativo por código temporário.
 - **[Integração com IA (xAI / Grok)](docs/IA-XAI.md):** Contratos de tutoria, plausibilidade, prompt caching no Mongo e rate-limiting com exclusão mútua.
 - **[Automação do Acervo Legado](docs/CLASSIFICACAO-LEGADO-SOB-DEMANDA.md):** Classificação assistida sob demanda com cotas diárias estritas e salvaguardas de proveniência.

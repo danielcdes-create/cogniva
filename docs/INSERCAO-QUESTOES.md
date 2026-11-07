@@ -1,6 +1,6 @@
 # Inserção de questões: individual, lote e IA
 
-Módulo disponível no Android **1.4.13/build 20**, em **Ajustes → Inserir questões · individual, lote ou IA**, e no [painel web](https://198.199.65.103/admin/), usando o contrato v2 existente. [Publicação e aceite](RELEASE-1.4.13.md).
+Módulo disponível desde o Android **1.4.13/build 20**, em **Ajustes → Inserir questões · individual, lote ou IA**, e no [painel web](https://198.199.65.103/admin/), usando o contrato v2 existente. [Publicação e aceite](RELEASE-1.4.13.md).
 
 ## Fluxo
 

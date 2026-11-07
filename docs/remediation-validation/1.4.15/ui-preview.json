@@ -1,0 +1,13 @@
+{
+  "source_revision": "bc9451ff5b1584249440df3d9b7e4d28455ea3b8",
+  "environment": "loopback preview with synthetic account and catalog fixtures",
+  "guide_rendered_with_study_and_content_paths": true,
+  "individual_form_origin_metadata_fields_rendered": true,
+  "topic_selector_displays_parent_and_child_names": true,
+  "origin_metadata_recovered_after_browser_reload": true,
+  "editing_origin_clears_origin_confirmation": true,
+  "browser_console_errors": 0,
+  "document_width_matches_scroll_width": true,
+  "production_content_mutations": false,
+  "physical_android_verified": false
+}

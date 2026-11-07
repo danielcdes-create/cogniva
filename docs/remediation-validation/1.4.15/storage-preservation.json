@@ -1,0 +1,56 @@
+{
+  "before_capture": "20261107T173106Z",
+  "after_capture": "20261107T175832Z",
+  "question_and_exam_documents": {
+    "todasQuestoes": {
+      "documents": 618,
+      "sha256": "1beddb10e1a2255f47376744bb6957a7eb9449ed30eb5e533661135e10a07b82",
+      "byte_identical": true
+    },
+    "user_exams": {
+      "documents": 5,
+      "sha256": "f9ec1ebfcad6a3b89f88c0ec7f9e76412d21f7a1957da933d414a9d921d64214",
+      "byte_identical": true
+    }
+  },
+  "protected_history": {
+    "documents": 47,
+    "events": 84,
+    "sha256": "28b23646bccbc046a2dcae5e83e5e5834ff082f74daab67a2928ccba88ba47ad"
+  },
+  "history_unchanged": true,
+  "strict_validated_collections": [
+    "todasQuestoes",
+    "question_classification_suggestions",
+    "question_exam_compatibility",
+    "answer_evaluations"
+  ],
+  "installation_ready": true,
+  "indexes_verified": {
+    "todasQuestoes": [
+      "qv2_legacy_topic",
+      "qv2_classification_validity",
+      "qv2_validity_type"
+    ],
+    "question_classification_suggestions": [
+      "qv2_pending_classification"
+    ],
+    "question_exam_compatibility": [
+      "qv2_owner_exam_question"
+    ],
+    "answer_evaluations": [
+      "qv2_owner_attempt"
+    ],
+    "question_revision_events": [
+      "qv2_question_audit"
+    ],
+    "knowledge_catalog_versions": [
+      "qv2_catalog_version"
+    ]
+  },
+  "index_count": 8,
+  "catalog_snapshot_matches_source": true,
+  "catalog_version": 1,
+  "legacy_cohort_guard_verified": true,
+  "no_question_reclassification": true
+}

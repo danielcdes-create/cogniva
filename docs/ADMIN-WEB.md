@@ -36,6 +36,8 @@ O comando deve ser executado no ambiente que possui o segredo JWT e a lista admi
 
 Cole o código na tela de entrada. Ele vale por 10 minutos e tem uso único, com propósito `web_login`, separado das credenciais nativas e dos códigos de vínculo do Android. Após o login, a sessão web dura até 30 dias (1.4.15 ou posterior) e pode ser encerrada pelo botão **Sair**. O prazo é contado a partir do login; sessões emitidas antes dessa alteração conservam a expiração original e recebem 30 dias após nova entrada. Use a mesma conta do Android para administrar seus concursos; questões e catálogo são compartilhados, enquanto grades e rascunhos mantêm escopo de proprietário.
 
+O aceite repetível `python -X utf8 scripts/verify-web-session-lifetime.py --output docs/remediation-validation/1.4.15/web-session.json` emite um código para o único administrador já comprovado/configurado, confirma cookie de 2.592.000 segundos, expiração correspondente do token, identidade e logout. Cria e revoga uma sessão diagnóstica, sem editar conteúdos nem ampliar permissões; códigos e cookies ficam somente em memória.
+
 O navegador não guarda JWT em `localStorage` ou `sessionStorage`. A sessão usa cookie `HttpOnly`, `SameSite=Strict` e `Secure` fora de loopback, com revogação persistida no logout. Ações com cookie exigem origem correspondente ao endereço do painel e o cabeçalho `X-Cogniva-CSRF: 1`. Logout também funciona para limpar uma sessão expirada. Respostas autenticadas por cookie e os arquivos do painel usam `Cache-Control: no-store`.
 
 ## Edição e recuperação

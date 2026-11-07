@@ -1,5 +1,7 @@
 # Catálogo compartilhado de conhecimentos
 
+Para os significados de tronco, concurso, edital, grade, componente, disciplina, assunto, subassunto e questão, consulte o [mapa da estrutura de estudos](ESTRUTURA-ESTUDOS.md). O guia da interface usa estas mesmas relações.
+
 O arquivo compartilhado abaixo é a base imutável v1. A implementação do [painel web](ADMIN-WEB.md) permite criar, revisar e ativar versões posteriores no Mongo, sem recompilar a cada alteração. A API entrega a versão ativa e o Android atualizado projeta seus nomes, vínculos e situações após sincronização. IDs e snapshots históricos são preservados; desativação afeta a seleção atual sem apagar questões ou aprendizagem. Esta capacidade foi publicada na [release 1.4.13](RELEASE-1.4.13.md). O deploy preservou o catálogo ativo v1 e o acervo existente; novas versões exigem revisão e ativação explícitas pelo administrador.
 
 Etapa 1 concluída como definição versionada: `shared/knowledge-catalog.json`, versão 1, com 35 disciplinas, 49 assuntos, 174 subassuntos e sete troncos. A consulta completa está em [catalogo/CONHECIMENTOS.md](catalogo/CONHECIMENTOS.md). Há 41 nomes alternativos de disciplinas, além de abreviações pontuais de subassuntos.
