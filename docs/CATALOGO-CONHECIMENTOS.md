@@ -1,5 +1,7 @@
 # Catálogo compartilhado de conhecimentos
 
+O arquivo compartilhado abaixo é a base imutável v1. A implementação do [painel web](ADMIN-WEB.md) permite criar, revisar e ativar versões posteriores no Mongo, sem recompilar a cada alteração. A API entrega a versão ativa e o Android atualizado projeta seus nomes, vínculos e situações após sincronização. IDs e snapshots históricos são preservados; desativação afeta a seleção atual sem apagar questões ou aprendizagem. Esta capacidade está implementada localmente, sem evidência de publicação em produção.
+
 Etapa 1 concluída como definição versionada: `shared/knowledge-catalog.json`, versão 1, com 35 disciplinas, 49 assuntos, 174 subassuntos e sete troncos. A consulta completa está em [catalogo/CONHECIMENTOS.md](catalogo/CONHECIMENTOS.md). Há 41 nomes alternativos de disciplinas, além de abreviações pontuais de subassuntos.
 
 Esta base editorial organiza conteúdo reutilizável; não certifica cobertura de editais nem classifica questões automaticamente. As etapas [3](ETAPA-3-BACKEND-MONGO.md) e [4](ETAPA-4-CADASTRO-CATALOGO.md), implementadas para 1.4.5/build 12, integram a leitura, a persistência versionada em Mongo e a associação explícita de componentes no Android. `shared/canonical-catalog.json` preserva os templates originais; a API de catálogo legado passa a projetar o catálogo de conhecimentos ampliado sem reescrever esse arquivo. Estado de publicação e aceite: `remediation-validation/1.4.5/`.

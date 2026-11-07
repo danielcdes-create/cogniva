@@ -22,3 +22,6 @@ pub mod classification;
 pub mod knowledge;
 pub mod practice_context;
 pub mod legacy_classification;
+pub mod question_import;
+pub mod catalog_editor;
+pub mod catalog_runtime;

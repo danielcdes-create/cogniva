@@ -297,6 +297,28 @@ class RepositoryContractTest {
         assertTrue(explanationError.contains(backendReason))
         assertTrue(explanationError.contains("ANSWER_REFERENCE_DO_NOT_REVEAL"))
     }
+    @Test fun tutorDistinguishesProviderNetworkAndProcessingFailuresWithoutRevealingAnswers()=runBlocking {
+        val store=Store(); val q=question().copy(explanation="ANSWER_REFERENCE_DO_NOT_REVEAL")
+        store.questions[q.id]=QuestionCacheMapping.toEntity(q,json)
+        for(status in listOf(403,429,502,503)) {
+            val reason="Motivo do servidor $status"
+            val repo=store.repository(aiTutor={_,_,_->throw retrofit2.HttpException(retrofit2.Response.error<AiAssistResponseDto>(status,"""{"message":"$reason"}""".toResponseBody("application/json".toMediaType())))})
+            for(kind in listOf("contextual-hint","child-friendly-pre")) {
+                val message=repo.requestAiTutor(q.id,kind);assertTrue(message.contains(reason));assertFalse(message.contains(q.explanation!!));assertFalse(message.contains("quando houver conexão"))
+            }
+        }
+        val noCached=question().copy(id="uncached")
+        assertTrue(store.repository(aiTutor={_,_,_->throw IOException()}).requestAiTutor(noCached.id,"explanation").contains("conexão"))
+        val processing=store.repository(aiTutor={_,_,_->throw IllegalStateException()})
+        assertTrue(processing.requestAiTutor(noCached.id,"explanation").contains("processar"));assertFalse(processing.requestAiTutor(noCached.id,"explanation").contains("conexão"))
+        for(kind in listOf("contextual-hint","child-friendly-pre"))assertFalse(processing.requestAiTutor(q.id,kind).contains(q.explanation!!))
+        for(body in listOf("", "<html>Proxy error</html>", "{}", """{"message":"   "}""", """{"message":null}""")) {
+            val repo=store.repository(aiTutor={_,_,_->throw retrofit2.HttpException(retrofit2.Response.error<AiAssistResponseDto>(502,body.toResponseBody("application/json".toMediaType())))})
+            assertTrue(repo.requestAiTutor(noCached.id,"explanation").contains("HTTP 502"))
+        }
+        val cancelled=store.repository(aiTutor={_,_,_->throw CancellationException("cancelled")})
+        try { cancelled.requestAiTutor(q.id,"contextual-hint");fail("Cancellation must propagate") } catch(_:CancellationException) { }
+    }
     @Test fun componentScopedPracticeSelectsLegacyQuestionsForTheComponentSubject()=runBlocking {
         val store=Store();val template=ExamCatalog.systemExams().find { it.examId=="CPNU" }!!
         val component=template.subjects.first { it.canonicalSubjectId=="SOC_TRAB" }
@@ -328,6 +350,17 @@ class RepositoryContractTest {
         val withoutExam=LearningProjection.masteryBySubject(listOf(projected)).getValue("FIN_PUB")
         val withExam=LearningProjection.masteryBySubject(listOf(projected),exam).getValue("FIN_PUB")
         assertEquals(withoutExam / 2.0,withExam,1e-9)
+    }
+    @Test fun deletingAnAlreadyAbsentRemoteExamKeepsLocalGradeAndSettlesTheQueue()=runBlocking {
+        val store=Store();val original=ExamCatalog.systemExams().first().copy(examId="missing-remote",revision=2,syncStatus="SYNCED")
+        store.putExam(original);store.remoteExams=emptyList()
+        val repo=store.repository(updateExam={throw retrofit2.HttpException(retrofit2.Response.error<ExamBlueprintPayload>(404,"{}".toResponseBody("application/json".toMediaType())))})
+        repo.editExamOffline(original.copy(lifecycleStatus="EXCLUIDO",isActiveInLadder=false))
+        assertTrue(repo.loadStoredExams().isEmpty())
+        repo.syncPendingAttempts(123);repo.pullExams()
+        val tombstone=repo.loadStoredExams(includeDeleted=true).single()
+        assertEquals("EXCLUIDO",tombstone.lifecycleStatus);assertEquals("SYNCED",tombstone.syncStatus)
+        assertEquals(original.subjects,tombstone.subjects);assertFalse(tombstone.isActiveInLadder)
     }
     @Test fun deletingPendingCreateExamSettlesLocallyAndDeletingSyncedExamResolvesRevisionConflict()=runBlocking {
         val store=Store()

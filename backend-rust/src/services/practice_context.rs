@@ -68,10 +68,7 @@ pub async fn load(
             continue;
         };
         if row.get_str("question_content_revision").ok() != Some(hash.as_str())
-            || number(&row, "catalog_version")
-                != super::question_contracts::catalog_ref()["catalog_version"]
-                    .as_i64()
-                    .unwrap()
+            || !super::catalog_runtime::version_known(number(&row, "catalog_version"))
         {
             continue;
         }

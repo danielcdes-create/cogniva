@@ -107,7 +107,8 @@ fun SettingsScreen(
     onUseServerExam: (StoredExam) -> Unit = {},
     onOpenPending: () -> Unit = {},
     accountLinkState: AccountLinkUiState = AccountLinkUiState(),
-    onConfirmAccountLink: (Long, String?, String) -> Unit = { _, _, _ -> }
+    onConfirmAccountLink: (Long, String?, String) -> Unit = { _, _, _ -> },
+    onOpenQuestionImport: () -> Unit = {}
 ) {
     var managementOpen by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     val ext = LocalExtendedColors.current
@@ -167,6 +168,7 @@ fun SettingsScreen(
             )
 
             OutlinedButton(onClick={managementOpen=true},modifier=Modifier.fillMaxWidth()) { Text("Gerenciar concursos e registros") }
+            OutlinedButton(onClick=onOpenQuestionImport,modifier=Modifier.fillMaxWidth()) { Text("Inserir questões · individual, lote ou IA") }
             // =========================================================================
             // 1. APARÊNCIA (Modo Claro / Escuro / Sistema)
             // =========================================================================

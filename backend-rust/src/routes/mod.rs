@@ -14,3 +14,5 @@ pub mod learning;
 mod contest_projection;
 
 pub mod questions_v2;
+pub mod web_admin;
+pub mod admin_data;

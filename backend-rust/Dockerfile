@@ -6,6 +6,7 @@ WORKDIR /app/backend-rust
 COPY backend-rust/Cargo.toml backend-rust/Cargo.lock ./
 COPY backend-rust/src ./src
 COPY shared /app/shared
+COPY web-admin /app/web-admin
 ARG BUILD_REVISION=local
 ENV BUILD_REVISION=${BUILD_REVISION}
 RUN --mount=type=cache,target=/usr/local/cargo/registry --mount=type=cache,target=/app/backend-rust/target cargo build --locked --release && cp target/release/api-rust-core /server

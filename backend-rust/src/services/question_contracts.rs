@@ -2,17 +2,11 @@
 use crate::error::AppError;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use std::{collections::HashSet, sync::OnceLock};
+use std::{collections::HashSet, sync::{Arc,OnceLock}};
 
-pub fn catalog_ref() -> &'static Value {
-    static C: OnceLock<Value> = OnceLock::new();
-    C.get_or_init(|| {
-        serde_json::from_str(include_str!("../../../shared/knowledge-catalog.json"))
-            .expect("catalog")
-    })
-}
+pub fn catalog_ref() -> Arc<Value> {super::catalog_runtime::snapshot().current.clone()}
 pub fn catalog() -> Value {
-    catalog_ref().clone()
+    (*catalog_ref()).clone()
 }
 fn bad(message: &str) -> AppError {
     AppError::BadRequest(message.into())
@@ -34,17 +28,17 @@ pub fn schema(kind: &str) -> Value {
 pub fn shape(kind: &str, value: &Value) -> Result<(), AppError> {
     static QUESTION: OnceLock<jsonschema::Validator> = OnceLock::new();
     if kind == "question" {
-        return check(
-            QUESTION
+        let validator = QUESTION
                 .get_or_init(|| {
                     jsonschema::options()
                         .should_validate_formats(true)
                         .build(&schema("question"))
                         .expect("bundled schema")
-                })
-                .is_valid(value),
-            "Documento não atende ao contrato de schema",
-        );
+                });
+        let issues: Vec<String> = validator.iter_errors(value).take(3).map(|error| {
+            format!("{}: {}", error.instance_path, error.to_string().chars().take(180).collect::<String>())
+        }).collect();
+        return check(issues.is_empty(), &format!("Contrato da questão: {}", issues.join("; ")));
     }
     let validator = jsonschema::options()
         .should_validate_formats(true)
@@ -74,11 +68,8 @@ fn human(p: &Value) -> bool {
     p["actor"]["type"] == "HUMAN" && p["method"] == "MANUAL_REVIEW"
 }
 pub fn known_topic(subject: &str, topic: &str) -> bool {
-    catalog_ref()["topics"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|t| t["subject_id"] == subject && t["topic_id"] == topic && t["status"] == "ACTIVE")
+    let snapshot=super::catalog_runtime::snapshot();
+    snapshot.references[&snapshot.version].active.contains(&(subject.into(),topic.into()))
 }
 pub fn validate(q: &Value) -> Result<(), AppError> {
     shape("question", q)?;
@@ -127,7 +118,7 @@ pub fn validate(q: &Value) -> Result<(), AppError> {
     }
     let c = &q["classification"];
     check(
-        c["catalog_version"] == catalog_ref()["catalog_version"],
+        c["catalog_version"].as_i64().is_some_and(super::catalog_runtime::version_known),
         "Versão de catálogo desconhecida",
     )?;
     let mut primary = None;
@@ -135,7 +126,7 @@ pub fn validate(q: &Value) -> Result<(), AppError> {
     let mut ids = HashSet::new();
     for l in c["links"].as_array().unwrap() {
         check(
-            known_topic(
+            super::catalog_runtime::topic_at(c["catalog_version"].as_i64().unwrap(),
                 l["subject_id"].as_str().unwrap(),
                 l["topic_id"].as_str().unwrap(),
             ),

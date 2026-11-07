@@ -102,6 +102,7 @@ private enum class BottomTab(val label: String) {
 fun ConcursoPrepRootApp(viewModel: MainViewModel) {
     val context = LocalContext.current
     var currentTab by rememberSaveable { mutableStateOf(BottomTab.HOJE) }
+    var questionImportOpen by rememberSaveable { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     val isOnboardingCompleted by viewModel.isOnboardingCompleted.collectAsState()
@@ -366,7 +367,15 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                 }
 
                 BottomTab.AJUSTES -> {
+                    if (questionImportOpen) {
+                        val questionImportViewModel: br.com.concursoprep.app.ui.QuestionImportViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+                            key = "question-import-${ConcursoApp.instance.repository.ownerUserId}",
+                            factory = br.com.concursoprep.app.ui.QuestionImportViewModel.Factory(ConcursoApp.instance.repository)
+                        )
+                        br.com.concursoprep.app.ui.screens.QuestionImportScreen(questionImportViewModel) { questionImportOpen = false }
+                    } else {
                     SettingsScreen(
+                        onOpenQuestionImport = { questionImportOpen = true },
                         userProfile = userProfile,
                         accountLinkState = accountLinkState,
                         onConfirmAccountLink = { id, username, code -> viewModel.confirmAccountLink(id, username, code) },
@@ -408,6 +417,7 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                             viewModel.reopenOnboardingWizard()
                         }
                     )
+                    }
                 }
             }
         }

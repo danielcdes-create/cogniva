@@ -422,7 +422,14 @@ fn stamp(v: &mut Value, user: i64) {
         _ => {}
     }
 }
-pub async fn save(db: &Database, user: i64, mut r: SaveRequest) -> Result<Value, AppError> {
+pub async fn save(db: &Database, user: i64, r: SaveRequest) -> Result<Value, AppError> {
+    save_internal(db, user, r, false).await
+}
+/// Insertion never upgrades or overwrites an existing question, including legacy revision zero.
+pub async fn create(db: &Database, user: i64, r: SaveRequest) -> Result<Value, AppError> {
+    save_internal(db, user, r, true).await
+}
+async fn save_internal(db: &Database, user: i64, mut r: SaveRequest, create_only: bool) -> Result<Value, AppError> {
     if uuid::Uuid::parse_str(&r.operation_id).is_err()
         || r.expected_revision < 0
         || r.expected_revision >= i64::MAX - 1
@@ -460,17 +467,27 @@ pub async fn save(db: &Database, user: i64, mut r: SaveRequest) -> Result<Value,
         );
     }
     let raw = coll.find_one(doc! {"_id":id}).await?;
+    if create_only && (raw.is_some() || r.expected_revision != 0) {
+        return Err(err("Inserção exige uma questão nova; o registro existente foi preservado"));
+    }
     if raw.as_ref().map(|d| number(d, "revision")).unwrap_or(0) != r.expected_revision
         || raw.is_none() && r.expected_revision != 0
     {
         return Err(err("Questão mudou; refaça a revisão"));
     }
     validate_transition(raw.as_ref(), &r.document)?;
+    for link in r.document["classification"]["links"].as_array().unwrap(){
+        if !contracts::known_topic(link["subject_id"].as_str().unwrap(),link["topic_id"].as_str().unwrap()) {
+            let retained=raw.as_ref().and_then(|d|d.get_document("classification").ok()).and_then(|d|d.get_array("links").ok()).is_some_and(|links|links.iter().filter_map(|v|v.as_document()).any(|old|old.get_str("subject_id").ok()==link["subject_id"].as_str() && old.get_str("topic_id").ok()==link["topic_id"].as_str() && old.get_str("role").ok()==link["role"].as_str() && old.get_str("coverage").ok()==link["coverage"].as_str()));
+            if !retained{return Err(err("Novos vínculos de questões exigem assunto ativo no catálogo atual"));}
+        }
+    }
+    let unchanged_classification=raw.as_ref().is_some_and(|d|Bson::Document(d.clone()).into_relaxed_extjson()["classification"]==r.document["classification"]);
     if r.document["classification"]["links"]
         .as_array()
         .unwrap()
         .iter()
-        .any(|l| !l["provenance"]["source_suggestion_id"].is_null())
+        .any(|l| !l["provenance"]["source_suggestion_id"].is_null()) && !unchanged_classification
     {
         return Err(err(
             "Aceitação de sugestões exige o fluxo de revisão da etapa de classificação",
@@ -486,16 +503,6 @@ pub async fn save(db: &Database, user: i64, mut r: SaveRequest) -> Result<Value,
     {
         return Err(AppError::TemporarilyUnavailable(
             "Prepare os validadores e índices antes da escrita v2".into(),
-        ));
-    }
-    if r.document["classification"]["links"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|l| !l["provenance"]["source_suggestion_id"].is_null())
-    {
-        return Err(err(
-            "Aceitação de sugestões exige o fluxo de revisão da etapa de classificação",
         ));
     }
     let commands = collection(db, "question_commands");

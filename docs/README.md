@@ -11,6 +11,10 @@ Este diretório centraliza os documentos de referência técnica, manuais operac
 - **[LICAO-APRENDIDA-OTA-APK.md](LICAO-APRENDIDA-OTA-APK.md):** Pós-morte e invariantes de engenharia do pipeline de atualização OTA. Registra o diagnóstico da recompressão gzip indevida de binários, regras de streaming direto (`proxy_buffering off`, `no-transform`), validação de certificados no Android (API 28+) e checklist de teste pós-promoção.
 
 ### 2. Catálogo de Conhecimentos e Modelagem de Dados
+- **[ADMIN-WEB.md](ADMIN-WEB.md):** Painel web, login, administração de concursos/editais e questões, edição/ativação global do catálogo, histórico, recuperação e publicação.
+- **[CONCILIACAO-ANTIGRAVITY-2026-11-07.md](CONCILIACAO-ANTIGRAVITY-2026-11-07.md):** Conferência das correções anteriores, causa da publicação interrompida da 1.4.12 e conciliação com painel/importador.
+- **[RELEASE-1.4.13.md](RELEASE-1.4.13.md):** Conteúdo, preparação, promoção e aceite da release conciliada 1.4.13/build 20.
+- **[INSERCAO-QUESTOES.md](INSERCAO-QUESTOES.md):** Cadastro individual e em lote no Android, formatos de entrada, assistência opcional de IA, revisão, permissões e recuperação de envios.
 - **[CATALOGO-CONHECIMENTOS.md](CATALOGO-CONHECIMENTOS.md):** Especificação normativa do catálogo de conhecimentos compartilhados (`shared/knowledge-catalog.json`). Define a hierarquia de disciplinas, assuntos, subassuntos, troncos de carreira, aliases editoriais e regras de mapeamento canônico.
 - **[SCHEMA-QUESTOES-V2.md](SCHEMA-QUESTOES-V2.md):** Especificação técnica dos contratos de questões v2, schemas JSON 2020-12 e validações BSON no MongoDB. Detalha validação normativa, hashing JCS/SHA-256 de conteúdo, idempotência com `operation_id`, outbox transacional e suporte a questões objetivas e discursivas.
 - **[catalogo/CONHECIMENTOS.md](catalogo/CONHECIMENTOS.md):** Tabela legível e formatada de todas as disciplinas, assuntos e subassuntos do catálogo compartilhado, gerada pelo script de validação de catálogo.

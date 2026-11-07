@@ -5,6 +5,20 @@ on:
 permissions:
   contents: read
 jobs:
+  web-admin:
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Web syntax, contracts and recovery
+        run: |
+          node --check web-admin/app.js
+          node --check web-admin/domain.js
+          node --test web-admin/tests/*.test.js
   knowledge-contracts:
     uses: ./.github/workflows/knowledge-contracts.yml
   backend:

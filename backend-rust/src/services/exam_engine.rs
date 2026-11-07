@@ -645,12 +645,28 @@ pub fn system_catalog() -> TrunkCatalog {
             topics: knowledge["topics"].as_array().unwrap().iter().filter(|t|t["subject_id"]==id && t["status"]=="ACTIVE").map(|t|CanonicalTopic {topic_id:t["topic_id"].as_str().unwrap().into(),title:t["label"].as_str().unwrap().into(),tags:vec![]}).collect(),
         }
     }).collect();
-    for t in knowledge["trunks"].as_array().unwrap().iter().filter(|t|t["status"]=="ACTIVE") {
+    if knowledge["catalog_version"]!=crate::services::catalog_runtime::bundled().current["catalog_version"] {
+        let old=catalog.trunks.clone();
+        catalog.trunks=knowledge["trunks"].as_array().unwrap().iter().filter(|t|t["status"]=="ACTIVE").map(|t|{
+            let slug=t["trunk_id"].as_str().unwrap();let mut core=Vec::new();let mut complementary=Vec::new();
+            for subject in &catalog.subjects {
+                if subject.topics.is_empty(){continue;}
+                let source=knowledge["subjects"].as_array().unwrap().iter().find(|s|s["subject_id"]==subject.canonical_subject_id).unwrap();
+                if let Some(link)=source["trunk_links"].as_array().unwrap().iter().find(|l|l["trunk_id"]==slug){
+                    let prior=old.iter().find(|t|t.slug==slug).and_then(|t|t.core_subjects.iter().chain(t.complementary_subjects.iter()).find(|s|s.canonical_subject_id==subject.canonical_subject_id));
+                    let foundational=link["role"]=="FOUNDATIONAL";
+                    let item=TrunkSubjectDefault{canonical_subject_id:subject.canonical_subject_id.clone(),name:subject.name.clone(),default_weight:prior.map(|s|s.default_weight).unwrap_or(1.0),relevance_tier:if foundational{RelevanceTier::Core}else{RelevanceTier::Complementary},topics:subject.topics.clone()};
+                    if foundational{core.push(item)}else{complementary.push(item)}
+                }
+            }
+            CareerTrunk{slug:slug.into(),name:t["label"].as_str().unwrap().into(),icon_key:old.iter().find(|t|t.slug==slug).map(|t|t.icon_key.clone()).unwrap_or_else(||"work".into()),core_subjects:core,complementary_subjects:complementary,is_system_default:true}
+        }).collect();
+    } else {for t in knowledge["trunks"].as_array().unwrap().iter().filter(|t|t["status"]=="ACTIVE") {
         let slug=t["trunk_id"].as_str().unwrap();
         if !catalog.trunks.iter().any(|old|old.slug==slug) {
             catalog.trunks.push(CareerTrunk {slug:slug.into(),name:t["label"].as_str().unwrap().into(),icon_key:"work".into(),core_subjects:vec![],complementary_subjects:vec![],is_system_default:true});
         }
-    }
+    }}
     catalog
 }
 

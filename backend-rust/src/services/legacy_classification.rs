@@ -64,6 +64,7 @@ fn eligible(raw: &Document) -> bool {
 }
 fn enabled(config: &AppConfig) -> bool {
     config.legacy_auto_classification_enabled
+        && super::catalog_runtime::snapshot().version==1
         && config.xai_api_key.is_some()
         && config.xai_model == "grok-4.3"
 }
@@ -267,7 +268,7 @@ fn approved_links(suggestion: &Value) -> Option<Value> {
         return None;
     }
     let normalized = json!({"catalog_version":suggestion["catalog_version"],"links":links});
-    classification::parse_model_output(&normalized.to_string()).ok()?;
+    classification::parse_model_output_for(&normalized.to_string(),suggestion["catalog_version"].as_i64()?).ok()?;
     if links
         .iter()
         .filter(|l| l["role"] == "PRIMARY" && l["coverage"] == "DIRECT")
@@ -317,7 +318,7 @@ pub fn binding(raw: &Document) -> Option<(String, String)> {
         || a["provenance"]["prompt_version"] != classification::PROMPT_VERSION
         || a["provenance"]["prompt_sha256"] != classification::prompt_sha256()
         || a["provenance"]["model"] != "grok-4.3"
-        || a["catalog_version"] != super::question_contracts::catalog_ref()["catalog_version"]
+        || !a["catalog_version"].as_i64().is_some_and(super::catalog_runtime::version_known)
         || a["content_revision"].as_str()
             != Some(classification::content_revision_of(raw).ok()?.as_str())
     {
@@ -333,6 +334,7 @@ pub fn binding(raw: &Document) -> Option<(String, String)> {
     let primary = links.as_array()?.iter().find(|l| l["role"] == "PRIMARY")?;
     let subject = primary["subject_id"].as_str()?;
     let topic = primary["topic_id"].as_str()?;
+    if !super::question_contracts::known_topic(subject,topic){return None;}
     if raw.get_str("canonical_subject_id").ok() != Some(subject)
         || raw.get_str("canonical_topic_id").ok() != Some(topic)
     {
@@ -491,7 +493,8 @@ pub fn spawn(state: Arc<AppState>) {
         loop {
             // No inventory sweep: startup consumes only an existing demand queue.
             tokio::time::sleep(Duration::from_secs(5)).await;
-            if let Err(error) = tick(&state).await {
+            let result=async{let snapshot=state.catalog.refresh(&state.db).await?;super::catalog_runtime::scope(snapshot,tick(&state)).await}.await;
+            if let Err(error) = result {
                 tracing::warn!("Fila de classificação legada indisponível: {}", error);
             }
         }

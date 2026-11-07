@@ -24,6 +24,12 @@ prompt_id=classify-question prompt_version=2\n";
 pub fn prompt_sha256() -> String {
     format!("{:x}", Sha256::digest(CLASSIFICATION_PROMPT.as_bytes()))
 }
+fn generation_prompt()->String {
+    let version=contracts::catalog_ref()["catalog_version"].as_i64().unwrap();
+    if version==1{CLASSIFICATION_PROMPT.into()}else{CLASSIFICATION_PROMPT.replace("\"catalog_version\":1",&format!("\"catalog_version\":{version}")).replace("prompt_version=2","prompt_version=3")}
+}
+fn generation_version()->&'static str{if contracts::catalog_ref()["catalog_version"]==1{PROMPT_VERSION}else{"3"}}
+fn generation_hash()->String{format!("{:x}",Sha256::digest(generation_prompt().as_bytes()))}
 
 fn bad(message: &str) -> AppError {
     AppError::BadRequest(message.into())
@@ -59,6 +65,9 @@ fn duplicate(error: &mongodb::error::Error) -> bool {
 }
 
 pub fn parse_model_output(raw: &str) -> Result<Value, AppError> {
+    parse_model_output_for(raw,contracts::catalog_ref()["catalog_version"].as_i64().unwrap())
+}
+pub(crate) fn parse_model_output_for(raw:&str,expected_version:i64)->Result<Value,AppError>{
     let value: Value = serde_json::from_str(raw.trim())
         .map_err(|_| bad("A resposta da classificação não é JSON do contrato"))?;
     let object = value
@@ -73,10 +82,7 @@ pub fn parse_model_output(raw: &str) -> Result<Value, AppError> {
     let version = value["catalog_version"]
         .as_i64()
         .ok_or_else(|| bad("Versão de catálogo ausente"))?;
-    if version
-        != contracts::catalog_ref()["catalog_version"]
-            .as_i64()
-            .unwrap()
+    if version !=expected_version || !super::catalog_runtime::version_known(version)
     {
         return Err(bad("Versão de catálogo desconhecida"));
     }
@@ -110,7 +116,7 @@ pub fn parse_model_output(raw: &str) -> Result<Value, AppError> {
         let topic = link["topic_id"]
             .as_str()
             .ok_or_else(|| bad("Tópico inválido"))?;
-        if !contracts::known_topic(subject, topic) {
+        if !super::catalog_runtime::topic_at(version,subject, topic) {
             return Err(bad("ID fora do catálogo ou de outra disciplina"));
         }
         if !seen.insert(topic.to_owned()) {
@@ -258,7 +264,7 @@ fn document_revision(raw: &Document) -> Option<i64> {
 
 fn candidates() -> Value {
     let catalog = contracts::catalog_ref();
-    Value::Array(catalog["topics"].as_array().unwrap().iter().filter(|topic| topic["status"] == "ACTIVE").map(|topic| json!({
+    Value::Array(catalog["topics"].as_array().unwrap().iter().filter(|topic| contracts::known_topic(topic["subject_id"].as_str().unwrap(),topic["topic_id"].as_str().unwrap())).map(|topic| json!({
         "subject_id": topic["subject_id"], "topic_id": topic["topic_id"], "parent_topic_id": topic["parent_topic_id"],
         "label": topic["label"], "aliases": topic["aliases"],
         "subject_label": catalog["subjects"].as_array().unwrap().iter().find(|s| s["subject_id"]==topic["subject_id"]).map(|s|s["label"].clone())
@@ -271,8 +277,8 @@ fn reservation_id(question_id: &str, content: &str, class_rev: i64, model: &str)
         contracts::catalog_ref()["catalog_version"]
             .as_i64()
             .unwrap(),
-        PROMPT_VERSION,
-        prompt_sha256()
+        generation_version(),
+        generation_hash()
     )
 }
 fn suggestion_id(reservation: &str, generation: i64) -> String {
@@ -327,7 +333,7 @@ async fn call_model(
         .map_err(|_| AppError::Internal("Cliente xAI indisponível".into()))?;
     let response = client.post(format!("{base}/responses")).bearer_auth(key).json(&json!({
         "model": config.xai_model, "store": false, "max_output_tokens": 2048,
-        "input": [{"role":"system","content":CLASSIFICATION_PROMPT},{"role":"user","content":user.to_string()}]
+        "input": [{"role":"system","content":generation_prompt()},{"role":"user","content":user.to_string()}]
     })).send().await.map_err(|_| AppError::ExternalAiError("Não foi possível receber a classificação da xAI".into()))?;
     if response.status().as_u16() == 429 {
         return Err(AppError::ExternalAiError(
@@ -392,7 +398,7 @@ fn build_suggestion(
             "evidence": [],
             "model": model,
             "prompt_id": PROMPT_ID,
-            "prompt_version": PROMPT_VERSION,
+            "prompt_version": generation_version(),
             "source_suggestion_id": null
         },
         "resolution": null
@@ -618,7 +624,7 @@ pub(crate) async fn generate_one(
         .ok_or_else(|| conflict("Gerações esgotadas"))?;
     let suggestion_key = suggestion_id(&reservation, generation);
     let lease_until = bson::DateTime::from_millis(now.timestamp_millis() + 120_000);
-    let reserve = doc! {"_id": &reservation, "status": "reserved", "generation": generation, "suggestion_id": &suggestion_key, "paid": false, "batch_operation":batch_operation,"lease_until":lease_until,"prompt_sha256": prompt_sha256(), "model": &config.xai_model};
+    let reserve = doc! {"_id": &reservation, "status": "reserved", "generation": generation, "suggestion_id": &suggestion_key, "paid": false, "batch_operation":batch_operation,"lease_until":lease_until,"prompt_sha256": generation_hash(), "model": &config.xai_model};
     if commands
         .find_one(doc! {"_id": &reservation})
         .await?
@@ -1497,8 +1503,7 @@ async fn supersede_stale(
     while let Some(row) = cursor.try_next().await? {
         let same_content = row.get_str("question_content_revision").ok() == Some(content);
         let same_exam = i64_of(&row, "exam_revision") == Some(exam_revision);
-        let same_catalog =
-            i64_of(&row, "catalog_version") == contracts::catalog_ref()["catalog_version"].as_i64();
+        let same_catalog =i64_of(&row,"catalog_version").is_some_and(super::catalog_runtime::version_known);
         if !(same_content && same_exam && same_catalog) {
             let id = row.get_str("_id").unwrap_or("").to_owned();
             collection

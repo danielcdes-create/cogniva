@@ -6,7 +6,7 @@ Aplicativo Android de estudo para concursos, com cliente Kotlin/Compose e API Ru
 
 ## 🚀 Versão em Produção
 
-Versão atual: **1.4.11 / build 18**, revisão `4d790fca6838a1bb4021200508a28795da28ad2a`, promovida em 06/11/2026; contrato de sincronização 2.
+Versão confirmada antes da nova promoção: **1.4.11 / build 18**, revisão `4d790fc3df3701447333e34eabef3870b11b58b3`; contrato de sincronização 2. A [release 1.4.13/build 20](docs/RELEASE-1.4.13.md) está preparada para o pipeline; o aceite final será registrado após sua conclusão.
 
 - **Pipeline CI/CD:** [Run #42153099016](https://github.com/danielcdes-create/cogniva/actions/runs/42153099016) — 100% dos jobs aprovados (`verify / backend`, `verify / android`, `verify / knowledge-contracts`, `emulator`, `build` e `promote`).
 - **Endpoint da API:** `https://198.199.65.103/api/v1/`.
@@ -29,6 +29,8 @@ A documentação do ecossistema está organizada no diretório [`docs/`](docs/RE
 - **[Lições Aprendidas — Pipeline OTA de APK](docs/LICAO-APRENDIDA-OTA-APK.md):** Diagnóstico de falha de download truncado, incompatibilidade de gzip em binários pré-comprimidos e novas invariantes de engenharia.
 - **[Catálogo Compartilhado de Conhecimentos](docs/CATALOGO-CONHECIMENTOS.md):** Hierarquia de disciplinas, tópicos, troncos de carreira e aliases editoriais (`shared/knowledge-catalog.json`). [Visualização formatada](docs/catalogo/CONHECIMENTOS.md).
 - **[Contratos e Schema de Questões v2](docs/SCHEMA-QUESTOES-V2.md):** Validação JSON Schema 2020-12, regras BSON no Mongo, outbox transacional e suporte a questões objetivas e discursivas.
+- **[Inserção de Questões](docs/INSERCAO-QUESTOES.md):** Módulo Android individual e em lote, JSON/JSONL, rascunhos locais, revisão, recibos idempotentes e preparação opcional com Grok 4.3. Implementação local; publicação independente.
+- **[Administração Web](docs/ADMIN-WEB.md):** Painel para computador em `/admin/`, com concursos, editais/grades, questões e edição/ativação versionada de troncos, disciplinas e assuntos globais. Mesma API do Android, login administrativo e recuperação de rascunhos. Implementação local, ainda sem publicação.
 - **[Integração com IA (xAI / Grok)](docs/IA-XAI.md):** Contratos de tutoria, plausibilidade, prompt caching no Mongo e rate-limiting com exclusão mútua.
 - **[Automação do Acervo Legado](docs/CLASSIFICACAO-LEGADO-SOB-DEMANDA.md):** Classificação assistida sob demanda com cotas diárias estritas e salvaguardas de proveniência.
 - **[Arquivo Histórico](docs/historico/README.md):** Relatórios de auditorias passadas, etapas de desenvolvimento e notas de patches anteriores.

@@ -85,16 +85,14 @@ pub fn decode(mut raw: Document) -> Result<QuestionDocument, AppError> {
         }
     }
     if let Ok(classification) = raw.get_document("classification").cloned() {
-        let contracts = crate::services::question_contracts::catalog_ref();
         crate::services::question_contracts::shape(
             "classification",
             &bson::Bson::Document(classification.clone()).into_relaxed_extjson(),
         )?;
-        if classification
+        let version=classification
             .get("catalog_version")
-            .and_then(|v| v.as_i64().or_else(|| v.as_i32().map(i64::from)))
-            != contracts["catalog_version"].as_i64()
-        {
+            .and_then(|v| v.as_i64().or_else(|| v.as_i32().map(i64::from)));
+        if !version.is_some_and(crate::services::catalog_runtime::version_known) {
             return Err(AppError::Conflict(
                 "Versão de classificação desconhecida".into(),
             ));
@@ -117,7 +115,7 @@ pub fn decode(mut raw: Document) -> Result<QuestionDocument, AppError> {
                             .is_some_and(|a| a.get_str("type").ok() == Some("HUMAN"))
                 });
                 if !human
-                    || !crate::services::question_contracts::known_topic(
+                    || !crate::services::catalog_runtime::topic_at(version.unwrap(),
                         link.get_str("subject_id").unwrap_or(""),
                         link.get_str("topic_id").unwrap_or(""),
                     )
@@ -172,6 +170,9 @@ pub fn decode(mut raw: Document) -> Result<QuestionDocument, AppError> {
     }
     let mut q: QuestionDocument = bson::from_document(raw.clone())
         .map_err(|_| AppError::Conflict("Documento de questão inválido".into()))?;
+    if let (Some(subject),Some(topic))=(&q.canonical_subject_id,&q.canonical_topic_id){
+        if !crate::services::question_contracts::known_topic(subject,topic){return Err(AppError::Conflict("Conteúdo desativado no catálogo corrente; histórico preservado".into()));}
+    }
     if raw.contains_key("legacy_auto_classification") && !raw.contains_key("classification")
         && !raw.contains_key("canonical_mapping_revision")
         && crate::services::legacy_classification::binding(&raw).is_none() {

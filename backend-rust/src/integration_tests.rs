@@ -11,6 +11,135 @@ use futures::TryStreamExt;
 
 #[tokio::test]
 #[ignore = "Requires dedicated loopback Mongo 27048"]
+async fn web_admin_session_csrf_editor_and_catalog_versions() {
+    use serde_json::{json,Value};
+    async fn web(app:&Router,method:&str,path:&str,cookie:Option<&str>,origin:Option<&str>,csrf:bool,body:Value)->(StatusCode,axum::http::HeaderMap,Value){
+        let mut req=Request::builder().method(method).uri(path).header("host","127.0.0.1:8876").header("content-type","application/json");
+        if let Some(cookie)=cookie{req=req.header("cookie",cookie);}
+        if let Some(origin)=origin{req=req.header("origin",origin);}
+        if csrf{req=req.header("x-cogniva-csrf","1");}
+        let response=app.clone().oneshot(req.body(if body.is_null(){Body::empty()}else{Body::from(body.to_string())}).unwrap()).await.unwrap();
+        let status=response.status();let headers=response.headers().clone();let bytes=axum::body::to_bytes(response.into_body(),2*1024*1024).await.unwrap();
+        (status,headers,serde_json::from_slice(&bytes).unwrap_or_else(|_|json!(String::from_utf8_lossy(&bytes))))
+    }
+    let uri=std::env::var("COGNIVA_TEST_MONGODB_URI").unwrap();assert!(uri.starts_with("mongodb://127.0.0.1:27048/"));
+    let previous=std::env::var("ADMIN_USER_IDS").ok();struct Restore(Option<String>);impl Drop for Restore{fn drop(&mut self){match &self.0{Some(v)=>std::env::set_var("ADMIN_USER_IDS",v),None=>std::env::remove_var("ADMIN_USER_IDS")}}}
+    let _restore=Restore(previous);std::env::set_var("ADMIN_USER_IDS","123,456");
+    let client=Client::with_uri_str(&uri).await.unwrap();let name=format!("cogniva_test_{}",uuid::Uuid::new_v4().simple());let db=client.database(&name);let cfg=config(&uri);let secret=cfg.jwt_secret.clone();let state=Arc::new(AppState::new(db.clone(),cfg));let app=build_router(state.clone());
+    for id in [123_i64,456]{db.collection::<Document>("usuarios").insert_one(doc!{"user_id":id,"display_name":"Synthetic admin","active_contest_ids":[]}).await.unwrap();}
+    services::question_storage::prepare(&db).await.unwrap();
+    let (status,headers,page)=web(&app,"GET","/admin/",None,None,false,json!(null)).await;assert_eq!(status,StatusCode::OK);assert!(headers["content-security-policy"].to_str().unwrap().contains("frame-ancestors 'none'"));assert!(page.as_str().unwrap().contains("Código de acesso"));
+    assert_eq!(web(&app,"GET","/admin/assets/unknown",None,None,false,json!(null)).await.0,StatusCode::NOT_FOUND);
+    let code=security::issue(&secret,123,"web_login",600).unwrap();
+    assert_eq!(web(&app,"POST","/api/v1/auth/web-session",None,Some("http://example.test"),true,json!({"code":code})).await.0,StatusCode::FORBIDDEN);
+    let origin=Some("http://127.0.0.1:8876");
+    let (status,headers,response)=web(&app,"POST","/api/v1/auth/web-session",None,origin,true,json!({"code":code})).await;
+    assert_eq!(status,StatusCode::OK,"{response}");assert_eq!(response["user_id"],"123");assert!(response.get("token").is_none());
+    let cookie=headers["set-cookie"].to_str().unwrap().split(';').next().unwrap().to_string();
+    assert!(headers["set-cookie"].to_str().unwrap().contains("HttpOnly"));
+    assert_eq!(web(&app,"POST","/api/v1/auth/web-session",None,origin,true,json!({"code":code})).await.0,StatusCode::UNAUTHORIZED);
+    let (status,headers,who)=web(&app,"GET","/api/v1/admin/web/me",Some(&cookie),None,false,json!(null)).await;assert_eq!(status,StatusCode::OK);assert_eq!(who["user_id"],"123");assert_eq!(headers["cache-control"],"no-store");
+    let (_,_,base)=web(&app,"GET","/api/v1/admin/catalog/base",Some(&cookie),None,false,json!(null)).await;
+    let mut candidate=base["catalog"].clone();candidate["catalog_version"]=json!(2);
+    assert_eq!(web(&app,"POST","/api/v1/admin/catalog/validate",Some(&cookie),origin,false,candidate.clone()).await.0,StatusCode::FORBIDDEN);
+    assert_eq!(web(&app,"POST","/api/v1/admin/catalog/validate",Some(&cookie),Some("https://example.test"),true,candidate.clone()).await.0,StatusCode::FORBIDDEN);
+    assert_eq!(web(&app,"POST","/api/v1/admin/catalog/validate",Some(&cookie),origin,true,candidate.clone()).await.0,StatusCode::OK);
+    let id=uuid::Uuid::new_v4().to_string();let draft=json!({"draft_id":id,"expected_revision":0,"base_catalog_sha256":base["sha256"],"status":"REVIEW_READY","catalog":candidate});
+    let (status,_,saved)=web(&app,"POST","/api/v1/admin/catalog/drafts",Some(&cookie),origin,true,draft.clone()).await;assert_eq!(status,StatusCode::OK,"{saved}");assert_eq!(saved["draft"]["revision"],1);
+    assert_eq!(web(&app,"POST","/api/v1/admin/catalog/drafts",Some(&cookie),origin,true,draft).await.2["draft"]["revision"],1);
+    assert_eq!(db.collection::<Document>("catalog_editor_versions").count_documents(doc!{}).await.unwrap(),1);
+    assert!(services::catalog_editor::get(&state,456,&id).await.is_err());
+    assert_eq!(services::question_contracts::catalog_ref()["catalog_version"],1);
+    let mut exam=services::exam_engine::system_exam_blueprints().remove(0);exam.id=uuid::Uuid::new_v4().to_string();
+    let (status,_,saved_exam)=web(&app,"POST","/api/v1/exams",Some(&cookie),origin,true,serde_json::to_value(exam).unwrap()).await;assert_eq!(status,StatusCode::OK,"{saved_exam}");assert_eq!(saved_exam["owner_user_id"],"123");
+    let draft=services::question_import::prepare(123,&uuid::Uuid::new_v4().to_string(),0,&json!({"question_type":"MULTIPLE_CHOICE","question":"Synthetic web question","answers":["1","2","3","4","5"],"correct_answer_indices":[3],"grading":null}),None).unwrap();
+    let request:services::question_storage::SaveRequest=serde_json::from_value(draft).unwrap();let created=services::question_storage::create(&db,123,request).await.unwrap();let question_id=created["id"].as_str().unwrap();
+    let (_,_,page)=web(&app,"GET","/api/v1/admin/questions?search=Synthetic&limit=1",Some(&cookie),None,false,json!(null)).await;assert_eq!(page["items"].as_array().unwrap().len(),1);assert!(page["items"][0].get("correct_answers").is_none());
+    assert_eq!(web(&app,"GET","/api/v1/admin/questions?search=.%2A",Some(&cookie),None,false,json!(null)).await.2["items"].as_array().unwrap().len(),0);
+    let (_,_,mut raw)=web(&app,"GET",&format!("/api/v1/admin/questions/v2/{question_id}"),Some(&cookie),None,false,json!(null)).await;raw["question"]=json!("Synthetic web question edited");
+    let edit=json!({"operation_id":uuid::Uuid::new_v4().to_string(),"expected_revision":1,"document":raw});
+    let (status,_,prepared)=web(&app,"POST",&format!("/api/v1/admin/questions/{question_id}/prepare-edit"),Some(&cookie),origin,true,edit).await;assert_eq!(status,StatusCode::OK,"{prepared}");assert_eq!(prepared["command"]["document"]["validity"]["status"],"UNDER_REVIEW");
+    let (status,_,ack)=web(&app,"POST","/api/v1/admin/questions/v2",Some(&cookie),origin,true,prepared["command"].clone()).await;assert_eq!(status,StatusCode::OK,"{ack}");assert_eq!(ack["revision"],2);
+    assert_eq!(web(&app,"POST","/api/v1/admin/web/logout",Some(&cookie),origin,true,json!(null)).await.0,StatusCode::OK);
+    assert_eq!(web(&app,"GET","/api/v1/admin/web/me",Some(&cookie),None,false,json!(null)).await.0,StatusCode::UNAUTHORIZED);
+    let expired=format!("cogniva_web_session={}",security::issue(&secret,123,"web_session",-1).unwrap());
+    let (status,headers,_)=web(&app,"POST","/api/v1/auth/web-logout",Some(&expired),origin,true,json!(null)).await;assert_eq!(status,StatusCode::OK);assert!(headers["set-cookie"].to_str().unwrap().contains("Max-Age=0"));
+    assert!(name.starts_with("cogniva_test_"));db.drop().await.unwrap();
+}
+
+#[tokio::test]
+#[ignore = "Requires dedicated loopback Mongo 27048"]
+async fn question_import_review_receipts_and_ai_are_isolated() {
+    use serde_json::json;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let uri=std::env::var("COGNIVA_TEST_MONGODB_URI").unwrap();
+    assert!(uri.starts_with("mongodb://127.0.0.1:27048/"));
+    let previous=std::env::var("ADMIN_USER_IDS").ok();
+    struct Restore(Option<String>);
+    impl Drop for Restore { fn drop(&mut self) { match &self.0 { Some(v)=>std::env::set_var("ADMIN_USER_IDS",v),None=>std::env::remove_var("ADMIN_USER_IDS") } } }
+    let _restore=Restore(previous); std::env::set_var("ADMIN_USER_IDS","123");
+    let draft=json!({"question_type":"MULTIPLE_CHOICE","question":"Synthetic import: 2 + 2?","answers":["1","2","3","4","5"],"correct_answer_indices":[3],"grading":null});
+    let hits=Arc::new(AtomicUsize::new(0)); let counter=hits.clone(); let generated=draft.clone();
+    let mock=Router::new().route("/responses",axum::routing::post(move |axum::Json(body):axum::Json<serde_json::Value>| {
+        let counter=counter.clone(); let generated=generated.clone();
+        async move {
+            counter.fetch_add(1,Ordering::SeqCst); assert_eq!(body["model"],"grok-4.3"); assert_eq!(body["store"],false);
+            axum::Json(json!({"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":json!([generated]).to_string()}]}]}))
+        }
+    }));
+    let listener=tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap(); let address=listener.local_addr().unwrap();
+    let provider=tokio::spawn(async move { axum::serve(listener,mock).await.unwrap(); });
+    let client=Client::with_uri_str(&uri).await.unwrap(); let name=format!("cogniva_test_{}",uuid::Uuid::new_v4().simple()); let db=client.database(&name);
+    let mut cfg=config(&uri); cfg.xai_model="grok-4.3".into(); cfg.xai_api_key=Some("synthetic-provider-key".into()); cfg.xai_base_url=format!("http://{address}");
+    let secret=cfg.jwt_secret.clone(); let state=Arc::new(AppState::new(db.clone(),cfg)); let app=build_router(state.clone());
+    services::question_storage::prepare(&db).await.unwrap();
+    let legacy_id=ObjectId::new();
+    let legacy=doc!{"_id":legacy_id,"question":"Legacy preserved","answers":["A","B","C","D","E"],"correct_answers":["B"],"mnemonico":"preserve cache","unknown_extra":{"keep":true}};
+    db.collection::<Document>("todasQuestoes").insert_one(legacy.clone()).await.unwrap();
+    let history=doc!{"_id":"synthetic-history","keep":true}; db.collection::<Document>("userActivityLog").insert_one(history.clone()).await.unwrap();
+    let path="/api/v1/admin/questions/import";
+    assert_eq!(request(&app,&secret,None,"GET",&format!("{path}/capabilities"),json!(null)).await.0,StatusCode::UNAUTHORIZED);
+    assert_eq!(request(&app,&secret,Some(456),"GET",&format!("{path}/capabilities"),json!(null)).await.0,StatusCode::FORBIDDEN);
+    let body=json!({"operation_id":uuid::Uuid::new_v4().to_string(),"items":[draft.clone(),draft.clone()]});
+    let (status,preview)=request(&app,&secret,Some(123),"POST",&format!("{path}/preview"),body.clone()).await;
+    assert_eq!(status,StatusCode::OK,"{preview}"); assert_eq!(preview["ready"],true);
+    assert_ne!(preview["items"][0]["command"]["document"]["_id"],preview["items"][1]["command"]["document"]["_id"]);
+    let repeated_preview=request(&app,&secret,Some(123),"POST",&format!("{path}/preview"),body).await.1;
+    assert_eq!(repeated_preview["items"][0]["command"]["operation_id"],preview["items"][0]["command"]["operation_id"]);
+    assert_eq!(db.collection::<Document>("todasQuestoes").count_documents(doc!{}).await.unwrap(),1);
+    let mut invalid=draft.clone(); invalid["correct_answer_indices"]=json!([]);
+    let (_,invalid_preview)=request(&app,&secret,Some(123),"POST",&format!("{path}/preview"),json!({"operation_id":uuid::Uuid::new_v4().to_string(),"items":[invalid]})).await;
+    assert_eq!(invalid_preview["ready"],false);
+    let commands:Vec<_>=preview["items"].as_array().unwrap().iter().map(|v|v["command"].clone()).collect();
+    assert_eq!(request(&app,&secret,Some(123),"POST",&format!("{path}/commit"),json!({"reviewed":false,"commands":commands})).await.0,StatusCode::BAD_REQUEST);
+    let commit=json!({"reviewed":true,"commands":commands});
+    let (status,first)=request(&app,&secret,Some(123),"POST",&format!("{path}/commit"),commit.clone()).await;
+    assert_eq!(status,StatusCode::OK,"{first}"); assert_eq!(first["complete"],true);
+    let (_,replay)=request(&app,&secret,Some(123),"POST",&format!("{path}/commit"),commit.clone()).await;
+    assert_eq!(replay["complete"],true); assert_eq!(replay["items"][0]["receipt"]["status"],"already_applied");
+    assert_eq!(db.collection::<Document>("todasQuestoes").count_documents(doc!{}).await.unwrap(),3);
+    assert_eq!(db.collection::<Document>("question_revision_events").count_documents(doc!{}).await.unwrap(),2);
+    let mut collision=commands[0].clone(); collision["operation_id"]=json!(uuid::Uuid::new_v4().to_string()); collision["document"]["_id"]=json!({"$oid":legacy_id.to_hex()});
+    let (_,collision)=request(&app,&secret,Some(123),"POST",&format!("{path}/commit"),json!({"reviewed":true,"commands":[commands[0].clone(),collision]})).await;
+    assert_eq!(collision["items"][0]["saved"],true); assert_eq!(collision["items"][1]["saved"],false); assert_eq!(collision["complete"],false);
+    let mut changed=commands[0].clone(); changed["document"]["question"]=json!("Different payload"); changed["document"]["content_revision"]=json!(services::question_contracts::hash(&changed["document"]).unwrap());
+    let (_,conflict)=request(&app,&secret,Some(123),"POST",&format!("{path}/commit"),json!({"reviewed":true,"commands":[changed]})).await;
+    assert_eq!(conflict["complete"],false);
+    let assist_id=uuid::Uuid::new_v4().to_string(); let assist=json!({"operation_id":assist_id,"mode":"GENERATE","text":"Create one synthetic arithmetic question"});
+    let (status,generated)=request(&app,&secret,Some(123),"POST",&format!("{path}/assist"),assist.clone()).await;
+    assert_eq!(status,StatusCode::OK,"{generated}"); assert_eq!(request(&app,&secret,Some(123),"POST",&format!("{path}/assist"),assist).await.1,generated); assert_eq!(hits.load(Ordering::SeqCst),1);
+    let (_,ai_preview)=request(&app,&secret,Some(123),"POST",&format!("{path}/preview"),json!({"operation_id":uuid::Uuid::new_v4().to_string(),"items":generated["items"],"assistance_id":assist_id})).await;
+    assert_eq!(ai_preview["items"][0]["command"]["document"]["origins"][0]["kind"],"AI_GENERATED");
+    assert_eq!(ai_preview["items"][0]["command"]["document"]["validity"]["status"],"UNKNOWN");
+    let other=services::question_import::PreviewRequest { operation_id:uuid::Uuid::new_v4().to_string(),items:vec![draft],assistance_id:Some(assist_id) };
+    assert!(services::question_import::preview(&state,456,other).await.is_err());
+    assert_eq!(db.collection::<Document>("todasQuestoes").find_one(doc!{"_id":legacy_id}).await.unwrap().unwrap(),legacy);
+    assert_eq!(db.collection::<Document>("userActivityLog").find_one(doc!{"_id":"synthetic-history"}).await.unwrap().unwrap(),history);
+    assert!(name.starts_with("cogniva_test_")); db.drop().await.unwrap(); provider.abort();
+}
+
+#[tokio::test]
+#[ignore = "Requires dedicated loopback Mongo 27048"]
 async fn knowledge_selection_cache_and_shared_progress_preserve_attempts(){
     use models::exam_hierarchy::*;
     let uri=std::env::var("COGNIVA_TEST_MONGODB_URI").unwrap();assert!(uri.starts_with("mongodb://127.0.0.1:27048/"));
@@ -137,9 +266,9 @@ async fn editable_exam_components_and_deletion_survive_sync_without_touching_his
     let command=serde_json::to_value(&edit).unwrap();let (status,updated)=request(&app,&secret,Some(123),"PUT",&path,command.clone()).await;assert_eq!(status,StatusCode::OK,"{updated}");
     assert_eq!(updated["subjects"].as_array().unwrap().len(),1);assert_eq!(updated["subjects"][0]["stage"],"2ª etapa · Prova técnica");assert!(updated["subjects"][0]["topics"].as_array().unwrap().is_empty());
     assert_eq!(request(&app,&secret,Some(123),"PUT",&path,command).await.1,updated);
-    let mut removed:ExamBlueprint=serde_json::from_value(updated).unwrap();removed.status=ExamLifecycleStatus::Excluido;removed.is_active_in_ladder=false;removed.subjects.clear();
+    let mut removed:ExamBlueprint=serde_json::from_value(updated).unwrap();let preserved_subjects=removed.subjects.clone();removed.status=ExamLifecycleStatus::Excluido;removed.is_active_in_ladder=false;removed.subjects.clear();
     let (status,deleted)=request(&app,&secret,Some(123),"PUT",&path,serde_json::to_value(removed).unwrap()).await;assert_eq!(status,StatusCode::OK,"{deleted}");
-    let listed=services::exam_store::list(&state,123).await.unwrap();let tombstone=listed.iter().find(|e| e.id==exam.id).unwrap();assert_eq!(tombstone.status,ExamLifecycleStatus::Excluido);assert!(!tombstone.is_active_in_ladder);assert!(tombstone.subjects.is_empty());
+    let listed=services::exam_store::list(&state,123).await.unwrap();let tombstone=listed.iter().find(|e| e.id==exam.id).unwrap();assert_eq!(tombstone.status,ExamLifecycleStatus::Excluido);assert!(!tombstone.is_active_in_ladder);assert_eq!(tombstone.subjects,preserved_subjects,"Deletion preserves the last stored grade even when the client sends an empty one");
     assert!(!services::exam_store::list(&state,456).await.unwrap().iter().any(|e| e.id==exam.id));
     let raw=db.collection::<Document>("user_exams").find_one(doc!{"exam_id":&exam.id}).await.unwrap().unwrap();assert_eq!(raw.get_array("revision_history").unwrap().len(),2);
     assert_eq!(db.collection::<Document>("userActivityLog").find_one(doc!{"user_id":123_i64}).await.unwrap().unwrap().get_str("marker").unwrap(),"history unchanged");
@@ -204,7 +333,7 @@ async fn request_http_metadata(app:&Router)->StatusCode {
     app.clone().oneshot(Request::builder().uri("/api/v1/catalog/knowledge").body(Body::empty()).unwrap()).await.unwrap().status()
 }
 
-fn config(uri: &str) -> AppConfig {
+pub(super) fn config(uri: &str) -> AppConfig {
     AppConfig {
         port: 0,
         mongodb_uri: uri.into(),
@@ -222,7 +351,7 @@ fn config(uri: &str) -> AppConfig {
         apk_metadata_path: PathBuf::from("missing"),
     }
 }
-async fn request(
+pub(super) async fn request(
     app: &Router,
     secret: &str,
     user: Option<i64>,

@@ -667,7 +667,7 @@ object OfflineExamQueue {
 }
 
 object QuizSelection {
-    fun allowed(decisions:List<br.com.concursoprep.app.data.remote.PracticeDecision>,exam:StoredExam,component:StoredSubject,id:String,revision:String):Boolean = decisions.filter { it.examId==exam.examId && it.examRevision==exam.revision && it.componentId==component.localSubjectId && it.questionId==id && it.questionRevision==revision && it.catalogVersion==ExamCatalog.knowledgeVersion() }.maxWithOrNull(compareBy<br.com.concursoprep.app.data.remote.PracticeDecision> { it.revision }.thenBy { if(it.relation=="EXCLUDED")2 else if(it.relation=="ANALOGOUS")1 else 0 })?.relation?.let { it=="DIRECT" }?:true
+    fun allowed(decisions:List<br.com.concursoprep.app.data.remote.PracticeDecision>,exam:StoredExam,component:StoredSubject,id:String,revision:String):Boolean = decisions.filter { it.examId==exam.examId && it.examRevision==exam.revision && it.componentId==component.localSubjectId && it.questionId==id && it.questionRevision==revision && it.catalogVersion in 1..ExamCatalog.knowledgeVersion() }.maxWithOrNull(compareBy<br.com.concursoprep.app.data.remote.PracticeDecision> { it.revision }.thenBy { if(it.relation=="EXCLUDED")2 else if(it.relation=="ANALOGOUS")1 else 0 })?.relation?.let { it=="DIRECT" }?:true
     fun weightedSimuladoIds(exam: StoredExam, questions: List<QuestionRef>,decisions:List<br.com.concursoprep.app.data.remote.PracticeDecision> = emptyList()): List<String> {
         val picked=mutableListOf<String>()
         for(subject in exam.subjects){
@@ -726,6 +726,7 @@ object ExamCatalog {
     }
     fun matchesSubject(subject: StoredSubject, search: String): Boolean = knowledge.array("subjects").map { it.jsonObject }.find { it.text("subject_id") == subject.canonicalSubjectId }?.let { it.text("label").contains(search,true) || it.array("aliases").any { alias -> alias.jsonPrimitive.content.contains(search,true) } } ?: subject.displayName.contains(search,true)
     fun defaultTopicsForSubject(subjectId: String): List<StoredTopic> {
+        if(knowledge.array("subjects").none { it.jsonObject.text("subject_id")==subjectId && it.jsonObject.text("status")=="ACTIVE" })return emptyList()
         val rawTopics = knowledge.array("topics").map { it.jsonObject }.filter { it.text("subject_id") == subjectId && it.text("status") == "ACTIVE" }
         val roots = rawTopics.filter { it["parent_topic_id"]?.jsonPrimitive?.contentOrNull == null }
         val selected = roots.ifEmpty { rawTopics }
@@ -749,7 +750,7 @@ object ExamCatalog {
     fun associateSubject(subject: StoredSubject, target: StoredSubject): StoredSubject = subject.copy(canonicalSubjectId=target.canonicalSubjectId,topics=subject.topics.map { old ->
         old.copy(canonicalSubjectId=target.canonicalSubjectId,canonicalTopicId=if(catalogTopics(target.canonicalSubjectId).any { it.canonicalTopicId==old.canonicalTopicId } || old.canonicalTopicId.startsWith("custom-"))old.canonicalTopicId else "custom-${UUID.randomUUID()}")
     })
-    fun catalogTopics(subjectId: String): List<StoredTopic> = knowledge.array("topics").map { it.jsonObject }.filter { it.text("subject_id")==subjectId && it.text("status")=="ACTIVE" }.map { t ->
+    fun catalogTopics(subjectId: String): List<StoredTopic> = if(knowledge.array("subjects").none { it.jsonObject.text("subject_id")==subjectId && it.jsonObject.text("status")=="ACTIVE" })emptyList() else knowledge.array("topics").map { it.jsonObject }.filter { it.text("subject_id")==subjectId && it.text("status")=="ACTIVE" }.map { t ->
         StoredTopic(t.text("topic_id"),t.text("topic_id"),subjectId,t.text("label"),"PRE_EDITAL_BASE")
     }
     fun topicLabel(topic: StoredTopic): String {
@@ -772,14 +773,29 @@ object ExamCatalog {
     private fun JsonObject.text(key:String):String = getValue(key).jsonPrimitive.content
     private fun JsonObject.array(key:String):JsonArray = getValue(key).jsonArray
     private fun topic(value:JsonObject,subjectId:String)=StoredTopic(value.text("topic_id"),value.text("topic_id"),subjectId,value.text("title"),"PRE_EDITAL_BASE")
-    fun trunks(): List<TrunkTemplate> = catalog.array("trunks").map { element ->
+    fun trunks(): List<TrunkTemplate> {
+        if(knowledgeVersion()>bundledKnowledge.getValue("catalog_version").jsonPrimitive.long) {
+            return knowledge.array("trunks").map { it.jsonObject }.filter { it.text("status")=="ACTIVE" }.map { trunk ->
+                val slug=trunk.text("trunk_id")
+                val subjects=knowledge.array("subjects").map { it.jsonObject }.filter { s ->s.text("status")=="ACTIVE" && s.array("trunk_links").any { it.jsonObject.text("trunk_id")==slug } }.mapNotNull { s ->
+                    val topics=catalogTopics(s.text("subject_id"));val first=topics.firstOrNull()?:return@mapNotNull null
+                    val link=s.array("trunk_links").first { it.jsonObject.text("trunk_id")==slug }.jsonObject
+                    val old=catalog.array("trunks").map { it.jsonObject }.firstOrNull { it.text("slug")==slug }
+                    val weight=old?.let { it.array("core_subjects")+it.array("complementary_subjects") }?.map { it.jsonObject }?.firstOrNull { it.text("canonical_subject_id")==s.text("subject_id") }?.get("default_weight")?.jsonPrimitive?.double?:1.0
+                    TrunkSubjectTemplate(s.text("subject_id"),s.text("label"),weight,if(link.text("role")=="FOUNDATIONAL")"CORE"else"COMPLEMENTARY",first.canonicalTopicId,first.displayTitle,topics)
+                }
+                TrunkTemplate(slug,trunk.text("label"),"work",subjects)
+            }
+        }
+        return catalog.array("trunks").map { element ->
         val t=element.jsonObject
         val subjects=(t.array("core_subjects")+t.array("complementary_subjects")).map { raw ->
             val item=raw.jsonObject;val id=item.text("canonical_subject_id");val topics=item.array("topics").map { topic(it.jsonObject,id) };val first=topics.first()
             TrunkSubjectTemplate(id,item.text("name"),item.getValue("default_weight").jsonPrimitive.double,item.text("relevance_tier"),first.canonicalTopicId,first.displayTitle,topics)
         }
         TrunkTemplate(t.text("slug"),t.text("name"),t.text("icon_key"),subjects)
-    } + knowledge.array("trunks").map { it.jsonObject }.filter { t -> catalog.array("trunks").none { it.jsonObject.text("slug")==t.text("trunk_id") } }.map { TrunkTemplate(it.text("trunk_id"),it.text("label"),"work",emptyList()) }
+    } + knowledge.array("trunks").map { it.jsonObject }.filter { t -> t.text("status")=="ACTIVE" && catalog.array("trunks").none { it.jsonObject.text("slug")==t.text("trunk_id") } }.map { TrunkTemplate(it.text("trunk_id"),it.text("label"),"work",emptyList()) }
+    }
     fun subjectsForTrunk(trunkSlug:String):List<StoredSubject> = trunks().find { it.slug==trunkSlug }?.subjects.orEmpty().mapIndexed { index,s ->
         StoredSubject("${s.canonicalSubjectId}-$index",s.canonicalSubjectId,s.name,if(s.relevanceTier=="CORE")"CONHECIMENTOS_ESPECIFICOS"else"CONHECIMENTOS_GERAIS",s.defaultWeight,kotlin.math.round(s.defaultWeight*5).toInt(),s.relevanceTier,s.topics)
     }

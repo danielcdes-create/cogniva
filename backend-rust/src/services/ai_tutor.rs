@@ -454,7 +454,7 @@ fn format_plausibility_markdown(pa: &PlausibilityAnalysis) -> String {
     out
 }
 
-async fn call_xai_text(
+pub(crate) async fn call_xai_text(
     config: &AppConfig,
     system_prompt: &str,
     user_prompt: &str,
@@ -538,6 +538,29 @@ async fn call_xai_text(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn provider_errors_keep_http_reason_in_the_android_and_import_contract() {
+        use axum::{routing::post, Router, response::IntoResponse, http::StatusCode};
+        for (status,body,detail) in [
+            (403, r#"{"error":"Limite de créditos atingido"}"#, Some("Limite de créditos atingido")),
+            (429, r#"{"error":{"message":"Aguarde antes de tentar novamente"}}"#, Some("Aguarde antes de tentar novamente")),
+            (503, r#"{"message":"Serviço em manutenção"}"#, Some("Serviço em manutenção")),
+            (502, "<html>Bad gateway</html>", None),
+        ] {
+            let listener=tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address=listener.local_addr().unwrap();
+            let provider=tokio::spawn(async move { axum::serve(listener,Router::new().route("/responses",post(move || async move {(StatusCode::from_u16(status).unwrap(),body)}))).await.unwrap(); });
+            let mut config=crate::integration_tests::config("mongodb://127.0.0.1:27048/");
+            config.xai_api_key=Some("synthetic-only".into());config.xai_base_url=format!("http://{address}");
+            let error=call_xai_text(&config,"synthetic system","synthetic question").await.unwrap_err();
+            let response=error.into_response();assert_eq!(response.status(),StatusCode::BAD_GATEWAY);
+            let bytes=axum::body::to_bytes(response.into_body(),4096).await.unwrap();let payload:serde_json::Value=serde_json::from_slice(&bytes).unwrap();
+            let message=payload["message"].as_str().unwrap();assert!(message.contains(&format!("HTTP {status}")));assert!(!message.contains("synthetic-only"));
+            if let Some(detail)=detail {assert!(message.contains(detail));} else {assert!(!message.contains("<html>"));}
+            provider.abort();
+        }
+    }
 
     #[test]
     fn test_sanitize_ai_content_removes_redundant_dr_sincero_prefix() {

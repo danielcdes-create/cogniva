@@ -1,0 +1,71 @@
+{
+  "date": "2026-11-07",
+  "timezone": "America/Sao_Paulo",
+  "scope": "local implementation and synthetic verification; not a production release",
+  "backend": {
+    "command": "cargo test --locked -- --include-ignored --test-threads=1",
+    "passed": 68,
+    "failed": 0,
+    "ignored": 0,
+    "mongo": "dedicated loopback 127.0.0.1:27048",
+    "build": "cargo build --locked passed"
+  },
+  "web": {
+    "command": "node --test web-admin/tests/*.test.js",
+    "passed": 10,
+    "failed": 0,
+    "syntax": "node --check passed for app.js and domain.js"
+  },
+  "contracts": {
+    "command": "python -m pytest scripts/tests -q",
+    "passed": 47,
+    "subtests_passed": 14,
+    "failed": 0
+  },
+  "browser": {
+    "environment": "isolated synthetic database created by preview-web-admin.py",
+    "verified": [
+      "single-use login and authenticated bootstrap",
+      "single question creation with explicit primary classification",
+      "question content edit recorded as revision 2 and UNDER_REVIEW validity",
+      "two-question JSONL batch with per-item ACKs",
+      "exam grade with the same discipline in two independently configured stages",
+      "catalog rename preserving old label and REVIEW_READY draft save",
+      "browser reload preserves account drafts and cookie session",
+      "overview queries synthetic database counts",
+      "global catalog v2 activation via explicit saved revision, review and reason",
+      "confirmed activation history displayed",
+      "active catalog and session persisted after browser reload",
+      "new v3 draft starts from active v2",
+      "explicit legacy to v2 conversion preserved identity, unknown extra fields and reviewed primary classification"
+    ],
+    "desktop_viewport_width": 1440,
+    "desktop_document_width": 1425,
+    "compact_viewport_width": 658,
+    "compact_document_width": 643,
+    "console_errors_at_final_check": [],
+    "screenshot": "catalogo-ativado.jpg"
+  },
+  "limits": {
+    "production_deployed": false,
+    "real_ai_provider_called": false,
+    "catalog_runtime_activation": "implemented; immutable per-database snapshots, request-scoped historical references and conditional activation; verified locally only",
+    "legacy_auto_classification_after_catalog_v1": "new automatic generations paused; existing cohort, queue and budgets preserved"
+  },
+  "android": {
+    "command": ":app:testDebugUnitTest :app:lintDebug",
+    "passed": 71,
+    "failed": 0,
+    "lint": "passed",
+    "physical_device_verified": false
+  },
+  "activation_integration": [
+    "competing activations have exactly one committed winner",
+    "activation receipt replay after later version",
+    "restart loads active snapshot",
+    "reserved immutable event recovers without the original draft",
+    "historical question classification and explicit EXCLUDED decision survive rename",
+    "deprecation removes current selection without rewriting questions or learning history",
+    "explicit revision-zero question conversion keeps identity and extra fields"
+  ]
+}

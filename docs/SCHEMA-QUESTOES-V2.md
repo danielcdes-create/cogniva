@@ -1,5 +1,7 @@
 # Contratos de questões, classificação, validade e correção
 
+O módulo de [inserção individual, em lote e assistida por IA](INSERCAO-QUESTOES.md) implementa o cadastro e a revisão no Android sobre estes contratos. Sua implantação é independente das evidências históricas descritas abaixo; ele não ativa correção aberta automática nem muda o schema validado.
+
 Exceção autorizada posterior, restrita ao inventário de 618 IDs: [classificação automática sob demanda](CLASSIFICACAO-LEGADO-SOB-DEMANDA.md). Ela usa uma extensão própria com proveniência AI, sem transformar sugestões em confirmação humana do contrato v2. Documentos novos continuam sujeitos ao schema v2 completo; a migração `legacy-cohort-guard/1` fecha a permissão de formato legado fora do inventário.
 
 Etapa 2 formalizada em `shared/schemas/question-contracts.schema.json`, com exemplos em `shared/examples/question-contracts/` e regras executáveis em `scripts/question_contracts.py`. As etapas [3](ETAPA-3-BACKEND-MONGO.md) e [4](ETAPA-4-CADASTRO-CATALOGO.md), implementadas para 1.4.5/build 12, acrescentam validação e escrita no backend, preparação aditiva do Mongo e cadastro associado no Android. Estado de publicação e aceite: `remediation-validation/1.4.5/`. Não há reclassificação automática do acervo nem chamada paga de IA nesta adaptação. A etapa 5 grava sugestões e decisões neste mesmo contrato. O exemplo `suggestion-pending.json` continua pendente: confiança do modelo não confirma classificação nem entra na seleção. Nenhum lote de produção reclassificou o acervo.
@@ -36,6 +38,8 @@ O backup validado de 02/11/2026, `20261102T155257Z`, tinha 618 questões com cin
 `classification.state` aceita `UNCLASSIFIED`, `PARTIAL` e `CONFIRMED`. A primeira tem lista vazia; as demais têm vínculos confirmados individualmente. `CONFIRMED` exige exatamente um vínculo `PRIMARY`; `PARTIAL` permite no máximo um. O primário sempre tem cobertura `DIRECT`. Vínculos `SECONDARY` representam conteúdo complementar e podem ser diretos ou contextuais.
 
 Cada vínculo contém identidade própria, disciplina, tópico, papel, cobertura e proveniência. Referências precisam existir na versão do catálogo e ter a disciplina correspondente. Um tópico não pode aparecer repetido com papéis contraditórios. Vínculos secundários não transferem domínio integral nem bastam para estabelecer compatibilidade direta com outro edital.
+
+Com a [ativação versionada pelo painel](ADMIN-WEB.md), o servidor aceita versões históricas confirmadas do catálogo e verifica os vínculos no snapshot correspondente. Renomeações não reescrevem classificações. A seleção atual exige que o vínculo principal continue ativo; novas associações a entidades desativadas são recusadas, enquanto registros anteriores e seu histórico permanecem armazenados.
 
 Os campos canônicos singulares atuais, quando presentes, devem refletir o vínculo principal. Eles são projeções de compatibilidade temporária, não uma segunda fonte editável de classificação. Aliases e semelhança textual não confirmam vínculos.
 

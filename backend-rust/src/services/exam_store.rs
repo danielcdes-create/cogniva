@@ -1,7 +1,7 @@
 use crate::{
     error::AppError,
     models::exam_hierarchy::*,
-    services::exam_engine::{canonical_subjects, system_exam_blueprints},
+    services::exam_engine::system_exam_blueprints,
     AppState,
 };
 use bson::{doc, Document};
@@ -9,6 +9,7 @@ use futures::TryStreamExt;
 use mongodb::options::{CollectionOptions, WriteConcern};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
+#[cfg(test)] use crate::services::exam_engine::canonical_subjects;
 
 fn collection(state: &AppState) -> mongodb::Collection<Document> {
     state.db.collection_with_options(
@@ -86,9 +87,7 @@ pub fn validate(exam: &ExamBlueprint) -> Result<(), AppError> {
         || !exam.wrong_answer_penalty.is_finite()
         || !(0.0..=1.0).contains(&exam.wrong_answer_penalty)
         || exam.subjects.len() > 100
-        || !crate::services::exam_engine::system_trunks()
-            .iter()
-            .any(|t| t.slug == exam.trunk_slug)
+        || !crate::services::question_contracts::catalog_ref()["trunks"].as_array().unwrap().iter().any(|t|t["trunk_id"]==exam.trunk_slug)
     {
         return Err(invalid(
             "Revise nome, tronco, prioridade, corte e disciplinas",
@@ -118,14 +117,12 @@ pub fn validate(exam: &ExamBlueprint) -> Result<(), AppError> {
     {
         return Err(invalid("A grade aceita no máximo 500 questões"));
     }
-    let catalog = canonical_subjects();
     let mut local_subject_ids = HashSet::new();
     let mut local_topic_ids = HashSet::new();
     for subject in &exam.subjects {
         let mut topic_ids = HashSet::new();
-        let known = catalog.iter().find(|s| s.canonical_subject_id == subject.canonical_subject_id);
         let custom = subject.canonical_subject_id.strip_prefix("custom-").is_some_and(|id| uuid::Uuid::parse_str(id).is_ok());
-        if known.is_none() && !custom { return Err(invalid("Disciplina fora do catálogo ou sem identidade personalizada válida")); }
+        if !crate::services::catalog_runtime::registered(&subject.canonical_subject_id,None) && !custom { return Err(invalid("Disciplina fora do catálogo ou sem identidade personalizada válida")); }
         if subject.display_name.trim().is_empty() || subject.display_name.len()>300 || subject.stage.len()>120 {
             return Err(invalid("Nome ou etapa da disciplina inválido"));
         }
@@ -144,7 +141,7 @@ pub fn validate(exam: &ExamBlueprint) -> Result<(), AppError> {
                 || topic.canonical_subject_id != subject.canonical_subject_id
                 || !topic_ids.insert(&topic.canonical_topic_id)
                 || topic.display_title.trim().is_empty() || topic.display_title.len()>1000
-                || !(known.is_some_and(|k| k.topics.iter().any(|t| t.topic_id == topic.canonical_topic_id))
+                || !(crate::services::catalog_runtime::registered(&subject.canonical_subject_id,Some(&topic.canonical_topic_id))
                     || topic.canonical_topic_id.strip_prefix("custom-").is_some_and(|id| uuid::Uuid::parse_str(id).is_ok()))
             {
                 return Err(invalid("Tópico inválido, repetido ou fora da disciplina"));
@@ -214,6 +211,21 @@ pub async fn save_command(
         return Err(AppError::Conflict(
             "A revisão do concurso não está disponível".into(),
         ));
+    }
+    let previous=existing.as_ref().map(|d|decode(d.clone())).transpose()?.or_else(||system_exam_blueprints().into_iter().find(|e|e.id==exam.id));
+    let knowledge=crate::services::question_contracts::catalog_ref();
+    let active_trunk=knowledge["trunks"].as_array().unwrap().iter().any(|t|t["trunk_id"]==exam.trunk_slug && t["status"]=="ACTIVE");
+    if !active_trunk && !previous.as_ref().is_some_and(|e|e.trunk_slug==exam.trunk_slug){return Err(AppError::BadRequest("Novos vínculos exigem um tronco ativo".into()));}
+    for subject in &exam.subjects{
+        let prior=previous.as_ref().and_then(|e|e.subjects.iter().find(|s|s.local_subject_id==subject.local_subject_id && s.canonical_subject_id==subject.canonical_subject_id));
+        let active=knowledge["subjects"].as_array().unwrap().iter().any(|s|s["subject_id"]==subject.canonical_subject_id && s["status"]=="ACTIVE");
+        if !active && !subject.canonical_subject_id.starts_with("custom-") && prior.is_none(){return Err(AppError::BadRequest("Disciplina desativada só pode permanecer nos componentes existentes".into()));}
+        for topic in &subject.topics{
+            if !topic.canonical_topic_id.starts_with("custom-") && !crate::services::question_contracts::known_topic(&subject.canonical_subject_id,&topic.canonical_topic_id)
+                && !prior.is_some_and(|s|s.topics.iter().any(|t|t.local_topic_id==topic.local_topic_id && t.canonical_topic_id==topic.canonical_topic_id)){
+                return Err(AppError::BadRequest("Assunto desativado só pode permanecer nos vínculos existentes".into()));
+            }
+        }
     }
     let expected = exam.revision;
     exam.revision = expected + 1;

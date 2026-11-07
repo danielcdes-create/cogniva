@@ -1,6 +1,7 @@
 pub mod config;
 #[cfg(test)]
 mod contract_tests;
+#[cfg(test)] mod catalog_activation_tests;
 pub mod error;
 pub mod models;
 pub mod routes;
@@ -26,11 +27,12 @@ use tower_http::{
 pub struct AppState {
     pub db: Database,
     pub config: AppConfig,
+    pub catalog: services::catalog_runtime::Runtime,
 }
 
 impl AppState {
     pub fn new(db: Database, config: AppConfig) -> Self {
-        Self { db, config }
+        Self { db, config, catalog:services::catalog_runtime::Runtime::default() }
     }
 }
 
@@ -83,6 +85,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
         return Ok(());
     }
+    if args.get(1).map(String::as_str) == Some("--issue-web-code") {
+        let user_id:i64=args.get(2).ok_or("Informe a conta administrativa comprovada")?.parse()?;
+        if !security::is_admin(user_id) { return Err("Conta ausente em ADMIN_USER_IDS".into()); }
+        println!("{}",security::issue(&config.jwt_secret,user_id,"web_login",600)?);
+        return Ok(());
+    }
     tracing::info!(
         "Conectando ao MongoDB Atlas (database: {})...",
         config.mongodb_db
@@ -97,24 +105,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if std::env::args().nth(1).as_deref()==Some("--prepare-question-storage") {
         let result=services::question_storage::prepare(&db).await?;
         services::legacy_classification::prepare_guard(&db).await?;
+        let runtime=services::catalog_runtime::Runtime::default();let catalog=runtime.refresh(&db).await?;
+        services::catalog_runtime::scope(catalog,async{
         services::question_storage::recover_audit(&db).await?;
         services::classification::recover(&db).await?;
+        Ok::<_,error::AppError>(())}).await?;
         println!("{}",result);return Ok(());
     }
 
+    let state = Arc::new(AppState::new(db.clone(), config.clone()));
+    let catalog=state.catalog.refresh(&db).await?;
+    services::catalog_runtime::scope(catalog,async {
     services::legacy_classification::recover_guard(&db).await?;
     services::legacy_classification::recover_jobs(&db).await?;
     services::question_storage::recover_audit(&db).await?;
     services::classification::recover(&db).await?;
+    Ok::<_,error::AppError>(())
+    }).await?;
     // Inicia agendador diário em background (substitui schedule do AFTBot.py + countdown.py)
     spawn_background_daily_scheduler(db.clone());
 
-    let state = Arc::new(AppState::new(db, config.clone()));
     services::legacy_classification::spawn(state.clone());
 
     let app = build_router(state);
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], config.port));
+    let bind_address:std::net::IpAddr=std::env::var("BIND_ADDRESS").unwrap_or_else(|_|"0.0.0.0".into()).parse()?;
+    let addr = SocketAddr::new(bind_address,config.port);
     tracing::info!("🚀 api-rust-core escutando em http://{}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
@@ -130,6 +146,23 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .allow_headers(Any);
 
     Router::new()
+        .route("/api/v1/admin/catalog/activate",post(routes::admin_data::catalog_activate))
+        .route("/api/v1/admin/catalog/activations/:operation",get(routes::admin_data::catalog_activation_status))
+        .route("/api/v1/admin/catalog/history",get(routes::admin_data::catalog_history))
+        .route("/api/v1/admin/catalog/versions/:version",get(routes::admin_data::catalog_version))
+        .route("/api/v1/admin/catalog/base",get(routes::admin_data::catalog_base))
+        .route("/api/v1/admin/catalog/validate",post(routes::admin_data::catalog_validate))
+        .route("/api/v1/admin/catalog/drafts",get(routes::admin_data::catalog_list).post(routes::admin_data::catalog_save))
+        .route("/api/v1/admin/catalog/drafts/:id",get(routes::admin_data::catalog_get))
+        .route("/api/v1/admin/summary",get(routes::admin_data::summary))
+        .route("/api/v1/admin/questions",get(routes::admin_data::questions))
+        .route("/api/v1/admin/questions/:id/prepare-edit",post(routes::admin_data::prepare_question))
+        .route("/api/v1/admin/web/me",get(routes::web_admin::me))
+        .route("/api/v1/admin/web/logout",post(routes::web_admin::logout))
+        .route("/api/v1/admin/questions/import/capabilities",get(routes::questions_v2::import_capabilities))
+        .route("/api/v1/admin/questions/import/preview",post(routes::questions_v2::import_preview))
+        .route("/api/v1/admin/questions/import/commit",post(routes::questions_v2::import_commit))
+        .route("/api/v1/admin/questions/import/assist",post(routes::questions_v2::import_assist))
         .route("/api/v1/admin/questions/v2",post(routes::questions_v2::save))
         .route("/api/v1/admin/questions/v2/:id",get(routes::questions_v2::get))
         .route("/api/v1/admin/classification/proposals", post(routes::questions_v2::generate_proposals))
@@ -199,6 +232,11 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         )
         .route_layer(axum::middleware::from_fn_with_state(state.clone(), security::authenticate))
         .merge(Router::new()
+            .route("/admin",get(routes::web_admin::index))
+            .route("/admin/",get(routes::web_admin::index))
+            .route("/admin/assets/:name",get(routes::web_admin::asset))
+            .route("/api/v1/auth/web-session",post(routes::web_admin::login))
+            .route("/api/v1/auth/web-logout",post(routes::web_admin::logout))
             .route("/api/v1/health", get(|| async { Json(json!({"status":"ok","service":"api-rust-core", "version":env!("CARGO_PKG_VERSION"), "revision":option_env!("BUILD_REVISION").unwrap_or("local"), "contract_version":2})) }))
             .route("/api/v1/ready", get(readiness))
             .route("/api/v1/auth/native-session", post(routes::auth::handle_native_session))

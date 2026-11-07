@@ -132,6 +132,10 @@ data class ExamBlueprintPayload(
 )
 @Serializable data class CacheStateResponse(@SerialName("projection_version") val projectionVersion:Int,val questions:List<CacheStateItem>,val decisions:List<PracticeDecision> = emptyList())
 interface ConcursoApiService {
+    @GET("admin/questions/import/capabilities") suspend fun questionImportCapabilities(): JsonObject
+    @POST("admin/questions/import/preview") suspend fun previewQuestionImport(@Body payload: JsonObject): JsonObject
+    @POST("admin/questions/import/commit") suspend fun commitQuestionImport(@Body payload: JsonObject): JsonObject
+    @POST("admin/questions/import/assist") suspend fun assistQuestionImport(@Body payload: JsonObject): JsonObject
     @POST("questions/cache-state") suspend fun cacheState(@Body payload:CacheStatePayload):CacheStateResponse
     @GET("catalog/knowledge") suspend fun knowledgeCatalog(): JsonObject
     @GET("auth/profile")

@@ -1,0 +1,63 @@
+{
+  "run_url": "https://github.com/danielcdes-create/cogniva/actions/runs/42331321184",
+  "commit": "1ca40910902e437f0e5414349b5c2ceafdfcc31b",
+  "jobs": [
+    {
+      "id": 128278250443,
+      "name": "verify / backend",
+      "status": "completed",
+      "conclusion": "failure"
+    },
+    {
+      "id": 128278250614,
+      "name": "emulator / API 35 1440x3088 500dpi punch-hole",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128278250615,
+      "name": "verify / knowledge-contracts / contracts",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128278250984,
+      "name": "verify / android",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128280327383,
+      "name": "promote",
+      "status": "completed",
+      "conclusion": "skipped"
+    },
+    {
+      "id": 128280327655,
+      "name": "build",
+      "status": "completed",
+      "conclusion": "skipped"
+    }
+  ],
+  "failure": {
+    "test": "integration_tests::editable_exam_components_and_deletion_survive_sync_without_touching_history",
+    "assertion": "tombstone.subjects.is_empty()",
+    "passed": 54,
+    "failed": 1
+  },
+  "artifacts": [
+    {
+      "id": 13557951109,
+      "name": "android-validation",
+      "expired": false,
+      "digest": "sha256:23307b07af2d68b8f456354b57a43cc89d4c818199f974bbce4061ead1989f7a"
+    },
+    {
+      "id": 13557916591,
+      "name": "emulator-validation",
+      "expired": false,
+      "digest": "sha256:9bfe3f17da57fa495b645599c0ce52e7f0f4e76013d73891ee6dfa1eae8e1d29"
+    }
+  ],
+  "production_deployed_by_this_run": false
+}

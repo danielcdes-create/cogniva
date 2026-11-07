@@ -22,6 +22,21 @@ pub struct Claims {
 #[derive(Debug, Clone, Copy)]
 pub struct SessionUser(pub i64);
 
+pub fn is_admin(user_id: i64) -> bool {
+    std::env::var("ADMIN_USER_IDS").unwrap_or_default().split(',')
+        .any(|id| id.trim().parse::<i64>().ok() == Some(user_id))
+}
+
+pub fn same_origin(headers: &axum::http::HeaderMap) -> bool {
+    let Some(host) = headers.get("host").and_then(|v|v.to_str().ok()) else { return false };
+    let Some(origin) = headers.get("origin").and_then(|v|v.to_str().ok()) else { return false };
+    reqwest::Url::parse(origin).ok().is_some_and(|url| {
+        matches!(url.scheme(), "http" | "https") && url.username().is_empty() && url.password().is_none()
+            && url.path()=="/" && url.query().is_none() && url.fragment().is_none()
+            && reqwest::Url::parse(&format!("{}://{host}",url.scheme())).ok().is_some_and(|expected| expected.path()=="/" && expected.username().is_empty() && expected.origin()==url.origin())
+    })
+}
+
 pub fn issue(secret: &str, user_id: i64, purpose: &str, seconds: i64) -> Result<String, AppError> {
     let claims = Claims {
         sub: user_id.to_string(),
@@ -62,19 +77,28 @@ pub async fn authenticate(
     request: Request,
     next: Next,
 ) -> Result<Response, AppError> {
-    let token = request
+    let bearer = request
         .headers()
         .get("authorization")
         .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "))
-        .ok_or_else(|| AppError::Unauthorized("Entre na sua conta para sincronizar".into()))?;
-    let claims = verify(&state.config.jwt_secret, token, "session")?;
+        .and_then(|v| v.strip_prefix("Bearer "));
+    let web_cookie = request.headers().get("cookie").and_then(|v|v.to_str().ok()).and_then(|cookies|cookies.split(';').find_map(|entry|entry.trim().strip_prefix("cogniva_web_session=")));
+    let is_web = bearer.is_none() && web_cookie.is_some();
+    let claims = if let Some(token)=bearer {
+        verify(&state.config.jwt_secret, token, "session")?
+    } else if let Some(token)=web_cookie {
+        let claims=verify(&state.config.jwt_secret, token, "web_session")?;
+        if !matches!(*request.method(),axum::http::Method::GET | axum::http::Method::HEAD | axum::http::Method::OPTIONS)
+            && (!same_origin(request.headers()) || request.headers().get("x-cogniva-csrf").and_then(|v|v.to_str().ok())!=Some("1")) {
+            return Err(AppError::Forbidden("Origem da ação web não autorizada".into()));
+        }
+        if crate::services::question_storage::collection(&state.db,"web_sessions").find_one(bson::doc!{"_id":&claims.nonce,"user_id":claims.user_id,"revoked":false}).await?.is_none() {
+            return Err(AppError::Unauthorized("Sessão web encerrada".into()));
+        }
+        claims
+    } else { return Err(AppError::Unauthorized("Entre na sua conta para sincronizar".into())); };
     if request.uri().path().starts_with("/api/v1/admin/") {
-        let allowed = std::env::var("ADMIN_USER_IDS")
-            .unwrap_or_default()
-            .split(',')
-            .any(|id| id.trim().parse::<i64>().ok() == Some(claims.user_id));
-        if !allowed {
+        if !is_admin(claims.user_id) {
             return Err(AppError::Forbidden("Operação administrativa".into()));
         }
     }
@@ -103,14 +127,31 @@ pub async fn authenticate(
         }
     }
     parts.extensions.insert(SessionUser(claims.user_id));
-    Ok(next
-        .run(Request::from_parts(parts, Body::from(bytes)))
-        .await)
+    let catalog=state.catalog.refresh(&state.db).await?;
+    let mut response = crate::services::catalog_runtime::scope(catalog,next.run(Request::from_parts(parts, Body::from(bytes)))).await;
+    if is_web {
+        response.headers_mut().insert(axum::http::header::CACHE_CONTROL,axum::http::HeaderValue::from_static("no-store"));
+        response.headers_mut().append(axum::http::header::VARY,axum::http::HeaderValue::from_static("Cookie"));
+    }
+    Ok(response)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn browser_origin_and_token_purposes_are_separate() {
+        let mut headers=axum::http::HeaderMap::new();
+        headers.insert("host","127.0.0.1:8876".parse().unwrap());
+        assert!(!same_origin(&headers));
+        headers.insert("origin","http://127.0.0.1:8876".parse().unwrap());assert!(same_origin(&headers));
+        headers.insert("origin","http://127.0.0.1:8877".parse().unwrap());assert!(!same_origin(&headers));
+        headers.insert("origin","https://example.test".parse().unwrap());assert!(!same_origin(&headers));
+        headers.insert("origin","null".parse().unwrap());assert!(!same_origin(&headers));
+        let code=issue("synthetic-secret",123,"web_login",600).unwrap();
+        assert!(verify("synthetic-secret",&code,"web_session").is_err());
+        assert!(verify("synthetic-secret",&code,"session").is_err());
+    }
     #[test]
     fn a_pairing_credential_cannot_be_used_as_session_or_with_another_key() {
         let token = issue("synthetic-secret", 123, "legacy_link", 600).unwrap();
