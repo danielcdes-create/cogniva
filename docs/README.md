@@ -13,6 +13,7 @@ Este diretório centraliza os documentos de referência técnica, manuais operac
 ### 2. Catálogo de Conhecimentos e Modelagem de Dados
 - **[ADMIN-WEB.md](ADMIN-WEB.md):** Painel web, login, administração de concursos/editais e questões, edição/ativação global do catálogo, histórico, recuperação e publicação.
 - **[CONCILIACAO-ANTIGRAVITY-2026-11-07.md](CONCILIACAO-ANTIGRAVITY-2026-11-07.md):** Conferência das correções anteriores, causa da publicação interrompida da 1.4.12 e conciliação com painel/importador.
+- **[RELEASE-1.4.14.md](RELEASE-1.4.14.md):** Promoção e aceite da 1.4.14/build 21, com todas as chamadas novas de IA em `grok-4.7`.
 - **[RELEASE-1.4.13.md](RELEASE-1.4.13.md):** Conteúdo, preparação, promoção e aceite da release conciliada 1.4.13/build 20.
 - **[INSERCAO-QUESTOES.md](INSERCAO-QUESTOES.md):** Cadastro individual e em lote no Android, formatos de entrada, assistência opcional de IA, revisão, permissões e recuperação de envios.
 - **[CATALOGO-CONHECIMENTOS.md](CATALOGO-CONHECIMENTOS.md):** Especificação normativa do catálogo de conhecimentos compartilhados (`shared/knowledge-catalog.json`). Define a hierarquia de disciplinas, assuntos, subassuntos, troncos de carreira, aliases editoriais e regras de mapeamento canônico.
