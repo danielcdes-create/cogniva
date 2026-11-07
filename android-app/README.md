@@ -78,4 +78,4 @@ DO_API_BASE_URL=https://198.199.65.103/api/v1/
 ```
 # Inserção de questões
 
-Em **Ajustes → Inserir questões**, o módulo oferece formulário individual, JSON/JSONL em lote, rascunho local por conta, exportação/restauração, revisão e assistência opcional de Grok 4.3. O envio exige conta administrativa e backend com as novas rotas. Consulte [o contrato do módulo](../docs/INSERCAO-QUESTOES.md), incluindo retentativas com os comandos preservados. Disponível desde **1.4.13/build 20**, com [publicação e aceite registrados](../docs/RELEASE-1.4.13.md).
+Em **Ajustes → Inserir questões**, o módulo oferece formulário individual, JSON/JSONL em lote, rascunho local por conta, exportação/restauração, revisão e assistência opcional de Grok 4.7. O envio exige conta administrativa e backend com as novas rotas. Consulte [o contrato do módulo](../docs/INSERCAO-QUESTOES.md), incluindo retentativas com os comandos preservados. Disponível desde **1.4.13/build 20**, com [publicação e aceite registrados](../docs/RELEASE-1.4.13.md).

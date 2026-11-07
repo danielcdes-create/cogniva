@@ -9,7 +9,7 @@ root=pathlib.Path(__file__).resolve().parents[1]
 ssh=['ssh','-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-o','ConnectTimeout=5','root@198.199.65.103']
 core=json.loads(subprocess.check_output(ssh+['docker','inspect','api-rust-core']))[0]
 env=dict(row.split('=',1) for row in core['Config']['Env'] if '=' in row)
-assert env.get('XAI_MODEL')=='grok-4.3' and env.get('XAI_API_KEY')
+assert env.get('XAI_MODEL')=='grok-4.7' and env.get('XAI_API_KEY')
 tunnel=subprocess.Popen(ssh[:-1]+['-N','-D','127.0.0.1:27049',ssh[-1]],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
 try:
     for _ in range(30):

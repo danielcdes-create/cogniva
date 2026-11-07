@@ -20,7 +20,7 @@ class LegacyAutomaticContractTest(unittest.TestCase):
             'schema_version':1,'policy_version':'legacy-618-auto/1','cohort_id':'legacy-618/2026-11-02','status':'AUTO_APPLIED','operation_id':'legacy-auto:'+before['_id'],
             'content_revision':content_revision(legacy.content(before)),'catalog_version':1,
             'links':[dict(subject_id='MAT',topic_id='MAT_01_001',role='PRIMARY',coverage='DIRECT',rationale='Synthetic taxonomy rationale.',confidence=0.95)],
-            'provenance':dict(actor={'type':'AI','id':'grok-4.3'},method='AI_AUTOMATIC_LEGACY',model='grok-4.3',prompt_id='classify-question',prompt_version='2',prompt_sha256='a'*64,source_suggestion_id='20000000-0000-4000-8000-000000000001',recorded_at='2026-11-02T12:00:00Z',rationale='Finite policy application, not human review.')})
+            'provenance':dict(actor={'type':'AI','id':'grok-4.7'},method='AI_AUTOMATIC_LEGACY',model='grok-4.7',prompt_id='classify-question',prompt_version='2',prompt_sha256='a'*64,source_suggestion_id='20000000-0000-4000-8000-000000000001',recorded_at='2026-11-02T12:00:00Z',rationale='Finite policy application, not human review.')})
         return before,after,member
 
     def test_frozen_cohort_has_exactly_618_distinct_members_and_six_blocked(self):
@@ -32,6 +32,10 @@ class LegacyAutomaticContractTest(unittest.TestCase):
         before,after,member=self.fixture()
         with patch.object(legacy,'cohort',return_value={before['_id']:member}):
             self.assertTrue(legacy.validate_auto(after))
+            previous=copy.deepcopy(after)
+            previous['legacy_auto_classification']['provenance']['actor']['id']='grok-4.3'
+            previous['legacy_auto_classification']['provenance']['model']='grok-4.3'
+            self.assertTrue(legacy.validate_auto(previous))
             self.assertEqual(legacy.compare([before],[after])['changed_questions'],1)
             self.assertEqual(inventory_questions.classify_document(after,inventory_questions.load_catalog()),'legacy_auto_applied')
             self.assertNotIn('classification',after)

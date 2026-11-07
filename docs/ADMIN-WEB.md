@@ -6,7 +6,7 @@ O painel está em `/admin/`, servido pelo próprio backend Rust, com a mesma API
 
 - **Concursos:** criação, edição, situação, instituição, cargo, banca, previsão de prova, prioridade, corte, penalidade e participação na escada da conta.
 - **Editais e grades:** disciplinas por componente/etapa, pesos, quantidades, grupos de conhecimentos, assuntos canônicos ou personalizados, publicação da grade e arquivamento. A mesma disciplina pode aparecer em várias etapas com identidades locais diferentes.
-- **Questões:** busca paginada no enunciado, edição v2, conversão explícita de registros legados com prévia e revisão, inserção individual/JSON/JSONL e assistência opcional de Grok 4.3. Os fluxos de inserção usam as mesmas rotas do [módulo Android](INSERCAO-QUESTOES.md).
+- **Questões:** busca paginada no enunciado, edição v2, conversão explícita de registros legados com prévia e revisão, inserção individual/JSON/JSONL e assistência opcional de Grok 4.7. Os fluxos de inserção usam as mesmas rotas do [módulo Android](INSERCAO-QUESTOES.md).
 - **Troncos, disciplinas e assuntos globais:** criação, renomeação com aliases, escopo, vínculos com carreiras, papéis dos vínculos e desativação sem remoção de IDs. Revisões podem ser salvas, validadas, exportadas e **ativadas no próprio painel**.
 - **Rascunhos e pendências:** continuidade no navegador, exportação/restauração por conta, comandos congelados após envio incerto, comparação com servidor e preservação de edições substituídas.
 

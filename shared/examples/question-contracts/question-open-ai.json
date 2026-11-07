@@ -4,7 +4,7 @@
   },
   "schema_version": 2,
   "revision": 1,
-  "content_revision": "d7fd17aa5b96504788a8089e58fc0402494a62e6ba53add7268848e428b7f619",
+  "content_revision": "360a6b5a8c5c85f9792a13523261ce0287185d0d7522cdd08eb0dc03586751fb",
   "content_hash_version": "question-v2-jcs-sha256",
   "status": "ACTIVE",
   "question": "Exemplo sintético: explique como a coesão contribui para a organização de um texto e apresente um exemplo.",
@@ -74,7 +74,7 @@
     "reference_date": "2026-11-02",
     "review_due_on": null,
     "reason_codes": [],
-    "evaluated_content_revision": "d7fd17aa5b96504788a8089e58fc0402494a62e6ba53add7268848e428b7f619",
+    "evaluated_content_revision": "360a6b5a8c5c85f9792a13523261ce0287185d0d7522cdd08eb0dc03586751fb",
     "decision": {
       "actor": {
         "type": "HUMAN",
@@ -118,7 +118,7 @@
     },
     "engine": {
       "provider": "xai",
-      "model": "grok-4.3",
+      "model": "grok-4.7",
       "prompt_id": "open-answer-rubric",
       "prompt_version": "1",
       "semantic_model_id": null,

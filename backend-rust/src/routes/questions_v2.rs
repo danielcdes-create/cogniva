@@ -13,7 +13,7 @@ use serde_json::Value;
 use std::sync::Arc;
 
 pub async fn import_capabilities(State(state): State<Arc<AppState>>) -> Json<Value> {
-    Json(serde_json::json!({"max_items":50,"ai_available":state.config.xai_api_key.is_some() && state.config.xai_model=="grok-4.3"}))
+    Json(serde_json::json!({"max_items":50,"ai_available":state.config.xai_api_key.is_some() && state.config.xai_model==crate::config::XAI_MODEL}))
 }
 pub async fn import_preview(State(state): State<Arc<AppState>>, Extension(user): Extension<SessionUser>, Json(body): Json<crate::services::question_import::PreviewRequest>) -> Result<Json<Value>, AppError> {
     crate::services::question_import::preview(&state,user.0,body).await.map(Json)

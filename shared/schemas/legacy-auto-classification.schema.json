@@ -104,7 +104,7 @@
               "const": "AI"
             },
             "id": {
-              "const": "grok-4.3"
+              "enum": ["grok-4.3", "grok-4.7"]
             }
           }
         },
@@ -112,7 +112,7 @@
           "const": "AI_AUTOMATIC_LEGACY"
         },
         "model": {
-          "const": "grok-4.3"
+          "enum": ["grok-4.3", "grok-4.7"]
         },
         "prompt_id": {
           "const": "classify-question"

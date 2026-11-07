@@ -1,6 +1,9 @@
 use std::env;
 use std::path::PathBuf;
 
+/// Model for every new xAI call: tutors, classification, import assist and legacy queue.
+pub const XAI_MODEL: &str = "grok-4.7";
+
 #[derive(Clone, Debug)]
 pub struct AppConfig {
     pub port: u16,
@@ -61,7 +64,7 @@ impl AppConfig {
             gemini_model,
             xai_api_key: env::var("XAI_API_KEY").ok().filter(|v| !v.trim().is_empty()),
             xai_base_url: env::var("XAI_BASE_URL").unwrap_or_else(|_| "https://api.x.ai/v1".into()),
-            xai_model: env::var("XAI_MODEL").unwrap_or_else(|_| "grok-4.3".into()),
+            xai_model: env::var("XAI_MODEL").unwrap_or_else(|_| XAI_MODEL.into()),
             legacy_auto_classification_enabled: env::var("COGNIVA_LEGACY_AUTO_CLASSIFY").as_deref() == Ok("1"),
             jwt_secret,
             apk_storage_path,

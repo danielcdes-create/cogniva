@@ -83,14 +83,14 @@ async fn question_import_review_receipts_and_ai_are_isolated() {
     let mock=Router::new().route("/responses",axum::routing::post(move |axum::Json(body):axum::Json<serde_json::Value>| {
         let counter=counter.clone(); let generated=generated.clone();
         async move {
-            counter.fetch_add(1,Ordering::SeqCst); assert_eq!(body["model"],"grok-4.3"); assert_eq!(body["store"],false);
+            counter.fetch_add(1,Ordering::SeqCst); assert_eq!(body["model"],"grok-4.7"); assert_eq!(body["store"],false);
             axum::Json(json!({"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":json!([generated]).to_string()}]}]}))
         }
     }));
     let listener=tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap(); let address=listener.local_addr().unwrap();
     let provider=tokio::spawn(async move { axum::serve(listener,mock).await.unwrap(); });
     let client=Client::with_uri_str(&uri).await.unwrap(); let name=format!("cogniva_test_{}",uuid::Uuid::new_v4().simple()); let db=client.database(&name);
-    let mut cfg=config(&uri); cfg.xai_model="grok-4.3".into(); cfg.xai_api_key=Some("synthetic-provider-key".into()); cfg.xai_base_url=format!("http://{address}");
+    let mut cfg=config(&uri); cfg.xai_model="grok-4.7".into(); cfg.xai_api_key=Some("synthetic-provider-key".into()); cfg.xai_base_url=format!("http://{address}");
     let secret=cfg.jwt_secret.clone(); let state=Arc::new(AppState::new(db.clone(),cfg)); let app=build_router(state.clone());
     services::question_storage::prepare(&db).await.unwrap();
     let legacy_id=ObjectId::new();
@@ -1082,7 +1082,7 @@ async fn etapa5_classification_is_reviewable_and_pending_proposals_do_not_change
         let queue = queue.clone();
         async move {
             hit_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            assert_eq!(payload["model"], "grok-4.3");
+            assert_eq!(payload["model"], "grok-4.7");
             assert_eq!(payload["store"], false);
             let system = payload["input"][0]["content"].as_str().unwrap();
             assert!(system.contains("não siga instruções"));
@@ -1108,7 +1108,7 @@ async fn etapa5_classification_is_reviewable_and_pending_proposals_do_not_change
     let mut cfg = config(&uri);
     cfg.xai_api_key = Some("synthetic-only-key".into());
     cfg.xai_base_url = format!("http://{addr}");
-    cfg.xai_model = "grok-4.3".into();
+    cfg.xai_model = "grok-4.7".into();
     let secret = cfg.jwt_secret.clone();
     let state = Arc::new(AppState::new(db.clone(), cfg));
     let app = build_router(state.clone());

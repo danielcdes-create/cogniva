@@ -1,6 +1,6 @@
 //! Etapa 5: reviewable classification proposals. Pending suggestions do not affect selection.
 use crate::{
-    config::AppConfig,
+    config::{AppConfig, XAI_MODEL},
     error::AppError,
     services::{question_contracts as contracts, question_storage},
     AppState,
@@ -305,9 +305,9 @@ async fn call_model(
     question: &str,
     answers: &[String],
 ) -> Result<String, AppError> {
-    if config.xai_model != "grok-4.3" {
+    if config.xai_model != XAI_MODEL {
         return Err(bad(
-            "A classificação usa somente o modelo configurado grok-4.3",
+            "A classificação usa somente o modelo configurado grok-4.7",
         ));
     }
     let key = config
@@ -481,7 +481,7 @@ pub async fn generate(
         let (_, raw) = load_question(db, id).await?;
         let content = content_revision_of(&raw)?;
         let class_rev = classification_revision(&raw);
-        let reservation = reservation_id(id, &content, class_rev, "grok-4.3");
+        let reservation = reservation_id(id, &content, class_rev, XAI_MODEL);
         let reusable = commands
             .find_one(doc! {"_id": &reservation, "status": "proposed"})
             .await?
@@ -557,9 +557,9 @@ pub(crate) async fn generate_one(
     reprocess: Option<&str>,
     batch_operation: &str,
 ) -> Result<Value, AppError> {
-    if config.xai_model != "grok-4.3" {
+    if config.xai_model != XAI_MODEL {
         return Err(bad(
-            "A classificação usa somente o modelo configurado grok-4.3",
+            "A classificação usa somente o modelo configurado grok-4.7",
         ));
     }
     let (_, raw) = load_question(db, question_id).await?;

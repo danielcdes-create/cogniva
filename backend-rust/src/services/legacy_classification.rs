@@ -1,6 +1,11 @@
 //! Finite, demand-driven exception for the frozen legacy cohort. Never a human review.
 use super::{classification, question_storage::collection};
-use crate::{config::AppConfig, error::AppError, models::question::QuestionDocument, AppState};
+use crate::{
+    config::{AppConfig, XAI_MODEL},
+    error::AppError,
+    models::question::QuestionDocument,
+    AppState,
+};
 use bson::{doc, oid::ObjectId, Bson, Document};
 use mongodb::{options::ReturnDocument, Database};
 use serde_json::{json, Value};
@@ -18,6 +23,9 @@ const CONTROL: &str = "legacy-auto:control/1";
 const GUARD: &str = "legacy-cohort-guard/1";
 fn conflict(text: &str) -> AppError {
     AppError::Conflict(text.into())
+}
+fn recorded_model(value: &Value) -> bool {
+    matches!(value.as_str(), Some("grok-4.3" | XAI_MODEL))
 }
 fn cohort() -> &'static Value {
     static C: OnceLock<Value> = OnceLock::new();
@@ -66,7 +74,7 @@ fn enabled(config: &AppConfig) -> bool {
     config.legacy_auto_classification_enabled
         && super::catalog_runtime::snapshot().version==1
         && config.xai_api_key.is_some()
-        && config.xai_model == "grok-4.3"
+        && config.xai_model == XAI_MODEL
 }
 async fn control(db: &Database) -> Result<Document, AppError> {
     let c = collection(db, "question_commands");
@@ -313,11 +321,11 @@ pub fn binding(raw: &Document) -> Option<(String, String)> {
         || a["operation_id"] != format!("legacy-auto:{id}")
         || a["provenance"]["actor"]["type"] != "AI"
         || a["provenance"]["method"] != "AI_AUTOMATIC_LEGACY"
-        || a["provenance"]["actor"]["id"] != "grok-4.3"
+        || !recorded_model(&a["provenance"]["actor"]["id"])
+        || a["provenance"]["model"] != a["provenance"]["actor"]["id"]
         || a["provenance"]["prompt_id"] != classification::PROMPT_ID
         || a["provenance"]["prompt_version"] != classification::PROMPT_VERSION
         || a["provenance"]["prompt_sha256"] != classification::prompt_sha256()
-        || a["provenance"]["model"] != "grok-4.3"
         || !a["catalog_version"].as_i64().is_some_and(super::catalog_runtime::version_known)
         || a["content_revision"].as_str()
             != Some(classification::content_revision_of(raw).ok()?.as_str())
@@ -400,7 +408,7 @@ async fn process(db: &Database, config: &AppConfig, id: &str) -> Result<(), AppE
         .unwrap();
     let a = json!({"schema_version":1,"policy_version":POLICY,"cohort_id":COHORT,"status":"AUTO_APPLIED","operation_id":job,
         "content_revision":content,"catalog_version":suggestion["catalog_version"],"links":links,
-        "provenance":{"actor":{"type":"AI","id":"grok-4.3"},"method":"AI_AUTOMATIC_LEGACY","model":"grok-4.3","prompt_id":classification::PROMPT_ID,"prompt_version":classification::PROMPT_VERSION,"prompt_sha256":classification::prompt_sha256(),"source_suggestion_id":suggestion["_id"],"recorded_at":chrono::Utc::now().to_rfc3339(),"rationale":"Aplicação automática autorizada exclusivamente para o acervo legado; não constitui revisão humana."}});
+        "provenance":{"actor":{"type":"AI","id":XAI_MODEL},"method":"AI_AUTOMATIC_LEGACY","model":XAI_MODEL,"prompt_id":classification::PROMPT_ID,"prompt_version":classification::PROMPT_VERSION,"prompt_sha256":classification::prompt_sha256(),"source_suggestion_id":suggestion["_id"],"recorded_at":chrono::Utc::now().to_rfc3339(),"rationale":"Aplicação automática autorizada exclusivamente para o acervo legado; não constitui revisão humana."}});
     let extension =
         Bson::try_from(a).map_err(|_| AppError::Internal("Auditoria inválida".into()))?;
     // Exact original snapshot CAS also protects concurrent editors and tutor writes.
@@ -623,7 +631,7 @@ mod tests {
         let mut cfg = AppConfig::from_env();
         cfg.legacy_auto_classification_enabled = true;
         cfg.xai_api_key = Some("synthetic-only".into());
-        cfg.xai_model = "grok-4.3".into();
+        cfg.xai_model = XAI_MODEL.into();
         cfg.xai_base_url = format!("http://{addr}");
         let state = AppState::new(db.clone(), cfg.clone());
         super::super::question_storage::prepare(&db).await.unwrap();

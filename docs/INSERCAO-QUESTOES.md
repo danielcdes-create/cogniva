@@ -100,7 +100,7 @@ Os validadores e índices devem ter sido preparados pelo processo normal `--prep
 
 ## IA
 
-Somente **xAI / Grok 4.3**, com credencial no servidor. Limite de material: **40.000 bytes**, até **10 rascunhos por solicitação**, timeout do provedor de 40 segundos. A chamada reutiliza o orçamento diário de IA da conta (120/dia). Nesta operação, uma reserva feita antes do provedor conta conservadoramente mesmo se a resposta falhar ou o resultado for incerto; não há repetição paga automática.
+Somente **xAI / Grok 4.7**, com credencial no servidor. Limite de material: **40.000 bytes**, até **10 rascunhos por solicitação**, timeout do provedor de 40 segundos. A chamada reutiliza o orçamento diário de IA da conta (120/dia). Nesta operação, uma reserva feita antes do provedor conta conservadoramente mesmo se a resposta falhar ou o resultado for incerto; não há repetição paga automática.
 
 `question_import_ai_requests` mantém a reserva por conta/operação e a resposta concluída com write concern majority/journal. Repetir uma operação concluída recupera a mesma resposta sem outra chamada; conteúdo divergente gera conflito. Reserva inconclusiva/falha exige nova operação explícita, em vez de reexecutar uma cobrança incerta. A conta também é conferida quando `assistance_id` é usado na prévia.
 

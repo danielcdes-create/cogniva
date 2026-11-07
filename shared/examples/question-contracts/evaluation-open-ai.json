@@ -4,7 +4,7 @@
   "attempt_id": "00000000-0000-0000-0000-00000000025c",
   "user_id": 123,
   "question_id": "000000000000000000000005",
-  "question_content_revision": "d7fd17aa5b96504788a8089e58fc0402494a62e6ba53add7268848e428b7f619",
+  "question_content_revision": "360a6b5a8c5c85f9792a13523261ce0287185d0d7522cdd08eb0dc03586751fb",
   "rubric_revision": 1,
   "submission": {
     "type": "TEXT",
@@ -31,7 +31,7 @@
   "feedback": "Feedback sintético de validação.",
   "engine": {
     "provider": "xai",
-    "model": "grok-4.3",
+    "model": "grok-4.7",
     "prompt_id": "open-answer-rubric",
     "prompt_version": "1",
     "semantic_model_id": null,
@@ -47,7 +47,7 @@
     "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
     "recorded_at": "2026-11-02T15:00:00Z",
     "evidence": [],
-    "model": "grok-4.3",
+    "model": "grok-4.7",
     "prompt_id": "open-answer-rubric",
     "prompt_version": "1",
     "source_suggestion_id": null

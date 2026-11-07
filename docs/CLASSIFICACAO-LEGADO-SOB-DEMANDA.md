@@ -17,7 +17,7 @@ O cadastro normal permanece no schema v2. A migração Mongo `legacy-cohort-guar
 
 ## Limites de custo
 
-Ativação explícita: `COGNIVA_LEGACY_AUTO_CLASSIFY=1`, chave privada configurada e modelo `grok-4.3`. Sem isso, não há enfileiramento nem chamada. O limite fixo inicial é de **20 reservas globais por dia civil UTC−03:00**, uma oportunidade automática por ID elegível em toda a vida desta política. Nenhum cliente escolhe orçamento, modelo ou reprocessamento.
+Ativação explícita: `COGNIVA_LEGACY_AUTO_CLASSIFY=1`, chave privada configurada e modelo `grok-4.7`. Sem isso, não há enfileiramento nem chamada. O limite fixo inicial é de **20 reservas globais por dia civil UTC−03:00**, uma oportunidade automática por ID elegível em toda a vida desta política. Nenhum cliente escolhe orçamento, modelo ou reprocessamento.
 
 O orçamento é reservado duravelmente antes de chamar o provedor. Reserva, erro de banco, timeout ou resposta desconhecida não são devolvidos ao orçamento. Uma proposta já existente é reutilizada ou deixada para revisão, conservadoramente consumindo a reserva diária mesmo sem chamada nova. A geração compartilha a reserva do classificador administrativo, impedindo uma segunda chamada concorrente pelo caminho automático. Chamadas administrativas explicitamente autorizadas têm o orçamento administrativo próprio; o teto de 20 aplica-se a esta automação.
 

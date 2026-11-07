@@ -294,9 +294,9 @@ pub async fn assist(state: &AppState, user: i64, r: AssistRequest) -> Result<Val
     {
         return Err(bad("Informe modo e material de até 40.000 bytes"));
     }
-    if state.config.xai_model != "grok-4.3" || state.config.xai_api_key.is_none() {
+    if state.config.xai_model != crate::config::XAI_MODEL || state.config.xai_api_key.is_none() {
         return Err(AppError::ExternalAiError(
-            "Configure xAI/Grok 4.3 no servidor".into(),
+            "Configure xAI/Grok 4.7 no servidor".into(),
         ));
     }
     let key = format!("{user}:{}", r.operation_id);
@@ -399,7 +399,7 @@ mod tests {
             "op",
             0,
             &draft(),
-            Some(&json!({"model":"grok-4.3","recorded_at":"2026-11-07T00:00:00Z"})),
+            Some(&json!({"model":"grok-4.7","recorded_at":"2026-11-07T00:00:00Z"})),
         )
         .unwrap();
         assert_eq!(
