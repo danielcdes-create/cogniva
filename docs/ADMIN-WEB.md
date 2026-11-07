@@ -18,6 +18,8 @@ Abra [o painel administrativo](https://198.199.65.103/admin/). A publicação 1.
 
 O responsável emite um código para uma conta **já comprovada e autorizada em `ADMIN_USER_IDS`**:
 
+Na configuração inicial, `ADMIN_USER_IDS` precisa estar no ambiente efetivo do container, por exemplo no arquivo privado `/opt/apps/.env.rust`. Emitir um código não concede o papel administrativo. Confirme a identidade por um vínculo nativo existente e seu recibo; depois atualize a configuração privada e recrie somente o Cogniva, com gate, backup e readiness, sem substituir o Compose compartilhado ou ampliar a lista para contas não verificadas.
+
 ```sh
 docker exec api-rust-core /usr/local/bin/app --issue-web-code ID_DA_CONTA
 ```
@@ -121,3 +123,5 @@ A execução completa encontrou uma expectativa antiga de teste que exigia grade
 Evidências: [registro de validação](remediation-validation/admin-web/validation.json) e [captura do catálogo ativado com dados sintéticos](remediation-validation/admin-web/catalogo-ativado.jpg). Nenhuma publicação em produção ou chamada paga à IA foi realizada nesta validação.
 
 A validação de publicação da 1.4.13 confirmou todos os gates de CI, download integral e assinatura compatível do APK, quatro assets públicos idênticos ao commit, 401 em quatro rotas administrativas, rejeição de login inválido/origem externa e três rotas de APK sem compressão. Não foram inseridas questões ou ativados catálogos em produção para testar a entrega. [Resultados medidos](RELEASE-1.4.13.md).
+
+Após a publicação, a conta administrativa do proprietário foi habilitada usando o vínculo nativo e recibo já existentes. O teste autenticado confirmou cookie seguro, identidade, resumo, catálogo v1, capacidades de inserção e logout com retorno a 401. Somente metadados de sessão foram criados; nenhum conteúdo foi editado. [Configuração](remediation-validation/1.4.13/admin-access.json) e [login validado](remediation-validation/1.4.13/admin-login.json). Códigos e cookies não integram as evidências.

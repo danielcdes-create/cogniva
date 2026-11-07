@@ -1,0 +1,11 @@
+{
+  "captured_at": "2026-11-07T12:47:06.994372+00:00",
+  "admin_accounts_enabled": 1,
+  "identity_basis": "sole linked native account, matching confirmed link receipt and Daniel Caires profile",
+  "core_image_unchanged": true,
+  "revision": "5f77a4adb900bed386f28df2268b40f4dbc123cc",
+  "shared_compose_unchanged": true,
+  "other_services_unchanged": true,
+  "private_configuration_backup": "/var/backups/cogniva-admin/20261107T124653Z/env.rust",
+  "ready": true
+}

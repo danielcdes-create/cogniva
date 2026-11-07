@@ -1,0 +1,13 @@
+{
+  "captured_at": "2026-11-07T12:48:09.012580+00:00",
+  "login_verified": true,
+  "secure_http_only_same_site_cookie": true,
+  "admin_profile_matched_verified_linked_account": true,
+  "summary_questions": 618,
+  "catalog_version": 1,
+  "import_capabilities_read": true,
+  "logout_verified": true,
+  "post_logout_status": 401,
+  "content_mutations": false,
+  "credential_stored_in_evidence": false
+}

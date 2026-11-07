@@ -42,3 +42,9 @@ O Nginx em produção ainda não possuía as rotas do painel nem todos os blocos
 A primeira referência do servidor incluiu o container temporário `certbot/certbot` da renovação TLS das 12:03 UTC. Seus eventos mostram saída 0 e remoção normal, sem pertencer ao Compose; a referência inicial foi preservada. A [referência estável](remediation-validation/1.4.13/before/server-stable-baseline.json) confirmou os mesmos quatro serviços persistentes e foi usada no aceite. [Evidência do container transitório](remediation-validation/1.4.13/before/transient-container.json).
 
 A publicação está concluída. Instalação e interação em aparelho físico continuam distintas dos testes JVM/golden, do emulador e da disponibilidade do APK; não foi feita instalação física nesta entrega.
+
+## Acesso administrativo após a publicação
+
+Na solicitação do primeiro código web, constatou-se que a configuração efetiva não continha contas administrativas. O único vínculo nativo existente, seu recibo de confirmação e o perfil do proprietário foram conferidos antes de habilitar uma conta em `ADMIN_USER_IDS`. A configuração privada foi guardada em backup; somente o Cogniva foi recriado, mantendo imagem/revisão/APK, Compose e os demais serviços. [Registro de configuração](remediation-validation/1.4.13/admin-access.json).
+
+Um código de teste separado confirmou login real por cookie seguro, identidade administrativa, resumo com 618 questões, catálogo v1, capacidades de inserção e logout que voltou a rejeitar a sessão com 401. Esse teste criou somente metadados de login/sessão, sem edição de questões, concursos ou catálogo. O código entregue ao proprietário é emitido depois dessa conferência e não fica nos arquivos de evidência. [Aceite autenticado](remediation-validation/1.4.13/admin-login.json).
