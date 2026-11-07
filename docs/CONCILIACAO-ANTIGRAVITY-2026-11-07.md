@@ -1,6 +1,8 @@
 # Conciliação das correções do Antigravity — 07/11/2026
 
-O material fornecido foi comparado ao commit `1ca40910902e437f0e5414349b5c2ceafdfcc31b`, ao checkout local com as ampliações do painel/importador e à execução real no GitHub. O commit do Antigravity é o `HEAD` e a base das alterações locais: as correções não estavam em um branch separado aguardando merge.
+Atualização de entrega: o conjunto conciliado foi publicado e conferido na [release 1.4.13/build 20](RELEASE-1.4.13.md). Os estados locais e da 1.4.11 descritos abaixo são as evidências anteriores à promoção.
+
+O material fornecido foi comparado ao commit `1ca40910902e437f0e5414349b5c2ceafdfcc31b`, ao checkout local com as ampliações do painel/importador e à execução real no GitHub. No início desta conferência, o commit do Antigravity era o `HEAD` e a base das alterações locais: as correções não estavam em um branch separado aguardando merge.
 
 ## Publicação e causa da interrupção
 
@@ -8,7 +10,7 @@ A [run 42331321184](https://github.com/danielcdes-create/cogniva/actions/runs/42
 
 Os jobs Android, contratos Python e emulador de insets passaram naquela execução. Isso não substitui a construção/publicação do APK nem comprova interação física com o editor de disciplinas.
 
-Na consulta pública desta revisão, `/api/v1/health` e `/api/v1/ready` responderam 200 com revisão `4d790fc3df3701447333e34eabef3870b11b58b3`; `/api/app/latest-apk` anunciou **1.4.11/build 18**, 46.101.553 bytes e SHA-256 `f020d1f6ecba659b323257468647657fc1cd9af8ba63c4171e9b81f5156bf049`. O APK inteiro não foi baixado novamente nesta auditoria.
+Na consulta pública anterior à publicação da 1.4.13, `/api/v1/health` e `/api/v1/ready` responderam 200 com revisão `4d790fc3df3701447333e34eabef3870b11b58b3`; `/api/app/latest-apk` anunciou **1.4.11/build 18**, 46.101.553 bytes e SHA-256 `f020d1f6ecba659b323257468647657fc1cd9af8ba63c4171e9b81f5156bf049`. O APK inteiro não foi baixado novamente nesta auditoria.
 
 `OPERACAO.md` chamava essa combinação de hash/tamanho de “1.4.12/build 19”. A documentação foi corrigida para distinguir a versão efetivamente anunciada pelo servidor da tentativa interrompida.
 
@@ -47,6 +49,6 @@ As ampliações de catálogo preservam IDs e versões históricas. A mesma disci
 
 O resultado final está no [registro de validação](remediation-validation/antigravity-reconciliation-2026-11-07/validation.json). A suíte Rust integral com Mongo loopback aprovou **69 testes**, incluindo a regressão da exclusão que falhou no CI e o novo teste do provedor. O Android aprovou **73 testes JVM**, lint e compilação dos testes instrumentados. Os testes instrumentados não foram executados em aparelho/emulador nesta conciliação.
 
-Não houve commit, push, nova tag, publicação, geração paga de IA ou alteração no banco de produção nesta conciliação. As modificações continuam locais e preservam o trabalho anterior. Um novo deploy precisa incluir o conjunto conciliado em um novo commit; repetir a tag antiga aponta apenas para o commit original, sem as ampliações locais.
+Não houve commit, push, nova tag, publicação, geração paga de IA ou alteração no banco de produção nesta conciliação. Esse era o estado ao encerrar a conciliação, antes da autorização de publicação. O conjunto foi depois incluído no commit `5f77a4a` e publicado na [release 1.4.13/build 20](RELEASE-1.4.13.md), mantendo a tag antiga intacta.
 
 Evidências: [jobs e falha da execução](remediation-validation/antigravity-reconciliation-2026-11-07/workflow.json), [respostas públicas da produção](remediation-validation/antigravity-reconciliation-2026-11-07/production-readonly.json) e [validação anterior do painel](ADMIN-WEB.md).

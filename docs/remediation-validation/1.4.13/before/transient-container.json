@@ -1,0 +1,51 @@
+{
+  "captured_at": "2026-11-07T12:11:36.016426+00:00",
+  "container": "8f0cbe06db96176d95cb0883adc2c6e4d62178b75fd71e0213ba798b1687bb87",
+  "events": [
+    {
+      "action": "create",
+      "time": 1794052995,
+      "name": "beautiful_bhaskara",
+      "image": "certbot/certbot@sha256:c23159d30afdd9c97960578aa4654f5901de6cae394958f894074dedd55e599d",
+      "exit_code": null,
+      "compose_project": null,
+      "compose_service": null
+    },
+    {
+      "action": "attach",
+      "time": 1794052995,
+      "name": "beautiful_bhaskara",
+      "image": "certbot/certbot@sha256:c23159d30afdd9c97960578aa4654f5901de6cae394958f894074dedd55e599d",
+      "exit_code": null,
+      "compose_project": null,
+      "compose_service": null
+    },
+    {
+      "action": "start",
+      "time": 1794052995,
+      "name": "beautiful_bhaskara",
+      "image": "certbot/certbot@sha256:c23159d30afdd9c97960578aa4654f5901de6cae394958f894074dedd55e599d",
+      "exit_code": null,
+      "compose_project": null,
+      "compose_service": null
+    },
+    {
+      "action": "die",
+      "time": 1794053004,
+      "name": "beautiful_bhaskara",
+      "image": "certbot/certbot@sha256:c23159d30afdd9c97960578aa4654f5901de6cae394958f894074dedd55e599d",
+      "exit_code": "0",
+      "compose_project": null,
+      "compose_service": null
+    },
+    {
+      "action": "destroy",
+      "time": 1794053004,
+      "name": "beautiful_bhaskara",
+      "image": "certbot/certbot@sha256:c23159d30afdd9c97960578aa4654f5901de6cae394958f894074dedd55e599d",
+      "exit_code": null,
+      "compose_project": null,
+      "compose_service": null
+    }
+  ]
+}

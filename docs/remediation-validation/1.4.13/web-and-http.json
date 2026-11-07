@@ -1,0 +1,63 @@
+{
+  "captured_at": "2026-11-07T12:31:44.411080+00:00",
+  "base_url": "https://198.199.65.103",
+  "source_revision": "5f77a4adb900bed386f28df2268b40f4dbc123cc",
+  "assets": {
+    "/admin/": {
+      "status": 200,
+      "sha256": "fcd6f699d40056b1daaeea838ad3f8e6bd6d874da72b66ca3c04c541f4e74ebf",
+      "content_type": "text/html; charset=utf-8",
+      "cache_control": "no-store",
+      "csp": "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; font-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+    },
+    "/admin/assets/app.js": {
+      "status": 200,
+      "sha256": "9dd8d2adc824bf9b714cbee3c43bff56a774976d95edea321f736254dcce1046",
+      "content_type": "text/javascript; charset=utf-8",
+      "cache_control": "no-store",
+      "csp": "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; font-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+    },
+    "/admin/assets/domain.js": {
+      "status": 200,
+      "sha256": "cf9f0a02d13030b2f73989b0e4256f1ccbbcca0df5ea2e65d0c678df5b00bc94",
+      "content_type": "text/javascript; charset=utf-8",
+      "cache_control": "no-store",
+      "csp": "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; font-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+    },
+    "/admin/assets/style.css": {
+      "status": 200,
+      "sha256": "597d98728d81ee598b1424d83778c384b3398806a00afe6bbdd6a98a4af0c560",
+      "content_type": "text/css; charset=utf-8",
+      "cache_control": "no-store",
+      "csp": "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; font-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+    }
+  },
+  "anonymous_status": {
+    "/api/v1/admin/web/me": 401,
+    "/api/v1/admin/summary": 401,
+    "/api/v1/admin/catalog/base": 401,
+    "/api/v1/admin/questions/import/capabilities": 401
+  },
+  "apk_headers": {
+    "/api/v1/apk/download": {
+      "status": 200,
+      "content_length": 46363697,
+      "content_encoding": null,
+      "cache_control": "no-store, no-transform"
+    },
+    "/apk": {
+      "status": 200,
+      "content_length": 46363697,
+      "content_encoding": null,
+      "cache_control": "no-store, no-transform"
+    },
+    "/cogniva.apk": {
+      "status": 200,
+      "content_length": 46363697,
+      "content_encoding": null,
+      "cache_control": "no-store, no-transform"
+    }
+  },
+  "invalid_login_same_origin": 401,
+  "cross_origin_login": 403
+}

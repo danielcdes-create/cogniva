@@ -1,0 +1,53 @@
+{
+  "run_url": "https://github.com/danielcdes-create/cogniva/actions/runs/42371065615",
+  "revision": "5f77a4adb900bed386f28df2268b40f4dbc123cc",
+  "gates": [
+    {
+      "id": 128399110361,
+      "name": "verify / web-admin",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128399110408,
+      "name": "verify / android",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128399110429,
+      "name": "verify / backend",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128399110472,
+      "name": "verify / knowledge-contracts / contracts",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128399110505,
+      "name": "emulator / API 35 1440x3088 500dpi punch-hole",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "measured_log_lines": {
+    "backend": [
+      "2026-11-07T12:09:30.6418856Z test result: ok. 69 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 18.12s"
+    ],
+    "android": [
+      "2026-11-07T12:11:00.5973856Z BUILD SUCCESSFUL in 3m 28s",
+      "2026-11-07T12:11:18.1975197Z BUILD SUCCESSFUL in 17s",
+      "2026-11-07T12:11:34.3068323Z BUILD SUCCESSFUL in 11s"
+    ],
+    "emulator": [
+      "2026-11-07T12:09:03.3797372Z EMULATOR_BOOTED 15 35 Physical size: 1440x3088 Physical density: 500 punch-hole=hole",
+      "2026-11-07T12:13:34.3278247Z BUILD SUCCESSFUL in 4m 30s",
+      "2026-11-07T12:13:36.7198943Z 11-07 12:12:55.111  4331  4346 I INSET_CHECK: success topBar=136.0 obstacle=136 ctaBottom=2975.0 nav=75 window=3088.0",
+      "2026-11-07T12:13:36.8432362Z 11-07 12:12:55.111  4331  4346 I INSET_CHECK: success topBar=136.0 obstacle=136 ctaBottom=2975.0 nav=75 window=3088.0",
+      "2026-11-07T12:13:58.6288321Z BUILD SUCCESSFUL in 11s"
+    ]
+  }
+}

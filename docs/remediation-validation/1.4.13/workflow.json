@@ -1,0 +1,57 @@
+{
+  "run_url": "https://github.com/danielcdes-create/cogniva/actions/runs/42371065615",
+  "revision": "5f77a4adb900bed386f28df2268b40f4dbc123cc",
+  "status": "completed",
+  "conclusion": "success",
+  "jobs": [
+    {
+      "id": 128399110361,
+      "name": "verify / web-admin",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128399110408,
+      "name": "verify / android",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128399110429,
+      "name": "verify / backend",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128399110472,
+      "name": "verify / knowledge-contracts / contracts",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128399110505,
+      "name": "emulator / API 35 1440x3088 500dpi punch-hole",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128400603379,
+      "name": "build",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 128403828132,
+      "name": "promote",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "promotion_log": [
+    "2026-11-07T12:29:10.1651227Z IMMUTABLE_BUNDLE_STAGED 5f77a4adb900bed386f28df2268b40f4dbc123cc",
+    "2026-11-07T12:29:43.9383228Z ROLLBACK_HEALTHY",
+    "2026-11-07T12:29:43.9383821Z CONTROLLED_ROLLBACK_VERIFIED",
+    "2026-11-07T12:30:12.3873219Z {\"ready\":true,\"schema_version\":2,\"question_documents_rewritten\":0,\"indexes\":8,\"catalog_version\":1}",
+    "2026-11-07T12:30:12.3873990Z {\"promoted\": \"5f77a4adb900bed386f28df2268b40f4dbc123cc\", \"runtime_size_bytes\": 31964202, \"other_containers_preserved\": true}"
+  ]
+}

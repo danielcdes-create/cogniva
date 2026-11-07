@@ -1,6 +1,6 @@
 # Inserção de questões: individual, lote e IA
 
-Implementação local do módulo Android em **Ajustes → Inserir questões · individual, lote ou IA**, usando o contrato v2 existente. Este documento não indica publicação de uma nova versão em produção.
+Módulo disponível no Android **1.4.13/build 20**, em **Ajustes → Inserir questões · individual, lote ou IA**, e no [painel web](https://198.199.65.103/admin/), usando o contrato v2 existente. [Publicação e aceite](RELEASE-1.4.13.md).
 
 ## Fluxo
 
@@ -120,4 +120,6 @@ cd ../android-app
 
 O teste integrado exige Mongo dedicado em loopback na porta 27048, cria e remove apenas banco sintético `cogniva_test_*` e usa provedor HTTP falso. Cobre autorização, prévia sem escrita, gabarito ausente, identidades distintas para textos iguais, confirmação, replay, conflito, preservação de legado/cache/histórico, geração única e isolamento da assistência entre contas. Não chama xAI real nem toca produção.
 
-Validação local em 07/11/2026: 47 testes Python e 14 subtestes aprovados; 49 testes Rust aprovados na execução padrão (11 integrações opt-in não executadas nessa chamada). A execução específica `question_import -- --include-ignored --test-threads=1` aprovou os quatro testes unitários do módulo e sua integração real com Mongo isolado. Android: 69 testes JVM aprovados, incluindo seis do módulo, e lint sem erros. A validação não inclui uma chamada paga à xAI, instalação em aparelho físico ou publicação de APK/backend.
+Registro da primeira validação local em 07/11/2026: 47 testes Python e 14 subtestes aprovados; 49 testes Rust aprovados na execução padrão (11 integrações opt-in não executadas nessa chamada). A execução específica `question_import -- --include-ignored --test-threads=1` aprovou os quatro testes unitários do módulo e sua integração real com Mongo isolado. Android: 69 testes JVM aprovados, incluindo seis do módulo, e lint sem erros. A validação não inclui uma chamada paga à xAI, instalação em aparelho físico ou publicação de APK/backend.
+
+A validação conciliada final aprovou 69 testes Rust, 73 JVM, lint e compilação instrumentada. A publicação 1.4.13 aprovou os gates web, Rust, contratos, JVM/golden e emulador API 35; o APK assinado foi baixado integralmente e conferido com a versão 20 e o hash do servidor. Questões/concursos permaneceram idênticos no backup antes/depois; o aceite não chamou a IA nem inseriu material real. [Evidências](RELEASE-1.4.13.md).

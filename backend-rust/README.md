@@ -45,3 +45,5 @@ As rotas administrativas `/api/v1/admin/questions/import/{capabilities,preview,c
 ## Administração web
 
 O backend também serve `/admin/`, com assets de `web-admin/` incorporados à compilação, login por código temporário e cookie HttpOnly. O painel reutiliza os contratos Android; revisões do catálogo têm ativação explícita em execução e snapshots históricos imutáveis no Mongo. Consulte [ADMIN-WEB.md](../docs/ADMIN-WEB.md). O build deve usar o contexto raiz do repositório, incluindo `web-admin/` e `shared/`.
+
+Painel, importação e catálogo em execução estão disponíveis desde a **1.4.13/build 20**, com [publicação e aceite registrados](../docs/RELEASE-1.4.13.md).

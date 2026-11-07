@@ -1,6 +1,6 @@
 # Administração web do Cogniva
 
-O painel está em `/admin/`, servido pelo próprio backend Rust, com a mesma API e base do Android. Implementação local: a URL pública só passa a atender depois da promoção do backend e da configuração Nginx atualizados.
+O painel está em `/admin/`, servido pelo próprio backend Rust, com a mesma API e base do Android. Disponível em produção desde **1.4.13/build 20**, com backend, APK e Nginx conferidos em 07/11/2026. [Aceite e evidências](RELEASE-1.4.13.md).
 
 ## O que pode ser administrado
 
@@ -10,11 +10,11 @@ O painel está em `/admin/`, servido pelo próprio backend Rust, com a mesma API
 - **Troncos, disciplinas e assuntos globais:** criação, renomeação com aliases, escopo, vínculos com carreiras, papéis dos vínculos e desativação sem remoção de IDs. Revisões podem ser salvas, validadas, exportadas e **ativadas no próprio painel**.
 - **Rascunhos e pendências:** continuidade no navegador, exportação/restauração por conta, comandos congelados após envio incerto, comparação com servidor e preservação de edições substituídas.
 
-Grades de concursos e questões são gravadas após confirmação. Alterações globais exigem uma proposta salva como `REVIEW_READY`, motivo e confirmação explícita de ativação. A nova versão passa a valer nas próximas consultas, sem reinício ou nova compilação; o Android a recebe na sincronização. Referências históricas, classificações e tentativas continuam na versão em que foram registradas. Esta capacidade ainda precisa ser instalada pela publicação inicial do backend/painel e do Android atualizado.
+Grades de concursos e questões são gravadas após confirmação. Alterações globais exigem uma proposta salva como `REVIEW_READY`, motivo e confirmação explícita de ativação. A nova versão passa a valer nas próximas consultas, sem reinício ou nova compilação; o Android a recebe na sincronização. Referências históricas, classificações e tentativas continuam na versão em que foram registradas. Esta capacidade está instalada no backend e no Android 1.4.13; o deploy preservou o catálogo v1, sem ativar uma revisão editorial.
 
 ## Entrar pelo computador
 
-Depois da publicação, abra o endereço do Cogniva com o caminho `/admin/`. Na infraestrutura documentada, o destino será `https://198.199.65.103/admin/`; isso não é evidência de que este módulo já foi implantado.
+Abra [o painel administrativo](https://198.199.65.103/admin/). A publicação 1.4.13 confirmou a página e os três assets iguais ao commit promovido, CSP, cache desabilitado e rejeição de acesso administrativo anônimo.
 
 O responsável emite um código para uma conta **já comprovada e autorizada em `ADMIN_USER_IDS`**:
 
@@ -119,3 +119,5 @@ O script cria apenas uma base `cogniva_test_web_preview_*`, restringe o HTTP a `
 A execução completa encontrou uma expectativa antiga de teste que exigia grade vazia no tombstone de concurso. O backend já preservava a última grade salva, conforme seu contrato; o teste foi atualizado para exigir essa preservação, sem alterar a rotina de exclusão. A suíte integral passou depois desse ajuste.
 
 Evidências: [registro de validação](remediation-validation/admin-web/validation.json) e [captura do catálogo ativado com dados sintéticos](remediation-validation/admin-web/catalogo-ativado.jpg). Nenhuma publicação em produção ou chamada paga à IA foi realizada nesta validação.
+
+A validação de publicação da 1.4.13 confirmou todos os gates de CI, download integral e assinatura compatível do APK, quatro assets públicos idênticos ao commit, 401 em quatro rotas administrativas, rejeição de login inválido/origem externa e três rotas de APK sem compressão. Não foram inseridas questões ou ativados catálogos em produção para testar a entrega. [Resultados medidos](RELEASE-1.4.13.md).

@@ -6,15 +6,15 @@ Aplicativo Android de estudo para concursos, com cliente Kotlin/Compose e API Ru
 
 ## 🚀 Versão em Produção
 
-Versão confirmada antes da nova promoção: **1.4.11 / build 18**, revisão `4d790fc3df3701447333e34eabef3870b11b58b3`; contrato de sincronização 2. A [release 1.4.13/build 20](docs/RELEASE-1.4.13.md) está preparada para o pipeline; o aceite final será registrado após sua conclusão.
+Versão atual: **1.4.13 / build 20**, revisão `5f77a4adb900bed386f28df2268b40f4dbc123cc`, promovida e conferida em 07/11/2026; contrato de sincronização 2. [Conteúdo e aceite da release](docs/RELEASE-1.4.13.md).
 
-- **Pipeline CI/CD:** [Run #42153099016](https://github.com/danielcdes-create/cogniva/actions/runs/42153099016) — 100% dos jobs aprovados (`verify / backend`, `verify / android`, `verify / knowledge-contracts`, `emulator`, `build` e `promote`).
+- **Pipeline CI/CD:** [Run #42371065615](https://github.com/danielcdes-create/cogniva/actions/runs/42371065615) — todos os jobs aprovados: web, Rust, Android/JVM/golden, contratos, emulador, build e promoção com ensaio de rollback.
 - **Endpoint da API:** `https://198.199.65.103/api/v1/`.
 - **Saúde e Prontidão:** `/api/v1/health` (processo) e `/api/v1/ready` (validação com MongoDB e revisão ativa).
 - **Metadados Públicos do APK:** `GET /api/app/latest-apk` e `GET /api/v1/apk/info`.
-- **Download do APK de Produção:** [Baixar APK v1.4.11 / build 18](https://198.199.65.103/api/v1/apk/download)
-  - **Tamanho:** 46.101.553 bytes
-  - **SHA-256:** `f020d1f6ecba659b323257468647657fc1cd9af8ba63c4171e9b81f5156bf049`
+- **Download do APK de Produção:** [Baixar APK v1.4.13 / build 20](https://198.199.65.103/api/v1/apk/download)
+  - **Tamanho:** 46.363.697 bytes
+  - **SHA-256:** `87c7e36e0b2661c5027c8b37326dbfc7fad4e6d0fcc6f1d8287c9f95b32c114f`
   - **Assinatura:** Chave de release privada com APK Signature Scheme v3 (API 28+).
   - **Streaming:** Entrega direta sem compressão dinâmica intermediária (`no-transform`, `proxy_buffering off`). Detalhes em [docs/LICAO-APRENDIDA-OTA-APK.md](docs/LICAO-APRENDIDA-OTA-APK.md).
 
@@ -29,8 +29,8 @@ A documentação do ecossistema está organizada no diretório [`docs/`](docs/RE
 - **[Lições Aprendidas — Pipeline OTA de APK](docs/LICAO-APRENDIDA-OTA-APK.md):** Diagnóstico de falha de download truncado, incompatibilidade de gzip em binários pré-comprimidos e novas invariantes de engenharia.
 - **[Catálogo Compartilhado de Conhecimentos](docs/CATALOGO-CONHECIMENTOS.md):** Hierarquia de disciplinas, tópicos, troncos de carreira e aliases editoriais (`shared/knowledge-catalog.json`). [Visualização formatada](docs/catalogo/CONHECIMENTOS.md).
 - **[Contratos e Schema de Questões v2](docs/SCHEMA-QUESTOES-V2.md):** Validação JSON Schema 2020-12, regras BSON no Mongo, outbox transacional e suporte a questões objetivas e discursivas.
-- **[Inserção de Questões](docs/INSERCAO-QUESTOES.md):** Módulo Android individual e em lote, JSON/JSONL, rascunhos locais, revisão, recibos idempotentes e preparação opcional com Grok 4.3. Implementação local; publicação independente.
-- **[Administração Web](docs/ADMIN-WEB.md):** Painel para computador em `/admin/`, com concursos, editais/grades, questões e edição/ativação versionada de troncos, disciplinas e assuntos globais. Mesma API do Android, login administrativo e recuperação de rascunhos. Implementação local, ainda sem publicação.
+- **[Inserção de Questões](docs/INSERCAO-QUESTOES.md):** Módulo Android individual e em lote, JSON/JSONL, rascunhos locais, revisão, recibos idempotentes e preparação opcional com Grok 4.3. Disponível desde 1.4.13/build 20.
+- **[Administração Web](docs/ADMIN-WEB.md):** Painel para computador em `/admin/`, com concursos, editais/grades, questões e edição/ativação versionada de troncos, disciplinas e assuntos globais. Mesma API do Android, login administrativo e recuperação de rascunhos. Disponível em [198.199.65.103/admin/](https://198.199.65.103/admin/), com acesso administrativo por código temporário.
 - **[Integração com IA (xAI / Grok)](docs/IA-XAI.md):** Contratos de tutoria, plausibilidade, prompt caching no Mongo e rate-limiting com exclusão mútua.
 - **[Automação do Acervo Legado](docs/CLASSIFICACAO-LEGADO-SOB-DEMANDA.md):** Classificação assistida sob demanda com cotas diárias estritas e salvaguardas de proveniência.
 - **[Arquivo Histórico](docs/historico/README.md):** Relatórios de auditorias passadas, etapas de desenvolvimento e notas de patches anteriores.
