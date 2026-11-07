@@ -5,7 +5,7 @@ Módulo disponível no Android **1.4.13/build 20**, em **Ajustes → Inserir que
 ## Fluxo
 
 1. Escolha **Individual** para preencher enunciado, alternativas e gabarito; ou **Lote / IA** para colar/importar JSON, JSONL ou texto.
-2. No cadastro individual, indique se o conteúdo é uma transcrição/importação ou autoria própria. Classificação é opcional: selecione disciplina e tópico no catálogo e confirme o vínculo explicitamente.
+2. No cadastro individual, indique se o conteúdo é transcrição/importação, questão de prova oficial ou autoria própria. A partir de 1.4.15/build 22, preencha também os metadados da prova e a referência da fonte. Classificação é opcional: selecione disciplina e tópico no catálogo e confirme o vínculo explicitamente.
 3. Para discursivas, informe resposta de referência e critérios da rubrica. Os critérios devem somar 100 pontos; o corte é 60 e a confirmação é humana. Para outras políticas, use um documento v2 completo.
 4. Opcionalmente, peça à IA para **estruturar texto** existente ou **gerar autorais**. O material é enviado à xAI somente pelo botão “Preparar com IA”. Revise o JSON devolvido antes de prosseguir.
 5. Toque em **Validar e revisar questões**. A revisão mostra enunciados, alternativas, gabaritos/rubrica, classificação, origem e validade/contexto temporal. O contrato completo também pode ser inspecionado.
@@ -14,6 +14,26 @@ Módulo disponível no Android **1.4.13/build 20**, em **Ajustes → Inserir que
 Os formulários e o lote ficam salvos nos metadados do banco Room da conta atual, sem migração destrutiva. É possível preparar conteúdo offline; validação autoritativa, IA e inserção exigem conexão. O módulo não acrescenta envios automáticos ao worker de tentativas.
 
 **Exportar rascunho** gera um envelope `cogniva-question-import-draft/1` com conta, texto, comandos congelados e recibos. Para restaurá-lo, abra **Lote / IA → Abrir JSON / JSONL / TXT** na mesma conta, antes de iniciar um envio. O envelope exportado é diferente do formato de questões abaixo e não deve ser enviado diretamente à API de prévia. Arquivos de recuperação podem ter até 2 MiB; o material do lote continua limitado a 512 KiB.
+
+## Campos individuais e metadados — 1.4.15/build 22
+
+Painel e Android expõem os mesmos campos adicionais:
+
+| Campo na interface | Campo transmitido / persistido |
+| --- | --- |
+| Identificação da prova / cargo / caderno | `source_exam_code` → `origins[].source_exam_code` |
+| Instituição / órgão, banca organizadora | `institution`, `organizer` → `origins[]` |
+| Ano e número da questão | `exam_year` inteiro 1900–2200; `question_number` textual (preserva zeros e caderno) → `origins[]` |
+| Endereço, título, página e data de consulta | `source_reference` → `origins[].source_reference` |
+| Consultei a fonte e conferi a origem | `confirm_origin` → decisão humana de `verification` |
+| Nível / dificuldade | `level`, texto opcional |
+| Explicação / justificativa | `explanation`, texto opcional |
+
+Campos em branco são enviados como `null`; rascunhos antigos sem os novos campos continuam aceitos. Se preencher parte da referência, complete URL HTTP/HTTPS, título e data. A data declarada é serializada à meia-noite UTC (precisão de dia, sem inferir horário de consulta), com localizador opcional e `sha256=null`; nenhum download automático verifica o documento. O ano também é enviado na projeção legada `exam_year` para exibição nos clientes existentes.
+
+`OFFICIAL_EXAM` exige identificação da prova, instituição, banca, ano e referência documental, conforme o schema v2. O número é opcional. Transcrições/importações e origens oficiais começam `PENDING`, até marcar a conferência com fonte válida. Alterar os metadados de origem desmarca a conferência. A autoria própria conserva sua declaração explícita; assistência de IA conserva autoria/proveniência AI e não pode usar `confirm_origin=true`.
+
+Classificação, conferência de origem e validade são decisões independentes. Registrar banca/prova não associa a questão automaticamente ao concurso nem ao tronco. Validade continua `UNKNOWN`; múltiplos vínculos e decisões de validade revisada usam o contrato v2 completo. Os novos campos integram a prévia antes da confirmação e os mesmos comandos/recibos idempotentes. Para editar questão já salva no acervo, abra **Banco de questões → Abrir** no painel, preservando o ID.
 
 ## Formato simplificado
 
@@ -44,7 +64,7 @@ Aceita objeto individual, array JSON ou JSONL (um objeto por linha). Até **50 q
 
 Índices começam em zero. Não se escolhe A por omissão. Múltipla escolha exige cinco alternativas distintas; certo/errado exige exatamente `Certo`, `Errado`. O gabarito textual é projetado do índice informado e o hash é calculado pelo servidor.
 
-`origin_kind` é opcional: `LEGACY_IMPORT` por omissão, com origem pendente; `AUTHOR_CREATED` é uma declaração explícita de autoria do responsável. Não há atribuição automática a banca/prova. `subject_id`, `topic_id` e `confirm_classification` são opcionais; sem confirmação, o conteúdo permanece `UNCLASSIFIED`. IDs desconhecidos ou de disciplinas incompatíveis são rejeitados.
+`origin_kind` é opcional: `LEGACY_IMPORT` por omissão, com origem pendente; `AUTHOR_CREATED` é uma declaração explícita de autoria do responsável; `OFFICIAL_EXAM` exige os campos documentais descritos acima. Não há atribuição automática a banca/prova. `subject_id`, `topic_id` e `confirm_classification` são opcionais; sem confirmação, o conteúdo permanece `UNCLASSIFIED`. IDs desconhecidos ou de disciplinas incompatíveis são rejeitados.
 
 Discursivas usam `answers: []`, `correct_answer_indices: []` e `grading` completo:
 
@@ -73,7 +93,7 @@ Discursivas usam `answers: []`, `correct_answer_indices: []` e `grading` complet
 }
 ```
 
-Também são aceitos documentos v2 completos, novos, com `revision=1`, `_id` exclusivo e hash correspondente. Essa opção cobre origem oficial com evidência, múltiplos vínculos, validade revisada e políticas de correção já previstas no schema. Campos adicionais legítimos da raiz são preservados; `schema_outbox` é reservado ao servidor. Importar uma questão aberta não ativa motores semânticos/IA nem muda as capacidades de treino dos clientes existentes.
+Também são aceitos documentos v2 completos, novos, com `revision=1`, `_id` exclusivo e hash correspondente. Essa opção cobre múltiplas origens ou vínculos, validade revisada e políticas de correção já previstas no schema. Campos adicionais legítimos da raiz são preservados; `schema_outbox` é reservado ao servidor. Importar uma questão aberta não ativa motores semânticos/IA nem muda as capacidades de treino dos clientes existentes.
 
 ## Acesso e rotas
 

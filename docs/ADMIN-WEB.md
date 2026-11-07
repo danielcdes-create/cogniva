@@ -12,6 +12,14 @@ O painel está em `/admin/`, servido pelo próprio backend Rust, com a mesma API
 
 Grades de concursos e questões são gravadas após confirmação. Alterações globais exigem uma proposta salva como `REVIEW_READY`, motivo e confirmação explícita de ativação. A nova versão passa a valer nas próximas consultas, sem reinício ou nova compilação; o Android a recebe na sincronização. Referências históricas, classificações e tentativas continuam na versão em que foram registradas. Esta capacidade está instalada no backend e no Android 1.4.13; o deploy preservou o catálogo v1, sem ativar uma revisão editorial.
 
+## Estrutura visível no painel e no Android — 1.4.15
+
+O guia **Como troncos, concursos, conteúdo e questões se conectam** aparece na visão geral e nas telas de administração. No Android está disponível em Concursos, Gerenciar concursos e Inserir questões, em diálogo com rolagem. A referência de significado e relações está em [ESTRUTURA-ESTUDOS.md](ESTRUTURA-ESTUDOS.md).
+
+Troncos mostram os concursos da conta com acesso à grade. Disciplinas mostram seus troncos relacionados e os componentes das grades que as utilizam. Assuntos e subassuntos exibem o caminho com o nome do pai nos seletores e na consulta do catálogo. A mesma disciplina pode compor várias etapas com pesos e conteúdos independentes.
+
+O cadastro individual foi dividido em conteúdo/gabarito, prova de origem, classificação e comentário da resolução. Inclui origem oficial, identificação da prova/cargo/caderno, instituição, banca, ano, número, nível, URL/título/página/data da fonte, conferência explícita de origem e explicação. [Campos e regras](INSERCAO-QUESTOES.md). Os comandos congelados e a recuperação de rascunhos anteriores continuam suportados.
+
 ## Entrar pelo computador
 
 Abra [o painel administrativo](https://198.199.65.103/admin/). A publicação 1.4.13 confirmou a página e os três assets iguais ao commit promovido, CSP, cache desabilitado e rejeição de acesso administrativo anônimo.
@@ -26,7 +34,7 @@ docker exec api-rust-core /usr/local/bin/app --issue-web-code ID_DA_CONTA
 
 O comando deve ser executado no ambiente que possui o segredo JWT e a lista administrativa corretos. Não publicar códigos, colocá-los na URL, gravá-los em documentação ou ampliar a lista de administradores apenas para contornar uma falha de acesso.
 
-Cole o código na tela de entrada. Ele vale por 10 minutos e tem uso único, com propósito `web_login`, separado das credenciais nativas e dos códigos de vínculo do Android. Após o login, a sessão web dura até 8 horas e pode ser encerrada pelo botão **Sair**. Use a mesma conta do Android para administrar seus concursos; questões e catálogo são compartilhados, enquanto grades e rascunhos mantêm escopo de proprietário.
+Cole o código na tela de entrada. Ele vale por 10 minutos e tem uso único, com propósito `web_login`, separado das credenciais nativas e dos códigos de vínculo do Android. Após o login, a sessão web dura até 30 dias (1.4.15 ou posterior) e pode ser encerrada pelo botão **Sair**. O prazo é contado a partir do login; sessões emitidas antes dessa alteração conservam a expiração original e recebem 30 dias após nova entrada. Use a mesma conta do Android para administrar seus concursos; questões e catálogo são compartilhados, enquanto grades e rascunhos mantêm escopo de proprietário.
 
 O navegador não guarda JWT em `localStorage` ou `sessionStorage`. A sessão usa cookie `HttpOnly`, `SameSite=Strict` e `Secure` fora de loopback, com revogação persistida no logout. Ações com cookie exigem origem correspondente ao endereço do painel e o cabeçalho `X-Cogniva-CSRF: 1`. Logout também funciona para limpar uma sessão expirada. Respostas autenticadas por cookie e os arquivos do painel usam `Cache-Control: no-store`.
 

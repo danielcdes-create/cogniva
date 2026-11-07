@@ -80,6 +80,7 @@ fun QuestionImportScreen(viewModel: QuestionImportViewModel, onBack: () -> Unit)
                 Text("Inserir questões", style = MaterialTheme.typography.headlineSmall)
                 Text("Individual ou em lote · revisão antes do envio", style = MaterialTheme.typography.bodyMedium)
                 Text("Rascunho salvo neste aparelho, separado por conta. IA e envio exigem conexão e acesso administrativo.", style = MaterialTheme.typography.bodySmall)
+                br.com.concursoprep.app.ui.components.StudyStructureGuide()
             }
             item {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -98,8 +99,9 @@ fun QuestionImportScreen(viewModel: QuestionImportViewModel, onBack: () -> Unit)
                 item {
                     Text("Origem do conteúdo")
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(selected = draft.originKind == "LEGACY_IMPORT", onClick = { viewModel.edit { it.copy(originKind = "LEGACY_IMPORT") } }, enabled = editable, label = { Text("Transcrição / importação") })
-                        FilterChip(selected = draft.originKind == "AUTHOR_CREATED", onClick = { viewModel.edit { it.copy(originKind = "AUTHOR_CREATED") } }, enabled = editable, label = { Text("Autoria própria") })
+                        FilterChip(selected = draft.originKind == "LEGACY_IMPORT", onClick = { viewModel.edit { it.copy(originKind = "LEGACY_IMPORT", confirmOrigin = false) } }, enabled = editable, label = { Text("Transcrição / importação") })
+                        FilterChip(selected = draft.originKind == "OFFICIAL_EXAM", onClick = { viewModel.edit { it.copy(originKind = "OFFICIAL_EXAM", confirmOrigin = false) } }, enabled = editable, label = { Text("Prova oficial") })
+                        FilterChip(selected = draft.originKind == "AUTHOR_CREATED", onClick = { viewModel.edit { it.copy(originKind = "AUTHOR_CREATED", confirmOrigin = false) } }, enabled = editable, label = { Text("Autoria própria") })
                     }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf("MULTIPLE_CHOICE" to "Múltipla escolha", "TRUE_FALSE" to "Certo / Errado", "OPEN_ENDED" to "Discursiva").forEach { (kind, label) ->
@@ -123,13 +125,36 @@ fun QuestionImportScreen(viewModel: QuestionImportViewModel, onBack: () -> Unit)
                     Text("Correção manual com revisão humana; cadastro não ativa correção automática.", style = MaterialTheme.typography.bodySmall)
                 }
                 item {
+                    Text("Prova de origem e referência", style = MaterialTheme.typography.titleMedium)
+                    Text("A origem registra de onde veio a questão. Na origem oficial, informe prova, instituição, banca, ano e fonte. Para editar uma questão já salva no Cogniva, use o Banco de questões no painel web.", style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(value = draft.sourceExamCode, onValueChange = { value -> viewModel.edit { it.copy(sourceExamCode = value, confirmOrigin = false) } }, label = { Text("Identificação da prova / cargo / caderno") }, enabled = editable, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = draft.institution, onValueChange = { value -> viewModel.edit { it.copy(institution = value, confirmOrigin = false) } }, label = { Text("Instituição / órgão") }, enabled = editable, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = draft.organizer, onValueChange = { value -> viewModel.edit { it.copy(organizer = value, confirmOrigin = false) } }, label = { Text("Banca organizadora") }, enabled = editable, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = draft.examYear, onValueChange = { value -> viewModel.edit { it.copy(examYear = value, confirmOrigin = false) } }, label = { Text("Ano da prova") }, enabled = editable, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = draft.questionNumber, onValueChange = { value -> viewModel.edit { it.copy(questionNumber = value, confirmOrigin = false) } }, label = { Text("Número da questão") }, enabled = editable, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = draft.level, onValueChange = { value -> viewModel.edit { it.copy(level = value) } }, label = { Text("Nível / dificuldade (opcional)") }, enabled = editable, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = draft.sourceUri, onValueChange = { value -> viewModel.edit { it.copy(sourceUri = value, confirmOrigin = false) } }, label = { Text("Endereço da fonte (URL)") }, enabled = editable, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = draft.sourceTitle, onValueChange = { value -> viewModel.edit { it.copy(sourceTitle = value, confirmOrigin = false) } }, label = { Text("Título do documento / fonte") }, enabled = editable, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = draft.sourceLocator, onValueChange = { value -> viewModel.edit { it.copy(sourceLocator = value, confirmOrigin = false) } }, label = { Text("Página / localização no documento") }, enabled = editable, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = draft.sourceDate, onValueChange = { value -> viewModel.edit { it.copy(sourceDate = value, confirmOrigin = false) } }, label = { Text("Data de consulta da fonte (AAAA-MM-DD)") }, enabled = editable, modifier = Modifier.fillMaxWidth())
+                    Row {
+                        Checkbox(checked = draft.confirmOrigin, onCheckedChange = { value -> viewModel.edit { it.copy(confirmOrigin = value) } }, enabled = editable)
+                        Text("Consultei a fonte e conferi a origem informada.", Modifier.padding(top = 12.dp))
+                    }
+                    Text("Sem conferência, a origem transcrita fica pendente. Origem conferida não significa validade atual do conteúdo.", style = MaterialTheme.typography.bodySmall)
+                }
+                item {
                     Text("Classificação por conteúdo", style = MaterialTheme.typography.titleMedium)
+                    Text("Disciplina → Assunto → Subassunto. Escolha o conteúdo mais específico cobrado; este vínculo é compartilhado entre concursos.", style = MaterialTheme.typography.bodySmall)
                     OutlinedButton(onClick = { chooseSubject = true }, enabled = editable) { Text(ExamCatalog.allSubjects().find { it.canonicalSubjectId == draft.subjectId }?.displayName ?: "Selecionar disciplina (opcional)") }
                     OutlinedButton(onClick = { chooseTopic = true }, enabled = editable && draft.subjectId.isNotBlank()) { Text(ExamCatalog.catalogTopics(draft.subjectId).find { it.canonicalTopicId == draft.topicId }?.let { ExamCatalog.topicLabel(it) } ?: "Selecionar tópico") }
                     Row {
                         Checkbox(checked = draft.confirmClassification, onCheckedChange = { value -> viewModel.edit { it.copy(confirmClassification = value) } }, enabled = editable && draft.topicId.isNotBlank())
                         Text("Conferi e confirmo este vínculo principal direto", modifier = Modifier.padding(top = 12.dp))
                     }
+                }
+                item {
+                    OutlinedTextField(value = draft.explanation, onValueChange = { value -> viewModel.edit { it.copy(explanation = value) } }, label = { Text("Explicação / justificativa do gabarito (opcional)") }, minLines = 3, enabled = editable, modifier = Modifier.fillMaxWidth())
                 }
             } else {
                 item {
@@ -144,7 +169,7 @@ fun QuestionImportScreen(viewModel: QuestionImportViewModel, onBack: () -> Unit)
                 item {
                     Card {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Assistência de IA · Grok 4.3", style = MaterialTheme.typography.titleMedium)
+                            Text("Assistência de IA · Grok 4.7", style = MaterialTheme.typography.titleMedium)
                             Text("Envia o material acima à xAI somente ao tocar no botão. Até 10 rascunhos por solicitação; usa a cota diária de IA da conta.")
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 FilterChip(selected = draft.aiMode == "STRUCTURE", onClick = { viewModel.edit { it.copy(aiMode = "STRUCTURE") } }, enabled = editable && draft.assistanceId == null, label = { Text("Estruturar texto") })
@@ -158,7 +183,7 @@ fun QuestionImportScreen(viewModel: QuestionImportViewModel, onBack: () -> Unit)
                 }
             }
             item {
-                Text("Novas questões simplificadas entram com validade desconhecida e sem classificação confirmada por omissão. Para origem oficial, validade revisada ou metadados completos, importe o contrato v2.", style = MaterialTheme.typography.bodySmall)
+                Text("Novas questões entram com validade desconhecida. Origem e classificação têm conferências separadas. Para validade revisada ou múltiplos vínculos, importe o contrato v2.", style = MaterialTheme.typography.bodySmall)
                 Button(onClick = viewModel::preview, enabled = editable && state.allowed, modifier = Modifier.fillMaxWidth()) { Text("Validar e revisar questões") }
             }
             draft.preview?.let { preview ->
@@ -184,7 +209,8 @@ fun QuestionImportScreen(viewModel: QuestionImportViewModel, onBack: () -> Unit)
                                 Text("Contexto: ${validity["scope"]} · data histórica: ${validity["context_date"]} · próxima revisão: ${validity["review_due_on"]}", style = MaterialTheme.typography.bodySmall)
                                 q["origins"]!!.jsonArray.forEach { origin ->
                                     val o = origin.jsonObject
-                                    Text("Origem: ${o["kind"]} · ${o["verification"]} · banca: ${o["organizer"]}", style = MaterialTheme.typography.bodySmall)
+                                    Text("Origem: ${o["kind"]} · ${o["verification"]} · prova: ${o["source_exam_code"]} · instituição: ${o["institution"]} · banca: ${o["organizer"]} · ano: ${o["exam_year"]} · questão: ${o["question_number"]}", style = MaterialTheme.typography.bodySmall)
+                                    if (o["source_reference"] is JsonObject) Text("Fonte: ${o["source_reference"]}", style = MaterialTheme.typography.bodySmall)
                                 }
                             }
                         }

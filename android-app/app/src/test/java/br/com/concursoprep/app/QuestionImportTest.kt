@@ -10,6 +10,20 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class QuestionImportTest {
+    @Test fun existingQuestionMetadataSurvivesDraftRecoveryAndPayload() {
+        val draft = QuestionImportDraft(originKind = "OFFICIAL_EXAM", sourceExamCode = " Analista / caderno 1 ", institution = "Órgão", organizer = "Banca", examYear = "2025", questionNumber = "042", sourceUri = "https://example.org/prova.pdf", sourceTitle = "Caderno oficial", sourceLocator = "p. 10", sourceDate = "2026-11-07", confirmOrigin = true, explanation = "Comentário", level = "Intermediária")
+        val restored = Json.decodeFromString<QuestionImportDraft>(Json.encodeToString(draft))
+        val q = restored.items()[0].jsonObject
+        assertEquals("Analista / caderno 1", q["source_exam_code"]!!.jsonPrimitive.content)
+        assertEquals(2025, q["exam_year"]!!.jsonPrimitive.int)
+        assertEquals("042", q["question_number"]!!.jsonPrimitive.content)
+        assertEquals("Comentário", q["explanation"]!!.jsonPrimitive.content)
+        assertEquals("2026-11-07T00:00:00Z", q["source_reference"]!!.jsonObject["retrieved_at"]!!.jsonPrimitive.content)
+        assertTrue(q["confirm_origin"]!!.jsonPrimitive.boolean)
+        assertFalse(q["confirm_classification"]!!.jsonPrimitive.boolean)
+        listOf(draft.copy(examYear = "20e2"), draft.copy(examYear = "1899"), draft.copy(sourceDate = "2026-02-30"), draft.copy(sourceTitle = ""), draft.copy(sourceUri = "javascript:alert(1)")).forEach { assertTrue(runCatching { it.items() }.isFailure) }
+        assertEquals("", Json.decodeFromString<QuestionImportDraft>("""{"question":"rascunho antigo"}""").sourceExamCode)
+    }
     @Test fun supportsJsonJsonlAndSingleWithoutDeduplicating() {
         assertEquals(1, parseQuestionImport("{\"question\":\"A\"}").size)
         assertEquals(2, parseQuestionImport("{\"question\":\"A\"}\n{\"question\":\"A\"}").size)

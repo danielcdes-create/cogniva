@@ -113,6 +113,7 @@ fun ContestsScreen(
                 subtitle = "Edital Verticalizado · Cobertura Real"
             )
             Spacer(modifier = Modifier.height(8.dp))
+            br.com.concursoprep.app.ui.components.StudyStructureGuide()
 
             // Seletor de abas de concursos uniforme e sem emojis estáticos
             val selectedTabIndex = availableContests

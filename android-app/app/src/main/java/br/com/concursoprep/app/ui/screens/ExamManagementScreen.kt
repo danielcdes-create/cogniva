@@ -25,6 +25,7 @@ fun ExamManagementScreen(
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
             OutlinedButton(onClick=onBack) { Text("Voltar aos ajustes") }
             Text("Gerenciar concursos e registros",style=MaterialTheme.typography.headlineSmall)
+            br.com.concursoprep.app.ui.components.StudyStructureGuide()
             Button(onClick=onCreate,modifier=Modifier.fillMaxWidth()) { Text("Criar concurso") }
             Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                 FilterChip(selected=!archived,onClick={archived=false},label={Text("Concursos")})

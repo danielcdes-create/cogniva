@@ -1,6 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {parseQuestions,verifyReceipt,blankExam,newComponent,objectiveDraft,renameEntity,freshImport,exportWorkspace,restoreWorkspace,validityPresentation,legacyQuestionDraft} from '../domain.js';
+import {parseQuestions,verifyReceipt,blankExam,newComponent,objectiveDraft,renameEntity,freshImport,exportWorkspace,restoreWorkspace,validityPresentation,legacyQuestionDraft,topicPath,orderedTopics} from '../domain.js';
+
+test('existing question metadata survives workspace restore and preview payload',()=>{
+  const draft=freshImport('op','ai');
+  Object.assign(draft.form,{sourceExamCode:' Prova Analista / caderno 1 ',institution:'Órgão',organizer:'Banca',examYear:'2025',questionNumber:'042',sourceUri:'https://example.org/prova.pdf',sourceTitle:'Caderno oficial',sourceLocator:'p. 10',sourceDate:'2026-11-07',confirmOrigin:true,explanation:'Justificativa',level:'Intermediária',originKind:'OFFICIAL_EXAM'});
+  const restored=restoreWorkspace('1',JSON.parse(JSON.stringify(exportWorkspace('1',{import:draft}))));
+  const q=objectiveDraft(restored.import.form);
+  assert.equal(q.source_exam_code,'Prova Analista / caderno 1');assert.equal(q.exam_year,2025);assert.equal(q.question_number,'042');assert.equal(q.explanation,'Justificativa');assert.equal(q.confirm_origin,true);
+  assert.deepEqual(q.source_reference,{uri:'https://example.org/prova.pdf',title:'Caderno oficial',locator:'p. 10',retrieved_at:'2026-11-07T00:00:00.000Z',sha256:null});
+  assert.equal(q.confirm_classification,false);
+  for(const changes of [{examYear:'20e2'},{examYear:'1899'},{sourceDate:'2026-02-30'},{sourceTitle:''},{sourceUri:'javascript:alert(1)'}]) assert.throws(()=>objectiveDraft({...draft.form,...changes}));
+  const old={kind:'TRUE_FALSE',question:'Q',correctIndex:'0',originKind:'LEGACY_IMPORT'};
+  assert.equal(objectiveDraft(old).source_reference,null);assert.equal(objectiveDraft(old).exam_year,null);
+});
+
+test('topic paths distinguish parents and children even with repeated child labels',()=>{
+  const catalog={topics:[{topic_id:'B1',subject_id:'D',label:'Conceito',parent_topic_id:'B'},{topic_id:'A',subject_id:'D',label:'Assunto A'},{topic_id:'B',subject_id:'D',label:'Assunto B'},{topic_id:'A1',subject_id:'D',label:'Conceito',parent_topic_id:'A'},{topic_id:'X',subject_id:'OTHER',label:'Outro'}]};
+  assert.equal(topicPath(catalog,catalog.topics[0]),'Assunto B → Conceito');
+  assert.deepEqual(orderedTopics(catalog,'D').map(t=>t.topic_id),['A','A1','B','B1']);
+});
 
 test('JSON and JSONL preserve two distinct occurrences and report physical line numbers',()=>{
   assert.equal(parseQuestions('{"question":"a"}\n\n{"question":"a"}').length,2);

@@ -93,6 +93,15 @@ pub fn prepare(
             "topic_id",
             "confirm_classification",
             "origin_kind",
+            "source_exam_code",
+            "institution",
+            "organizer",
+            "exam_year",
+            "question_number",
+            "source_reference",
+            "confirm_origin",
+            "explanation",
+            "level",
         ];
         if item
             .as_object()
@@ -106,8 +115,17 @@ pub fn prepare(
             .as_str()
             .ok_or_else(|| bad("Informe question_type"))?;
         let origin_kind = item["origin_kind"].as_str().unwrap_or("LEGACY_IMPORT");
-        if !["AUTHOR_CREATED", "LEGACY_IMPORT"].contains(&origin_kind) {
-            return Err(bad("Origem simplificada deve ser AUTHOR_CREATED ou LEGACY_IMPORT; para prova oficial use v2 completo"));
+        if !["AUTHOR_CREATED", "LEGACY_IMPORT", "OFFICIAL_EXAM"].contains(&origin_kind) {
+            return Err(bad(
+                "Origem deve ser AUTHOR_CREATED, LEGACY_IMPORT ou OFFICIAL_EXAM",
+            ));
+        }
+        if item["confirm_origin"] == true
+            && (assistance.is_some() || item["source_reference"].is_null())
+        {
+            return Err(bad(
+                "Conferir origem exige fonte documental e cadastro manual sem assistência de IA",
+            ));
         }
         let answers = item["answers"]
             .as_array()
@@ -144,8 +162,8 @@ pub fn prepare(
         } else {
             provenance
         };
-        json!({"_id":{"$oid":format!("{:x}",Sha256::digest(seed.as_bytes()))[..24]},"schema_version":2,"revision":1,"content_hash_version":"question-v2-jcs-sha256","status":"ACTIVE","question_type":kind,"question":item["question"],"answers":answers,"correct_answer_indices":indices,"correct_answers":correct,
-        "origins":[{"origin_id":uuid_for(&format!("{seed}:origin")),"kind":if assistance.is_some_and(|a|a["mode"]=="GENERATE"){"AI_GENERATED"}else if assistance.is_some(){"LEGACY_IMPORT"}else{origin_kind},"verification":if assistance.is_some() || origin_kind=="LEGACY_IMPORT"{"PENDING"}else{"CONFIRMED"},"source_exam_code":null,"institution":null,"organizer":null,"exam_year":null,"question_number":null,"source_reference":null,"provenance":origin}],
+        json!({"_id":{"$oid":format!("{:x}",Sha256::digest(seed.as_bytes()))[..24]},"schema_version":2,"revision":1,"content_hash_version":"question-v2-jcs-sha256","status":"ACTIVE","question_type":kind,"question":item["question"],"answers":answers,"correct_answer_indices":indices,"correct_answers":correct,"explanation":item["explanation"],"level":item["level"],"exam_year":item["exam_year"],
+        "origins":[{"origin_id":uuid_for(&format!("{seed}:origin")),"kind":if assistance.is_some_and(|a|a["mode"]=="GENERATE"){"AI_GENERATED"}else if assistance.is_some(){"LEGACY_IMPORT"}else{origin_kind},"verification":if assistance.is_some(){"PENDING"}else if origin_kind=="AUTHOR_CREATED" || item["confirm_origin"]==true{"CONFIRMED"}else{"PENDING"},"source_exam_code":item["source_exam_code"],"institution":item["institution"],"organizer":item["organizer"],"exam_year":item["exam_year"],"question_number":item["question_number"],"source_reference":item["source_reference"],"provenance":origin}],
         "classification":classification,"validity":{"revision":0,"status":"UNKNOWN","basis":"FACTUAL","reference_date":null,"review_due_on":null,"reason_codes":[],"evaluated_content_revision":null,"decision":null,"scope":"CURRENT_KNOWLEDGE","context_date":null},"grading":grading})
     };
     if q.get("schema_outbox").is_some() || q.get("import_assistance").is_some() {
@@ -368,6 +386,58 @@ mod tests {
         );
         assert_eq!(a["document"]["validity"]["status"], "UNKNOWN");
         assert_eq!(a["document"]["classification"]["state"], "UNCLASSIFIED");
+    }
+    #[test]
+    fn source_metadata_is_preserved_without_conferring_classification_or_validity() {
+        let mut input = draft();
+        let source = json!({"uri":"https://example.org/prova.pdf","title":"Caderno oficial","locator":"p. 10","retrieved_at":"2026-11-07T00:00:00Z","sha256":null});
+        input["origin_kind"] = json!("OFFICIAL_EXAM");
+        input["source_exam_code"] = json!("Analista / caderno 1");
+        input["institution"] = json!("Órgão");
+        input["organizer"] = json!("Banca");
+        input["exam_year"] = json!(2025);
+        input["question_number"] = json!("042");
+        input["source_reference"] = source.clone();
+        input["explanation"] = json!("Comentário da resolução");
+        input["level"] = json!("Intermediária");
+        let q = prepare(1, "op", 0, &input, None).unwrap()["document"].clone();
+        for key in [
+            "source_exam_code",
+            "institution",
+            "organizer",
+            "exam_year",
+            "question_number",
+            "source_reference",
+        ] {
+            assert_eq!(q["origins"][0][key], input[key]);
+        }
+        assert_eq!(q["origins"][0]["verification"], "PENDING");
+        assert_eq!(q["explanation"], input["explanation"]);
+        assert_eq!(q["level"], input["level"]);
+        assert_eq!(q["classification"]["state"], "UNCLASSIFIED");
+        assert_eq!(q["validity"]["status"], "UNKNOWN");
+        input["confirm_origin"] = json!(true);
+        let confirmed = prepare(1, "op", 0, &input, None).unwrap();
+        assert_eq!(
+            confirmed["document"]["origins"][0]["verification"],
+            "CONFIRMED"
+        );
+        assert_eq!(
+            confirmed["document"]["origins"][0]["provenance"]["actor"]["id"],
+            "1"
+        );
+        assert!(prepare(1, "op", 0, &input, Some(&json!({"mode":"GENERATE"}))).is_err());
+        for (key, value) in [
+            ("exam_year", json!(1899)),
+            ("exam_year", json!("2025")),
+            ("institution", Value::Null),
+            ("source_reference", Value::Null),
+            ("question_number", json!(42)),
+        ] {
+            let mut invalid = input.clone();
+            invalid[key] = value;
+            assert!(prepare(1, "op", 0, &invalid, None).is_err(), "{key}");
+        }
     }
     #[test]
     fn missing_answer_is_never_invented() {

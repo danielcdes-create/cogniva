@@ -49,6 +49,8 @@ pub async fn index() -> Response {
     )
 }
 
+pub const WEB_SESSION_SECONDS: i64 = 30 * 24 * 3600;
+
 fn cookie(headers: &HeaderMap, token: &str, seconds: i64) -> Result<HeaderValue, AppError> {
     let host = headers
         .get(header::HOST)
@@ -102,7 +104,7 @@ pub async fn login(
         &state.config.jwt_secret,
         claims.user_id,
         "web_session",
-        8 * 3600,
+        WEB_SESSION_SECONDS,
     )?;
     let session = security::verify(&state.config.jwt_secret, &token, "web_session")?;
     question_storage::collection(&state.db,"web_sessions").insert_one(doc!{"_id":session.nonce,"user_id":claims.user_id,"revoked":false,"created_at":bson::DateTime::now(),"expires_at":bson::DateTime::from_millis(session.exp as i64*1000)}).await?;
@@ -112,7 +114,7 @@ pub async fn login(
     .into_response();
     response
         .headers_mut()
-        .insert(header::SET_COOKIE, cookie(&headers, &token, 8 * 3600)?);
+        .insert(header::SET_COOKIE, cookie(&headers, &token, WEB_SESSION_SECONDS)?);
     response
         .headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));

@@ -9,6 +9,18 @@ data class QuestionImportDraft(
     val mode: String = "SINGLE",
     val kind: String = "MULTIPLE_CHOICE",
     val originKind: String = "LEGACY_IMPORT",
+    val sourceExamCode: String = "",
+    val institution: String = "",
+    val organizer: String = "",
+    val examYear: String = "",
+    val questionNumber: String = "",
+    val sourceUri: String = "",
+    val sourceTitle: String = "",
+    val sourceLocator: String = "",
+    val sourceDate: String = "",
+    val confirmOrigin: Boolean = false,
+    val explanation: String = "",
+    val level: String = "",
     val question: String = "",
     val answers: List<String> = List(5) { "" },
     val correctIndex: Int = -1,
@@ -28,6 +40,19 @@ data class QuestionImportDraft(
 ) {
     fun items(): JsonArray {
         if (mode == "BULK") return parseQuestionImport(source)
+        val year = examYear.trim().takeIf { it.isNotEmpty() }?.let {
+            require(it.matches(Regex("[0-9]{4}")) && it.toInt() in 1900..2200) { "Informe um ano entre 1900 e 2200." }
+            it.toInt()
+        }
+        val sourceReference = if (listOf(sourceUri, sourceTitle, sourceLocator, sourceDate).any { it.isNotBlank() }) {
+            require(sourceUri.trim().matches(Regex("https?://.+", RegexOption.IGNORE_CASE)) && sourceTitle.isNotBlank() && sourceDate.matches(Regex("[0-9]{4}-[0-9]{2}-[0-9]{2}"))) { "Complete endereço HTTP/HTTPS, título e data de consulta da fonte (AAAA-MM-DD)." }
+            val date = runCatching { java.time.LocalDate.parse(sourceDate) }.getOrElse { error("Data de consulta inválida.") }
+            buildJsonObject {
+                put("uri", sourceUri.trim()); put("title", sourceTitle.trim())
+                put("locator", sourceLocator.trim().takeIf { it.isNotEmpty() }?.let(::JsonPrimitive) ?: JsonNull)
+                put("retrieved_at", "${date}T00:00:00Z"); put("sha256", JsonNull)
+            }
+        } else JsonNull
         val options = when (kind) {
             "TRUE_FALSE" -> listOf("Certo", "Errado")
             "OPEN_ENDED" -> emptyList()
@@ -48,6 +73,14 @@ data class QuestionImportDraft(
         return JsonArray(listOf(buildJsonObject {
             put("question_type", kind); put("question", question)
             put("origin_kind", originKind)
+            put("source_exam_code", sourceExamCode.trim().takeIf { it.isNotEmpty() }?.let(::JsonPrimitive) ?: JsonNull)
+            put("institution", institution.trim().takeIf { it.isNotEmpty() }?.let(::JsonPrimitive) ?: JsonNull)
+            put("organizer", organizer.trim().takeIf { it.isNotEmpty() }?.let(::JsonPrimitive) ?: JsonNull)
+            put("exam_year", year?.let(::JsonPrimitive) ?: JsonNull)
+            put("question_number", questionNumber.trim().takeIf { it.isNotEmpty() }?.let(::JsonPrimitive) ?: JsonNull)
+            put("source_reference", sourceReference); put("confirm_origin", confirmOrigin)
+            put("explanation", explanation.trim().takeIf { it.isNotEmpty() }?.let(::JsonPrimitive) ?: JsonNull)
+            put("level", level.trim().takeIf { it.isNotEmpty() }?.let(::JsonPrimitive) ?: JsonNull)
             put("answers", JsonArray(options.map(::JsonPrimitive)))
             put("correct_answer_indices", JsonArray(if (kind == "OPEN_ENDED" || correctIndex < 0) emptyList() else listOf(JsonPrimitive(correctIndex))))
             put("grading", grading)

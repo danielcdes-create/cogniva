@@ -11,6 +11,8 @@ Este diretório centraliza os documentos de referência técnica, manuais operac
 - **[LICAO-APRENDIDA-OTA-APK.md](LICAO-APRENDIDA-OTA-APK.md):** Pós-morte e invariantes de engenharia do pipeline de atualização OTA. Registra o diagnóstico da recompressão gzip indevida de binários, regras de streaming direto (`proxy_buffering off`, `no-transform`), validação de certificados no Android (API 28+) e checklist de teste pós-promoção.
 
 ### 2. Catálogo de Conhecimentos e Modelagem de Dados
+- **[ESTRUTURA-ESTUDOS.md](ESTRUTURA-ESTUDOS.md):** Significados e relações entre troncos, concursos, editais, grades, componentes, disciplinas, assuntos, subassuntos e questões.
+- **[RELEASE-1.4.15.md](RELEASE-1.4.15.md):** Hierarquia visível, cadastro de questões com origem completa e sessão web de 30 dias.
 - **[ADMIN-WEB.md](ADMIN-WEB.md):** Painel web, login, administração de concursos/editais e questões, edição/ativação global do catálogo, histórico, recuperação e publicação.
 - **[CONCILIACAO-ANTIGRAVITY-2026-11-07.md](CONCILIACAO-ANTIGRAVITY-2026-11-07.md):** Conferência das correções anteriores, causa da publicação interrompida da 1.4.12 e conciliação com painel/importador.
 - **[RELEASE-1.4.14.md](RELEASE-1.4.14.md):** Promoção e aceite da 1.4.14/build 21, com todas as chamadas novas de IA em `grok-4.7`.

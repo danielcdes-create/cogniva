@@ -37,6 +37,15 @@ async fn web_admin_session_csrf_editor_and_catalog_versions() {
     assert_eq!(status,StatusCode::OK,"{response}");assert_eq!(response["user_id"],"123");assert!(response.get("token").is_none());
     let cookie=headers["set-cookie"].to_str().unwrap().split(';').next().unwrap().to_string();
     assert!(headers["set-cookie"].to_str().unwrap().contains("HttpOnly"));
+    assert!(headers["set-cookie"].to_str().unwrap().contains("Max-Age=2592000"));
+    let session_token=cookie.strip_prefix("cogniva_web_session=").unwrap();
+    let session=security::verify(&secret,session_token,"web_session").unwrap();
+    let remaining=session.exp as i64-chrono::Utc::now().timestamp();
+    assert!((2591995..=2592000).contains(&remaining));
+    assert_eq!(response["expires_at"],session.exp);
+    let stored=db.collection::<Document>("web_sessions").find_one(doc!{"_id":&session.nonce}).await.unwrap().unwrap();
+    assert_eq!(stored.get_datetime("expires_at").unwrap().timestamp_millis(),session.exp as i64*1000);
+
     assert_eq!(web(&app,"POST","/api/v1/auth/web-session",None,origin,true,json!({"code":code})).await.0,StatusCode::UNAUTHORIZED);
     let (status,headers,who)=web(&app,"GET","/api/v1/admin/web/me",Some(&cookie),None,false,json!(null)).await;assert_eq!(status,StatusCode::OK);assert_eq!(who["user_id"],"123");assert_eq!(headers["cache-control"],"no-store");
     let (_,_,base)=web(&app,"GET","/api/v1/admin/catalog/base",Some(&cookie),None,false,json!(null)).await;

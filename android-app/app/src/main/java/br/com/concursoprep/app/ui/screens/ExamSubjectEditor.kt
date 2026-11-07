@@ -79,6 +79,7 @@ internal fun SubjectEditor(
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(subject.displayName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("Componente da grade: disciplina nesta etapa. Peso e assuntos valem para esta ocorrência.", style = MaterialTheme.typography.bodySmall)
             Text(
                 listOf(
                     subject.stage.ifBlank { "Etapa não definida" },

@@ -34,7 +34,27 @@ export function objectiveDraft(form) {
   const open = form.kind === 'OPEN_ENDED';
   const answers = open ? [] : form.kind === 'TRUE_FALSE' ? ['Certo','Errado'] : form.answers;
   const grading = open ? {strategy:'RUBRIC',max_score:100,pass_score:60,expected_responses:[form.reference],rubric:{revision:1,criteria:JSON.parse(form.criteria)},engine:null,confirmation_policy:'HUMAN_REVIEW',policy_version:'open-rubric-human-review/1'} : null;
-  return {question_type:form.kind,question:form.question,answers,correct_answer_indices:open || form.correctIndex === '' ? [] : [Number(form.correctIndex)],grading,origin_kind:form.originKind,subject_id:form.subjectId,topic_id:form.topicId,confirm_classification:form.confirmClassification};
+  const text = value => value?.trim() || null;
+  const year = text(form.examYear);
+  if (year && (!/^\d{4}$/.test(year) || Number(year)<1900 || Number(year)>2200)) throw new Error('Informe um ano entre 1900 e 2200.');
+  let source = null;
+  if (text(form.sourceUri) || text(form.sourceTitle) || text(form.sourceLocator) || text(form.sourceDate)) {
+    if (!text(form.sourceUri) || !text(form.sourceTitle) || !/^\d{4}-\d{2}-\d{2}$/.test(form.sourceDate || '')) throw new Error('Complete endereço, título e data de consulta da fonte.');
+    if (!/^https?:\/\//i.test(form.sourceUri.trim())) throw new Error('Use um endereço de fonte HTTP ou HTTPS.');
+    const retrieved = new Date(`${form.sourceDate}T00:00:00Z`);
+    if (!Number.isFinite(retrieved.getTime()) || retrieved.toISOString().slice(0,10)!==form.sourceDate) throw new Error('Data de consulta inválida.');
+    source = {uri:form.sourceUri.trim(),title:form.sourceTitle.trim(),locator:text(form.sourceLocator),retrieved_at:retrieved.toISOString(),sha256:null};
+  }
+  return {question_type:form.kind,question:form.question,answers,correct_answer_indices:open || form.correctIndex === '' ? [] : [Number(form.correctIndex)],grading,origin_kind:form.originKind,subject_id:form.subjectId,topic_id:form.topicId,confirm_classification:form.confirmClassification,
+    source_exam_code:text(form.sourceExamCode),institution:text(form.institution),organizer:text(form.organizer),exam_year:year?Number(year):null,question_number:text(form.questionNumber),source_reference:source,confirm_origin:!!form.confirmOrigin,explanation:text(form.explanation),level:text(form.level)};
+}
+export function topicPath(catalog, topic) {
+  const parent = catalog.topics.find(row=>row.topic_id===topic.parent_topic_id);
+  return parent ? `${parent.label} → ${topic.label}` : topic.label;
+}
+export function orderedTopics(catalog, subjectId) {
+  const topics=catalog.topics.filter(t=>t.subject_id===subjectId);
+  return topics.toSorted((a,b)=>topicPath(catalog,a).localeCompare(topicPath(catalog,b),'pt-BR'));
 }
 export function renameEntity(row, label) {
   const result = structuredClone(row);
@@ -45,7 +65,7 @@ export function renameEntity(row, label) {
   return result;
 }
 export function freshImport(id, aiId) {
-  return {mode:'single',operationId:id,aiOperationId:aiId,source:'',assistanceId:null,aiMode:'STRUCTURE',preview:null,result:null,submitted:false,form:{kind:'MULTIPLE_CHOICE',question:'',answers:['','','','',''],correctIndex:'',reference:'',criteria:'',originKind:'LEGACY_IMPORT',subjectId:'',topicId:'',confirmClassification:false}};
+  return {mode:'single',operationId:id,aiOperationId:aiId,source:'',assistanceId:null,aiMode:'STRUCTURE',preview:null,result:null,submitted:false,form:{kind:'MULTIPLE_CHOICE',question:'',answers:['','','','',''],correctIndex:'',reference:'',criteria:'',originKind:'LEGACY_IMPORT',sourceExamCode:'',institution:'',organizer:'',examYear:'',questionNumber:'',sourceUri:'',sourceTitle:'',sourceLocator:'',sourceDate:'',confirmOrigin:false,explanation:'',level:'',subjectId:'',topicId:'',confirmClassification:false}};
 }
 export function exportWorkspace(owner, workspace) { return {format:'cogniva-admin-workspace/1',owner_user_id:String(owner),workspace}; }
 export function restoreWorkspace(owner, envelope) {
