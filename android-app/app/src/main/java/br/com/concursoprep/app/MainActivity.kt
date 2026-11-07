@@ -322,6 +322,8 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                         trunkRows = ExamEngine.trunkRows(trunkSlug, storedExams),
                         trunkSlug = trunkSlug,
                         onSelectTrunk = { trunkSlug = it },
+                        onEditContest = { cid -> storedExams.find { it.examId == cid }?.let { viewModel.editExam(it) } },
+                        onDeleteContest = { cid -> storedExams.find { it.examId == cid }?.let { viewModel.deleteExam(it) } },
                         onPracticeDiscipline = { disc, component ->
                             viewModel.startQuizSession(
                                 mode = QuizMode.STANDARD,
@@ -417,7 +419,8 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
             existingExams = storedExams,
             editingExam = editingExam,
             onDismiss = { viewModel.dismissExamBuilder() },
-            onSave = { draft -> viewModel.saveExamDraft(draft) }
+            onSave = { draft -> viewModel.saveExamDraft(draft) },
+            onDelete = { exam -> viewModel.deleteExam(exam) }
         )
     }
 }

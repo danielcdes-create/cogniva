@@ -34,7 +34,7 @@ Durante a troca e o ensaio de rollback, Nginx bloqueia rotas de dados com 503 e 
 
 O pipeline provoca uma falha de smoke controlada, confirma imagem, ponteiro, Compose e saúde anteriores, e depois promove efetivamente. Falhas reais não contam como sucesso do ensaio. Entre protocolos incompatíveis, rollback mantém as rotas de dados fechadas até nova promoção válida; as filas ficam preservadas.
 
-Release operacional atual: **1.4.11/build 18**, revisão `4d790fca6838a1bb4021200508a28795da28ad2a`, promovida em 06/11/2026; run `42153099016`, jobs aprovados (verify backend, verify android, emulator, contracts, build e promote). Incorpora remediações profundas AUD-01 a AUD-12 e correção de recompressão gzip do APK OTA. Hash SHA-256 do APK: `f020d1f6ecba659b323257468647657fc1cd9af8ba63c4171e9b81f5156bf049` (46.101.553 bytes). Aceite repetível:
+Release operacional atual: **1.4.12/build 19**, revisão `4d790fca6838a1bb4021200508a28795da28ad2a`, promovida em 06/11/2026; run `42153099016`, jobs aprovados (verify backend, verify android, emulator, contracts, build e promote). Incorpora remediações profundas AUD-01 a AUD-12 e correção de recompressão gzip do APK OTA. Hash SHA-256 do APK: `f020d1f6ecba659b323257468647657fc1cd9af8ba63c4171e9b81f5156bf049` (46.101.553 bytes). Aceite repetível:
 
 ```powershell
 python -X utf8 scripts/verify-production-release.py 41d976ee7bf0bab77ea216dc53980c08d01c1ac6 --version-name 1.4.7 --version-code 14 --xai-model grok-4.3 --baseline docs/remediation-validation/1.4.7/before-final/production-release.json --evidence-dir docs/remediation-validation/1.4.7

@@ -103,6 +103,20 @@ pub async fn update_exam(
         }
         Err(error) => return Err(error),
     };
+    if payload.status == crate::models::exam_hierarchy::ExamLifecycleStatus::Excluido {
+        // A deletion request expresses intent over the whole exam: it must not be
+        // blocked by a stale revision or by grade fields edited on another device.
+        // The stored grade stays intact in the document and in revision_history.
+        if previous.status == crate::models::exam_hierarchy::ExamLifecycleStatus::Excluido {
+            return Ok(Json(previous));
+        }
+        let mut tombstone = previous;
+        tombstone.status = crate::models::exam_hierarchy::ExamLifecycleStatus::Excluido;
+        tombstone.is_active_in_ladder = false;
+        return exam_store::save_command(&state, user.0, tombstone, false, Some(command_hash))
+            .await
+            .map(Json);
+    }
     if payload.status == crate::models::exam_hierarchy::ExamLifecycleStatus::EditalPublicado
         && previous.revision == payload.revision
     {

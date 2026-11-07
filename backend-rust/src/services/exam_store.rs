@@ -278,6 +278,16 @@ mod validation_tests {
         exam.trunk_slug="fiscalizacao_trabalho".into();assert!(validate(&exam).is_ok());
     }
     #[test]
+    fn every_system_exam_and_its_deletion_tombstone_pass_validation() {
+        for exam in system_exam_blueprints() {
+            assert!(validate(&exam).is_ok(), "template {} inválido", exam.id);
+            let mut tombstone = exam.clone();
+            tombstone.status = ExamLifecycleStatus::Excluido;
+            tombstone.is_active_in_ladder = false;
+            assert!(validate(&tombstone).is_ok(), "exclusão de {} inválida", exam.id);
+        }
+    }
+    #[test]
     fn invalid_revision_quantity_weight_and_utf8_date_fail_without_panicking() {
         let template = system_exam_blueprints().remove(0);
         assert!(validate(&template).is_ok());

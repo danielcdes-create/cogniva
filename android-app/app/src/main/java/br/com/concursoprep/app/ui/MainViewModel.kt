@@ -159,7 +159,7 @@ class MainViewModel(private val repository:ConcursoRepository,private val appCon
     fun saveExamDraft(draft:ExamDraft){operation {
         val previous=_editingExam.value
         val created=if(previous==null)repository.createExamOffline(draft)else{
-            val next=OfflineExamQueue.createPendingExam(draft).copy(examId=previous.examId,revision=previous.revision,isActiveInLadder=draft.lifecycleStatus!="ARQUIVADO",wrongAnswerPenalty=draft.wrongAnswerPenalty,syncStatus=if(previous.syncStatus=="PENDING_CREATE")"PENDING_CREATE"else if(draft.lifecycleStatus=="EDITAL_PUBLICADO"&&previous.lifecycleStatus!="EDITAL_PUBLICADO")"PENDING_PUBLISH"else"PENDING_UPDATE")
+            val next=OfflineExamQueue.createPendingExam(draft).copy(examId=previous.examId,revision=previous.revision,isActiveInLadder=draft.lifecycleStatus!="ARQUIVADO",wrongAnswerPenalty=draft.wrongAnswerPenalty,syncStatus=if(previous.syncStatus=="PENDING_CREATE")"PENDING_CREATE"else"PENDING_UPDATE")
             repository.editExamOffline(next);next
         }
         _selectedContestId.value=created.examId;_showExamBuilder.value=false;_editingExam.value=null
@@ -167,10 +167,18 @@ class MainViewModel(private val repository:ConcursoRepository,private val appCon
         repository.saveOnboarding(profile.userId,profile.activeContestIds,profile.dailyQuestionsTarget,profile.dailyStudyHoursTarget,profile.displayName)
         refreshAllData();appContext?.let{OfflineSyncWorker.enqueueNow(it)};_userFeedbackMessage.emit("Concurso salvo neste aparelho. A confirmação do servidor aparecerá após sincronizar.")
     }}
-    fun archiveExam(exam:StoredExam)=setExamLifecycle(exam,"ARQUIVADO")
-    fun restoreExam(exam:StoredExam)=setExamLifecycle(exam,"RUMOR_PREVISTO")
-    fun deleteExam(exam:StoredExam)=setExamLifecycle(exam,"EXCLUIDO")
-    private fun setExamLifecycle(exam:StoredExam,status:String){operation {repository.editExamOffline(exam.copy(lifecycleStatus=status,isActiveInLadder=status!="ARQUIVADO"&&status!="EXCLUIDO"));val profile=_userProfile.value.copy(activeContestIds=if(status=="RUMOR_PREVISTO")(_userProfile.value.activeContestIds+exam.examId).distinct()else _userProfile.value.activeContestIds-exam.examId);saveProfile(profile);_userProfile.value=profile;repository.saveOnboarding(profile.userId,profile.activeContestIds,profile.dailyQuestionsTarget,profile.dailyStudyHoursTarget,profile.displayName);refreshAllData();appContext?.let{OfflineSyncWorker.enqueueNow(it)}}}
+    fun archiveExam(exam:StoredExam)=setExamLifecycle(exam,"ARQUIVADO","Concurso \"${exam.shortName}\" arquivado.")
+    fun restoreExam(exam:StoredExam)=setExamLifecycle(exam,"RUMOR_PREVISTO","Concurso \"${exam.shortName}\" restaurado.")
+    fun deleteExam(exam:StoredExam)=setExamLifecycle(exam,"EXCLUIDO","Concurso \"${exam.shortName}\" excluído da sua lista.")
+    private fun setExamLifecycle(exam:StoredExam,status:String,feedbackMessage:String?=null){operation {
+        if(_editingExam.value?.examId==exam.examId){_showExamBuilder.value=false;_editingExam.value=null}
+        repository.editExamOffline(exam.copy(lifecycleStatus=status,isActiveInLadder=status!="ARQUIVADO"&&status!="EXCLUIDO"))
+        val profile=_userProfile.value.copy(activeContestIds=if(status=="RUMOR_PREVISTO")(_userProfile.value.activeContestIds+exam.examId).distinct()else _userProfile.value.activeContestIds-exam.examId)
+        saveProfile(profile);_userProfile.value=profile
+        repository.saveOnboarding(profile.userId,profile.activeContestIds,profile.dailyQuestionsTarget,profile.dailyStudyHoursTarget,profile.displayName)
+        refreshAllData();appContext?.let{OfflineSyncWorker.enqueueNow(it)}
+        feedbackMessage?.let { _userFeedbackMessage.emit(it) }
+    }}
     fun applyEditalDiffUpdate(id:String){operation {val before=_storedExams.value.find{it.examId==id}?.revision;repository.syncPendingAttempts(repository.ownerUserId);refreshAllData();_userFeedbackMessage.emit(if(repository.loadStoredExams().find{it.examId==id}?.revision!=before)"Nova revisão de edital salva. Histórico preservado."else"Nenhuma revisão nova de edital foi publicada para este concurso.")}}
     fun startQuizSession(mode:QuizMode,quantity:Int,contestId:String?=null,disciplina:String?=null,componentId:String?=null){
         startJob?.cancel()

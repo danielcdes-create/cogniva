@@ -102,7 +102,12 @@ class ConcursoRepository(
     suspend fun editExamOffline(exam: StoredExam) {
         mutationMutex.withLock {
             val previous=examDao.listExams().find { it.examId==exam.examId }?.let { ExamLocalMapping.assemble(it,examDao.subjectsFor(it.examId),examDao.topicsFor(it.examId)) }
-            saveExamAggregate(exam.copy(syncStatus=if(exam.revision==0L && exam.syncStatus=="PENDING_CREATE") "PENDING_CREATE" else "PENDING_UPDATE",syncError=null))
+            val nextSyncStatus = when {
+                exam.lifecycleStatus == "EXCLUIDO" && previous != null && previous.revision == 0L && previous.syncStatus == "PENDING_CREATE" -> "SYNCED"
+                exam.revision == 0L && exam.syncStatus == "PENDING_CREATE" -> "PENDING_CREATE"
+                else -> "PENDING_UPDATE"
+            }
+            saveExamAggregate(exam.copy(syncStatus=nextSyncStatus,syncError=null))
         }
     }
     suspend fun setTrunkFocus(slug: String, focused: Boolean) { ensureExamSeed();examDao.setTrunkFocus(slug,focused) }
@@ -351,7 +356,19 @@ class ConcursoRepository(
                 val result=when(snapshot.syncStatus){
                     "PENDING_CREATE"->api.createExam(snapshot.toPayload())
                     "PENDING_PUBLISH"->api.publishEdital(snapshot.examId,PublishEditalPayload(snapshot.revision,snapshot.subjects.flatMap { it.topics }.filter { it.diffStatus!="ARQUIVADO" }.map { PublishedTopicPayload(it.canonicalTopicId,it.canonicalSubjectId,it.displayTitle) }))
-                    else->api.updateExam(snapshot.examId,snapshot.toPayload())
+                    else->try {
+                        api.updateExam(snapshot.examId,snapshot.toPayload())
+                    } catch(conflict: retrofit2.HttpException) {
+                        if (snapshot.lifecycleStatus == "EXCLUIDO" && conflict.code() == 409) {
+                            val remoteRev = api.listExams().find { it.id == snapshot.examId }?.revision
+                            if (remoteRev != null) api.updateExam(snapshot.examId, snapshot.copy(revision = remoteRev).toPayload())
+                            else throw conflict
+                        } else if (snapshot.lifecycleStatus == "EXCLUIDO" && conflict.code() == 404) {
+                            snapshot.copy(syncStatus = "SYNCED", syncError = null).toPayload()
+                        } else {
+                            throw conflict
+                        }
+                    }
                 }
                 mutationMutex.withLock {
                     val current=examDao.listExams().find { it.examId==snapshot.examId }?.let { ExamLocalMapping.assemble(it,examDao.subjectsFor(it.examId),examDao.topicsFor(it.examId)) }
@@ -373,8 +390,8 @@ class ConcursoRepository(
             val local=examDao.listExams().associateBy { it.examId }
             incoming.forEach { remote ->
                 val current=local[remote.id]
-                if(current==null||current.syncStatus=="SYNCED") saveExamAggregate(remote.toStored())
-                else if(current.revision!=remote.revision&&current.syncError==null) examDao.setSyncError(remote.id,"Conflito de revisão: há uma versão diferente no servidor. Preserve sua edição antes de carregá-la.")
+                if(current==null||(current.syncStatus=="SYNCED"&&remote.revision>=current.revision)) saveExamAggregate(remote.toStored())
+                else if(current.lifecycleStatus!="EXCLUIDO"&&current.revision!=remote.revision&&current.syncError==null) examDao.setSyncError(remote.id,"Conflito de revisão: há uma versão diferente no servidor. Preserve sua edição antes de carregá-la.")
             }
         }
         val catalog=api.catalog();ExamCatalog.installCatalog(catalog);metadata("catalog",catalog.toString())
@@ -390,7 +407,12 @@ class ConcursoRepository(
     }
     suspend fun requestAiTutor(questionId: String,kind: String,hintIndex: Int?=null): String {
         return try {auth?.ensureSession(api,ownerUserId);api.requestAiTutor(questionId,kind,hintIndex).contentMarkdown}
-        catch(e:CancellationException){throw e}catch(_:Exception){
+        catch(e:CancellationException){throw e}catch(e:retrofit2.HttpException){
+            val detail=runCatching { Json.parseToJsonElement(e.response()?.errorBody()?.string().orEmpty()).jsonObject["message"]?.jsonPrimitive?.content }.getOrNull()?.takeIf { it.isNotBlank() }
+            val reason=detail ?: "Serviço de IA indisponível no momento (HTTP ${e.code()})."
+            if(kind in listOf("contextual-hint","child-friendly-pre")) "Tutor indisponível ($reason).\n\nA dica não foi gerada; sua resposta continua sem interferência."
+            else dao.findQuestionById(questionId)?.explanation?.let { "Comentário já disponível ($reason):\n\n$it" } ?: "Tutor indisponível: $reason"
+        }catch(_:Exception){
             if(kind in listOf("contextual-hint","child-friendly-pre")) "Tutor indisponível. A dica não foi gerada; sua resposta continua sem interferência."
             else dao.findQuestionById(questionId)?.explanation?.let { "Comentário já disponível (tutor indisponível):\n\n$it" }?:"Tutor indisponível. Tente novamente quando houver conexão."
         }

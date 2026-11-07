@@ -21,11 +21,14 @@ class ExamManagementTest {
         var saved: ExamDraft?=null
         rule.setContent { ConcursoPrepTheme { ExamFormBottomSheet(emptyList(),onDismiss={},onSave={saved=it}) } }
         rule.onNodeWithText("Criar do zero").performScrollTo().performClick()
-        rule.onNodeWithText("Continuar").performScrollTo().performClick()
-        rule.onNodeWithText("Continuar").performScrollTo().performClick()
+        rule.onNodeWithText("Continuar").performClick()
+        rule.onNodeWithText("Continuar").performClick()
         rule.onNodeWithText("Buscar em todo o catálogo").performScrollTo().performTextInput("Língua Portuguesa")
-        repeat(2) { rule.onNodeWithText("+ Língua Portuguesa").performScrollTo().performClick() }
-        rule.onNodeWithText("Salvar na escada").performScrollTo().performClick()
+        rule.onNodeWithText("+ Língua Portuguesa").performScrollTo().performClick()
+        rule.onNodeWithText("+ Língua Portuguesa").assertDoesNotExist()
+        rule.onNodeWithText("Editar disciplina e tópicos").performScrollTo().performClick()
+        rule.onNodeWithText("Adicionar outra etapa").performScrollTo().performClick()
+        rule.onNodeWithText("Salvar na escada").performClick()
         rule.runOnIdle {
             val subjects=checkNotNull(saved).subjects
             assertEquals(2,subjects.size)
@@ -44,8 +47,8 @@ class ExamManagementTest {
         }
         rule.onNodeWithText("Criar do zero").performScrollTo().performClick()
         rule.onNodeWithText("Órgão ou concurso").performScrollTo().performTextInput("Concurso sintético")
-        rule.onNodeWithText("Continuar").performScrollTo().performClick()
-        rule.onNodeWithText("Continuar").performScrollTo().performClick()
+        rule.onNodeWithText("Continuar").performClick()
+        rule.onNodeWithText("Continuar").performClick()
         rule.onNodeWithText("Nome de outra disciplina").performScrollTo().performTextInput("Engenharia de Túneis")
         androidx.test.espresso.Espresso.closeSoftKeyboard()
         rule.onNodeWithText("Adicionar disciplina personalizada").performScrollTo().performClick()
@@ -56,7 +59,7 @@ class ExamManagementTest {
         rule.onNodeWithText("Novo tópico").performScrollTo().performTextInput("Escavação")
         androidx.test.espresso.Espresso.closeSoftKeyboard()
         rule.onNodeWithText("Adicionar tópico").performScrollTo().performClick()
-        rule.onNodeWithText("Salvar na escada").performScrollTo().performClick()
+        rule.onNodeWithText("Salvar na escada").performClick()
         rule.runOnIdle {
             val subject=checkNotNull(saved).subjects.single()
             assertEquals("Engenharia de Túneis",subject.displayName)

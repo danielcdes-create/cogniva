@@ -725,7 +725,27 @@ object ExamCatalog {
         installedKnowledge = value
     }
     fun matchesSubject(subject: StoredSubject, search: String): Boolean = knowledge.array("subjects").map { it.jsonObject }.find { it.text("subject_id") == subject.canonicalSubjectId }?.let { it.text("label").contains(search,true) || it.array("aliases").any { alias -> alias.jsonPrimitive.content.contains(search,true) } } ?: subject.displayName.contains(search,true)
-    fun newComponent(subject: StoredSubject): StoredSubject = subject.copy(localSubjectId=UUID.randomUUID().toString(),topics=subject.topics.map { it.copy(localTopicId=UUID.randomUUID().toString()) })
+    fun defaultTopicsForSubject(subjectId: String): List<StoredTopic> {
+        val rawTopics = knowledge.array("topics").map { it.jsonObject }.filter { it.text("subject_id") == subjectId && it.text("status") == "ACTIVE" }
+        val roots = rawTopics.filter { it["parent_topic_id"]?.jsonPrimitive?.contentOrNull == null }
+        val selected = roots.ifEmpty { rawTopics }
+        return selected.map { t ->
+            val topicId = t.text("topic_id")
+            StoredTopic(UUID.randomUUID().toString(), topicId, subjectId, t.text("label"), "PRE_EDITAL_BASE")
+        }
+    }
+    fun newComponent(subject: StoredSubject): StoredSubject {
+        val baseTopics = if (subject.topics.isNotEmpty()) {
+            subject.topics.map { it.copy(localTopicId = UUID.randomUUID().toString()) }
+        } else {
+            defaultTopicsForSubject(subject.canonicalSubjectId)
+        }
+        return subject.copy(
+            localSubjectId = UUID.randomUUID().toString(),
+            questionCount = subject.questionCount?.takeIf { it > 0 } ?: 5,
+            topics = baseTopics
+        )
+    }
     fun associateSubject(subject: StoredSubject, target: StoredSubject): StoredSubject = subject.copy(canonicalSubjectId=target.canonicalSubjectId,topics=subject.topics.map { old ->
         old.copy(canonicalSubjectId=target.canonicalSubjectId,canonicalTopicId=if(catalogTopics(target.canonicalSubjectId).any { it.canonicalTopicId==old.canonicalTopicId } || old.canonicalTopicId.startsWith("custom-"))old.canonicalTopicId else "custom-${UUID.randomUUID()}")
     })

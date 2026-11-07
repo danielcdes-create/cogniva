@@ -57,10 +57,7 @@ impl IntoResponse for AppError {
             AppError::InvalidObjectId(_) => (StatusCode::BAD_REQUEST, self.to_string()),
             AppError::NotFound(_) => (StatusCode::NOT_FOUND, self.to_string()),
             AppError::BadRequest(_) => (StatusCode::BAD_REQUEST, self.to_string()),
-            AppError::ExternalAiError(_) => (
-                StatusCode::BAD_GATEWAY,
-                "Assistente temporariamente indisponível".to_string(),
-            ),
+            AppError::ExternalAiError(_) => (StatusCode::BAD_GATEWAY, self.to_string()),
             AppError::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()),
         };
 

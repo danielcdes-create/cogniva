@@ -89,10 +89,13 @@ fun ContestsScreen(
     onAddContest: () -> Unit = {},
     trunkRows: List<TrunkSubjectRow> = emptyList(),
     trunkSlug: String = "fiscal",
-    onSelectTrunk: (String) -> Unit = {}
+    onSelectTrunk: (String) -> Unit = {},
+    onEditContest: (String) -> Unit = {},
+    onDeleteContest: (String) -> Unit = {}
 ) {
     var selectedTopicForSourceSheet by remember { mutableStateOf<SyllabusTopicDto?>(null) }
     var showEditalDiffSheet by remember { mutableStateOf(false) }
+    var confirmDeleteContest by remember { mutableStateOf(false) }
     val ext = LocalExtendedColors.current
 
     Surface(
@@ -205,6 +208,51 @@ fun ContestsScreen(
             Spacer(modifier = Modifier.height(10.dp))
 
             // Banner de Transição "Previsto -> Edital Publicado"
+            if (syllabusViewMode == SyllabusViewMode.CONTEST && availableContests.any { it.first == selectedContestId }) {
+                val currentContestName = availableContests.firstOrNull { it.first == selectedContestId }?.second.orEmpty()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedButton(
+                        onClick = { onEditContest(selectedContestId) },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Editar concurso e disciplinas", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    androidx.compose.material3.TextButton(
+                        onClick = { confirmDeleteContest = true }
+                    ) {
+                        Text("Excluir", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                if (confirmDeleteContest) {
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { confirmDeleteContest = false },
+                        title = { Text("Excluir $currentContestName?") },
+                        text = { Text("O concurso e sua grade sairão da sua lista. Seu histórico de respostas será mantido.") },
+                        confirmButton = {
+                            androidx.compose.material3.TextButton(
+                                onClick = {
+                                    confirmDeleteContest = false
+                                    onDeleteContest(selectedContestId)
+                                }
+                            ) {
+                                Text("Excluir concurso", color = MaterialTheme.colorScheme.error)
+                            }
+                        },
+                        dismissButton = {
+                            androidx.compose.material3.TextButton(onClick = { confirmDeleteContest = false }) {
+                                Text("Cancelar")
+                            }
+                        }
+                    )
+                }
+            }
             if (diffData != null) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),

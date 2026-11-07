@@ -486,10 +486,26 @@ async fn call_xai_text(
         .await
         .map_err(|_| AppError::ExternalAiError("Não foi possível receber a resposta da xAI".into()))?;
     if !response.status().is_success() {
-        return Err(AppError::ExternalAiError(format!(
-            "xAI indisponível (HTTP {})",
-            response.status().as_u16()
-        )));
+        let status = response.status().as_u16();
+        let detail = response
+            .json::<serde_json::Value>()
+            .await
+            .ok()
+            .and_then(|v| {
+                v.get("error")
+                    .and_then(|e| {
+                        e.as_str()
+                            .or_else(|| e.get("message").and_then(|m| m.as_str()))
+                    })
+                    .or_else(|| v.get("message").and_then(|m| m.as_str()))
+                    .map(|s| s.trim().chars().take(280).collect::<String>())
+            })
+            .filter(|s| !s.is_empty());
+        let msg = match detail {
+            Some(d) => format!("xAI indisponível (HTTP {status}): {d}"),
+            None => format!("xAI indisponível (HTTP {status})"),
+        };
+        return Err(AppError::ExternalAiError(msg));
     }
     let body: serde_json::Value = response
         .json()

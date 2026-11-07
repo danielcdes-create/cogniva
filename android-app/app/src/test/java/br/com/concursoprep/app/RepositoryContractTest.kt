@@ -95,7 +95,7 @@ class RepositoryContractTest {
             "observeMetadata"->flowOf(null)
             else->error("Unexpected durable operation $method")
         }}
-        fun repository(submit:(SubmitBatchPayload)->SubmitBatchResponseDto={throw IOException("Synthetic outage")},sendReport:()->Unit={},updateExam:(ExamBlueprintPayload)->ExamBlueprintPayload={throw IOException("Synthetic outage")},generate:(QuizGeneratePayload)->List<QuestionDto> = {throw IOException("Synthetic outage")}):ConcursoRepository {
+        fun repository(submit:(SubmitBatchPayload)->SubmitBatchResponseDto={throw IOException("Synthetic outage")},sendReport:()->Unit={},updateExam:(ExamBlueprintPayload)->ExamBlueprintPayload={throw IOException("Synthetic outage")},generate:(QuizGeneratePayload)->List<QuestionDto> = {throw IOException("Synthetic outage")},aiTutor:(String,String,Int?)->AiAssistResponseDto={_,_,_->throw IOException("Synthetic outage")}):ConcursoRepository {
             val api=fake<ConcursoApiService>{method,args->when(method){
                 "submitAttemptsBatch"->submit(args[0] as SubmitBatchPayload)
                 "listExams"->remoteExams
@@ -106,6 +106,7 @@ class RepositoryContractTest {
                 "learningState"->LearningPage(emptyList())
                 "reportQuestionProblem"->{sendReport();Unit}
                 "generateQuizQuestions"->generate(args[0] as QuizGeneratePayload)
+                "requestAiTutor"->aiTutor(args[0] as String,args[1] as String,args[2] as Int?)
                 else->error("Unexpected API operation $method")
             }}
             return ConcursoRepository(api,dao,exams,json,durable=durable,ownerUserId=123)
@@ -286,6 +287,15 @@ class RepositoryContractTest {
         val repo=store.repository()
         for(kind in listOf("contextual-hint","child-friendly-pre"))assertFalse(repo.requestAiTutor(q.id,kind).contains("ANSWER_REFERENCE_DO_NOT_REVEAL"))
         assertTrue(repo.requestAiTutor(q.id,"explanation").contains("ANSWER_REFERENCE_DO_NOT_REVEAL"))
+        val backendReason="Erro ao consultar provedor de IA: xAI indisponível (HTTP 403): limite de créditos atingido"
+        val body="""{"error":true,"message":"$backendReason"}"""
+        val httpRepo=store.repository(aiTutor={_,_,_->throw retrofit2.HttpException(retrofit2.Response.error<AiAssistResponseDto>(502,body.toResponseBody("application/json".toMediaType())))})
+        val hintError=httpRepo.requestAiTutor(q.id,"contextual-hint")
+        assertTrue(hintError.contains(backendReason))
+        assertFalse(hintError.contains("ANSWER_REFERENCE_DO_NOT_REVEAL"))
+        val explanationError=httpRepo.requestAiTutor(q.id,"explanation")
+        assertTrue(explanationError.contains(backendReason))
+        assertTrue(explanationError.contains("ANSWER_REFERENCE_DO_NOT_REVEAL"))
     }
     @Test fun componentScopedPracticeSelectsLegacyQuestionsForTheComponentSubject()=runBlocking {
         val store=Store();val template=ExamCatalog.systemExams().find { it.examId=="CPNU" }!!
@@ -318,5 +328,28 @@ class RepositoryContractTest {
         val withoutExam=LearningProjection.masteryBySubject(listOf(projected)).getValue("FIN_PUB")
         val withExam=LearningProjection.masteryBySubject(listOf(projected),exam).getValue("FIN_PUB")
         assertEquals(withoutExam / 2.0,withExam,1e-9)
+    }
+    @Test fun deletingPendingCreateExamSettlesLocallyAndDeletingSyncedExamResolvesRevisionConflict()=runBlocking {
+        val store=Store()
+        val repo=store.repository(updateExam={ payload ->
+            if(payload.revision==1L) throw retrofit2.HttpException(retrofit2.Response.error<ExamBlueprintPayload>(409,"{}".toResponseBody("application/json".toMediaType())))
+            payload.copy(revision=payload.revision+1,syncStatus="SYNCED")
+        })
+        val draft=ExamDraft("Teste","Teste","Órgão","Cargo","fiscal","RUMOR_PREVISTO",emptyList(),"UNDEFINED",null,null,"",70.0,1,ExamCatalog.subjectsForTrunk("fiscal"))
+        val localCreated=repo.createExamOffline(draft)
+        assertEquals(1,repo.loadStoredExams().count { it.examId==localCreated.examId })
+        repo.editExamOffline(localCreated.copy(lifecycleStatus="EXCLUIDO",isActiveInLadder=false))
+        assertEquals(0,repo.loadStoredExams().count { it.examId==localCreated.examId })
+        assertEquals("SYNCED",repo.loadStoredExams(includeDeleted=true).single { it.examId==localCreated.examId }.syncStatus)
+
+        val remoteBase=ExamCatalog.systemExams().first().copy(examId="RFB",revision=1,syncStatus="SYNCED")
+        store.putExam(remoteBase)
+        store.remoteExams=listOf(remoteBase.copy(revision=3).toPayload())
+        repo.editExamOffline(remoteBase.copy(lifecycleStatus="EXCLUIDO",isActiveInLadder=false))
+        repo.syncPendingAttempts(123)
+        val deleted=repo.loadStoredExams(includeDeleted=true).single { it.examId=="RFB" }
+        assertEquals("EXCLUIDO",deleted.lifecycleStatus)
+        assertEquals("SYNCED",deleted.syncStatus)
+        assertEquals(4L,deleted.revision)
     }
 }
