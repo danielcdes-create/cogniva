@@ -14,7 +14,7 @@ args = parser.parse_args()
 assert len(args.revision) == 40 and all(c in '0123456789abcdef' for c in args.revision)
 root = Path(__file__).resolve().parents[1]
 files = {'/admin/': 'index.html', '/admin/assets/app.js': 'app.js',
-         '/admin/assets/domain.js': 'domain.js', '/admin/assets/style.css': 'style.css'}
+         '/admin/assets/help.js': 'help.js', '/admin/assets/domain.js': 'domain.js', '/admin/assets/style.css': 'style.css'}
 checked = {}
 for url, name in files.items():
     expected = subprocess.check_output(['git', 'show', f'{args.revision}:web-admin/{name}'], cwd=root)

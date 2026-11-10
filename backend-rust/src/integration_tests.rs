@@ -29,6 +29,8 @@ async fn web_admin_session_csrf_editor_and_catalog_versions() {
     for id in [123_i64,456]{db.collection::<Document>("usuarios").insert_one(doc!{"user_id":id,"display_name":"Synthetic admin","active_contest_ids":[]}).await.unwrap();}
     services::question_storage::prepare(&db).await.unwrap();
     let (status,headers,page)=web(&app,"GET","/admin/",None,None,false,json!(null)).await;assert_eq!(status,StatusCode::OK);assert!(headers["content-security-policy"].to_str().unwrap().contains("frame-ancestors 'none'"));assert!(page.as_str().unwrap().contains("Código de acesso"));
+    let (help_status,help_headers,help_body)=web(&app,"GET","/admin/assets/help.js",None,None,false,json!(null)).await;
+    assert_eq!(help_status,StatusCode::OK);assert!(help_headers["content-type"].to_str().unwrap().starts_with("text/javascript"));assert!(help_body.as_str().unwrap().contains("export function searchHelp"));
     assert_eq!(web(&app,"GET","/admin/assets/unknown",None,None,false,json!(null)).await.0,StatusCode::NOT_FOUND);
     let code=security::issue(&secret,123,"web_login",600).unwrap();
     assert_eq!(web(&app,"POST","/api/v1/auth/web-session",None,Some("http://example.test"),true,json!({"code":code})).await.0,StatusCode::FORBIDDEN);

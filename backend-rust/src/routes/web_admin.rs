@@ -17,6 +17,10 @@ pub async fn asset(axum::extract::Path(name): axum::extract::Path<String>) -> Re
             "text/javascript; charset=utf-8",
             include_str!("../../../web-admin/app.js"),
         ),
+        "help.js" => (
+            "text/javascript; charset=utf-8",
+            include_str!("../../../web-admin/help.js"),
+        ),
         "domain.js" => (
             "text/javascript; charset=utf-8",
             include_str!("../../../web-admin/domain.js"),

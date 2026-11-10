@@ -1,13 +1,16 @@
+import {helpTopics,searchHelp} from './help.js';
 import {parseQuestions,verifyReceipt,blankExam,newComponent,objectiveDraft,renameEntity,freshImport,exportWorkspace,restoreWorkspace,validityPresentation,legacyQuestionDraft,manualProvenance,topicPath,orderedTopics} from './domain.js';
 
 const $ = selector => document.querySelector(selector);
 const uid = () => crypto.randomUUID();
 const copy = value => structuredClone(value);
 const pretty = value => JSON.stringify(value,null,2);
-const labels = {overview:'Visão geral',exams:'Concursos',edital:'Editais e grades',trunks:'Troncos de carreira',subjects:'Disciplinas e assuntos',questions:'Banco de questões',import:'Inserir questões',catalog:'Revisões do catálogo',drafts:'Rascunhos e pendências',exam:'Editar concurso',question:'Editar questão',entity:'Editar catálogo'};
+const labels = {overview:'Visão geral',exams:'Concursos',edital:'Editais e grades',trunks:'Troncos de carreira',subjects:'Disciplinas e assuntos',questions:'Banco de questões',import:'Inserir questões',catalog:'Revisões do catálogo',drafts:'Rascunhos e pendências',help:'Ajuda',exam:'Editar concurso',question:'Editar questão',entity:'Editar catálogo'};
 const lifecycle = {RUMOR_PREVISTO:'Previsto',AUTORIZADO:'Autorizado',BANCA_DEFINIDA:'Banca definida',EDITAL_PUBLICADO:'Edital publicado',PROVA_REALIZADA:'Prova realizada',ARQUIVADO:'Arquivado',EXCLUIDO:'Excluído'};
 const kinds = {MULTIPLE_CHOICE:'Múltipla escolha',TRUE_FALSE:'Certo / Errado',OPEN_ENDED:'Discursiva'};
 const statuses = {UNKNOWN:'Desconhecida',UNDER_REVIEW:'Em revisão',CURRENT:'Atual',OBSOLETE:'Obsoleta'};
+let helpFocus = '';
+const helpForPage={overview:'visao-geral',exams:'concursos',exam:'editais-grades',edital:'editais-grades',trunks:'troncos',subjects:'disciplinas-assuntos',questions:'banco-questoes',question:'banco-questoes',import:'inserir-individual',catalog:'revisoes-catalogo',entity:'revisoes-catalogo',drafts:'rascunhos'};
 let current = 'overview', me = null, data = {}, ws = {}, busy = false, sequence = 0;
 let storageBlocked = false, unreadableStorage = null;
 let selectedExam = null, selectedQuestion = null, selectedEntity = null, entityGroup = 'trunks';
@@ -80,7 +83,7 @@ async function confirm(title,text) {
   const dialog=$('#confirm-dialog');$('#confirm-title').textContent=title;$('#confirm-text').textContent=text;
   return new Promise(resolve=>{dialog.addEventListener('close',()=>resolve(dialog.returnValue==='confirm'),{once:true});dialog.returnValue='cancel';dialog.showModal();});
 }
-function heading(title,subtitle,...buttons) {return h('div',{class:'page-heading'},h('div',{},h('span',{class:'eyebrow'},'COGNIVA · ADMINISTRAÇÃO'),h('h1',{},title),h('p',{},subtitle)),actions(...buttons));}
+function heading(title,subtitle,...buttons) {return h('div',{class:'page-heading'},h('div',{},h('span',{class:'eyebrow'},'COGNIVA · ADMINISTRAÇÃO'),h('h1',{},title),h('p',{},subtitle)),actions(...buttons,current!=='help'?button('Ajuda desta tela',()=>{helpFocus=helpForPage[current] || 'primeiros-passos';navigate('help');}):null));}
 function structureGuide(expanded=false) {
   return h('details',{class:'card structure-guide',...(expanded?{open:true}:{})},h('summary',{},'Como troncos, concursos, conteúdo e questões se conectam'),
     h('div',{class:'structure-grid'},
@@ -109,11 +112,34 @@ function render() {
   const view=$('#view');view.replaceChildren();
   if(storageBlocked){view.append(card(h('h2',{},'O rascunho local está ilegível e foi preservado'),h('p',{},'Exporte a cópia original antes de restaurar um arquivo válido da mesma conta. Nenhum envio será iniciado.'),button('Exportar cópia original',()=>downloadText('cogniva-rascunho-recuperacao.txt',unreadableStorage || '')),
     h('input',{type:'file',accept:'.json,application/json','aria-label':'Restaurar arquivo válido',onchange:async e=>{try{const file=e.target.files[0];if(!file)return;if(file.size>4*1024*1024)throw new Error('Arquivo excede 4 MiB.');const recovered=restoreWorkspace(me.user_id,JSON.parse(await file.text()));if(await confirm('Restaurar após exportar a cópia original?','O arquivo válido substituirá a cópia ilegível apenas no armazenamento local desta conta.')){storageBlocked=false;ws=recovered;ws.exams ||= {};ws.questionEdits ||= {};ws.archives ||= [];try{persist();unreadableStorage=null;render();}catch(error){storageBlocked=true;throw error;}}}catch(error){notice(error.message,'error');}}})));return;}
-  if(!data.base){view.append(heading('Conectar ao acervo','Carregue os dados para continuar.'),button('Recarregar',()=>run('Carregando…',loadData),'primary'));return;}
-  const views={overview:overviewView,exams:examsView,edital:examsView,exam:examView,trunks:trunksView,subjects:subjectsView,questions:questionsView,import:importView,question:questionView,catalog:catalogView,entity:entityView,drafts:draftsView};
+  if(!data.base && current!=='help'){view.append(heading('Conectar ao acervo','Carregue os dados para continuar.'),button('Recarregar',()=>run('Carregando…',loadData),'primary'));return;}
+  const views={overview:overviewView,exams:examsView,edital:examsView,exam:examView,trunks:trunksView,subjects:subjectsView,questions:questionsView,import:importView,question:questionView,catalog:catalogView,entity:entityView,drafts:draftsView,help:helpView};
   try {const page=views[current]();if(['overview','exams','edital','exam','trunks','subjects','questions','import','question','catalog','entity'].includes(current))page.firstElementChild.after(structureGuide(current==='overview'));view.append(page);} catch(error) {view.append(card(h('h2',{},'Rascunho preservado'),h('p',{},`Não foi possível abrir esta tela: ${error.message}`),button('Exportar dados locais',()=>download('cogniva-rascunhos.json',exportWorkspace(me.user_id,ws)))));}
   if(busy)view.querySelectorAll('input,select,textarea,button').forEach(node=>node.disabled=true);
 }
+function helpView() {
+  const root=h('div',{},heading('Ajuda do portal','Entenda a estrutura, encontre uma tela e siga os passos para concluir seu trabalho.'));
+  const count=h('p',{class:'help-count',role:'status','aria-live':'polite'});
+  const articles=h('div',{class:'help-articles'});
+  const draw=query=>{
+    const found=searchHelp(query);
+    count.textContent=query.trim()?`${found.length} de ${helpTopics.length} tópicos encontrados`:`${helpTopics.length} tópicos · escolha um tema ou use a busca`;
+    articles.replaceChildren(...found.map(topic=>h('details',{class:'card help-article',id:`help-${topic.id}`,open:!!query.trim() || topic.id===helpFocus},
+      h('summary',{},h('span',{class:'eyebrow'},topic.category),h('span',{class:'help-title'},topic.title)),
+      h('p',{},topic.intro),h('ol',{},...topic.steps.map(step=>h('li',{},step))),
+      ...topic.notes.map(note=>h('p',{class:'help-note'},note)),
+      button(topic.action,()=>navigate(topic.page),'primary'))));
+    if(!found.length)articles.append(card(h('h2',{},'Nenhum tópico encontrado'),h('p',{},'Tente palavras como concurso, pré-edital, questões, catálogo, rascunho ou sessão.')));
+  };
+  const search=h('input',{type:'search','aria-label':'Buscar na ajuda',placeholder:'Buscar: pré-edital, Banco Central, questões, sessão…',oninput:e=>draw(e.target.value)});
+  const toc=h('nav',{class:'help-index','aria-label':'Tópicos da ajuda'},...helpTopics.map(topic=>button(topic.title,()=>{search.value='';helpFocus=topic.id;draw('');document.getElementById(`help-${topic.id}`)?.scrollIntoView({behavior:'smooth',block:'start'});})));
+  root.append(h('section',{class:'card help-search'},h('label',{},'O que você quer fazer?',search),count),
+    h('details',{class:'card help-toc'},h('summary',{},'Todos os tópicos da ajuda'),toc),articles);
+  draw('');
+  if(helpFocus)requestAnimationFrame(()=>document.getElementById(`help-${helpFocus}`)?.scrollIntoView({block:'start'}));
+  return root;
+}
+
 function overviewView() {
   const root=h('div',{},heading('Seu acervo, em perspectiva.','Organize a base de estudos e continue de onde parou.',button('＋ Inserir questões',()=>navigate('import'),'primary')));
   const summary=data.summary || {};
@@ -364,7 +390,7 @@ function draftsView() {
   root.append(card(h('h2',{},'Restaurar arquivo exportado'),h('p',{},'Restaure apenas um arquivo desta conta. Nenhum envio é disparado ao abrir o arquivo.'),file),card(h('h2',{},`Arquivo local · ${ws.archives.length} registros preservados`),h('p',{},'Edições substituídas ficam disponíveis para exportação. Elas não são reenviadas automaticamente.'),...ws.archives.map((item,index)=>h('div',{class:'catalog-row'},h('div',{},h('strong',{},`${index+1}. ${item.type}`),h('small',{},item.saved_at)),button('Exportar',()=>download(`cogniva-arquivo-${index+1}.json`,item))))));return root;
 }
 
-document.querySelectorAll('[data-page]').forEach(node=>node.addEventListener('click',()=>navigate(node.dataset.page)));
+document.querySelectorAll('[data-page]').forEach(node=>node.addEventListener('click',()=>{if(node.dataset.page==='help')helpFocus='';navigate(node.dataset.page);}));
 $('#menu-toggle').addEventListener('click',()=>{const open=$('#app').classList.toggle('menu-open');$('#menu-toggle').setAttribute('aria-expanded',String(open));});
 $('#logout').addEventListener('click',()=>run('Encerrando sessão…',async()=>{if(!storageBlocked)persist();await api('auth/web-logout',{method:'POST'});me=null;ws={};data={};storageBlocked=false;unreadableStorage=null;$('#app').hidden=true;$('#login').hidden=false;$('#login-message').textContent='Sessão encerrada. Seus rascunhos foram preservados nesta conta.';}));
 $('#login-form').addEventListener('submit',async event=>{event.preventDefault();const control=$('#login-code'),submit=$('#login-form button');submit.disabled=true;$('#login-message').textContent='Verificando acesso…';try{await api('auth/web-session',{method:'POST',body:{code:control.value.trim()}});control.value='';await bootstrap();$('#login-message').textContent='';}catch(error){control.value='';$('#login-message').textContent=error.message;notice(error.message,'error');}finally{submit.disabled=false;}});

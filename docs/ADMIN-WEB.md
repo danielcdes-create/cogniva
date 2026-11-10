@@ -2,6 +2,14 @@
 
 O painel está em `/admin/`, servido pelo próprio backend Rust, com a mesma API e base do Android. Disponível em produção desde **1.4.13/build 20**, com backend, APK e Nginx conferidos em 07/11/2026. [Aceite e evidências](RELEASE-1.4.13.md).
 
+## Ajuda dentro do portal — 1.4.16
+
+O menu lateral inclui **Ajuda**, com busca que ignora acentos e maiúsculas, índice de 14 tópicos e artigos expansíveis. **Ajuda desta tela** abre o tópico relacionado à tela atual. Cada artigo oferece um atalho para a área explicada; a consulta à Ajuda não grava conteúdo.
+
+O guia cobre visão geral, estrutura dos estudos, concursos, edital/grade, troncos, disciplinas e assuntos, consulta/edição de questões, inserção individual, lote/IA, revisões e ativação do catálogo, rascunhos/recuperação e acesso/sessão. Há um passo a passo específico para montar a preparação do Banco Central antes de um edital novo, usando o anterior como referência.
+
+A [versão em Markdown do guia](GUIA-ADMINISTRACAO.md) é gerada da mesma fonte `web-admin/help.js`: `node scripts/export-admin-help.mjs --write`. O CI executa `--check` e rejeita divergência entre a Ajuda e o documento. O Rust incorpora e serve também `/admin/assets/help.js`, com as mesmas políticas de CSP/cache dos demais módulos.
+
 ## O que pode ser administrado
 
 - **Concursos:** criação, edição, situação, instituição, cargo, banca, previsão de prova, prioridade, corte, penalidade e participação na escada da conta.

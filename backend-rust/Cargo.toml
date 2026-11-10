@@ -1,6 +1,6 @@
 [package]
 name = "api-rust-core"
-version = "1.4.15"
+version = "1.4.16"
 edition = "2021"
 authors = ["Daniel Caires <daniel.caires@yahoo.com>"]
 description = "Backend em Rust (Axum + MongoDB) para Plataforma de Preparação de Concursos Públicos"

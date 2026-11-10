@@ -18,6 +18,8 @@ jobs:
         run: |
           node --check web-admin/app.js
           node --check web-admin/domain.js
+          node --check web-admin/help.js
+          node scripts/export-admin-help.mjs --check
           node --test web-admin/tests/*.test.js
   knowledge-contracts:
     uses: ./.github/workflows/knowledge-contracts.yml

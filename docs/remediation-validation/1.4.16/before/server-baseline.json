@@ -1,0 +1,29 @@
+{
+  "captured_at": "2026-11-10T23:51:33.073311+00:00",
+  "access": "read-only",
+  "server": {
+    "compose_sha256": "ae0f543998b6bb3972e32a7942a73e8c269a4ac16af773c5c01e3fcfe531dcc2",
+    "containers": [
+      {
+        "name": "/spamshield-server",
+        "id": "ce1e10783c022b135b2d4d6a9e075f7ff421416ce797f21a2bcfeb8d703abaf0",
+        "image_id": "sha256:1368be44494a64f7cabb52a34417bf8762be4f53af257e1814564544aa06fc95"
+      },
+      {
+        "name": "/api-rust-core",
+        "id": "ab9e24abbfb11c9993d3746cd7959b0f7722352f7d8376118f0d6dcae53ab75f",
+        "image_id": "sha256:21477999b7b7b817d70d94d71bd54423b2dcabe85376fde16392e279f63e2208"
+      },
+      {
+        "name": "/financial-twin-server",
+        "id": "ff32c5849f62c6d5b32b8c7bdd62a11d9351fc689e0d5c84bef8f93b5d627703",
+        "image_id": "sha256:7e72faaca6f3ac843c08265af79c2f9469de238308a3a4e03da5895ad50bb482"
+      },
+      {
+        "name": "/asbuildo-server",
+        "id": "ba879ad18169909c528d85aee1494a276a1013eea196eb6cdce5d5ad61f152f4",
+        "image_id": "sha256:367a4f0c518ad77c42e21be187d1d4c4fd0b3284268bd9ff02a850ffac119bf6"
+      }
+    ]
+  }
+}
