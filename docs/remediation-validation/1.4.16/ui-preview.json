@@ -1,0 +1,13 @@
+{
+  "environment": "loopback with synthetic account/catalog fixtures",
+  "help_topic_count": 14,
+  "sidebar_help_rendered": true,
+  "search_ignores_accents_and_case": true,
+  "banco_central_pre_edital_search_one_result": true,
+  "no_results_guidance_rendered": true,
+  "article_action_opens_contests": true,
+  "contextual_help_opens_contests_article": true,
+  "browser_console_errors": 0,
+  "horizontal_overflow": false,
+  "production_content_mutations": false
+}

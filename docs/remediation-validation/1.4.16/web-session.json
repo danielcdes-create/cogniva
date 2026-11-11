@@ -1,0 +1,12 @@
+{
+  "captured_at": "2026-11-11T00:20:12.752351+00:00",
+  "login_verified": true,
+  "cookie_max_age_seconds": 2592000,
+  "jwt_lifetime_matches_cookie": true,
+  "secure_http_only_same_site_cookie": true,
+  "admin_profile_matched_configured_verified_account": true,
+  "logout_verified": true,
+  "post_logout_status": 401,
+  "content_mutations": false,
+  "credentials_stored_in_evidence": false
+}

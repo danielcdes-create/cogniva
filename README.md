@@ -6,15 +6,15 @@ Aplicativo Android de estudo para concursos, com cliente Kotlin/Compose e API Ru
 
 ## 🚀 Versão em Produção
 
-Versão atual: **1.4.15 / build 22**, revisão `bc9451ff5b1584249440df3d9b7e4d28455ea3b8`, promovida e conferida em 07/11/2026; contrato de sincronização 2. [Conteúdo e aceite da release](docs/RELEASE-1.4.15.md).
+Versão atual: **1.4.16 / build 23**, revisão `610e669d7273f030112f86801321593c09884379`, promovida e conferida em 10/11/2026; contrato de sincronização 2. [Conteúdo e aceite da release](docs/RELEASE-1.4.16.md).
 
-- **Pipeline CI/CD:** [Run #42397102944](https://github.com/danielcdes-create/cogniva/actions/runs/42397102944) — todos os jobs aprovados: web, Rust, Android/JVM/golden, contratos, emulador, build e promoção com ensaio de rollback.
+- **Pipeline CI/CD:** [Run #42926911430](https://github.com/danielcdes-create/cogniva/actions/runs/42926911430) — todos os jobs aprovados: web, Rust, Android/JVM/golden, contratos, emulador, build e promoção com ensaio de rollback.
 - **Endpoint da API:** `https://198.199.65.103/api/v1/`.
 - **Saúde e Prontidão:** `/api/v1/health` (processo) e `/api/v1/ready` (validação com MongoDB e revisão ativa).
 - **Metadados Públicos do APK:** `GET /api/app/latest-apk` e `GET /api/v1/apk/info`.
-- **Download do APK de Produção:** [Baixar APK v1.4.15 / build 22](https://198.199.65.103/api/v1/apk/download)
+- **Download do APK de Produção:** [Baixar APK v1.4.16 / build 23](https://198.199.65.103/api/v1/apk/download)
   - **Tamanho:** 46.429.233 bytes
-  - **SHA-256:** `1a32c1c333372ad19e63162ab18518b163b360f5f41c1351476cf6b40accd42c`
+  - **SHA-256:** `6eacb5459164ad97e1cbfcf74dd5dd77c46db8ed6861646d26c9fb12e394dfe3`
   - **Assinatura:** Chave de release privada com APK Signature Scheme v3 (API 28+).
   - **Streaming:** Entrega direta sem compressão dinâmica intermediária (`no-transform`, `proxy_buffering off`). Detalhes em [docs/LICAO-APRENDIDA-OTA-APK.md](docs/LICAO-APRENDIDA-OTA-APK.md).
 
@@ -27,6 +27,7 @@ A documentação do ecossistema está organizada no diretório [`docs/`](docs/RE
 - **[Mapa Completo da Documentação](docs/README.md):** Índice mestre e catálogo de referências ativas.
 - **[Manual de Operação e Produção](docs/OPERACAO.md):** Guia de deployment na VPS, monitoramento, rollback atômico, gates de manutenção e renovação de certificados TLS.
 - **[Lições Aprendidas — Pipeline OTA de APK](docs/LICAO-APRENDIDA-OTA-APK.md):** Diagnóstico de falha de download truncado, incompatibilidade de gzip em binários pré-comprimidos e novas invariantes de engenharia.
+- **[Ajuda do Portal](docs/GUIA-ADMINISTRACAO.md):** Guia das telas e fluxos da administração, com os mesmos 14 tópicos da seção Ajuda, busca e atalhos por tela na 1.4.16.
 - **[Estrutura de Estudos](docs/ESTRUTURA-ESTUDOS.md):** Relações entre troncos, concursos, editais, grades, componentes, disciplinas, assuntos, subassuntos e questões, com guia nas interfaces web e Android.
 - **[Catálogo Compartilhado de Conhecimentos](docs/CATALOGO-CONHECIMENTOS.md):** Hierarquia de disciplinas, tópicos, troncos de carreira e aliases editoriais (`shared/knowledge-catalog.json`). [Visualização formatada](docs/catalogo/CONHECIMENTOS.md).
 - **[Contratos e Schema de Questões v2](docs/SCHEMA-QUESTOES-V2.md):** Validação JSON Schema 2020-12, regras BSON no Mongo, outbox transacional e suporte a questões objetivas e discursivas.

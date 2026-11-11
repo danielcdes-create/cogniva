@@ -1,0 +1,50 @@
+{
+  "before_capture": "20261110T235138Z",
+  "after_capture": "20261111T001844Z",
+  "strict_full_snapshot_comparison_passed": false,
+  "difference": "One exam advanced by two revisions during the capture interval; prior snapshots retained exactly. No production correction or rollback was applied to these edits.",
+  "questions_byte_identical": true,
+  "question_documents": 618,
+  "exam_identity_sets_equal": true,
+  "exam_documents": 5,
+  "exam_documents_byte_identical": 4,
+  "exam_revision_changes": [
+    {
+      "identity_sha256": "b0f6168b1ff74cc9132815d2c13ea769708eca651f7bcd89d6051d5a36ac5929",
+      "revision_before": 3,
+      "revision_after": 5,
+      "retained_prior_history": true,
+      "baseline_snapshot_retained_exactly": true,
+      "new_history_snapshots": 2,
+      "changed_fields": [
+        "historical_cutoff_score",
+        "is_active_in_ladder",
+        "last_command_hash",
+        "revision",
+        "revision_history",
+        "role",
+        "status",
+        "subjects",
+        "title",
+        "wrong_answer_penalty"
+      ]
+    }
+  ],
+  "protected_history": {
+    "documents": 52,
+    "events": 89,
+    "sha256": "4a5ee18b9407aa14084db495fa4148dbb6dfe665d4dfdd356a01782686a73920"
+  },
+  "learning_history_unchanged": true,
+  "strict_validated_collections": [
+    "todasQuestoes",
+    "question_classification_suggestions",
+    "question_exam_compatibility",
+    "answer_evaluations"
+  ],
+  "index_count": 8,
+  "catalog_snapshot_matches_source": true,
+  "catalog_version": 1,
+  "legacy_cohort_guard_verified": true,
+  "validation_source_sha256": "9babbf7d863add4096dc76feff3d321e11ede83da43627462a0563660c7dc0dd"
+}
