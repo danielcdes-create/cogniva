@@ -6,15 +6,15 @@ Aplicativo Android de estudo para concursos, com cliente Kotlin/Compose e API Ru
 
 ## 🚀 Versão em Produção
 
-Versão atual: **1.4.16 / build 23**, revisão `610e669d7273f030112f86801321593c09884379`, promovida e conferida em 10/11/2026; contrato de sincronização 2. [Conteúdo e aceite da release](docs/RELEASE-1.4.16.md).
+Versão atual: **1.4.17 / build 24**, revisão `36811181f3cb106ee9ac24539e35404b96a63238`, promovida e conferida em 12/11/2026; contrato de sincronização 2. [Conteúdo e aceite da release](docs/RELEASE-1.4.17.md).
 
-- **Pipeline CI/CD:** [Run #42926911430](https://github.com/danielcdes-create/cogniva/actions/runs/42926911430) — todos os jobs aprovados: web, Rust, Android/JVM/golden, contratos, emulador, build e promoção com ensaio de rollback.
+- **Pipeline CI/CD:** [Run #43153558224](https://github.com/danielcdes-create/cogniva/actions/runs/43153558224) — todos os jobs aprovados: web, Rust, Android/JVM/golden, contratos, emulador, build e promoção com ensaio de rollback.
 - **Endpoint da API:** `https://198.199.65.103/api/v1/`.
 - **Saúde e Prontidão:** `/api/v1/health` (processo) e `/api/v1/ready` (validação com MongoDB e revisão ativa).
 - **Metadados Públicos do APK:** `GET /api/app/latest-apk` e `GET /api/v1/apk/info`.
-- **Download do APK de Produção:** [Baixar APK v1.4.16 / build 23](https://198.199.65.103/api/v1/apk/download)
-  - **Tamanho:** 46.429.233 bytes
-  - **SHA-256:** `6eacb5459164ad97e1cbfcf74dd5dd77c46db8ed6861646d26c9fb12e394dfe3`
+- **Download do APK de Produção:** [Baixar APK v1.4.17 / build 24](https://198.199.65.103/api/v1/apk/download)
+  - **Tamanho:** 46.445.617 bytes
+  - **SHA-256:** `8cb59460a876830e2c72fe828765e60654de071d8cded04f24873cb671b1b09d`
   - **Assinatura:** Chave de release privada com APK Signature Scheme v3 (API 28+).
   - **Streaming:** Entrega direta sem compressão dinâmica intermediária (`no-transform`, `proxy_buffering off`). Detalhes em [docs/LICAO-APRENDIDA-OTA-APK.md](docs/LICAO-APRENDIDA-OTA-APK.md).
 
