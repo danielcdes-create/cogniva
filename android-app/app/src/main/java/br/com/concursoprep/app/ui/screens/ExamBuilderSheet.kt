@@ -1,7 +1,18 @@
 package br.com.concursoprep.app.ui.screens
 
+import android.content.Context
+import android.os.Build
+import android.view.ContextThemeWrapper
+import android.view.View
+import android.view.ViewGroup
+import android.view.Window
+import android.view.WindowManager
+import androidx.activity.ComponentDialog
+import androidx.activity.addCallback
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -41,23 +52,43 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionContext
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCompositionContext
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.AbstractComposeView
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.ViewRootForInspector
+import androidx.compose.ui.semantics.dialog
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.view.WindowCompat
+import androidx.lifecycle.findViewTreeLifecycleOwner
+import androidx.lifecycle.findViewTreeViewModelStoreOwner
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeViewModelStoreOwner
+import androidx.savedstate.findViewTreeSavedStateRegistryOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import br.com.concursoprep.app.domain.exam.ExamCatalog
 import br.com.concursoprep.app.domain.exam.ExamDraft
 import br.com.concursoprep.app.domain.exam.StoredExam
@@ -89,11 +120,163 @@ fun ExamFormBottomSheet(
     onSave: (ExamDraft) -> Unit,
     onDelete: ((StoredExam) -> Unit)? = null
 ) {
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false, dismissOnClickOutside = false)
-    ) {
+    FullScreenModalDialog(onDismissRequest = onDismiss) {
         ExamFormContent(existingExams, editingExam, onDismiss, onSave, onDelete)
+    }
+}
+
+/**
+ * Edge-to-edge modal dialog window using Material3's non-floating window theme so the
+ * WindowManager measures and lays out the full screen in a single pass on API 31-35
+ * (avoiding Compose Dialog's floating WRAP_CONTENT -> setLayout two-pass race) while
+ * preserving parent density/fontScale overrides and dialog semantics.
+ */
+@Composable
+private fun FullScreenModalDialog(
+    onDismissRequest: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    val view = LocalView.current
+    val density = LocalDensity.current
+    val layoutDirection = LocalLayoutDirection.current
+    val darkTheme = isSystemInDarkTheme()
+    val composition = rememberCompositionContext()
+    val currentContent by rememberUpdatedState(content)
+    val currentDensity by rememberUpdatedState(density)
+    val currentLayoutDirection by rememberUpdatedState(layoutDirection)
+    val dialogId = rememberSaveable { UUID.randomUUID() }
+    val dialog = remember(view) {
+        FullScreenDialogWrapper(
+            onDismissRequest = onDismissRequest,
+            composeView = view,
+            layoutDirection = layoutDirection,
+            dialogId = dialogId,
+            darkTheme = darkTheme
+        ).apply {
+            setContent(composition) {
+                CompositionLocalProvider(
+                    LocalDensity provides currentDensity,
+                    LocalLayoutDirection provides currentLayoutDirection
+                ) {
+                    Box(Modifier.fillMaxSize().semantics { dialog() }) {
+                        currentContent()
+                    }
+                }
+            }
+        }
+    }
+    DisposableEffect(dialog) {
+        dialog.show()
+        onDispose {
+            dialog.dismiss()
+            dialog.disposeComposition()
+        }
+    }
+    SideEffect {
+        dialog.updateParameters(
+            onDismissRequest = onDismissRequest,
+            layoutDirection = layoutDirection,
+            darkTheme = darkTheme
+        )
+    }
+}
+
+private class FullScreenDialogLayout(
+    context: Context,
+    override val window: Window
+) : AbstractComposeView(context), DialogWindowProvider {
+    private var content: @Composable () -> Unit by mutableStateOf({})
+
+    override var shouldCreateCompositionOnAttachedToWindow: Boolean = false
+        private set
+
+    fun setContent(parent: CompositionContext, content: @Composable () -> Unit) {
+        setParentCompositionContext(parent)
+        this.content = content
+        shouldCreateCompositionOnAttachedToWindow = true
+        createComposition()
+    }
+
+    @Composable
+    override fun Content() {
+        content()
+    }
+}
+
+private class FullScreenDialogWrapper(
+    private var onDismissRequest: () -> Unit,
+    composeView: View,
+    layoutDirection: LayoutDirection,
+    dialogId: UUID,
+    darkTheme: Boolean
+) : ComponentDialog(
+    ContextThemeWrapper(
+        composeView.context,
+        androidx.compose.material3.R.style.EdgeToEdgeFloatingDialogWindowTheme
+    )
+), ViewRootForInspector {
+    private val dialogLayout: FullScreenDialogLayout
+
+    override val subCompositionView: AbstractComposeView
+        get() = dialogLayout
+
+    init {
+        val window = checkNotNull(window) { "Dialog has no window" }
+        window.requestFeature(Window.FEATURE_NO_TITLE)
+        window.setBackgroundDrawableResource(android.R.color.transparent)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        setCanceledOnTouchOutside(false)
+        dialogLayout = FullScreenDialogLayout(context, window).apply {
+            setTag(androidx.compose.ui.R.id.compose_view_saveable_id_tag, "Dialog:$dialogId")
+            clipChildren = false
+        }
+        setContentView(dialogLayout)
+        dialogLayout.setViewTreeLifecycleOwner(composeView.findViewTreeLifecycleOwner())
+        dialogLayout.setViewTreeViewModelStoreOwner(composeView.findViewTreeViewModelStoreOwner())
+        dialogLayout.setViewTreeSavedStateRegistryOwner(composeView.findViewTreeSavedStateRegistryOwner())
+        updateParameters(onDismissRequest, layoutDirection, darkTheme)
+        onBackPressedDispatcher.addCallback(this) {
+            this@FullScreenDialogWrapper.onDismissRequest()
+        }
+    }
+
+    fun setContent(parentComposition: CompositionContext, children: @Composable () -> Unit) {
+        dialogLayout.setContent(parentComposition, children)
+    }
+
+    fun updateParameters(
+        onDismissRequest: () -> Unit,
+        layoutDirection: LayoutDirection,
+        darkTheme: Boolean
+    ) {
+        this.onDismissRequest = onDismissRequest
+        dialogLayout.layoutDirection = when (layoutDirection) {
+            LayoutDirection.Ltr -> View.LAYOUT_DIRECTION_LTR
+            LayoutDirection.Rtl -> View.LAYOUT_DIRECTION_RTL
+        }
+        window?.let { win ->
+            win.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+            win.setSoftInputMode(
+                if (Build.VERSION.SDK_INT >= 30) {
+                    WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING
+                } else {
+                    @Suppress("DEPRECATION")
+                    WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+                }
+            )
+            WindowCompat.getInsetsController(win, win.decorView).apply {
+                isAppearanceLightStatusBars = !darkTheme
+                isAppearanceLightNavigationBars = !darkTheme
+            }
+        }
+    }
+
+    fun disposeComposition() {
+        dialogLayout.disposeComposition()
+    }
+
+    override fun cancel() {
+        // Controlled via onDismissRequest, matching Compose DialogWrapper.
     }
 }
 
