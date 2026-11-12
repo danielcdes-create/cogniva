@@ -70,6 +70,59 @@ class ExamManagementTest {
         }
     }
 
+    @Test fun editFromManagementKeepsTheFormAboveActionsAtLargeFont() {
+        val original = ExamCatalog.systemExams().first().copy(shortName = "Concurso sintético")
+        var editing by mutableStateOf(false)
+        var saved: ExamDraft? = null
+        rule.setContent {
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density, 2f)
+            ) {
+                ConcursoPrepTheme {
+                    ExamManagementScreen(
+                        listOf(original), 0, onBack = {}, onCreate = {}, onEdit = { editing = true },
+                        onArchive = {}, onRestore = {}, onDelete = {}, onPending = {}, onUseServer = {}
+                    )
+                    if (editing) ExamFormBottomSheet(
+                        listOf(original), original, onDismiss = { editing = false }, onSave = { saved = it }
+                    )
+                }
+            }
+        }
+        rule.onNodeWithText("Como troncos, concursos e questões se conectam?").assertDoesNotExist()
+        rule.onNodeWithText("Editar concurso e componentes").performScrollTo().performClick()
+        fun assertActionsDoNotOverlap() {
+            rule.onNodeWithTag("exam_editor_primary_action").assertIsDisplayed()
+            val form = rule.onNodeWithTag("exam_editor_form").fetchSemanticsNode().boundsInRoot
+            val actions = rule.onNodeWithTag("exam_editor_actions").fetchSemanticsNode().boundsInRoot
+            val primary = rule.onNodeWithTag("exam_editor_primary_action").fetchSemanticsNode().boundsInRoot
+            assertTrue("Form extends under the actions: $form / $actions", form.bottom <= actions.top)
+            assertTrue("Action escapes its bar: $primary / $actions", primary.bottom <= actions.bottom)
+        }
+        assertActionsDoNotOverlap()
+        rule.onNodeWithText("Outra banca").performScrollTo()
+        assertActionsDoNotOverlap()
+        rule.onNodeWithText("Continuar").performClick()
+        assertActionsDoNotOverlap()
+        rule.onNodeWithText("Continuar").performClick()
+        assertActionsDoNotOverlap()
+        rule.onNodeWithText("Salvar na escada").performClick()
+        rule.runOnIdle {
+            assertEquals(original.subjects, checkNotNull(saved).subjects)
+            assertEquals(original.institution, checkNotNull(saved).institution)
+        }
+    }
+
+    @Test fun studyStructureIsAvailableThroughHelp() {
+        rule.setContent { ConcursoPrepTheme { br.com.concursoprep.app.ui.components.StudyStructureHelp() } }
+        rule.onNodeWithText("Como troncos, concursos e questões se conectam?").assertDoesNotExist()
+        rule.onNodeWithText("Ajuda").performClick()
+        rule.onNodeWithText("Ajuda · Estrutura dos estudos").assertIsDisplayed()
+        rule.onNodeWithText("Entendi").performClick()
+        rule.onNodeWithText("Ajuda · Estrutura dos estudos").assertDoesNotExist()
+    }
+
     @Test fun archiveRestoreAndConfirmedDeleteAreReachableInTheManagementArea() {
         val original=ExamCatalog.systemExams().first().copy(shortName="Concurso sintético")
         var exams by mutableStateOf(listOf(original))

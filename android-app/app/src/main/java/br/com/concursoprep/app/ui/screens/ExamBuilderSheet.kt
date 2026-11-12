@@ -8,6 +8,9 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -21,6 +24,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
@@ -32,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -47,6 +52,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -75,7 +81,6 @@ internal fun availableCatalogSubjects(all: List<StoredSubject>, added: List<Stor
  * Full-screen exam wizard. A Dialog (instead of a ModalBottomSheet) keeps the sheet's
  * drag-to-dismiss gesture from competing with vertical scrolling of the long form.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ExamFormBottomSheet(
     existingExams: List<StoredExam>,
@@ -83,6 +88,24 @@ fun ExamFormBottomSheet(
     onDismiss: () -> Unit,
     onSave: (ExamDraft) -> Unit,
     onDelete: ((StoredExam) -> Unit)? = null
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false, dismissOnClickOutside = false)
+    ) {
+        ExamFormContent(existingExams, editingExam, onDismiss, onSave, onDelete)
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun ExamFormContent(
+    existingExams: List<StoredExam>,
+    editingExam: StoredExam? = null,
+    onDismiss: () -> Unit,
+    onSave: (ExamDraft) -> Unit,
+    onDelete: ((StoredExam) -> Unit)? = null,
+    windowInsets: WindowInsets = WindowInsets.safeDrawing
 ) {
     val formKey = editingExam?.examId ?: "new"
     val focusManager = LocalFocusManager.current
@@ -122,243 +145,260 @@ fun ExamFormBottomSheet(
     val stepTitles = listOf("Identificação", "Prova e escada", "Disciplinas e tópicos")
     val canSave = invalidSubjects.none { id -> subjects.any { it.localSubjectId == id } }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false, dismissOnClickOutside = false)
-    ) {
-        BackHandler(enabled = step > 1) { step -= 1 }
-        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+    BackHandler(enabled = step > 1) {
+        focusManager.clearFocus()
+        keyboard?.hide()
+        step -= 1
+    }
+    // Measure the action bar before the scrolling form so its space and the
+    // navigation/IME insets cannot be used by the form beneath it.
+    Scaffold(
+        modifier = Modifier.fillMaxSize().imePadding(),
+        contentWindowInsets = windowInsets,
+        topBar = {
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .windowInsetsPadding(WindowInsets.safeDrawing)
-                    .imePadding()
+                Modifier.fillMaxWidth().windowInsetsPadding(
+                    windowInsets.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
+                )
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().testTag("exam_editor_header").padding(horizontal = 4.dp, vertical = 4.dp)) {
                     IconButton(onClick = onDismiss) { Icon(Icons.Default.Close, contentDescription = "Fechar sem salvar") }
                     Column(Modifier.weight(1f)) {
                         Text(if (editingExam == null) "Novo concurso" else "Editar concurso", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Text("Passo $step de 3 · ${stepTitles[step - 1]}", style = MaterialTheme.typography.bodySmall)
                     }
                     if (editingExam != null && onDelete != null) {
-                        TextButton(onClick = { confirmDeleteExam = true }) {
-                            Text("Excluir concurso", color = MaterialTheme.colorScheme.error)
+                        IconButton(onClick = { confirmDeleteExam = true }) {
+                            Icon(Icons.Outlined.DeleteOutline, contentDescription = "Excluir concurso", tint = MaterialTheme.colorScheme.error)
                         }
                     }
                 }
-                Row(
+                FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
                 ) {
                     stepTitles.forEachIndexed { idx, label ->
                         val targetStep = idx + 1
                         FilterChip(
                             selected = step == targetStep,
-                            onClick = { step = targetStep },
-                            label = { Text("${targetStep}. $label") },
-                            modifier = Modifier.weight(1f)
+                            onClick = { focusManager.clearFocus(); keyboard?.hide(); step = targetStep },
+                            label = { Text("${targetStep}. $label") }
                         )
                     }
                 }
                 LinearProgressIndicator(progress = { step / 3f }, modifier = Modifier.fillMaxWidth())
-
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    when (step) {
-                        1 -> {
-                            Text("Tronco de carreira", style = MaterialTheme.typography.titleMedium)
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                trunks.forEach { trunk -> FilterChip(selected = trunkSlug == trunk.slug, onClick = { trunkSlug = trunk.slug }, label = { Text(trunk.name) }, modifier = Modifier.heightIn(min = 48.dp)) }
-                            }
-                            if (editingExam == null) {
-                                Text("Modo de criação", style = MaterialTheme.typography.titleMedium)
-                                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    listOf("template" to "Template do tronco", "clone" to "Clonar concurso", "blank" to "Criar do zero").forEach { (mode, label) ->
-                                        FilterChip(selected = creationMode == mode, onClick = { creationMode = mode }, label = { Text(label) }, modifier = Modifier.heightIn(min = 48.dp))
-                                    }
-                                }
-                                if (creationMode == "clone") {
-                                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        existingExams.forEach { exam -> FilterChip(selected = cloneFromId == exam.examId, onClick = { cloneFromId = exam.examId }, label = { Text(exam.shortName) }, modifier = Modifier.heightIn(min = 48.dp)) }
-                                    }
-                                }
-                            }
-                            OutlinedTextField(value = organ, onValueChange = { organ = it }, label = { Text("Órgão ou concurso") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                            OutlinedTextField(value = role, onValueChange = { role = it }, label = { Text("Cargo") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                            Text("Bancas", style = MaterialTheme.typography.titleMedium)
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                (boards + selectedBoards).distinct().forEach { board ->
-                                    val selected = selectedBoards.contains(board)
-                                    FilterChip(selected = selected, onClick = { selectedBoards = if (selected) selectedBoards - board else selectedBoards + board }, label = { Text(board) }, modifier = Modifier.heightIn(min = 48.dp))
-                                }
-                            }
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedTextField(customBoard, { customBoard = it.take(100) }, label = { Text("Outra banca") }, modifier = Modifier.weight(1f), singleLine = true)
-                                OutlinedButton(enabled = customBoard.isNotBlank(), onClick = { selectedBoards = (selectedBoards + customBoard.trim()).distinct(); customBoard = "" }) { Text("Adicionar banca") }
-                            }
-                        }
-                        2 -> {
-                            Text("Status do edital", style = MaterialTheme.typography.titleMedium)
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                listOf("RUMOR_PREVISTO" to "Pré-edital", "AUTORIZADO" to "Autorizado", "BANCA_DEFINIDA" to "Banca definida", "EDITAL_PUBLICADO" to "Edital publicado", "PROVA_REALIZADA" to "Prova realizada").forEach { (value, label) ->
-                                    FilterChip(selected = status == value, onClick = { status = value }, label = { Text(label) }, modifier = Modifier.heightIn(min = 48.dp))
-                                }
-                            }
-                            Text("Data da prova", style = MaterialTheme.typography.titleMedium)
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                FilterChip(selected = dateMode == "EXACT_DATE", onClick = { dateMode = "EXACT_DATE" }, label = { Text("Data exata") }, modifier = Modifier.heightIn(min = 48.dp))
-                                FilterChip(selected = dateMode != "EXACT_DATE", onClick = { dateMode = if (windowLabel == "Sem previsão") "UNDEFINED" else "ESTIMATED_WINDOW" }, label = { Text("Janela estimada") }, modifier = Modifier.heightIn(min = 48.dp))
-                            }
-                            if (dateMode == "EXACT_DATE") {
-                                OutlinedTextField(value = exactDate, onValueChange = { exactDate = it }, label = { Text("Data ISO (AAAA-MM-DD)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                            } else {
-                                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    listOf("1º sem/2027", "2º sem/2027", "1º sem/2028", "Sem previsão").forEach { label ->
-                                        FilterChip(selected = windowLabel == label, onClick = { windowLabel = label; dateMode = if (label == "Sem previsão") "UNDEFINED" else "ESTIMATED_WINDOW" }, label = { Text(label) }, modifier = Modifier.heightIn(min = 48.dp))
-                                    }
-                                }
-                            }
-                            Text("Desconto por resposta errada (conforme a regra da prova)")
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                listOf(0.0, 0.25, 0.5, 1.0).forEach { value -> FilterChip(selected = wrongPenalty == value, onClick = { wrongPenalty = value }, label = { Text(value.toString()) }) }
-                            }
-                            Text("Posição na escada", style = MaterialTheme.typography.titleMedium)
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                listOf(1 to "Foco imediato", 2 to "Médio prazo", 3 to "Longo prazo").forEach { (priority, label) ->
-                                    FilterChip(selected = ladderPriority == priority, onClick = { ladderPriority = priority }, label = { Text(label) }, modifier = Modifier.heightIn(min = 48.dp))
-                                }
-                            }
-                            Text("Nota de corte histórica: ${cutoff.roundToInt()}%", style = MaterialTheme.typography.bodyLarge)
-                            Slider(value = cutoff, onValueChange = { cutoff = it }, valueRange = 0f..100f)
-                        }
-                        else -> {
-                            Text("Disciplinas do edital", style = MaterialTheme.typography.titleMedium)
-                            Text(
-                                "${subjects.size} disciplina(s) · ${subjects.sumOf { it.questionCount ?: 0 }} questões · ${subjects.sumOf { s -> s.topics.count { it.diffStatus != "ARQUIVADO" } }} tópicos ativos",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            if (subjects.isEmpty()) Text("Nenhuma disciplina ainda. Adicione abaixo pelo catálogo ou crie uma personalizada.")
-                            subjects.forEach { subject ->
-                                key(subject.localSubjectId) {
-                                    SubjectEditor(
-                                        subject,
-                                        onChange = { updated -> subjects = subjects.map { if (it.localSubjectId == updated.localSubjectId) updated else it } },
-                                        onRemove = { subjects = subjects.filterNot { it.localSubjectId == subject.localSubjectId }; invalidSubjects = invalidSubjects - subject.localSubjectId },
-                                        onAddStage = {
-                                            val index = subjects.indexOfFirst { it.localSubjectId == subject.localSubjectId }
-                                            val copy = ExamCatalog.newComponent(subject).copy(stage = "")
-                                            subjects = subjects.toMutableList().apply { add(index + 1, copy) }
-                                        },
-                                        onValidity = { valid -> invalidSubjects = if (valid) invalidSubjects - subject.localSubjectId else invalidSubjects + subject.localSubjectId }
-                                    )
-                                }
-                            }
-
-                            HorizontalDivider()
-                            Text("Adicionar disciplina", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            OutlinedTextField(subjectSearch, { subjectSearch = it }, label = { Text("Buscar em todo o catálogo") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                            val catalog = remember { ExamCatalog.allSubjects() }
-                            val suggested = remember(trunkSlug) { ExamCatalog.subjectsForTrunk(trunkSlug).map { it.canonicalSubjectId } }
-                            val candidates = availableCatalogSubjects(catalog, subjects, subjectSearch, suggested)
-                            val limit = if (showAllCatalog || subjectSearch.isNotBlank()) candidates.size else MAX_VISIBLE_CHOICES
-                            when {
-                                candidates.isEmpty() && subjectSearch.isNotBlank() -> Text("Nenhuma disciplina disponível com esse nome. Crie uma personalizada abaixo.")
-                                candidates.isEmpty() -> Text("Todas as disciplinas do catálogo já estão nesta grade.")
-                                subjectSearch.isBlank() -> Text("Sugestões do tronco primeiro. Disciplinas já adicionadas saem desta lista; para cobrá-la em outra etapa, use \"Adicionar outra etapa\" no cartão.", style = MaterialTheme.typography.bodySmall)
-                            }
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                candidates.take(limit).forEach { candidate ->
-                                    AssistChip(
-                                        onClick = { subjects = subjects + ExamCatalog.newComponent(candidate); subjectSearch = "" },
-                                        label = { Text("+ ${candidate.displayName}") },
-                                        leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
-                                        modifier = Modifier.heightIn(min = 48.dp)
-                                    )
-                                }
-                            }
-                            if (subjectSearch.isBlank() && candidates.size > MAX_VISIBLE_CHOICES) {
-                                TextButton(onClick = { showAllCatalog = !showAllCatalog }) {
-                                    Text(if (showAllCatalog) "Mostrar menos" else "Ver todas as ${candidates.size} disciplinas")
-                                }
-                            }
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedTextField(customName, { customName = it.take(150) }, label = { Text("Nome de outra disciplina") }, modifier = Modifier.weight(1f), singleLine = true)
-                            }
-                            OutlinedButton(enabled = customName.isNotBlank(), onClick = {
-                                focusManager.clearFocus(); keyboard?.hide()
-                                val id = "custom-${UUID.randomUUID()}"
-                                subjects = subjects + StoredSubject(UUID.randomUUID().toString(), id, customName.trim(), "CONHECIMENTOS_ESPECIFICOS", 1.0, 5, "SPECIFIC", emptyList())
-                                customName = ""
-                            }) { Text("Adicionar disciplina personalizada") }
-                            Spacer(Modifier.height(8.dp))
-                        }
-                    }
-                }
-
-                HorizontalDivider()
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-                    if (step > 1) {
-                        OutlinedButton(onClick = { step -= 1 }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("Voltar") }
-                    }
-                    Button(
-                        onClick = {
-                            if (step < 3) {
-                                step += 1
-                            } else {
-                                val name = organ.ifBlank { trunks.first { it.slug == trunkSlug }.name }
-                                onSave(
-                                    ExamDraft(
-                                        title = "$name · ${role.ifBlank { "Cargo" }}",
-                                        shortName = name,
-                                        institution = name,
-                                        role = role.ifBlank { "Cargo" },
-                                        trunkSlug = trunkSlug,
-                                        lifecycleStatus = status,
-                                        examBoards = selectedBoards.filter { it != "A definir" },
-                                        dateType = dateMode,
-                                        exactDateIso = if (dateMode == "EXACT_DATE") exactDate else null,
-                                        estimatedWindowLabel = if (dateMode == "ESTIMATED_WINDOW") windowLabel else null,
-                                        estimatedSortDateIso = when (dateMode) {
-                                            "EXACT_DATE" -> exactDate
-                                            "ESTIMATED_WINDOW" -> mapOf("1º sem/2027" to "2027-06-30", "2º sem/2027" to "2027-12-31", "1º sem/2028" to "2028-06-30")[windowLabel] ?: editingExam?.estimatedSortDateIso.orEmpty()
-                                            else -> ""
-                                        },
-                                        historicalCutoffScore = cutoff.toDouble(),
-                                        ladderPriority = ladderPriority,
-                                        subjects = subjects,
-                                        wrongAnswerPenalty = wrongPenalty
-                                    )
-                                )
-                            }
-                        },
-                        enabled = step < 3 || canSave,
-                        modifier = Modifier.weight(1f).heightIn(min = 48.dp)
-                    ) {
-                        Text(if (step < 3) "Continuar" else "Salvar na escada")
-                    }
-                }
             }
-            if (confirmDeleteExam && editingExam != null && onDelete != null) {
-                androidx.compose.material3.AlertDialog(
-                    onDismissRequest = { confirmDeleteExam = false },
-                    title = { Text("Excluir ${editingExam.shortName}?") },
-                    text = { Text("O concurso e sua grade sairão da sua lista. Seu histórico de respostas será mantido.") },
-                    confirmButton = {
-                        TextButton(onClick = { confirmDeleteExam = false; onDelete(editingExam) }) {
-                            Text("Excluir concurso", color = MaterialTheme.colorScheme.error)
+        },
+        bottomBar = {
+            Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
+                Column(
+                    Modifier.fillMaxWidth().windowInsetsPadding(
+                        windowInsets.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal)
+                    ).testTag("exam_editor_actions")
+                ) {
+                    HorizontalDivider()
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        if (step > 1) {
+                            OutlinedButton(onClick = { focusManager.clearFocus(); keyboard?.hide(); step -= 1 }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("Voltar") }
                         }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { confirmDeleteExam = false }) { Text("Cancelar") }
+                        Button(
+                            onClick = {
+                                focusManager.clearFocus()
+                                keyboard?.hide()
+                                if (step < 3) {
+                                    step += 1
+                                } else {
+                                    val name = organ.ifBlank { trunks.first { it.slug == trunkSlug }.name }
+                                    onSave(
+                                        ExamDraft(
+                                            title = "$name · ${role.ifBlank { "Cargo" }}",
+                                            shortName = name,
+                                            institution = name,
+                                            role = role.ifBlank { "Cargo" },
+                                            trunkSlug = trunkSlug,
+                                            lifecycleStatus = status,
+                                            examBoards = selectedBoards.filter { it != "A definir" },
+                                            dateType = dateMode,
+                                            exactDateIso = if (dateMode == "EXACT_DATE") exactDate else null,
+                                            estimatedWindowLabel = if (dateMode == "ESTIMATED_WINDOW") windowLabel else null,
+                                            estimatedSortDateIso = when (dateMode) {
+                                                "EXACT_DATE" -> exactDate
+                                                "ESTIMATED_WINDOW" -> mapOf("1º sem/2027" to "2027-06-30", "2º sem/2027" to "2027-12-31", "1º sem/2028" to "2028-06-30")[windowLabel] ?: editingExam?.estimatedSortDateIso.orEmpty()
+                                                else -> ""
+                                            },
+                                            historicalCutoffScore = cutoff.toDouble(),
+                                            ladderPriority = ladderPriority,
+                                            subjects = subjects,
+                                            wrongAnswerPenalty = wrongPenalty
+                                        )
+                                    )
+                                }
+                            },
+                            enabled = step < 3 || canSave,
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp).testTag("exam_editor_primary_action")
+                        ) {
+                            Text(if (step < 3) "Continuar" else "Salvar na escada")
+                        }
                     }
-                )
+                }
             }
         }
+    ) { contentPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(contentPadding)
+                .consumeWindowInsets(contentPadding)
+                .testTag("exam_editor_form")
+                .verticalScroll(key(step) { rememberScrollState() })
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            when (step) {
+                1 -> {
+                    Text("Tronco de carreira", style = MaterialTheme.typography.titleMedium)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        trunks.forEach { trunk -> FilterChip(selected = trunkSlug == trunk.slug, onClick = { trunkSlug = trunk.slug }, label = { Text(trunk.name) }, modifier = Modifier.heightIn(min = 48.dp)) }
+                    }
+                    if (editingExam == null) {
+                        Text("Modo de criação", style = MaterialTheme.typography.titleMedium)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            listOf("template" to "Template do tronco", "clone" to "Clonar concurso", "blank" to "Criar do zero").forEach { (mode, label) ->
+                                FilterChip(selected = creationMode == mode, onClick = { creationMode = mode }, label = { Text(label) }, modifier = Modifier.heightIn(min = 48.dp))
+                            }
+                        }
+                        if (creationMode == "clone") {
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                existingExams.forEach { exam -> FilterChip(selected = cloneFromId == exam.examId, onClick = { cloneFromId = exam.examId }, label = { Text(exam.shortName) }, modifier = Modifier.heightIn(min = 48.dp)) }
+                            }
+                        }
+                    }
+                    OutlinedTextField(value = organ, onValueChange = { organ = it }, label = { Text("Órgão ou concurso") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    OutlinedTextField(value = role, onValueChange = { role = it }, label = { Text("Cargo") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    Text("Bancas", style = MaterialTheme.typography.titleMedium)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        (boards + selectedBoards).distinct().forEach { board ->
+                            val selected = selectedBoards.contains(board)
+                            FilterChip(selected = selected, onClick = { selectedBoards = if (selected) selectedBoards - board else selectedBoards + board }, label = { Text(board) }, modifier = Modifier.heightIn(min = 48.dp))
+                        }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(customBoard, { customBoard = it.take(100) }, label = { Text("Outra banca") }, modifier = Modifier.weight(1f), singleLine = true)
+                        OutlinedButton(enabled = customBoard.isNotBlank(), onClick = { selectedBoards = (selectedBoards + customBoard.trim()).distinct(); customBoard = "" }) { Text("Adicionar banca") }
+                    }
+                }
+                2 -> {
+                    Text("Status do edital", style = MaterialTheme.typography.titleMedium)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        listOf("RUMOR_PREVISTO" to "Pré-edital", "AUTORIZADO" to "Autorizado", "BANCA_DEFINIDA" to "Banca definida", "EDITAL_PUBLICADO" to "Edital publicado", "PROVA_REALIZADA" to "Prova realizada").forEach { (value, label) ->
+                            FilterChip(selected = status == value, onClick = { status = value }, label = { Text(label) }, modifier = Modifier.heightIn(min = 48.dp))
+                        }
+                    }
+                    Text("Data da prova", style = MaterialTheme.typography.titleMedium)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        FilterChip(selected = dateMode == "EXACT_DATE", onClick = { dateMode = "EXACT_DATE" }, label = { Text("Data exata") }, modifier = Modifier.heightIn(min = 48.dp))
+                        FilterChip(selected = dateMode != "EXACT_DATE", onClick = { dateMode = if (windowLabel == "Sem previsão") "UNDEFINED" else "ESTIMATED_WINDOW" }, label = { Text("Janela estimada") }, modifier = Modifier.heightIn(min = 48.dp))
+                    }
+                    if (dateMode == "EXACT_DATE") {
+                        OutlinedTextField(value = exactDate, onValueChange = { exactDate = it }, label = { Text("Data ISO (AAAA-MM-DD)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    } else {
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            listOf("1º sem/2027", "2º sem/2027", "1º sem/2028", "Sem previsão").forEach { label ->
+                                FilterChip(selected = windowLabel == label, onClick = { windowLabel = label; dateMode = if (label == "Sem previsão") "UNDEFINED" else "ESTIMATED_WINDOW" }, label = { Text(label) }, modifier = Modifier.heightIn(min = 48.dp))
+                            }
+                        }
+                    }
+                    Text("Desconto por resposta errada (conforme a regra da prova)")
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        listOf(0.0, 0.25, 0.5, 1.0).forEach { value -> FilterChip(selected = wrongPenalty == value, onClick = { wrongPenalty = value }, label = { Text(value.toString()) }) }
+                    }
+                    Text("Posição na escada", style = MaterialTheme.typography.titleMedium)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        listOf(1 to "Foco imediato", 2 to "Médio prazo", 3 to "Longo prazo").forEach { (priority, label) ->
+                            FilterChip(selected = ladderPriority == priority, onClick = { ladderPriority = priority }, label = { Text(label) }, modifier = Modifier.heightIn(min = 48.dp))
+                        }
+                    }
+                    Text("Nota de corte histórica: ${cutoff.roundToInt()}%", style = MaterialTheme.typography.bodyLarge)
+                    Slider(value = cutoff, onValueChange = { cutoff = it }, valueRange = 0f..100f)
+                }
+                else -> {
+                    Text("Disciplinas do edital", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "${subjects.size} disciplina(s) · ${subjects.sumOf { it.questionCount ?: 0 }} questões · ${subjects.sumOf { s -> s.topics.count { it.diffStatus != "ARQUIVADO" } }} tópicos ativos",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    if (subjects.isEmpty()) Text("Nenhuma disciplina ainda. Adicione abaixo pelo catálogo ou crie uma personalizada.")
+                    subjects.forEach { subject ->
+                        key(subject.localSubjectId) {
+                            SubjectEditor(
+                                subject,
+                                onChange = { updated -> subjects = subjects.map { if (it.localSubjectId == updated.localSubjectId) updated else it } },
+                                onRemove = { subjects = subjects.filterNot { it.localSubjectId == subject.localSubjectId }; invalidSubjects = invalidSubjects - subject.localSubjectId },
+                                onAddStage = {
+                                    val index = subjects.indexOfFirst { it.localSubjectId == subject.localSubjectId }
+                                    val copy = ExamCatalog.newComponent(subject).copy(stage = "")
+                                    subjects = subjects.toMutableList().apply { add(index + 1, copy) }
+                                },
+                                onValidity = { valid -> invalidSubjects = if (valid) invalidSubjects - subject.localSubjectId else invalidSubjects + subject.localSubjectId }
+                            )
+                        }
+                    }
+
+                    HorizontalDivider()
+                    Text("Adicionar disciplina", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    OutlinedTextField(subjectSearch, { subjectSearch = it }, label = { Text("Buscar em todo o catálogo") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                    val catalog = remember { ExamCatalog.allSubjects() }
+                    val suggested = remember(trunkSlug) { ExamCatalog.subjectsForTrunk(trunkSlug).map { it.canonicalSubjectId } }
+                    val candidates = availableCatalogSubjects(catalog, subjects, subjectSearch, suggested)
+                    val limit = if (showAllCatalog || subjectSearch.isNotBlank()) candidates.size else MAX_VISIBLE_CHOICES
+                    when {
+                        candidates.isEmpty() && subjectSearch.isNotBlank() -> Text("Nenhuma disciplina disponível com esse nome. Crie uma personalizada abaixo.")
+                        candidates.isEmpty() -> Text("Todas as disciplinas do catálogo já estão nesta grade.")
+                        subjectSearch.isBlank() -> Text("Sugestões do tronco primeiro. Disciplinas já adicionadas saem desta lista; para cobrá-la em outra etapa, use \"Adicionar outra etapa\" no cartão.", style = MaterialTheme.typography.bodySmall)
+                    }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        candidates.take(limit).forEach { candidate ->
+                            AssistChip(
+                                onClick = { subjects = subjects + ExamCatalog.newComponent(candidate); subjectSearch = "" },
+                                label = { Text("+ ${candidate.displayName}") },
+                                leadingIcon = { Icon(Icons.Default.Add, contentDescription = null) },
+                                modifier = Modifier.heightIn(min = 48.dp)
+                            )
+                        }
+                    }
+                    if (subjectSearch.isBlank() && candidates.size > MAX_VISIBLE_CHOICES) {
+                        TextButton(onClick = { showAllCatalog = !showAllCatalog }) {
+                            Text(if (showAllCatalog) "Mostrar menos" else "Ver todas as ${candidates.size} disciplinas")
+                        }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(customName, { customName = it.take(150) }, label = { Text("Nome de outra disciplina") }, modifier = Modifier.weight(1f), singleLine = true)
+                    }
+                    OutlinedButton(enabled = customName.isNotBlank(), onClick = {
+                        focusManager.clearFocus(); keyboard?.hide()
+                        val id = "custom-${UUID.randomUUID()}"
+                        subjects = subjects + StoredSubject(UUID.randomUUID().toString(), id, customName.trim(), "CONHECIMENTOS_ESPECIFICOS", 1.0, 5, "SPECIFIC", emptyList())
+                        customName = ""
+                    }) { Text("Adicionar disciplina personalizada") }
+                    Spacer(Modifier.height(8.dp))
+                }
+            }
+        }
+    }
+    if (confirmDeleteExam && editingExam != null && onDelete != null) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmDeleteExam = false },
+            title = { Text("Excluir ${editingExam.shortName}?") },
+            text = { Text("O concurso e sua grade sairão da sua lista. Seu histórico de respostas será mantido.") },
+            confirmButton = {
+                TextButton(onClick = { confirmDeleteExam = false; onDelete(editingExam) }) {
+                    Text("Excluir concurso", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDeleteExam = false }) { Text("Cancelar") }
+            }
+        )
     }
 }

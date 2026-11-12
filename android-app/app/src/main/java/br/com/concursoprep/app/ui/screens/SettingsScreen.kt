@@ -169,6 +169,7 @@ fun SettingsScreen(
 
             OutlinedButton(onClick={managementOpen=true},modifier=Modifier.fillMaxWidth()) { Text("Gerenciar concursos e registros") }
             OutlinedButton(onClick=onOpenQuestionImport,modifier=Modifier.fillMaxWidth()) { Text("Inserir questões · individual, lote ou IA") }
+            br.com.concursoprep.app.ui.components.StudyStructureHelp()
             // =========================================================================
             // 1. APARÊNCIA (Modo Claro / Escuro / Sistema)
             // =========================================================================

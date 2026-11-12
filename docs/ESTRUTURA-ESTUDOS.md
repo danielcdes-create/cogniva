@@ -1,6 +1,6 @@
 # Estrutura de estudos e conteúdo no Cogniva
 
-O Cogniva conecta uma organização de estudos por concurso a um catálogo de conhecimento compartilhado. O guia na administração web e no Android usa estes significados.
+O Cogniva conecta uma organização de estudos por concurso a um catálogo de conhecimento compartilhado. O guia na administração web e em **Ajustes → Ajuda**, no Android, usa estes significados.
 
 | Entidade | Relação e responsabilidade |
 | --- | --- |

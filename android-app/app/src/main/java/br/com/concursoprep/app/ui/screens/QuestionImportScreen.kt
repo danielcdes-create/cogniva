@@ -80,7 +80,6 @@ fun QuestionImportScreen(viewModel: QuestionImportViewModel, onBack: () -> Unit)
                 Text("Inserir questões", style = MaterialTheme.typography.headlineSmall)
                 Text("Individual ou em lote · revisão antes do envio", style = MaterialTheme.typography.bodyMedium)
                 Text("Rascunho salvo neste aparelho, separado por conta. IA e envio exigem conexão e acesso administrativo.", style = MaterialTheme.typography.bodySmall)
-                br.com.concursoprep.app.ui.components.StudyStructureGuide()
             }
             item {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

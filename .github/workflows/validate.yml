@@ -77,7 +77,7 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew :app:testDebugUnitTest :app:lintDebug --no-daemon --console=plain
-          ./gradlew :app:verifyPaparazziDebug --tests br.com.concursoprep.app.QuestionPreviewMatrixScreenshotTest --tests br.com.concursoprep.app.AccountLinkScreenshotTest --no-daemon --console=plain
+          ./gradlew :app:verifyPaparazziDebug --tests br.com.concursoprep.app.QuestionPreviewMatrixScreenshotTest --tests br.com.concursoprep.app.AccountLinkScreenshotTest --tests br.com.concursoprep.app.ExamEditorScreenshotTest --no-daemon --console=plain
           git diff --exit-code -- app/src/test/snapshots
       - uses: actions/upload-artifact@v4
         if: always()
