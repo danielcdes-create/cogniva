@@ -1,0 +1,320 @@
+name: Administrative account bootstrap and read-only CNU migration (DigitalOcean)
+on:
+  workflow_dispatch:
+    inputs:
+      admin_email:
+        description: E-mail opcional para autorizar em ADMIN_EMAILS e promover a admin
+        required: false
+        default: ''
+        type: string
+      cnu_migration_mode:
+        description: Modo de migração somente-leitura CNU -> cogniva (none, dry-run, apply)
+        required: false
+        default: 'none'
+        type: choice
+        options:
+          - none
+          - dry-run
+          - apply
+      contest_filter:
+        description: Regex opcional de concurso/acervo (ex. banco central|bacen|\bbcb\b)
+        required: false
+        default: ''
+        type: string
+      include_contest_subjects:
+        description: Incluir também questões das disciplinas do concurso filtrado
+        required: false
+        default: false
+        type: boolean
+permissions:
+  contents: read
+concurrency:
+  group: cogniva-production
+  cancel-in-progress: false
+jobs:
+  ops:
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Validate workflow inputs before touching VPS
+        env:
+          TARGET_EMAIL: ${{ inputs.admin_email }}
+          MIG_MODE: ${{ inputs.cnu_migration_mode }}
+          CONTEST_FILTER: ${{ inputs.contest_filter }}
+        run: |
+          python3 - <<'PY'
+          import os, re, sys
+          email = os.environ.get('TARGET_EMAIL', '').strip().lower()
+          mig_mode = os.environ.get('MIG_MODE', 'none').strip()
+          contest_filter = os.environ.get('CONTEST_FILTER', '').strip()
+          if not email and mig_mode == 'none':
+              print('::error::Informe admin_email e/ou selecione cnu_migration_mode (dry-run / apply).', file=sys.stderr)
+              sys.exit(1)
+          if email:
+              if not re.fullmatch(r'^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$', email) or len(email) > 254:
+                  print('::error::Formato de e-mail inválido.', file=sys.stderr)
+                  sys.exit(1)
+          if mig_mode not in ('none', 'dry-run', 'apply'):
+              print('::error::Modo de migração inválido.', file=sys.stderr)
+              sys.exit(1)
+          if contest_filter:
+              re.compile(contest_filter, re.IGNORECASE)
+          PY
+      - name: Checkout migration contracts when CNU migration is requested
+        if: inputs.cnu_migration_mode != 'none'
+        uses: actions/checkout@v4
+      - name: Install trusted SSH credentials
+        env:
+          SSH_KEY: ${{ secrets.DO_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DO_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$SSH_KEY" && test -n "$KNOWN_HOSTS"
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Configure ADMIN_EMAILS atomically and grant admin on api-rust-core
+        if: inputs.admin_email != ''
+        env:
+          DO_HOST: ${{ secrets.DO_HOST }}
+          DO_USER: ${{ secrets.DO_USER }}
+          TARGET_EMAIL: ${{ inputs.admin_email }}
+        run: |
+          set -euo pipefail
+          email_b64=$(printf '%s' "$TARGET_EMAIL" | base64 -w0)
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$DO_USER@$DO_HOST" "python3 - '$email_b64'" <<'PY'
+          import base64
+          import fcntl
+          import json
+          import os
+          import pathlib
+          import re
+          import subprocess
+          import sys
+          import time
+          import urllib.request
+
+          email = base64.b64decode(sys.argv[1]).decode('utf-8').strip().lower()
+          assert re.fullmatch(r'^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$', email) and len(email) <= 254
+
+          root = pathlib.Path('/opt/apps')
+          env_path = root / '.env.rust'
+          compose_path = root / 'docker-compose.yml'
+          override_path = root / 'cogniva-runtime.override.json'
+          lock_path = root / '.cogniva-deploy.lock'
+          service = 'api-rust-core'
+
+          def run(*args: str) -> str:
+              return subprocess.check_output(args, text=True, stderr=subprocess.STDOUT)
+
+          def snapshot_neighbors() -> dict[str, str]:
+              ids = run('docker', 'ps', '-q').split()
+              if not ids:
+                  return {}
+              out: dict[str, str] = {}
+              for item in json.loads(run('docker', 'inspect', *ids)):
+                  name = item.get('Name', '')
+                  if name == '/' + service:
+                      continue
+                  if item.get('HostConfig', {}).get('AutoRemove'):
+                      continue
+                  if item.get('Config', {}).get('Image', '').startswith('certbot/certbot'):
+                      continue
+                  out[name] = item['Id']
+              return out
+
+          with lock_path.open('w', encoding='utf-8') as lock_file:
+              fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+              neighbors = snapshot_neighbors()
+              raw_lines = env_path.read_text(encoding='utf-8').splitlines()
+              updated_lines: list[str] = []
+              seen_admin = False
+              seen_db_name = False
+              for line in raw_lines:
+                  stripped = line.strip()
+                  if stripped.startswith('ADMIN_EMAILS='):
+                      existing = [
+                          part.strip().lower()
+                          for part in stripped.split('=', 1)[1].split(',')
+                          if part.strip() and '@' in part
+                      ]
+                      if email not in existing:
+                          existing.append(email)
+                      updated_lines.append('ADMIN_EMAILS=' + ','.join(existing))
+                      seen_admin = True
+                  elif stripped.startswith('MONGODB_DB_NAME='):
+                      updated_lines.append('MONGODB_DB_NAME=cogniva')
+                      seen_db_name = True
+                  else:
+                      updated_lines.append(line)
+              if not seen_admin:
+                  updated_lines.append(f'ADMIN_EMAILS={email}')
+              if not seen_db_name:
+                  updated_lines.append('MONGODB_DB_NAME=cogniva')
+
+              tmp_env = env_path.with_name('.env.rust.tmp')
+              fd = os.open(tmp_env, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+              with os.fdopen(fd, 'w', encoding='utf-8') as handle:
+                  handle.write('\n'.join(updated_lines) + '\n')
+              os.chmod(tmp_env, 0o600)
+              os.replace(tmp_env, env_path)
+
+              def recreate_and_wait() -> set[str]:
+                  compose_cmd = ['docker', 'compose', '-p', 'apps', '-f', str(compose_path)]
+                  if override_path.exists():
+                      compose_cmd.extend(['-f', str(override_path)])
+                  compose_cmd.extend(['up', '-d', '--no-deps', '--force-recreate', service])
+                  run(*compose_cmd)
+
+                  for _ in range(30):
+                      try:
+                          with urllib.request.urlopen('http://127.0.0.1:8001/api/v1/ready', timeout=5) as resp:
+                              payload = json.load(resp)
+                          if payload.get('status') == 'ready':
+                              inspected = json.loads(run('docker', 'inspect', service))[0]
+                              return {
+                                  entry.split('=', 1)[0]
+                                  for entry in inspected.get('Config', {}).get('Env', [])
+                              }
+                      except Exception:
+                          pass
+                      time.sleep(2)
+                  raise RuntimeError('api-rust-core did not become ready after reloading .env.rust')
+
+              env_keys = recreate_and_wait()
+              if 'ADMIN_EMAILS' not in env_keys and override_path.exists():
+                  override_doc = json.loads(override_path.read_text(encoding='utf-8'))
+                  svc_cfg = override_doc.setdefault('services', {}).setdefault(service, {})
+                  env_files = list(svc_cfg.get('env_file', []))
+                  if str(env_path) not in env_files:
+                      env_files.append(str(env_path))
+                      svc_cfg['env_file'] = env_files
+                      tmp_ov = override_path.with_name(override_path.name + '.tmp')
+                      tmp_ov.write_text(json.dumps(override_doc, indent=2), encoding='utf-8')
+                      os.replace(tmp_ov, override_path)
+                      env_keys = recreate_and_wait()
+
+              for name, cid in neighbors.items():
+                  current = json.loads(run('docker', 'inspect', name))[0]['Id']
+                  assert current == cid, f'Sibling container changed unexpectedly: {name}'
+
+              proc = subprocess.run(
+                  [
+                      'docker',
+                      'exec',
+                      '-e',
+                      'RUST_LOG=error',
+                      service,
+                      '/usr/local/bin/cogniva-api',
+                      '--grant-admin',
+                      email,
+                  ],
+                  capture_output=True,
+                  text=True,
+              )
+              if proc.returncode == 0:
+                  stdout = proc.stdout.strip()
+                  json_pos = stdout.find('{')
+                  profile = json.loads(stdout[json_pos:] if json_pos >= 0 else stdout)
+                  print(json.dumps({
+                      'status': 'granted_existing_account',
+                      'user_id': profile.get('user_id'),
+                      'role': profile.get('role'),
+                      'is_admin': profile.get('is_admin'),
+                      'admin_emails_configured': 'ADMIN_EMAILS' in env_keys,
+                      'other_containers_preserved': True,
+                  }))
+              elif 'Nenhuma conta cadastrada' in (proc.stdout + proc.stderr):
+                  print(json.dumps({
+                      'status': 'bootstrap_armed_for_registration',
+                      'admin_emails_configured': 'ADMIN_EMAILS' in env_keys,
+                      'other_containers_preserved': True,
+                  }))
+              else:
+                  raise RuntimeError(f'--grant-admin failed with exit {proc.returncode}')
+          PY
+      - name: Run read-only CNU -> cogniva Schema v2 migration (dry-run or apply)
+        if: inputs.cnu_migration_mode != 'none'
+        env:
+          DO_HOST: ${{ secrets.DO_HOST }}
+          DO_USER: ${{ secrets.DO_USER }}
+          MIG_MODE: ${{ inputs.cnu_migration_mode }}
+          CONTEST_FILTER: ${{ inputs.contest_filter }}
+          INCLUDE_SUBJECTS: ${{ inputs.include_contest_subjects }}
+        run: |
+          set -euo pipefail
+          target="$DO_USER@$DO_HOST"
+          py_ver=$(ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" \
+            'python3 -c "import sys; print(f\"{sys.version_info.major}.{sys.version_info.minor}\")"')
+
+          bundle="$RUNNER_TEMP/cogniva-mig-bundle"
+          mkdir -p "$bundle/scripts" "$bundle/deps"
+          cp scripts/migrate_cnu_to_cogniva.py scripts/knowledge_catalog.py scripts/question_contracts.py "$bundle/scripts/"
+          cp -r shared "$bundle/shared"
+          python3 -m pip install --quiet \
+            --platform manylinux2014_x86_64 \
+            --implementation cp \
+            --python-version "$py_ver" \
+            --only-binary=:all: \
+            --target "$bundle/deps" \
+            jsonschema==4.26.0 rfc8785==0.1.4 pymongo==4.11.2 dnspython
+
+          remote_tmp="/tmp/cogniva-mig-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          tar -C "$bundle" -czf - . | ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" \
+            "umask 077 && mkdir -p '$remote_tmp' && tar -xzf - -C '$remote_tmp'"
+
+          filter_b64=$(printf '%s' "$CONTEST_FILTER" | base64 -w0)
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" \
+            "python3 - '$remote_tmp' '$MIG_MODE' '$filter_b64' '$INCLUDE_SUBJECTS'" <<'PY'
+          import base64
+          import json
+          import pathlib
+          import shutil
+          import subprocess
+          import sys
+
+          remote_dir = pathlib.Path(sys.argv[1])
+          mig_mode = sys.argv[2]
+          contest_filter = base64.b64decode(sys.argv[3]).decode('utf-8').strip() or None
+          include_subjects = sys.argv[4].strip().lower() == 'true'
+
+          try:
+              sys.path.insert(0, str(remote_dir / 'deps'))
+              sys.path.insert(0, str(remote_dir / 'scripts'))
+              import migrate_cnu_to_cogniva as migrator
+
+              uri = ''
+              for raw in pathlib.Path('/opt/apps/.env.rust').read_text(encoding='utf-8').splitlines():
+                  s = raw.strip()
+                  if s.startswith('MONGODB_URI='):
+                      uri = s.split('=', 1)[1].strip().strip('"').strip("'")
+                      break
+              if not uri:
+                  raise RuntimeError('MONGODB_URI not present in /opt/apps/.env.rust')
+
+              report = migrator.run_mongo_migration(
+                  source_uri=uri,
+                  source_db_name='CNU',
+                  target_uri=uri,
+                  target_db_name='cogniva',
+                  dry_run=(mig_mode != 'apply'),
+                  contest_filter=contest_filter,
+                  include_contest_subjects=include_subjects,
+              )
+              if mig_mode == 'apply':
+                  prep = subprocess.check_output(
+                      ['docker', 'exec', '-e', 'RUST_LOG=error', 'api-rust-core', '/usr/local/bin/cogniva-api', '--prepare-storage'],
+                      text=True,
+                      stderr=subprocess.STDOUT,
+                  ).strip()
+                  jpos = prep.find('{')
+                  report['post_apply_storage_check'] = json.loads(prep[jpos:]) if jpos >= 0 else prep
+              print(json.dumps(report, ensure_ascii=False, indent=2))
+          finally:
+              shutil.rmtree(remote_dir, ignore_errors=True)
+          PY
+      - name: Remove runner SSH credentials
+        if: always()
+        run: rm -f ~/.ssh/id_ed25519
