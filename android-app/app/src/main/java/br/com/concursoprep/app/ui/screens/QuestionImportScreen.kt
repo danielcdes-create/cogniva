@@ -118,6 +118,19 @@ fun QuestionImportScreen(viewModel: QuestionImportViewModel, onBack: () -> Unit)
                         }
                     }
                 } else item {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            "Modo preparatório (acervo futuro): questões discursivas são validadas e preservadas no banco v2 com rubrica estruturada, mas não entram nas filas de prática objetiva nem possuem correção automática ativa.",
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
                     OutlinedTextField(value = draft.reference, onValueChange = { value -> viewModel.edit { it.copy(reference = value) } }, label = { Text("Resposta de referência") }, minLines = 3, enabled = editable, modifier = Modifier.fillMaxWidth())
                     Text("Rubrica: os pontos dos critérios devem somar 100. Critérios essenciais com zero impedem acerto confirmado.")
                     OutlinedTextField(value = draft.criteria, onValueChange = { value -> viewModel.edit { it.copy(criteria = value) } }, label = { Text("Critérios da rubrica (array JSON)") }, placeholder = { Text("[{\"criterion_id\":\"c1\",\"description\":\"...\",\"max_points\":100,\"essential\":true}]") }, minLines = 4, enabled = editable, modifier = Modifier.fillMaxWidth())
@@ -168,7 +181,7 @@ fun QuestionImportScreen(viewModel: QuestionImportViewModel, onBack: () -> Unit)
                 item {
                     Card {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Assistência de IA · Grok 4.7", style = MaterialTheme.typography.titleMedium)
+                            Text("Assistência de IA · xAI", style = MaterialTheme.typography.titleMedium)
                             Text("Envia o material acima à xAI somente ao tocar no botão. Até 10 rascunhos por solicitação; usa a cota diária de IA da conta.")
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 FilterChip(selected = draft.aiMode == "STRUCTURE", onClick = { viewModel.edit { it.copy(aiMode = "STRUCTURE") } }, enabled = editable && draft.assistanceId == null, label = { Text("Estruturar texto") })
@@ -239,7 +252,7 @@ fun QuestionImportScreen(viewModel: QuestionImportViewModel, onBack: () -> Unit)
                 }
             } }
             item {
-                OutlinedButton(onClick = { confirmNew = true }, enabled = !state.busy && !state.loading && state.storageReady && (!draft.submitted || draft.result?.get("complete")?.jsonPrimitive?.booleanOrNull == true)) { Text("Iniciar novo cadastro") }
+                OutlinedButton(onClick = { confirmNew = true }, enabled = !state.busy && !state.loading && state.storageReady && (!draft.submitted || draft.result != null)) { Text("Iniciar novo cadastro") }
             }
         }
     }

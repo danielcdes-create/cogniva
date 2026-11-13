@@ -31,7 +31,13 @@ class ConcursoApp : Application() {
 
     private var accountDatabases: AccountDatabaseSession<AppDatabase>? = null
 
-    fun selectAccount(userId: Long) { authStore.select(userId); openAccount(userId) }
+    suspend fun selectAccount(userId: Long) {
+        if (::repository.isInitialized) {
+            repository.awaitIdleForClose()
+        }
+        authStore.select(userId)
+        openAccount(userId)
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -57,16 +63,22 @@ class ConcursoApp : Application() {
         val session = accountDatabases ?: AccountDatabaseSession(
             openNamed = { name ->
                 Room.databaseBuilder(applicationContext, AppDatabase::class.java, name)
-                    .addMigrations(ExamMigrations.MIGRATION_1_2, ExamMigrations.MIGRATION_2_3, ExamMigrations.MIGRATION_3_4, ExamMigrations.MIGRATION_4_5)
+                    .addMigrations(
+                        ExamMigrations.MIGRATION_1_2,
+                        ExamMigrations.MIGRATION_2_3,
+                        ExamMigrations.MIGRATION_3_4,
+                        ExamMigrations.MIGRATION_4_5,
+                        ExamMigrations.MIGRATION_5_6
+                    )
                     .build()
             },
             close = { it.close() },
         ).also { accountDatabases = it }
         database = session.open(databaseName)
 
-        // 2. Configura OkHttp com timeouts generosos para LLMs (Gemini / OpenAI)
+        // 2. Configura OkHttp sem vazamento de logs HTTP em builds release
         val loggingInterceptor = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BASIC
+            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC else HttpLoggingInterceptor.Level.NONE
         }
 
         val okHttpClient = OkHttpClient.Builder()

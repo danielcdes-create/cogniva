@@ -34,10 +34,10 @@ class ConcursoRepository(
     val ownerUserId: Long = 0,
     private val auth: AuthStore? = null
 ) {
-    suspend fun questionImportCapabilities() = api.questionImportCapabilities()
-    suspend fun previewQuestionImport(payload: JsonObject) = api.previewQuestionImport(payload)
-    suspend fun commitQuestionImport(payload: JsonObject) = api.commitQuestionImport(payload)
-    suspend fun assistQuestionImport(payload: JsonObject) = api.assistQuestionImport(payload)
+    suspend fun questionImportCapabilities(): JsonObject { auth?.ensureSession(api, ownerUserId); return api.questionImportCapabilities() }
+    suspend fun previewQuestionImport(payload: JsonObject): JsonObject { auth?.ensureSession(api, ownerUserId); return api.previewQuestionImport(payload) }
+    suspend fun commitQuestionImport(payload: JsonObject): JsonObject { auth?.ensureSession(api, ownerUserId); return api.commitQuestionImport(payload) }
+    suspend fun assistQuestionImport(payload: JsonObject): JsonObject { auth?.ensureSession(api, ownerUserId); return api.assistQuestionImport(payload) }
     suspend fun loadQuestionImportDraft(): String? = metadata("question_import_draft")
     suspend fun saveQuestionImportDraft(value: String) {
         check(durable != null) { "Armazenamento local indisponível; o envio foi bloqueado." }
@@ -48,24 +48,71 @@ class ConcursoRepository(
     } ?: kotlinx.coroutines.flow.flowOf(null)
     private val syncMutex = Mutex()
     private val mutationMutex = Mutex()
+    suspend fun awaitIdleForClose() {
+        syncMutex.withLock {
+            mutationMutex.withLock { }
+        }
+    }
     private suspend fun <T> transaction(block: suspend () -> T): T = if (database!=null) database.withTransaction { block() } else block()
     private fun owner(userId: Long) { require(ownerUserId == 0L || ownerUserId == userId) { "As pendências pertencem a outra conta e foram preservadas." } }
     private suspend fun metadata(key: String): String? = durable?.metadata(key)
     private suspend fun metadata(key: String, value: String) { durable?.putMetadata(LocalMetadataEntity(key,value)) }
 
-    suspend fun linkTelegramAccountOrLogin(telegramUserId: Long?, telegramUsername: String?, displayName: String?, linkCode: String? = null): AuthSessionDto {
+    suspend fun startGuestOrOfflineSession(displayName: String?): AuthSessionDto {
         val identity = auth ?: error("Credencial da instalação indisponível")
-        if (!linkCode.isNullOrBlank()) {
-            api.nativeSession(NativeSessionPayload(identity.installationId, identity.installationSecret))
-            return api.linkTelegramOrLogin(TelegramLinkPayload(telegramUserId,telegramUsername,displayName,linkCode,identity.installationId,identity.installationSecret)).also(identity::accept)
-        }
-        require(telegramUserId == null && telegramUsername.isNullOrBlank()) { "Use o código de vínculo para acessar uma conta histórica." }
         return try {
-            api.nativeSession(NativeSessionPayload(identity.installationId, identity.installationSecret,displayName)).also(identity::accept)
-        } catch (e: CancellationException) { throw e } catch (e: java.io.IOException) {
-            // This is a unique, unlinked local identity, not a fabricated server session.
-            AuthSessionDto("",UserProfileDto(identity.localUserId,displayName=displayName,activeContestIds=listOf("CPNU"),currentDailyStreak=0,streakFreezesAvailable=0),0,false)
+            api.guestSession(NativeSessionPayload(identity.installationId, identity.installationSecret, displayName)).also(identity::accept)
+        } catch (e: CancellationException) { throw e } catch (_: java.io.IOException) {
+            AuthSessionDto(
+                "",
+                UserProfileDto(
+                    identity.localUserId,
+                    displayName = displayName,
+                    isGuest = true,
+                    activeContestIds = listOf("CPNU"),
+                    currentDailyStreak = 0,
+                    streakFreezesAvailable = 0
+                ),
+                0,
+                false
+            )
         }
+    }
+
+    suspend fun loginWithEmail(email: String, password: String): AuthSessionDto {
+        val identity = auth ?: error("Credencial da instalação indisponível")
+        val normalized = email.trim()
+        require(normalized.contains("@") && password.isNotEmpty()) { "Informe seu e-mail e sua senha." }
+        return api.login(AuthLoginPayload(email = normalized, password = password)).also(identity::accept)
+    }
+
+    suspend fun registerAccount(email: String, password: String, displayName: String?): AuthSessionDto {
+        val identity = auth ?: error("Credencial da instalação indisponível")
+        val normalized = email.trim()
+        require(normalized.contains("@") && password.length >= 10) { "Informe um e-mail válido e senha com no mínimo 10 caracteres." }
+        if (!identity.isRegisteredAccount(ownerUserId)) {
+            runCatching { identity.ensureSession(api, ownerUserId) }
+        }
+        return api.register(
+            AuthRegisterPayload(
+                email = normalized,
+                password = password,
+                displayName = displayName?.trim()?.takeIf { it.isNotEmpty() }
+            )
+        ).also(identity::accept)
+    }
+
+    suspend fun logoutAccount(): Long {
+        val identity = auth ?: error("Credencial da instalação indisponível")
+        runCatching { api.logout() }
+        return identity.clearSessionForLogout(ownerUserId)
+    }
+
+    suspend fun adoptExamTemplate(examId: String): StoredExam {
+        auth?.ensureSession(api, ownerUserId)
+        val updated = api.adoptExamTemplate(examId).toStored()
+        saveExamLocal(updated)
+        return updated
     }
 
     suspend fun saveOnboarding(userId: Long, contestIds: List<String>, dailyQuestionsTarget: Int, dailyHours: Double, displayName: String?): UserProfileDto {
@@ -116,7 +163,7 @@ class ConcursoRepository(
                 exam.revision == 0L && exam.syncStatus == "PENDING_CREATE" -> "PENDING_CREATE"
                 else -> "PENDING_UPDATE"
             }
-            saveExamAggregate(exam.copy(syncStatus=nextSyncStatus,syncError=null))
+            saveExamAggregate(exam.copy(syncStatus=nextSyncStatus,syncError=null,isCustomized=true))
         }
     }
     suspend fun setTrunkFocus(slug: String, focused: Boolean) { ensureExamSeed();examDao.setTrunkFocus(slug,focused) }
@@ -144,6 +191,7 @@ class ConcursoRepository(
                 val related=rows.filter { it.canonicalTopicId==topic.canonicalTopicId }
                 val value=(mastery[topic.canonicalTopicId]?:0.0)*100
                 SyllabusTopicNodeDto(SyllabusTopicDto(topic.localTopicId,exam.examId,subject.groupLabel(),subject.displayName,topic.displayTitle,index,
+                    canonicalTopicId=topic.canonicalTopicId,
                     estimation=EstimationMetadata(topic.diffStatus=="PRE_EDITAL_BASE",ConfidenceBadge.LOW,"Modelo/manual. Valide o conteúdo no edital e registre a fonte.",emptyList()),
                     diffStatus=when(topic.diffStatus){"OFICIAL_NOVO"->TopicDiffStatus.NEW_IN_EDITAL;"ARQUIVADO"->TopicDiffStatus.REMOVED_ARCHIVED;else->TopicDiffStatus.CONFIRMED}),value,related.sumOf { it.attempts },
                     if(related.isEmpty()) "NAO_INICIADO" else if(related.all { it.isMastered }) "DOMINADO" else if(related.any { it.practiceAvailable!=false&&(it.reviewRequired||Instant.parse(it.nextReviewAt)<=Instant.now()) }) "REVISAO" else "QUESTOES")
@@ -155,7 +203,7 @@ class ConcursoRepository(
         val exam=loadStoredExams().firstOrNull { it.examId==contestId } ?: return null
         if(exam.newTopicsCount+exam.archivedTopicsCount+exam.confirmedTopicsCount==0) return null
         fun nodes(status:String)=exam.subjects.flatMap { subject ->subject.topics.filter { it.diffStatus==status }.mapIndexed { index,topic ->
-            SyllabusTopicDto(topic.localTopicId,exam.examId,subject.groupLabel(),subject.displayName,topic.displayTitle,index,estimation=EstimationMetadata(false,ConfidenceBadge.LOW,"Publicação cadastrada pelo usuário; confira a fonte do edital."),diffStatus=when(status){"ARQUIVADO"->TopicDiffStatus.REMOVED_ARCHIVED;"OFICIAL_NOVO"->TopicDiffStatus.NEW_IN_EDITAL;else->TopicDiffStatus.CONFIRMED})
+            SyllabusTopicDto(topic.localTopicId,exam.examId,subject.groupLabel(),subject.displayName,topic.displayTitle,index,canonicalTopicId=topic.canonicalTopicId,estimation=EstimationMetadata(false,ConfidenceBadge.LOW,"Publicação cadastrada pelo usuário; confira a fonte do edital."),diffStatus=when(status){"ARQUIVADO"->TopicDiffStatus.REMOVED_ARCHIVED;"OFICIAL_NOVO"->TopicDiffStatus.NEW_IN_EDITAL;else->TopicDiffStatus.CONFIRMED})
         } }
         return ContestDiffScreenDto(exam.examId,exam.shortName,exam.examBoards.joinToString(),nodes("OFICIAL_CONFIRMADO"),nodes("OFICIAL_NOVO"),nodes("ARQUIVADO"))
     }
@@ -184,12 +232,12 @@ class ConcursoRepository(
         val records=projectedLearning().associateBy { it.questionId }
         return questions.map { q->records[q.id]?.let { row->q.copy(userStats=UserQuestionBriefStats(row.attempts,row.accuracyPct,row.events.maxByOrNull { Instant.parse(it.occurredAt) }?.occurredAt,row.isMastered,row.inErrorNotebook)) }?:q }
     }
-    suspend fun fetchOrGetOfflineQuiz(userId: Long,mode: QuizMode,quantity: Int,contestId: String?=null,disciplina: String?=null,componentId:String?=null): List<QuestionDto> {
+    suspend fun fetchOrGetOfflineQuiz(userId: Long,mode: QuizMode,quantity: Int,contestId: String?=null,disciplina: String?=null,componentId:String?=null,syllabusTopicId:String?=null): List<QuestionDto> {
         owner(userId);val count=quantity.coerceIn(1,120)
         val scope=PracticeScope.contest(mode,contestId)
         try {
             auth?.ensureSession(api,ownerUserId)
-            val remote=objectivePracticeQuestions(api.generateQuizQuestions(QuizGeneratePayload(userId,mode,count,trunkFocusSlugs=focusedTrunkSlugs().toList(),contestId=scope,disciplina=disciplina,componentId=componentId)).map(QuestionCacheMapping::withRevision))
+            val remote=objectivePracticeQuestions(api.generateQuizQuestions(QuizGeneratePayload(userId,mode,count,trunkFocusSlugs=focusedTrunkSlugs().toList(),contestId=scope,disciplina=disciplina,syllabusTopicId=syllabusTopicId,componentId=componentId)).map(QuestionCacheMapping::withRevision))
             require(componentId==null || remote.all { it.examComponentId==componentId }){"O servidor precisa confirmar o componente selecionado. Atualize e tente novamente."}
             if(remote.isNotEmpty()) dao.insertQuestions(remote.map { QuestionCacheMapping.toEntity(it,json) })
             return decorateQuestions(remote)
@@ -216,6 +264,7 @@ class ConcursoRepository(
         val commonTopics=if(mode==QuizMode.COMMON_TRUNK)loadStoredExams().filter { it.isActiveInLadder&&it.lifecycleStatus!="ARQUIVADO" }.flatMap { it.subjects }.flatMap { it.topics }.filter { it.diffStatus!="ARQUIVADO" }.map { it.canonicalTopicId }.toSet()else emptySet()
         val boardFilter=exam?.examBoards.orEmpty().filter { it!="A definir"&&it.isNotBlank() }.flatMap { if(it=="Cebraspe")listOf("Cebraspe","CEBRASPE","CESPE")else listOf(it) }.toSet()
         val pool=all.filter { mode!=QuizMode.SIMULADO||boardFilter.isEmpty()||it.source in boardFilter }.filter { q ->
+            (syllabusTopicId==null || q.canonicalTopicId==syllabusTopicId || syllabusTopicId in q.syllabusTopicIds) &&
             (disciplina==null || if(q.canonicalSubjectId!=null)q.canonicalSubjectId==ExamCatalog.subjectIdForLabel(disciplina) else q.disciplina in ExamCatalog.equivalentLabels(disciplina)) &&
             if(mode==QuizMode.COMMON_TRUNK)q.canonicalTopicId in commonTopics else (exam==null || q.canonicalTopicId in topics.orEmpty() || (q.canonicalTopicId==null && exam.subjects.any { it.topics.any { t->t.diffStatus!="ARQUIVADO" } && (it.displayName==q.disciplina || q.disciplina in ExamCatalog.legacyLabels(it.canonicalSubjectId)) }))
         }.filter { q -> exam==null || mode==QuizMode.SIMULADO || exam.subjects.any { s -> (q.canonicalTopicId==null || s.topics.any { it.diffStatus!="ARQUIVADO" && it.canonicalTopicId==q.canonicalTopicId }) && QuizSelection.allowed(decisions,exam,s,q.id,q.questionRevision) } }
@@ -495,8 +544,11 @@ class ConcursoRepository(
 
 fun StoredExam.toPayload():ExamBlueprintPayload=ExamBlueprintPayload(id=examId,revision=revision,wrongAnswerPenalty=wrongAnswerPenalty,title=title,shortName=shortName,institution=institution,role=role,trunkSlug=trunkSlug,status=lifecycleStatus,examBoards=examBoards,
     targetDate=when(dateType){"EXACT_DATE"->buildJsonObject{put("type","EXACT_DATE");put("iso_date",exactDateIso.orEmpty())};"ESTIMATED_WINDOW"->buildJsonObject{put("type","ESTIMATED_WINDOW");put("label",estimatedWindowLabel.orEmpty());put("estimated_sort_date",estimatedSortDateIso)};else->buildJsonObject{put("type","UNDEFINED")}},
-    historicalCutoffScore=historicalCutoffScore,isActiveInLadder=isActiveInLadder,ladderPriority=ladderPriority,syncStatus=syncStatus,subjects=subjects.map { s->ExamSubjectPayload(s.localSubjectId,s.canonicalSubjectId,s.displayName,s.category,s.weight,s.questionCount,s.relevanceTier,s.topics.map { ExamTopicPayload(it.localTopicId,it.canonicalTopicId,it.canonicalSubjectId,it.displayTitle,it.diffStatus) },s.stage) })
+    historicalCutoffScore=historicalCutoffScore,isActiveInLadder=isActiveInLadder,ladderPriority=ladderPriority,syncStatus=syncStatus,
+    templateSourceId=templateSourceId,templateRevisionSynced=templateRevisionSynced,isCustomized=isCustomized,upstreamUpdateAvailable=upstreamUpdateAvailable,
+    subjects=subjects.map { s->ExamSubjectPayload(s.localSubjectId,s.canonicalSubjectId,s.displayName,s.category,s.weight,s.questionCount,s.relevanceTier,s.topics.map { ExamTopicPayload(it.localTopicId,it.canonicalTopicId,it.canonicalSubjectId,it.displayTitle,it.diffStatus) },s.stage) })
 fun ExamBlueprintPayload.toStored():StoredExam=StoredExam(examId=id,title=title,shortName=shortName,institution=institution,role=role,trunkSlug=trunkSlug,lifecycleStatus=status,examBoards=examBoards,dateType=targetDate["type"]?.jsonPrimitive?.content?:"UNDEFINED",exactDateIso=targetDate["iso_date"]?.jsonPrimitive?.contentOrNull,estimatedWindowLabel=targetDate["label"]?.jsonPrimitive?.contentOrNull,estimatedSortDateIso=targetDate["estimated_sort_date"]?.jsonPrimitive?.contentOrNull?:targetDate["iso_date"]?.jsonPrimitive?.contentOrNull.orEmpty(),historicalCutoffScore=historicalCutoffScore,isActiveInLadder=isActiveInLadder,ladderPriority=ladderPriority,syncStatus="SYNCED",revision=revision,wrongAnswerPenalty=wrongAnswerPenalty,
+    templateSourceId=templateSourceId,templateRevisionSynced=templateRevisionSynced,isCustomized=isCustomized,upstreamUpdateAvailable=upstreamUpdateAvailable,
     confirmedTopicsCount=subjects.sumOf { it.topics.count { t->t.diffStatus=="OFICIAL_CONFIRMADO" } },newTopicsCount=subjects.sumOf { it.topics.count { t->t.diffStatus=="OFICIAL_NOVO" } },archivedTopicsCount=subjects.sumOf { it.topics.count { t->t.diffStatus=="ARQUIVADO" } },
     subjects=subjects.map { s->StoredSubject(s.localSubjectId,s.canonicalSubjectId,s.displayName,s.category,s.weight,s.questionCount,s.relevanceTier,s.topics.map { StoredTopic(it.localTopicId,it.canonicalTopicId,it.canonicalSubjectId,it.displayTitle,it.diffStatus) },s.stage) })
 

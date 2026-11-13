@@ -82,7 +82,7 @@ fun ContestsScreen(
     syllabusGroups: List<DisciplineSyllabusGroupDto>,
     diffData: ContestDiffScreenDto?,
     onSelectContest: (String) -> Unit,
-    onPracticeDiscipline: (String,String?) -> Unit,
+    onPracticeDiscipline: (String, String?, String?) -> Unit,
     onApplyDiffConsent: (String) -> Unit = {},
     syllabusViewMode: SyllabusViewMode = SyllabusViewMode.CONTEST,
     onSyllabusViewMode: (SyllabusViewMode) -> Unit = {},
@@ -91,7 +91,9 @@ fun ContestsScreen(
     trunkSlug: String = "fiscal",
     onSelectTrunk: (String) -> Unit = {},
     onEditContest: (String) -> Unit = {},
-    onDeleteContest: (String) -> Unit = {}
+    onDeleteContest: (String) -> Unit = {},
+    upstreamUpdateAvailable: Boolean = false,
+    onAdoptTemplate: (String) -> Unit = {}
 ) {
     var selectedTopicForSourceSheet by remember { mutableStateOf<SyllabusTopicDto?>(null) }
     var showEditalDiffSheet by remember { mutableStateOf(false) }
@@ -253,6 +255,39 @@ fun ContestsScreen(
                     )
                 }
             }
+            if (syllabusViewMode == SyllabusViewMode.CONTEST && upstreamUpdateAvailable) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Atualização oficial disponível no template deste concurso",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Sua grade personalizada foi preservada. Adote o template se quiser substituir pela nova revisão oficial.",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = { onAdoptTemplate(selectedContestId) },
+                            modifier = Modifier.heightIn(min = 48.dp)
+                        ) {
+                            Text("Adotar template")
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+            }
             if (diffData != null) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -397,7 +432,7 @@ fun ContestsScreen(
                             Spacer(modifier = Modifier.height(12.dp))
                             // Botão uniforme fillMaxWidth(min = 48dp)
                             OutlinedButton(
-                                onClick = { onPracticeDiscipline(group.discipline,group.componentId) },
+                                onClick = { onPracticeDiscipline(group.discipline, group.componentId, null) },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .heightIn(min = 48.dp)
@@ -478,8 +513,9 @@ fun ContestsScreen(
                     Button(
                         onClick = {
                             val disc = topic.discipline
+                            val componentId = syllabusGroups.firstOrNull { g -> g.topics.any { it.topic.id == topic.id } }?.componentId
                             selectedTopicForSourceSheet = null
-                            onPracticeDiscipline(disc,syllabusGroups.firstOrNull { g -> g.topics.any { it.topic.id==topic.id } }?.componentId)
+                            onPracticeDiscipline(disc, componentId, topic.canonicalTopicId)
                         },
                         modifier = Modifier
                             .weight(1f)

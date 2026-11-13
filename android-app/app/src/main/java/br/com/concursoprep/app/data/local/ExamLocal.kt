@@ -48,7 +48,11 @@ data class UserExamEntity(
     val syncStatus: String = "SYNCED",
     @androidx.room.ColumnInfo(defaultValue = "0") val revision: Long = 0,
     @androidx.room.ColumnInfo(defaultValue = "0") val wrongAnswerPenalty: Double = 0.0,
-    val syncError: String? = null
+    val syncError: String? = null,
+    val templateSourceId: String? = null,
+    val templateRevisionSynced: Long? = null,
+    @androidx.room.ColumnInfo(defaultValue = "0") val isCustomized: Boolean = false,
+    @androidx.room.ColumnInfo(defaultValue = "0") val upstreamUpdateAvailable: Boolean = false
 )
 
 @Entity(
@@ -149,6 +153,26 @@ interface ExamDao {
 }
 
 object ExamLocalMapping {
+    private fun encodeBoards(boards: List<String>): String =
+        kotlinx.serialization.json.Json.encodeToString(
+            kotlinx.serialization.builtins.ListSerializer(kotlinx.serialization.serializer<String>()),
+            boards
+        )
+
+    private fun decodeBoards(raw: String): List<String> {
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) return emptyList()
+        if (trimmed.startsWith("[")) {
+            return runCatching {
+                kotlinx.serialization.json.Json.decodeFromString(
+                    kotlinx.serialization.builtins.ListSerializer(kotlinx.serialization.serializer<String>()),
+                    trimmed
+                )
+            }.getOrElse { emptyList() }
+        }
+        return raw.split(",").map { it.trim() }.filter { it.isNotBlank() }
+    }
+
     fun toEntity(exam: StoredExam): UserExamEntity = UserExamEntity(
         examId = exam.examId,
         title = exam.title,
@@ -157,7 +181,7 @@ object ExamLocalMapping {
         role = exam.role,
         trunkSlug = exam.trunkSlug,
         lifecycleStatus = exam.lifecycleStatus,
-        examBoardsCsv = exam.examBoards.joinToString(","),
+        examBoardsCsv = encodeBoards(exam.examBoards),
         dateType = exam.dateType,
         exactDateIso = exam.exactDateIso,
         estimatedWindowLabel = exam.estimatedWindowLabel,
@@ -171,7 +195,11 @@ object ExamLocalMapping {
         syncStatus = exam.syncStatus,
         revision = exam.revision,
         wrongAnswerPenalty = exam.wrongAnswerPenalty,
-        syncError = exam.syncError
+        syncError = exam.syncError,
+        templateSourceId = exam.templateSourceId,
+        templateRevisionSynced = exam.templateRevisionSynced,
+        isCustomized = exam.isCustomized,
+        upstreamUpdateAvailable = exam.upstreamUpdateAvailable
     )
 
     fun subjectsOf(exam: StoredExam): List<ExamSubjectEntity> = exam.subjects.mapIndexed { index, subject ->
@@ -217,7 +245,7 @@ object ExamLocalMapping {
             role = exam.role,
             trunkSlug = exam.trunkSlug,
             lifecycleStatus = exam.lifecycleStatus,
-            examBoards = exam.examBoardsCsv.split(",").filter { it.isNotBlank() },
+            examBoards = decodeBoards(exam.examBoardsCsv),
             dateType = exam.dateType,
             exactDateIso = exam.exactDateIso,
             estimatedWindowLabel = exam.estimatedWindowLabel,
@@ -232,6 +260,10 @@ object ExamLocalMapping {
             revision = exam.revision,
             wrongAnswerPenalty = exam.wrongAnswerPenalty,
             syncError = exam.syncError,
+            templateSourceId = exam.templateSourceId,
+            templateRevisionSynced = exam.templateRevisionSynced,
+            isCustomized = exam.isCustomized,
+            upstreamUpdateAvailable = exam.upstreamUpdateAvailable,
             subjects = subjects.map { subject ->
                 StoredSubject(
                     localSubjectId = subject.localSubjectId,
@@ -258,6 +290,14 @@ object ExamLocalMapping {
 }
 
 object ExamMigrations {
+    val MIGRATION_5_6 = object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE user_exams ADD COLUMN templateSourceId TEXT")
+            db.execSQL("ALTER TABLE user_exams ADD COLUMN templateRevisionSynced INTEGER")
+            db.execSQL("ALTER TABLE user_exams ADD COLUMN isCustomized INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE user_exams ADD COLUMN upstreamUpdateAvailable INTEGER NOT NULL DEFAULT 0")
+        }
+    }
     val MIGRATION_4_5=object:Migration(4,5){override fun migrate(db:SupportSQLiteDatabase){db.execSQL("ALTER TABLE pending_attempts ADD COLUMN examComponentId TEXT")}}
     val MIGRATION_3_4 = object : Migration(3,4) {
         override fun migrate(db: SupportSQLiteDatabase) {

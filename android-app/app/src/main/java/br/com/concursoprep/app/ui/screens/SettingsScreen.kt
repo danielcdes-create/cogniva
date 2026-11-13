@@ -57,7 +57,7 @@ import br.com.concursoprep.app.BuildConfig
 import br.com.concursoprep.app.domain.exam.ExamCatalog
 import br.com.concursoprep.app.domain.exam.StoredExam
 import br.com.concursoprep.app.domain.model.ApkUpdateUiState
-import br.com.concursoprep.app.domain.model.AccountLinkUiState
+import br.com.concursoprep.app.domain.model.AccountAuthUiState
 import br.com.concursoprep.app.domain.model.AppThemeMode
 import br.com.concursoprep.app.domain.model.UserProfileDto
 import br.com.concursoprep.app.ui.theme.CognivaBrandHeader
@@ -66,7 +66,7 @@ import br.com.concursoprep.app.ui.theme.LocalExtendedColors
 /**
  * Aba "Ajustes" (SettingsScreen):
  * Centraliza:
- * 1. Cadastro / Perfil de Usuário & Vínculo com Bot do Telegram (ID / @username / Nome)
+ * 1. Perfil de Usuário & Conta Nativa Cogniva (E-mail + Senha Argon2id / Convidado)
  * 2. Aparência do App (Modo Claro / Escuro / Sistema)
  * 3. Metas Diárias & Escada de Concursos Ativos (Questões/dia, Horas/dia, Concursos)
  * 4. Atualização do App via OTA (Verificação de Versão, SHA-256 e Download Direto de APK)
@@ -82,13 +82,10 @@ fun SettingsScreen(
     pendingSyncCount: Int,
     onSelectThemeMode: (AppThemeMode) -> Unit,
     onSaveUserSettings: (
-        telegramUserId: Long?,
-        telegramUsername: String?,
         displayName: String,
         selectedContests: List<String>,
         dailyQuestionsTarget: Int,
-        dailyHoursTarget: Double,
-        linkCode: String?
+        dailyHoursTarget: Double
     ) -> Unit,
     onCheckApkUpdate: () -> Unit,
     onInstallApkUpdate: () -> Unit,
@@ -105,26 +102,25 @@ fun SettingsScreen(
     onDeleteExam: (StoredExam) -> Unit = {},
     onCreateExam: () -> Unit = {},
     onUseServerExam: (StoredExam) -> Unit = {},
+    onAdoptTemplate: (StoredExam) -> Unit = {},
     onOpenPending: () -> Unit = {},
-    accountLinkState: AccountLinkUiState = AccountLinkUiState(),
-    onConfirmAccountLink: (Long, String?, String) -> Unit = { _, _, _ -> },
+    accountAuthState: AccountAuthUiState = AccountAuthUiState(),
+    onAuthenticateAccount: (email: String, password: String, displayName: String?, isRegister: Boolean) -> Unit = { _, _, _, _ -> },
+    onLogoutAccount: () -> Unit = {},
     onOpenQuestionImport: () -> Unit = {}
 ) {
     var managementOpen by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     val ext = LocalExtendedColors.current
 
     var displayName by remember(userProfile.displayName) {
-        mutableStateOf(userProfile.displayName ?: "Concurseiro")
+        mutableStateOf(userProfile.displayName ?: "Estudante")
     }
-    var linkCode by remember(userProfile.userId) { mutableStateOf("") }
-    LaunchedEffect(accountLinkState.isLinked) {
-        if (accountLinkState.isLinked) linkCode = ""
+    var authEmail by remember(userProfile.userId, userProfile.email) {
+        mutableStateOf(userProfile.email ?: "")
     }
-    var telegramUserIdInput by remember(userProfile.userId) {
-        mutableStateOf(if(userProfile.userId>0)userProfile.userId.toString()else "")
-    }
-    var telegramUsernameInput by remember(userProfile.username) {
-        mutableStateOf(userProfile.username ?: "")
+    var authPassword by remember(userProfile.userId) { mutableStateOf("") }
+    LaunchedEffect(accountAuthState.isAuthenticated) {
+        if (accountAuthState.isAuthenticated) authPassword = ""
     }
     var dailyQuestions by remember(userProfile.dailyQuestionsTarget) {
         mutableIntStateOf(userProfile.dailyQuestionsTarget)
@@ -145,7 +141,19 @@ fun SettingsScreen(
 
     val ladderChips = ladderExams.filter { it.lifecycleStatus != "ARQUIVADO" }
     if(managementOpen) {
-        ExamManagementScreen(ladderExams+pendingExamDeletions,pendingSyncCount,onBack={managementOpen=false},onCreate=onCreateExam,onEdit=onEditExam,onArchive=onArchiveExam,onRestore=onRestoreExam,onDelete=onDeleteExam,onPending=onOpenPending,onUseServer=onUseServerExam)
+        ExamManagementScreen(
+            ladderExams + pendingExamDeletions,
+            pendingSyncCount,
+            onBack = { managementOpen = false },
+            onCreate = onCreateExam,
+            onEdit = onEditExam,
+            onArchive = onArchiveExam,
+            onRestore = onRestoreExam,
+            onDelete = onDeleteExam,
+            onPending = onOpenPending,
+            onUseServer = onUseServerExam,
+            onAdoptTemplate = onAdoptTemplate
+        )
         return
     }
 
@@ -168,7 +176,9 @@ fun SettingsScreen(
             )
 
             OutlinedButton(onClick={managementOpen=true},modifier=Modifier.fillMaxWidth()) { Text("Gerenciar concursos e registros") }
-            OutlinedButton(onClick=onOpenQuestionImport,modifier=Modifier.fillMaxWidth()) { Text("Inserir questões · individual, lote ou IA") }
+            if (userProfile.isAdmin) {
+                OutlinedButton(onClick=onOpenQuestionImport,modifier=Modifier.fillMaxWidth()) { Text("Inserir questões · individual, lote ou IA") }
+            }
             br.com.concursoprep.app.ui.components.StudyStructureHelp()
             // =========================================================================
             // 1. APARÊNCIA (Modo Claro / Escuro / Sistema)
@@ -239,7 +249,7 @@ fun SettingsScreen(
             }
 
             // =========================================================================
-            // 2. CADASTRO DE USUÁRIO & VÍNCULO COM BOT DO TELEGRAM
+            // 2. PERFIL E CONTA NATIVA COGNIVA
             // =========================================================================
             Card(
                 shape = RoundedCornerShape(14.dp),
@@ -275,7 +285,7 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.primaryContainer
                         ) {
                             Text(
-                                text = "ID #${userProfile.userId}",
+                                text = if (userProfile.isGuest) "Modo convidado · ID #${userProfile.userId}" else "Conta #${userProfile.userId}",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -285,7 +295,7 @@ fun SettingsScreen(
                     }
 
                     Text(
-                        text = "Edite seu nome ou confirme o acesso a uma conta histórica com um código de vínculo.",
+                        text = "Personalize seu nome de exibição e gerencie o acesso à sua conta Cogniva.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -295,19 +305,23 @@ fun SettingsScreen(
                         onValueChange = { displayName = it },
                         label = { Text("Nome de Exibição") },
                         singleLine = true,
-                        enabled = !accountLinkState.isSubmitting,
+                        enabled = !accountAuthState.isSubmitting,
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    AccountLinkForm(
-                        userId = telegramUserIdInput,
-                        onUserIdChange = { telegramUserIdInput = it },
-                        username = telegramUsernameInput,
-                        onUsernameChange = { telegramUsernameInput = it },
-                        code = linkCode,
-                        onCodeChange = { linkCode = it },
-                        state = accountLinkState,
-                        onConfirm = onConfirmAccountLink,
+                    AccountAuthForm(
+                        email = authEmail,
+                        onEmailChange = { authEmail = it },
+                        password = authPassword,
+                        onPasswordChange = { authPassword = it },
+                        isGuest = userProfile.isGuest,
+                        authenticatedEmail = userProfile.email,
+                        isAdmin = userProfile.isAdmin,
+                        state = accountAuthState,
+                        onAuthenticate = { email, password, isRegister ->
+                            onAuthenticateAccount(email, password, displayName.trim().ifBlank { null }, isRegister)
+                        },
+                        onLogout = onLogoutAccount,
                         modifier = Modifier.fillMaxWidth()
                     )
 
@@ -412,16 +426,13 @@ fun SettingsScreen(
                     Button(
                         onClick = {
                             onSaveUserSettings(
-                                null,
-                                null,
-                                displayName.trim().ifBlank { "Concurseiro" },
+                                displayName.trim().ifBlank { "Estudante" },
                                 selectedContests.toList(),
                                 dailyQuestions,
-                                dailyHours,
-                                null
+                                dailyHours
                             )
                         },
-                        enabled = !accountLinkState.isSubmitting,
+                        enabled = !accountAuthState.isSubmitting,
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(min = 48.dp)
