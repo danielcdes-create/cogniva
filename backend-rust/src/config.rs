@@ -24,6 +24,8 @@ pub struct AppConfig {
 
 impl AppConfig {
     pub fn from_env() -> Self {
+        let _ = dotenvy::dotenv();
+
         let (bind_ip, parsed_port) = env::var("BIND_ADDRESS")
             .ok()
             .and_then(|raw| raw.parse::<SocketAddr>().ok())
@@ -39,9 +41,13 @@ impl AppConfig {
         let mongodb_uri =
             env::var("MONGODB_URI").unwrap_or_else(|_| "mongodb://127.0.0.1:27017".to_string());
 
-        let mongodb_db = env::var("DATABASE_NAME")
+        let mongodb_db = env::var("MONGODB_DB_NAME")
+            .or_else(|_| env::var("DATABASE_NAME"))
             .or_else(|_| env::var("MONGODB_DB"))
-            .unwrap_or_else(|_| "cogniva".to_string());
+            .ok()
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty() && !v.eq_ignore_ascii_case("cnu"))
+            .unwrap_or_else(|| "cogniva".to_string());
 
         let jwt_secret = env::var("JWT_SECRET").unwrap_or_default();
 
@@ -109,6 +115,12 @@ impl AppConfig {
     }
 
     pub fn validate_server(&self) -> Result<(), AppError> {
+        if self.mongodb_db.eq_ignore_ascii_case("cnu") {
+            return Err(AppError::Internal(
+                "O banco legado CNU é estritamente somente-leitura na 2.0.0; use MONGODB_DB_NAME=cogniva"
+                    .into(),
+            ));
+        }
         if self.jwt_secret.len() < 32 {
             return Err(AppError::Internal(
                 "JWT_SECRET ausente ou menor que 32 bytes".into(),
