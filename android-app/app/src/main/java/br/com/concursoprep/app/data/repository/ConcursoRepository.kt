@@ -64,17 +64,17 @@ class ConcursoRepository(
             api.guestSession(NativeSessionPayload(identity.installationId, identity.installationSecret, displayName)).also(identity::accept)
         } catch (e: CancellationException) { throw e } catch (_: java.io.IOException) {
             AuthSessionDto(
-                "",
-                UserProfileDto(
-                    identity.localUserId,
+                token = "",
+                expiresInDays = 0,
+                profile = UserProfileDto(
+                    userId = identity.localUserId,
                     displayName = displayName,
                     isGuest = true,
                     activeContestIds = listOf("CPNU"),
                     currentDailyStreak = 0,
                     streakFreezesAvailable = 0
                 ),
-                0,
-                false
+                historicalQuestionsCount = 0
             )
         }
     }

@@ -1735,7 +1735,7 @@ async fn stage3_storage_validators_indexes_cas_and_legacy_preservation() {
         storage::create(&db, 123, req_fn(q.clone(), create_op.clone(), 0, false))
             .await
             .unwrap()["status"],
-        "created"
+        "applied"
     );
     // Strict MongoDB $jsonSchema rejects invalid answers array
     assert!(db

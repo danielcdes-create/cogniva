@@ -137,6 +137,16 @@ pub fn verify_csrf_same_origin(
     if matches!(method, &Method::GET | &Method::HEAD | &Method::OPTIONS) {
         return Ok(());
     }
+    if headers
+        .get("x-cogniva-csrf")
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        != Some("1")
+    {
+        return Err(AppError::Forbidden(
+            "Cabeçalho CSRF ausente na mutação da sessão web".into(),
+        ));
+    }
     let origin = headers
         .get(header::ORIGIN)
         .and_then(|v| v.to_str().ok())

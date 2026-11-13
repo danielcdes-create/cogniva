@@ -17,10 +17,13 @@ use futures::TryStreamExt;
 use rand::seq::SliceRandom;
 use std::collections::{HashMap, HashSet};
 
-pub const INVALID_REPORTS: [&str; 6] = [
+pub const INVALID_REPORTS: [&str; 9] = [
     "Questão com Erros de Conteúdo",
+    "Questão Mal Formulada",
+    "Enunciado Mal Formulado",
     "Alternativas Corretas em Duplicidade",
     "Alternativas Mal Formuladas",
+    "Alternativas c/ Erros de Conteúdo",
     "Enunciado c/ Erros de Conteúdo",
     "Alternativas Incorretas",
     "Questão Completamente Problemática",
