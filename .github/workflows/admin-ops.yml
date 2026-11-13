@@ -304,13 +304,26 @@ jobs:
                   include_contest_subjects=include_subjects,
               )
               if mig_mode == 'apply':
-                  prep = subprocess.check_output(
+                  proc = subprocess.run(
                       ['docker', 'exec', '-e', 'RUST_LOG=error', 'api-rust-core', '/usr/local/bin/cogniva-api', '--prepare-storage'],
+                      capture_output=True,
                       text=True,
-                      stderr=subprocess.STDOUT,
-                  ).strip()
+                  )
+                  if proc.returncode != 0:
+                      raise RuntimeError(
+                          f"--prepare-storage failed (exit {proc.returncode}): stdout={proc.stdout!r} stderr={proc.stderr!r}"
+                      )
+                  prep = proc.stdout.strip()
                   jpos = prep.find('{')
                   report['post_apply_storage_check'] = json.loads(prep[jpos:]) if jpos >= 0 else prep
+
+                  import urllib.request
+                  with urllib.request.urlopen('http://127.0.0.1:8001/api/v1/ready', timeout=10) as r_ready:
+                      ready_payload = json.loads(r_ready.read().decode('utf-8'))
+                  report['post_apply_live_api_check'] = {
+                      'ready_status': r_ready.status,
+                      'ready': ready_payload,
+                  }
               print(json.dumps(report, ensure_ascii=False, indent=2))
           finally:
               shutil.rmtree(remote_dir, ignore_errors=True)
