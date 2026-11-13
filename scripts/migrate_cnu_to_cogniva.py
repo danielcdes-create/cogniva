@@ -1513,7 +1513,10 @@ def _read_source_catalogs_and_labels(src_db) -> tuple[list[dict], dict[str, str]
     ):
         if coll_name not in existing_colls:
             continue
-        rows = [json.loads(json_util.dumps(d)) for d in src_db.get_collection(coll_name).find({})]
+        rows = [
+            json.loads(json_util.dumps(d, json_options=json_util.RELAXED_JSON_OPTIONS))
+            for d in src_db.get_collection(coll_name).find({})
+        ]
         rows.sort(key=lambda r: int(r.get("version") or 0))
         for doc in rows:
             cat = doc.get(payload_key)
@@ -1548,12 +1551,57 @@ def _read_target_active_catalog(
     event_raw = tgt_db.get_collection("knowledge_catalog_activations").find_one({"_id": act_id})
     if not event_raw:
         return copy.deepcopy(bundled_catalog), copy.deepcopy(bundled_registry), None
-    event = json.loads(json_util.dumps(event_raw))
+    event = json.loads(json_util.dumps(event_raw, json_options=json_util.RELAXED_JSON_OPTIONS))
     cat = event.get("catalog")
     reg = event.get("registry")
     if isinstance(cat, dict) and isinstance(reg, dict):
         return cat, reg, act_id
     return copy.deepcopy(bundled_catalog), copy.deepcopy(bundled_registry), None
+
+
+def _cast_catalog_doc_int64_fields(doc: dict, keys: tuple[str, ...], int64_cls) -> dict:
+    """Return a shallow copy of `doc` with specified integer metadata fields cast to `bson.Int64`."""
+    patched = copy.copy(doc)
+    for k in keys:
+        val = patched.get(k)
+        if isinstance(val, int) and not isinstance(val, bool):
+            patched[k] = int64_cls(int(val))
+    return patched
+
+
+def _ensure_catalog_bson_int64(tgt_db) -> dict:
+    """Ensure `knowledge_catalog_head`, `knowledge_catalog_activations`, and `knowledge_catalog_versions` store i64 fields as BSON Int64."""
+    from bson import Int64
+
+    spec = (
+        ("knowledge_catalog_head", ("version",)),
+        ("knowledge_catalog_activations", ("version", "actor_user_id", "draft_revision")),
+        ("knowledge_catalog_versions", ("version",)),
+    )
+    existing_colls = set(tgt_db.list_collection_names())
+    normalized_counts: dict[str, int] = {}
+    remaining_int32 = 0
+
+    for coll_name, keys in spec:
+        if coll_name not in existing_colls:
+            normalized_counts[coll_name] = 0
+            continue
+        coll = tgt_db.get_collection(coll_name)
+        count = 0
+        for raw_doc in coll.find({}):
+            patched = _cast_catalog_doc_int64_fields(raw_doc, keys, Int64)
+            coll.replace_one({"_id": raw_doc["_id"]}, patched)
+            count += 1
+        normalized_counts[coll_name] = count
+        remaining_int32 += coll.count_documents({"version": {"$type": "int"}})
+
+    if remaining_int32 != 0:
+        raise RuntimeError(f"failed to normalize catalog version fields to BSON Int64 (remaining Int32={remaining_int32})")
+
+    return {
+        "int64_verified": True,
+        "documents_checked": normalized_counts,
+    }
 
 
 def run_mongo_migration(
@@ -1565,7 +1613,7 @@ def run_mongo_migration(
     contest_filter: str | None = None,
     include_contest_subjects: bool = False,
 ) -> dict:
-    from bson import json_util
+    from bson import Int64, json_util
     from pymongo import MongoClient, ReplaceOne
 
     if source_uri == target_uri and source_db_name == target_db_name:
@@ -1585,14 +1633,17 @@ def run_mongo_migration(
         }
         source_catalogs, source_labels = _read_source_catalogs_and_labels(src_db)
         raw_cursor = src_db.get_collection("todasQuestoes").find({})
-        all_raw_questions = [json.loads(json_util.dumps(d)) for d in raw_cursor]
+        all_raw_questions = [
+            json.loads(json_util.dumps(d, json_options=json_util.RELAXED_JSON_OPTIONS))
+            for d in raw_cursor
+        ]
 
         raw_contests_by_coll: dict[str, list[dict]] = {}
         if contest_filter:
             for c_coll in ("exam_templates", "user_exams", "concursos"):
                 if c_coll in coll_names:
                     raw_contests_by_coll[c_coll] = [
-                        json.loads(json_util.dumps(d))
+                        json.loads(json_util.dumps(d, json_options=json_util.RELAXED_JSON_OPTIONS))
                         for d in src_db.get_collection(c_coll).find({})
                     ]
     finally:
@@ -1684,7 +1735,7 @@ def run_mongo_migration(
             {
                 "$setOnInsert": {
                     "catalog_id": bundled_catalog["catalog_id"],
-                    "version": int(bundled_catalog["catalog_version"]),
+                    "version": Int64(int(bundled_catalog["catalog_version"])),
                     "payload": bundled_catalog,
                 }
             },
@@ -1706,16 +1757,16 @@ def run_mongo_migration(
             event_doc = {
                 "_id": act_id,
                 "operation_id": op_uuid,
-                "actor_user_id": 0,
+                "actor_user_id": Int64(0),
                 "draft_id": op_uuid,
-                "draft_revision": 1,
+                "draft_revision": Int64(1),
                 "request_sha256": req_sha,
                 "reason": "Migração somente-leitura das extensões editoriais de catálogo CNU para Cogniva 2.0",
                 "recorded_at": now_dt,
                 "parent_activation_id": parent_activation_id,
                 "base_catalog_sha256": base_sha,
                 "catalog_sha256": next_sha,
-                "version": next_ver,
+                "version": Int64(next_ver),
                 "catalog": effective_catalog,
                 "registry": effective_registry,
             }
@@ -1730,7 +1781,7 @@ def run_mongo_migration(
                 {
                     "$setOnInsert": {
                         "catalog_id": effective_catalog["catalog_id"],
-                        "version": next_ver,
+                        "version": Int64(next_ver),
                         "payload": effective_catalog,
                     }
                 },
@@ -1739,7 +1790,7 @@ def run_mongo_migration(
             head_doc = {
                 "_id": "cogniva-knowledge",
                 "activation_id": act_id,
-                "version": next_ver,
+                "version": Int64(next_ver),
                 "catalog_sha256": next_sha,
                 "updated_at": now_dt,
             }
@@ -1751,12 +1802,16 @@ def run_mongo_migration(
             stats["activated_catalog_version"] = next_ver
             stats["activated_catalog_id"] = act_id
 
+        # 2b. Ensure BSON Int64 parity with Rust catalog_runtime.rs on all active/historical catalog metadata
+        stats["catalog_bson_int64"] = _ensure_catalog_bson_int64(tgt_db)
+
         # 3. Upsert selectively migrated contests into global exam_templates & activate on admin accounts
         tpl_coll = tgt_db.get_collection("exam_templates")
         migrated_tpl_ids: list[str] = []
         for mtpl in matched_templates:
             tpl_doc = copy.deepcopy(mtpl)
             tpl_doc["exam_id"] = tpl_doc["_id"]
+            tpl_doc["revision"] = Int64(int(tpl_doc.get("revision") or 1))
             tpl_doc["updated_at"] = now_dt
             tpl_coll.replace_one({"_id": tpl_doc["_id"]}, tpl_doc, upsert=True)
             migrated_tpl_ids.append(tpl_doc["_id"])
@@ -1774,6 +1829,7 @@ def run_mongo_migration(
         for tpl in templates_bundle["templates"]:
             tpl_doc = copy.deepcopy(tpl)
             tpl_doc["exam_id"] = tpl_doc["_id"]
+            tpl_doc["revision"] = Int64(int(tpl_doc.get("revision") or 1))
             tpl_doc["updated_at"] = now_dt
             up = tpl_coll.update_one({"_id": tpl_doc["_id"]}, {"$setOnInsert": tpl_doc}, upsert=True)
             if up.upserted_id is not None:

@@ -353,7 +353,37 @@ class MigrateCnuToCognivaTest(unittest.TestCase):
         self.assertEqual(out["canonical_topic_id"], "BCB_PIX_ARRANJOS")
         self.assertEqual(out["disciplina"], "Mercado Financeiro")
 
+    def test_cast_catalog_doc_int64_fields_wraps_metadata_integers(self):
+        class FakeInt64(int):
+            pass
+
+        head = {
+            "_id": "cogniva-knowledge",
+            "activation_id": "0:abc",
+            "version": 3,
+            "reviewed": True,
+        }
+        patched_head = migrator._cast_catalog_doc_int64_fields(head, ("version", "reviewed"), FakeInt64)
+        self.assertIsInstance(patched_head["version"], FakeInt64)
+        self.assertEqual(patched_head["version"], 3)
+        self.assertIs(patched_head["reviewed"], True)
+        self.assertNotIsInstance(patched_head["reviewed"], FakeInt64)
+
+        act = {
+            "_id": "0:abc",
+            "version": 3,
+            "actor_user_id": 0,
+            "draft_revision": 1,
+        }
+        patched_act = migrator._cast_catalog_doc_int64_fields(
+            act, ("version", "actor_user_id", "draft_revision"), FakeInt64
+        )
+        self.assertIsInstance(patched_act["version"], FakeInt64)
+        self.assertIsInstance(patched_act["actor_user_id"], FakeInt64)
+        self.assertIsInstance(patched_act["draft_revision"], FakeInt64)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
