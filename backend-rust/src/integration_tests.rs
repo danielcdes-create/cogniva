@@ -123,7 +123,7 @@ pub(super) fn v2_question_doc(
         base["classification"] = json!({
             "revision": 0,
             "state": "UNCLASSIFIED",
-            "catalog_version": null,
+            "catalog_version": 2,
             "links": []
         });
         if let Some(obj) = base.as_object_mut() {

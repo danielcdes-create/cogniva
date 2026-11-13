@@ -188,8 +188,8 @@ pub async fn prepare_question(
         .as_str()
         .unwrap_or("UNDER_REVIEW")
         .to_string();
-    let explicit_validity_decision = body.document["validity"]["status"] != old["validity"]["status"]
-        || body.document["validity"]["evaluated_content_revision"].is_null();
+    let explicit_validity_decision =
+        body.document["validity"]["status"] != old["validity"]["status"];
 
     // Content edits without an explicit new validity decision transition to UNDER_REVIEW.
     if changed && !legacy && !explicit_validity_decision {
