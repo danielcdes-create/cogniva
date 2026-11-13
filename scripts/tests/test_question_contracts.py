@@ -30,8 +30,11 @@ class QuestionContractsTest(unittest.TestCase):
             with self.subTest(path=path.name):
                 qc.validate_question(read(path), self.catalog)
 
-    def test_five_options_and_one_correct_option_are_required(self):
+    def test_four_or_five_options_and_one_correct_option_are_required(self):
         q = fixture("question-multiple-choice")
+        q["answers"].pop()
+        rehash(q)
+        qc.validate_question(q, self.catalog)
         q["answers"].pop()
         with self.assertRaisesRegex(ValueError, "schema"):
             qc.validate_question(q, self.catalog)

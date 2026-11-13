@@ -19,67 +19,98 @@ import org.junit.runner.RunWith
 class AccountLinkSettingsTest {
     @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
 
-    @Test fun confirmsBesideTheCodeWithoutSavingPreferences() = verifyForm(1f)
-    @Test fun largeFontKeepsAllFieldsAndConfirmationReachable() = verifyForm(2f)
+    @Test fun authenticatesWithoutSavingPreferencesAndSupportsLogout() = verifyForm(1f)
+    @Test fun largeFontKeepsAllFieldsAndAuthenticationReachable() = verifyForm(2f)
 
     private fun verifyForm(fontScale: Float) {
-        var state by mutableStateOf(AccountLinkUiState())
-        val confirmations = mutableListOf<Triple<Long, String?, String>>()
+        var profile by mutableStateOf(
+            UserProfileDto(
+                userId = 7084155621,
+                displayName = "Daniel Caires",
+                role = "student",
+                isGuest = true
+            )
+        )
+        var state by mutableStateOf(AccountAuthUiState())
+        val authAttempts = mutableListOf<Triple<String, String, Boolean>>()
+        var logoutCalls = 0
         var preferencesSaved = 0
-        val syntheticCode = "header." + "x".repeat(240) + ".signature"
+
         rule.setContent {
             val density = LocalDensity.current
             CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
                 ConcursoPrepTheme {
                     SettingsScreen(
-                        userProfile = UserProfileDto(7084155621, displayName = "Daniel Caires"),
+                        userProfile = profile,
                         themeMode = AppThemeMode.LIGHT,
                         apkUpdateState = ApkUpdateUiState(),
                         cachedQuestionsCount = 0,
                         pendingSyncCount = 0,
                         onSelectThemeMode = {},
-                        onSaveUserSettings = { _, _, _, _, _, _, _ -> preferencesSaved++ },
-                        onCheckApkUpdate = {}, onInstallApkUpdate = {}, onSyncNow = {},
-                        onClearOfflineCache = {}, onReopenOnboarding = {},
-                        accountLinkState = state,
-                        onConfirmAccountLink = { id, username, code ->
-                            confirmations += Triple(id, username, code)
-                            state = AccountLinkUiState(isSubmitting = true)
+                        onSaveUserSettings = { _, _, _, _ -> preferencesSaved++ },
+                        onCheckApkUpdate = {},
+                        onInstallApkUpdate = {},
+                        onSyncNow = {},
+                        onClearOfflineCache = {},
+                        onReopenOnboarding = {},
+                        accountAuthState = state,
+                        onAuthenticateAccount = { email, password, _, isRegister ->
+                            authAttempts += Triple(email, password, isRegister)
+                            state = AccountAuthUiState(isSubmitting = true)
+                        },
+                        onLogoutAccount = {
+                            logoutCalls++
+                            profile = profile.copy(email = null, isGuest = true)
+                            state = AccountAuthUiState(message = "Sessão encerrada neste aparelho.")
                         }
                     )
                 }
             }
         }
-        rule.onNodeWithTag("account_link_confirm").performScrollTo().assertIsNotEnabled()
-        // The broken Row left ID/username at almost zero width. Each real field
-        // must retain usable width and height after being scrolled into view.
+
+        rule.onNodeWithTag("account_auth_submit").performScrollTo().assertIsNotEnabled()
         val rootWidth = rule.onRoot().fetchSemanticsNode().boundsInRoot.width
-        listOf("account_link_id", "account_link_username", "account_link_code").forEach { tag ->
+        listOf("account_auth_email", "account_auth_password").forEach { tag ->
             val node = rule.onNodeWithTag(tag).performScrollTo().assertIsDisplayed()
             val bounds = node.fetchSemanticsNode().boundsInRoot
             assertTrue("$tag collapsed at fontScale=$fontScale", bounds.width > rootWidth * .7f)
             assertTrue("$tag lost its touch area", bounds.height > 40f)
         }
-        rule.onNodeWithTag("account_link_username").performScrollTo().performTextInput("@user_7084155621")
-        rule.onNodeWithTag("account_link_code").performScrollTo().performTextInput(syntheticCode)
-        rule.onNodeWithTag("account_link_confirm").performScrollTo().assertIsEnabled().performClick()
-        rule.onNodeWithTag("account_link_confirm").assertIsNotEnabled()
-        rule.onNodeWithTag("account_link_code").assertIsNotEnabled()
+
+        rule.onNodeWithTag("account_auth_mode_register").performScrollTo().performClick()
+        rule.onNodeWithTag("account_auth_email").performScrollTo().performTextInput("estudante@cogniva.app")
+        rule.onNodeWithTag("account_auth_password").performScrollTo().performTextInput("curta")
+        // Register mode requires at least 10 characters for password
+        rule.onNodeWithTag("account_auth_submit").performScrollTo().assertIsNotEnabled()
+
+        rule.onNodeWithTag("account_auth_password").performScrollTo().performTextClearance()
+        rule.onNodeWithTag("account_auth_password").performScrollTo().performTextInput("SenhaForte#2026")
+        rule.onNodeWithTag("account_auth_submit").performScrollTo().assertIsEnabled().performClick()
+        rule.onNodeWithTag("account_auth_submit").assertIsNotEnabled()
+        rule.onNodeWithTag("account_auth_email").assertIsNotEnabled()
+
         rule.runOnIdle {
-            assertEquals(listOf(Triple(7084155621L, "user_7084155621", syntheticCode)), confirmations)
+            assertEquals(listOf(Triple("estudante@cogniva.app", "SenhaForte#2026", true)), authAttempts)
             assertEquals(0, preferencesSaved)
-            state = AccountLinkUiState(message = "Falha sintética. Tente novamente.", isError = true)
+            state = AccountAuthUiState(message = "Falha sintética. Tente novamente.", isError = true)
         }
-        rule.onNodeWithTag("account_link_status").performScrollTo().assertTextEquals("Falha sintética. Tente novamente.")
-        // A failed submission preserves the pasted code for a retry.
-        rule.onNodeWithTag("account_link_confirm").performScrollTo().performClick()
+
+        rule.onNodeWithTag("account_auth_status").performScrollTo().assertTextEquals("Falha sintética. Tente novamente.")
+        // A failed submission preserves typed credentials for retry
+        rule.onNodeWithTag("account_auth_submit").performScrollTo().assertIsEnabled().performClick()
+
         rule.runOnIdle {
-            assertEquals(2, confirmations.size)
-            assertEquals(confirmations.first(), confirmations.last())
+            assertEquals(2, authAttempts.size)
+            assertEquals(authAttempts.first(), authAttempts.last())
             assertEquals(0, preferencesSaved)
-            state = AccountLinkUiState(isLinked = true, message = "Vínculo confirmado.")
+            profile = profile.copy(email = "estudante@cogniva.app", isGuest = false)
+            state = AccountAuthUiState(isAuthenticated = true, message = "Conta criada e vinculada com sucesso.")
         }
-        rule.onNodeWithTag("account_link_status").performScrollTo().assertTextEquals("Vínculo confirmado.")
-        rule.onNodeWithTag("account_link_confirm").performScrollTo().assertIsNotEnabled()
+
+        rule.onNodeWithTag("account_auth_status").performScrollTo().assertTextEquals("Conta criada e vinculada com sucesso.")
+        rule.onNodeWithTag("account_auth_logout").performScrollTo().assertIsDisplayed().performClick()
+        rule.runOnIdle {
+            assertEquals(1, logoutCalls)
+        }
     }
 }

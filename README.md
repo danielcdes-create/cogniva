@@ -1,94 +1,77 @@
 # Cogniva
 
-Aplicativo Android de estudo para concursos, com cliente Kotlin/Compose e API Rust/Axum. O projeto adota arquitetura offline-first com persistência local em Room (SQLite), sincronização bidirecional idempotente com MongoDB Atlas e infraestrutura conteinerizada e promovida atomicamente no DigitalOcean.
+Plataforma de estudo de alta performance para concursos públicos, composta por aplicativo nativo Android (**Kotlin / Jetpack Compose / Room v6**), painel administrativo web incorporado (**`/admin/`**) e API **Rust / Axum** (`cogniva-api`). O ecossistema opera em arquitetura *offline-first* com sincronização bidirecional idempotente sobre **MongoDB (`cogniva`)** e promoção atômica conteinerizada.
 
 ---
 
-## 🚀 Versão em Produção
+## 🚀 Versão Atual: `2.0.0` (`build 25`)
 
-Versão atual: **1.4.17 / build 24**, revisão `36811181f3cb106ee9ac24539e35404b96a63238`, promovida e conferida em 12/11/2026; contrato de sincronização 2. [Conteúdo e aceite da release](docs/RELEASE-1.4.17.md).
-
-- **Pipeline CI/CD:** [Run #43153558224](https://github.com/danielcdes-create/cogniva/actions/runs/43153558224) — todos os jobs aprovados: web, Rust, Android/JVM/golden, contratos, emulador, build e promoção com ensaio de rollback.
-- **Endpoint da API:** `https://198.199.65.103/api/v1/`.
-- **Saúde e Prontidão:** `/api/v1/health` (processo) e `/api/v1/ready` (validação com MongoDB e revisão ativa).
-- **Metadados Públicos do APK:** `GET /api/app/latest-apk` e `GET /api/v1/apk/info`.
-- **Download do APK de Produção:** [Baixar APK v1.4.17 / build 24](https://198.199.65.103/api/v1/apk/download)
-  - **Tamanho:** 46.445.617 bytes
-  - **SHA-256:** `8cb59460a876830e2c72fe828765e60654de071d8cded04f24873cb671b1b09d`
-  - **Assinatura:** Chave de release privada com APK Signature Scheme v3 (API 28+).
-  - **Streaming:** Entrega direta sem compressão dinâmica intermediária (`no-transform`, `proxy_buffering off`). Detalhes em [docs/LICAO-APRENDIDA-OTA-APK.md](docs/LICAO-APRENDIDA-OTA-APK.md).
+- **Contrato de Domínio:** `contract_version: 3` ([`shared/domain-contracts.json`](shared/domain-contracts.json)) e catálogo canônico unificado `catalog_version: 2` ([`shared/knowledge-catalog.json`](shared/knowledge-catalog.json)).
+- **Autenticação Nativa:** Modo convidado imediato + contas nativas Cogniva com e-mail, senha `Argon2id` e sessões revogáveis (zero dependência de Telegram).
+- **Saúde e Prontidão:** `GET /api/v1/health` (processo) e `GET /api/v1/ready` (validação MongoDB, catálogo ativo e revisão).
+- **Distribuição OTA Android:** `GET /api/v1/apk/info`, `GET /api/app/latest-apk` e streaming direto binário em `GET /api/v1/apk/download` (`Cache-Control: no-store, no-transform`, `proxy_buffering off`), preservando `applicationId = "br.com.concursoprep.app"` para atualização contínua.
+- **Histórico de Mudanças:** Consulte o [`CHANGELOG.md`](CHANGELOG.md).
 
 ---
 
-## 📚 Documentação Técnica e Operacional
+## 📚 Mapa da Documentação Viva
 
-A documentação do ecossistema está organizada no diretório [`docs/`](docs/README.md):
+Toda a documentação técnica e operacional ativa está centralizada em [`docs/`](docs/README.md):
 
-- **[Mapa Completo da Documentação](docs/README.md):** Índice mestre e catálogo de referências ativas.
-- **[Manual de Operação e Produção](docs/OPERACAO.md):** Guia de deployment na VPS, monitoramento, rollback atômico, gates de manutenção e renovação de certificados TLS.
-- **[Lições Aprendidas — Pipeline OTA de APK](docs/LICAO-APRENDIDA-OTA-APK.md):** Diagnóstico de falha de download truncado, incompatibilidade de gzip em binários pré-comprimidos e novas invariantes de engenharia.
-- **[Ajuda do Portal](docs/GUIA-ADMINISTRACAO.md):** Guia das telas e fluxos da administração, com os mesmos 14 tópicos da seção Ajuda, busca e atalhos por tela na 1.4.16.
-- **[Estrutura de Estudos](docs/ESTRUTURA-ESTUDOS.md):** Relações entre troncos, concursos, editais, grades, componentes, disciplinas, assuntos, subassuntos e questões, com guia nas interfaces web e Android.
-- **[Catálogo Compartilhado de Conhecimentos](docs/CATALOGO-CONHECIMENTOS.md):** Hierarquia de disciplinas, tópicos, troncos de carreira e aliases editoriais (`shared/knowledge-catalog.json`). [Visualização formatada](docs/catalogo/CONHECIMENTOS.md).
-- **[Contratos e Schema de Questões v2](docs/SCHEMA-QUESTOES-V2.md):** Validação JSON Schema 2020-12, regras BSON no Mongo, outbox transacional e suporte a questões objetivas e discursivas.
-- **[Inserção de Questões](docs/INSERCAO-QUESTOES.md):** Módulo Android individual e em lote, JSON/JSONL, rascunhos locais, revisão, recibos idempotentes e preparação opcional com Grok 4.7. Disponível desde 1.4.13/build 20; campos de prova, fonte e explicação ampliados na 1.4.15/build 22.
-- **[Administração Web](docs/ADMIN-WEB.md):** Painel para computador em `/admin/`, com concursos, editais/grades, questões e edição/ativação versionada de troncos, disciplinas e assuntos globais. Mesma API do Android, login administrativo e recuperação de rascunhos. Disponível em [198.199.65.103/admin/](https://198.199.65.103/admin/), com acesso administrativo por código temporário.
-- **[Integração com IA (xAI / Grok)](docs/IA-XAI.md):** Contratos de tutoria, plausibilidade, prompt caching no Mongo e rate-limiting com exclusão mútua.
-- **[Automação do Acervo Legado](docs/CLASSIFICACAO-LEGADO-SOB-DEMANDA.md):** Classificação assistida sob demanda com cotas diárias estritas e salvaguardas de proveniência.
-- **[Arquivo Histórico](docs/historico/README.md):** Relatórios de auditorias passadas, etapas de desenvolvimento e notas de patches anteriores.
+- **[Arquitetura do Ecossistema 2.0](docs/ARQUITETURA.md):** Visão ponta a ponta de autenticação nativa, banco `cogniva` 100% V2, separação `exam_templates` vs. `user_exams`, simetria Rust ↔ Kotlin e governança de IA.
+- **[Manual de Operação e Produção](docs/OPERACAO.md):** Variáveis de ambiente, migração *read-only* `CNU → cogniva`, preparação do MongoDB, TLS IPv4/IPv6, promoção atômica e rollback.
+- **[Administração Web (`/admin/`)](docs/ADMIN-WEB.md):** Login nativo com cookie `HttpOnly` + CSRF, gestão de templates globais, edição V2 de questões, curadoria de **Reportes**, **Classificação IA** e ativação versionada do catálogo.
+- **[Guia de Administração (Central de Ajuda)](docs/GUIA-ADMINISTRACAO.md):** Guia operacional gerado diretamente de [`web-admin/help.js`](web-admin/help.js) e verificado em CI.
+- **[Estrutura de Estudos](docs/ESTRUTURA-ESTUDOS.md):** Relações entre troncos, templates globais, grades pessoais, componentes, disciplinas, assuntos, subassuntos e questões.
+- **[Catálogo Compartilhado de Conhecimentos](docs/CATALOGO-CONHECIMENTOS.md):** Regras normativas de [`shared/knowledge-catalog.json`](shared/knowledge-catalog.json) e [`shared/exam-templates.json`](shared/exam-templates.json). Tabela completa em [`docs/catalogo/CONHECIMENTOS.md`](docs/catalogo/CONHECIMENTOS.md).
+- **[Contratos e Schema de Questões v2](docs/SCHEMA-QUESTOES-V2.md):** Especificação 100% V2, hash canônico JCS/SHA-256 (RFC 8785), validade temporal, modo preparatório de discursivas (`OPEN_ENDED`) e compatibilidade por edital.
+- **[Inserção de Questões](docs/INSERCAO-QUESTOES.md):** Cadastro individual e em lote (JSON/JSONL) no `/admin/` e no Android, recibos idempotentes e estruturação assistida por IA.
+- **[Integração com IA (xAI)](docs/IA-XAI.md):** Governança explícita via `XAI_MODEL`, orçamento diário global e por usuário, estorno de cota em falhas e metadados `ai_resource_meta`.
+- **[Lições Aprendidas — Pipeline OTA de APK](docs/LICAO-APRENDIDA-OTA-APK.md):** Invariantes de entrega binária sem recompressão gzip intermediária e checklist pós-promoção.
+- **Guias de Módulos:** [`backend-rust/README.md`](backend-rust/README.md) e [`android-app/README.md`](android-app/README.md).
 
 ---
 
-## 🏛️ Invariantes de Arquitetura e Contratos
+## 🏛️ Invariantes de Engenharia
 
-1. **Identidade e Autenticação:**
-   - Rotas de dados privadas exigem token JWT HS256 assinado com chave privada de pelo menos 32 caracteres.
-   - Contas históricas exigem prova temporária emitida exclusivamente após comprovação do operador (`--issue-link-code`). Não há autenticação por mero envio de `@username` ou ID numérico.
-2. **Histórico e Integridade Transacional:**
-   - Tentativas gravadas com `attempt_id` determinístico por sessão/questão, revisão de conteúdo e instante de ocorrência.
-   - Recibo e projeções são persistidos atomicamente no MongoDB com write concern `majority/journal`. Reenvios idênticos devolvem o mesmo recibo; reenvios com payload divergente são rejeitados com conflito.
-3. **Offline-First e Migrações Aditivas:**
-   - O cliente Android mantém banco Room 5 com migrações aditivas (1→2→3→4→5).
-   - Filas de envio e dados locais são isolados estritamente por `ownerUserId`.
-   - Pendências não confirmadas são preservadas localmente e nunca apagadas em lote sem ACK confiável do servidor.
+1. **Autenticação e Segurança de Sessão:**
+   - Senhas hashadas com `Argon2id`; sessões persistidas e revogáveis na coleção `sessions`; tokens mobile protegidos no Android Keystore (AES-GCM) e sessões web protegidas por cookie `HttpOnly` + `SameSite=Strict` + `X-Cogniva-CSRF: 1`.
+2. **Acervo 100% V2 e Integridade Transacional:**
+   - Todas as questões em `cogniva.todasQuestoes` obedecem ao `schema_version = 2` com `content_revision` JCS SHA-256 idêntico entre Python, Rust e Kotlin.
+   - Tentativas e comandos administrativos usam `write_concern: majority` com `journal: true` e recibos idempotentes.
+3. **Offline-First e Isolamento por Conta:**
+   - O cliente Android isola dados em bancos Room v6 separados por conta (`cogniva-<userId>.db`), preservando integralmente o progresso ao converter uma conta convidada em conta registrada.
+   - Reportes abertos de questões ficam isolados ao estudante que reportou até deliberação administrativa na aba **Reportes**.
 4. **Simetria Matemática (Rust ↔ Kotlin):**
-   - Cálculo de pontuação líquida unificado: penalidade explícita de erro por banca (Cebraspe fator 1.0 ou múltipla escolha fator 0.0), normalizado na escala 0–100.
-   - Projeção de domínio (`masteryBySubject`) computada sobre o total de tópicos ativos do edital selecionado, refletindo fielmente a cobertura do concurso.
-   - Fuso horário de estudo unificado em `UTC-3` (`America/Sao_Paulo`) para agregação de metas diárias, streak e heatmap.
-5. **Streaming Binário Seguro:**
-   - Downloads de binários `.apk` operam com `Content-Length` exato, sem recompressão gzip dinâmica intermediária e com cabeçalho `Cache-Control: no-store, no-transform`.
+   - Pontuação líquida ponderada com penalidade configurável por prova, domínio sobre tópicos ativos da grade e calendário unificado em `America/Sao_Paulo` (`UTC-3`).
 
 ---
 
-## 🛠️ Ambiente de Desenvolvimento e Validação
+## 🛠️ Validação Local
 
-- **Backend:** Rust 1.85+ (edição 2021), Axum 0.7, Tokio, MongoDB Driver.
-- **Android:** Kotlin 2.1.20, Jetpack Compose (BOM 2024.12.01), Room 2.7.0, targetSdk/compileSdk 35, minSdk 28, JDK 17 / Temurin 21.
-- **Scripts & Contratos:** Python 3.11+, Pytest, jsonschema.
+```bash
+# 1. Contratos, catálogo, schemas de questões e links Markdown (Python)
+python3 scripts/knowledge_catalog.py --check
+python3 scripts/question_contracts.py --examples
+python3 scripts/check_markdown_links.py
+pytest scripts/tests -v
 
-### Executar Testes Locais
+# 2. Painel Web Admin e sincronização da Ajuda (Node.js 20+)
+node scripts/export-admin-help.mjs --check
+npm --prefix web-admin run check
+npm --prefix web-admin test
 
-```powershell
-# 1. Testes de Contratos do Domínio e Catálogo (Python)
-pytest scripts/tests
+# 3. Backend Rust (unitários e contratos)
+cargo test --manifest-path backend-rust/Cargo.toml --locked
 
-# 2. Testes Unitários e de Integração do Backend (Rust)
-cd backend-rust
-cargo test --locked
-
-# 3. Testes Unitários e Gate Visual Paparazzi (Android)
-cd ../android-app
-$env:JAVA_HOME = "C:\Users\danie\.gradle\jdks\eclipse_adoptium-17-amd64-windows.2"
-.\gradlew.bat :app:testDebugUnitTest :app:lintDebug
-.\gradlew.bat :app:verifyPaparazziDebug
+# 4. Aplicativo Android (JVM, Lint e snapshots Paparazzi — requer JDK 17 e Android SDK)
+cd android-app
+./gradlew :app:testDebugUnitTest :app:lintDebug :app:verifyPaparazziDebug
 ```
 
 ---
 
-## 🚢 Pipeline de Deploy e Promoção
+## 🚢 CI/CD e Promoção Atômica
 
-O deploy é automatizado via GitHub Actions (`.github/workflows/deploy.yml`) disparado por tags `v*`:
-
-1. **Gate de Validação:** Execução simultânea de contratos Python, testes do backend Rust, testes unitários Android com lint e verificação de insets em emulador headless (API 35).
-2. **Build e Assinatura:** Compilação do binário estático Rust em contêiner Docker seguro e assinatura do APK release com chave privada e APK Signature Scheme v3.
-3. **Promoção Atômica:** Transferência do bundle imutável para a VPS DigitalOcean, fechamento do gate Nginx para rotas de dados, migração/preparação do MongoDB com `--prepare-question-storage`, ensaio controlado de rollback, troca de ponteiro symlink e reabertura do tráfego.
+- **Validação Contínua ([`.github/workflows/validate.yml`](.github/workflows/validate.yml) e [`knowledge-contracts.yml`](.github/workflows/knowledge-contracts.yml)):** Executada automaticamente em todo `push` e `pull_request`, validando contratos Python, links Markdown, paridade da Ajuda, testes do `/admin/`, suíte Rust (incluindo integração com MongoDB isolado), testes JVM/Paparazzi Android e ensaio real de rollback Docker.
+- **Release e Deploy ([`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)):** Disparado por tags `v*` ou execução manual, compila a imagem `cogniva-api`, assina o APK release minificado com R8 e executa [`deploy/promote.py`](deploy/promote.py) com gate Nginx `503`, `--prepare-question-storage`, ensaio de rollback verificado e troca atômica de symlink.

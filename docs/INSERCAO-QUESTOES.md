@@ -1,60 +1,50 @@
-# Inserção de questões: individual, lote e IA
+# Inserção de Questões: Individual, em Lote e Assistida por IA
 
-Módulo disponível desde o Android **1.4.13/build 20**, em **Ajustes → Inserir questões · individual, lote ou IA**, e no [painel web](https://198.199.65.103/admin/), usando o contrato v2 existente. [Publicação e aceite](RELEASE-1.4.13.md).
+O módulo de inserção revisada de questões está disponível tanto no painel web [`/admin/`](ADMIN-WEB.md) quanto no aplicativo Android (**Ajustes → Inserir questões**, visível para contas com `role = "admin"`), operando integralmente sobre o [contrato de questões V2](SCHEMA-QUESTOES-V2.md).
 
-## Fluxo
+---
 
-1. Escolha **Individual** para preencher enunciado, alternativas e gabarito; ou **Lote / IA** para colar/importar JSON, JSONL ou texto.
-2. No cadastro individual, indique se o conteúdo é transcrição/importação, questão de prova oficial ou autoria própria. A partir de 1.4.15/build 22, preencha também os metadados da prova e a referência da fonte. Classificação é opcional: selecione disciplina e tópico no catálogo e confirme o vínculo explicitamente.
-3. Para discursivas, informe resposta de referência e critérios da rubrica. Os critérios devem somar 100 pontos; o corte é 60 e a confirmação é humana. Para outras políticas, use um documento v2 completo.
-4. Opcionalmente, peça à IA para **estruturar texto** existente ou **gerar autorais**. O material é enviado à xAI somente pelo botão “Preparar com IA”. Revise o JSON devolvido antes de prosseguir.
-5. Toque em **Validar e revisar questões**. A revisão mostra enunciados, alternativas, gabaritos/rubrica, classificação, origem e validade/contexto temporal. O contrato completo também pode ser inspecionado.
-6. Corrija todos os erros. Marque a confirmação de revisão e confirme a inserção. A interface informa o resultado de cada questão.
+## 1. Fluxo Operacional
 
-Os formulários e o lote ficam salvos nos metadados do banco Room da conta atual, sem migração destrutiva. É possível preparar conteúdo offline; validação autoritativa, IA e inserção exigem conexão. O módulo não acrescenta envios automáticos ao worker de tentativas.
+1. **Escolha do Modo:**
+   - **Individual:** Formulário guiado para enunciado, alternativas/gabarito (ou rubrica em `OPEN_ENDED`), origem documental, classificação canônica (`Disciplina → Assunto/Subassunto`) e explicação do gabarito.
+   - **Lote / IA:** Entrada direta em JSON ou JSONL (até **50 questões / 512 KiB**) ou texto bruto para estruturação/geração assistida pela IA configurada em `XAI_MODEL`.
+2. **Aviso de Modo Preparatório (`OPEN_ENDED`):**
+   - Ao selecionar questão **Discursiva**, tanto o `/admin/` quanto o Android exibem aviso destacado informando que questões abertas são validadas e preservadas no banco V2 com rubrica estruturada (critérios somando `100` pontos e revisão humana), mas não entram nas filas de prática objetiva nem ativam correção automática.
+3. **Prévia Autoritativa (`POST /api/v1/admin/questions/import/preview`):**
+   - O servidor valida cada item por posição, calcula o `content_revision` JCS SHA-256 e devolve os comandos V2 prontos para inspeção sem gravar no acervo.
+4. **Confirmação Idempotente (`POST /api/v1/admin/questions/import/commit`):**
+   - Após marcar a confirmação de revisão, o cliente envia os comandos congelados. A escrita é *create-only* com `write_concern: majority` + `journal` e recibo individual por questão.
 
-**Exportar rascunho** gera um envelope `cogniva-question-import-draft/1` com conta, texto, comandos congelados e recibos. Para restaurá-lo, abra **Lote / IA → Abrir JSON / JSONL / TXT** na mesma conta, antes de iniciar um envio. O envelope exportado é diferente do formato de questões abaixo e não deve ser enviado diretamente à API de prévia. Arquivos de recuperação podem ter até 2 MiB; o material do lote continua limitado a 512 KiB.
+---
 
-## Campos individuais e metadados — 1.4.15/build 22
+## 2. Resiliência contra Bloqueio de Rascunhos
 
-Painel e Android expõem os mesmos campos adicionais:
+- **Isolamento por Conta e Recuperação:** No Android e no `/admin/`, o rascunho é salvo localmente por conta e pode ser exportado (`cogniva-question-import-draft/1`) a qualquer momento.
+- **Retentativa Segura em Quedas de Rede:** Se a conexão cair durante o `commit`, os comandos permanecem congelados para que **Conferir / reenviar os mesmos comandos** recupere `already_applied` sem duplicar questões.
+- **Destravamento Automático em Erros HTTP `4xx`:** Caso o servidor rejeite definitivamente a requisição (`400`, `401`, `403`, `409`, `422`), `submitted` volta imediatamente para `false`, permitindo corrigir o rascunho ou iniciar um novo cadastro sem travar a interface.
 
-| Campo na interface | Campo transmitido / persistido |
-| --- | --- |
-| Identificação da prova / cargo / caderno | `source_exam_code` → `origins[].source_exam_code` |
-| Instituição / órgão, banca organizadora | `institution`, `organizer` → `origins[]` |
-| Ano e número da questão | `exam_year` inteiro 1900–2200; `question_number` textual (preserva zeros e caderno) → `origins[]` |
-| Endereço, título, página e data de consulta | `source_reference` → `origins[].source_reference` |
-| Consultei a fonte e conferi a origem | `confirm_origin` → decisão humana de `verification` |
-| Nível / dificuldade | `level`, texto opcional |
-| Explicação / justificativa | `explanation`, texto opcional |
+---
 
-Campos em branco são enviados como `null`; rascunhos antigos sem os novos campos continuam aceitos. Se preencher parte da referência, complete URL HTTP/HTTPS, título e data. A data declarada é serializada à meia-noite UTC (precisão de dia, sem inferir horário de consulta), com localizador opcional e `sha256=null`; nenhum download automático verifica o documento. O ano também é enviado na projeção legada `exam_year` para exibição nos clientes existentes.
-
-`OFFICIAL_EXAM` exige identificação da prova, instituição, banca, ano e referência documental, conforme o schema v2. O número é opcional. Transcrições/importações e origens oficiais começam `PENDING`, até marcar a conferência com fonte válida. Alterar os metadados de origem desmarca a conferência. A autoria própria conserva sua declaração explícita; assistência de IA conserva autoria/proveniência AI e não pode usar `confirm_origin=true`.
-
-Classificação, conferência de origem e validade são decisões independentes. Registrar banca/prova não associa a questão automaticamente ao concurso nem ao tronco. Validade continua `UNKNOWN`; múltiplos vínculos e decisões de validade revisada usam o contrato v2 completo. Os novos campos integram a prévia antes da confirmação e os mesmos comandos/recibos idempotentes. Para editar questão já salva no acervo, abra **Banco de questões → Abrir** no painel, preservando o ID.
-
-## Formato simplificado
-
-Aceita objeto individual, array JSON ou JSONL (um objeto por linha). Até **50 questões / 512 KiB** por lote de entrada. Não há deduplicação por enunciado: dois itens iguais têm identidades distintas.
+## 3. Formato Simplificado de Lote (JSON / JSONL)
 
 ```json
 [
   {
     "question_type": "MULTIPLE_CHOICE",
-    "question": "Exemplo sintético: quanto é 2 + 2?",
-    "answers": ["1", "2", "3", "4", "5"],
-    "correct_answer_indices": [3],
+    "question": "Qual princípio constitucional rege expressamente a Administração Pública no caput do art. 37 da CF/88?",
+    "answers": ["Pessoalidade", "Eficiência", "Sigilo absoluto", "Informalidade", "Autotutela irrestrita"],
+    "correct_answer_indices": [1],
     "grading": null,
     "origin_kind": "AUTHOR_CREATED",
-    "subject_id": "MAT",
-    "topic_id": "MAT_01_001",
-    "confirm_classification": true
+    "subject_id": "DIR_ADM",
+    "topic_id": "DIR_ADM_01",
+    "confirm_classification": true,
+    "explanation": "O caput do art. 37 prevê legalidade, impessoalidade, moralidade, publicidade e eficiência (LIMPE)."
   },
   {
     "question_type": "TRUE_FALSE",
-    "question": "Exemplo sintético: 2 + 2 = 4.",
+    "question": "No regime da Lei de Responsabilidade Fiscal, a transparência é assegurada também pelo incentivo à participação popular.",
     "answers": ["Certo", "Errado"],
     "correct_answer_indices": [0],
     "grading": null
@@ -62,84 +52,12 @@ Aceita objeto individual, array JSON ou JSONL (um objeto por linha). Até **50 q
 ]
 ```
 
-Índices começam em zero. Não se escolhe A por omissão. Múltipla escolha exige cinco alternativas distintas; certo/errado exige exatamente `Certo`, `Errado`. O gabarito textual é projetado do índice informado e o hash é calculado pelo servidor.
+Documentos V2 completos (com `schema_version: 2`, `revision: 1` e `_id` exclusivo) também são aceitos diretamente no lote.
 
-`origin_kind` é opcional: `LEGACY_IMPORT` por omissão, com origem pendente; `AUTHOR_CREATED` é uma declaração explícita de autoria do responsável; `OFFICIAL_EXAM` exige os campos documentais descritos acima. Não há atribuição automática a banca/prova. `subject_id`, `topic_id` e `confirm_classification` são opcionais; sem confirmação, o conteúdo permanece `UNCLASSIFIED`. IDs desconhecidos ou de disciplinas incompatíveis são rejeitados.
+---
 
-Discursivas usam `answers: []`, `correct_answer_indices: []` e `grading` completo:
+## 4. Assistência Opcional por IA (`POST /api/v1/admin/questions/import/assist`)
 
-```json
-{
-  "question_type": "OPEN_ENDED",
-  "question": "Explique um mecanismo de coesão textual e dê um exemplo.",
-  "answers": [],
-  "correct_answer_indices": [],
-  "grading": {
-    "strategy": "RUBRIC",
-    "max_score": 100,
-    "pass_score": 60,
-    "expected_responses": ["A resposta deve explicar relações entre partes do texto e exemplificar um mecanismo pertinente."],
-    "rubric": {
-      "revision": 1,
-      "criteria": [
-        {"criterion_id": "CONCEPT", "description": "Explicar corretamente um mecanismo de coesão.", "max_points": 50, "essential": true},
-        {"criterion_id": "EXAMPLE", "description": "Apresentar exemplo coerente com o mecanismo explicado.", "max_points": 50, "essential": false}
-      ]
-    },
-    "engine": null,
-    "confirmation_policy": "HUMAN_REVIEW",
-    "policy_version": "open-rubric-human-review/1"
-  }
-}
-```
-
-Também são aceitos documentos v2 completos, novos, com `revision=1`, `_id` exclusivo e hash correspondente. Essa opção cobre múltiplas origens ou vínculos, validade revisada e políticas de correção já previstas no schema. Campos adicionais legítimos da raiz são preservados; `schema_outbox` é reservado ao servidor. Importar uma questão aberta não ativa motores semânticos/IA nem muda as capacidades de treino dos clientes existentes.
-
-## Acesso e rotas
-
-As quatro rotas são privadas e administrativas: JWT válido e conta em `ADMIN_USER_IDS`, conforme o middleware já existente. O cadastro não amplia permissões de contas comuns; 401/403 preservam o rascunho local.
-
-| Método / rota sob `/api/v1/admin/questions/import` | Corpo / resultado |
-| --- | --- |
-| `GET /capabilities` | Limite do lote e disponibilidade de xAI, sem credenciais |
-| `POST /preview` | `{operation_id, items, assistance_id?}` → validação por posição e comandos v2; nenhuma questão é inserida |
-| `POST /commit` | `{reviewed:true, commands:[...]}` → resultado e recibo individual; gravação parcial explícita |
-| `POST /assist` | `{operation_id, mode:"STRUCTURE" ou "GENERATE", text}` → rascunhos, `assistance_id` e exigência de revisão |
-
-`operation_id` deve ser UUID. A prévia gera IDs de questões e comandos a partir de conta, operação e posição, sem usar o texto como identidade. Documentos completos mantêm seu `_id`. IDs já presentes no acervo ou repetidos no lote bloqueiam a prévia. Novas prévias podem ter instantes de proveniência diferentes: depois de iniciar o envio, reutilize **os comandos congelados**, sem regenerar uma prévia.
-
-## Gravação, falhas e preservação
-
-O envio usa a validação v2, hash JCS, majority/journal, comando idempotente e outbox de auditoria existentes. A inserção é **create-only**: nunca migra nem sobrescreve um registro existente, inclusive legado sem revisão. Recebimentos já aplicados são recuperados antes de conferir colisão de ID. Conteúdo diferente com o mesmo identificador de operação gera conflito.
-
-Cada item é uma operação independente: o lote inteiro não é uma transação. A interface confere posição, ID da questão, ID da operação, revisão e status de cada recibo antes de considerar o lote completo. Se um item falhar, os outros recibos continuam preservados.
-
-Antes do acesso à rede, o Android grava os comandos exatos e o sinal de envio iniciado. Depois de timeout, fechamento do app ou resposta parcial, o formulário fica bloqueado para edição e permite **Conferir / reenviar os mesmos comandos**. Itens já gravados retornam `already_applied`. Um novo cadastro só substitui o rascunho depois da conclusão; pendências não são apagadas para contornar falhas. Se uma falha permanente exigir intervenção, exporte o rascunho e inspecione `question_commands`, `question_revision_events` e a questão pelo ID antes de qualquer decisão operacional.
-
-Os validadores e índices devem ter sido preparados pelo processo normal `--prepare-question-storage`. Não se modifica o schema compartilhado, não se migra o acervo em massa e não se altera o histórico de aprendizagem.
-
-## IA
-
-Somente **xAI / Grok 4.7**, com credencial no servidor. Limite de material: **40.000 bytes**, até **10 rascunhos por solicitação**, timeout do provedor de 40 segundos. A chamada reutiliza o orçamento diário de IA da conta (120/dia). Nesta operação, uma reserva feita antes do provedor conta conservadoramente mesmo se a resposta falhar ou o resultado for incerto; não há repetição paga automática.
-
-`question_import_ai_requests` mantém a reserva por conta/operação e a resposta concluída com write concern majority/journal. Repetir uma operação concluída recupera a mesma resposta sem outra chamada; conteúdo divergente gera conflito. Reserva inconclusiva/falha exige nova operação explícita, em vez de reexecutar uma cobrança incerta. A conta também é conferida quando `assistance_id` é usado na prévia.
-
-O prompt separa instruções e material não confiável. Respostas incompletas ou fora do contrato não publicam questões. Em transcrição, gabaritos/rubricas ausentes continuam pendentes e são rejeitados na validação; a IA não deve inventá-los. A proveniência é AI, com modelo e versão de prompt. `GENERATE` usa origem `AI_GENERATED`; `STRUCTURE` usa importação pendente. Nenhuma das opções confirma classificação ou validade. A validade simplificada permanece `UNKNOWN`.
-
-## Verificação local
-
-```powershell
-python -m pytest scripts/tests -q
-cd backend-rust
-cargo test --locked
-$env:COGNIVA_TEST_MONGODB_URI='mongodb://127.0.0.1:27048/'
-cargo test --locked question_import_review_receipts_and_ai_are_isolated -- --ignored --test-threads=1
-cd ../android-app
-.\gradlew.bat :app:testDebugUnitTest :app:lintDebug --console=plain
-```
-
-O teste integrado exige Mongo dedicado em loopback na porta 27048, cria e remove apenas banco sintético `cogniva_test_*` e usa provedor HTTP falso. Cobre autorização, prévia sem escrita, gabarito ausente, identidades distintas para textos iguais, confirmação, replay, conflito, preservação de legado/cache/histórico, geração única e isolamento da assistência entre contas. Não chama xAI real nem toca produção.
-
-Registro da primeira validação local em 07/11/2026: 47 testes Python e 14 subtestes aprovados; 49 testes Rust aprovados na execução padrão (11 integrações opt-in não executadas nessa chamada). A execução específica `question_import -- --include-ignored --test-threads=1` aprovou os quatro testes unitários do módulo e sua integração real com Mongo isolado. Android: 69 testes JVM aprovados, incluindo seis do módulo, e lint sem erros. A validação não inclui uma chamada paga à xAI, instalação em aparelho físico ou publicação de APK/backend.
-
-A validação conciliada final aprovou 69 testes Rust, 73 JVM, lint e compilação instrumentada. A publicação 1.4.13 aprovou os gates web, Rust, contratos, JVM/golden e emulador API 35; o APK assinado foi baixado integralmente e conferido com a versão 20 e o hash do servidor. Questões/concursos permaneceram idênticos no backup antes/depois; o aceite não chamou a IA nem inseriu material real. [Evidências](RELEASE-1.4.13.md).
+- Envia até `40.000` bytes de material ao modelo definido em `XAI_MODEL` apenas mediante clique explícito em **Preparar com IA** (`STRUCTURE` para estruturar texto existente ou `GENERATE` para criar rascunhos autorais, até 10 itens por chamada).
+- Consome 1 unidade do orçamento diário de IA (`XAI_DAILY_USER_LIMIT` e `XAI_DAILY_GLOBAL_LIMIT`), mas **estorna automaticamente a cota** (`release_tutor`) se a chamada ao provedor falhar ou retornar JSON inválido.
+- Todo item gerado por IA preserva proveniência `AI` e exige conferência humana antes da inserção.

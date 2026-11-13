@@ -1,4 +1,4 @@
-"""Executable stage-2 contracts. Offline fixtures only; no API, Mongo or AI calls."""
+"""Executable Cogniva V2 question, suggestion, compatibility, and evaluation contracts."""
 import argparse
 from datetime import date
 from decimal import Decimal
@@ -69,10 +69,11 @@ def validate_question(q, catalog):
     require(len({a.strip() for a in answers}) == len(answers), "duplicate answer options")
     if q["question_type"] != "OPEN_ENDED":
         index = q["correct_answer_indices"][0]
+        require(0 <= index < len(answers), "correct_answer_indices out of bounds")
         require(q["correct_answers"] == [answers[index]], "textual and indexed answers disagree")
 
     classification = q["classification"]
-    require(classification["catalog_version"] == catalog["catalog_version"], "unknown catalog version")
+    require(1 <= classification["catalog_version"] <= catalog["catalog_version"], "unknown catalog version")
     primaries = taxonomy_links(classification["links"], catalog, True)
     require(primaries <= 1, "multiple primary links")
     if classification["state"] == "CONFIRMED":
@@ -104,24 +105,43 @@ def validate_question(q, catalog):
         rubric = grading["rubric"]
         ids = [c["criterion_id"] for c in rubric["criteria"]]
         require(len(ids) == len(set(ids)), "duplicate rubric criterion")
-        require(sum(Decimal(str(c["max_points"])) for c in rubric["criteria"]) == Decimal(str(grading["max_score"])), "rubric total differs from max_score")
+        require(
+            sum(Decimal(str(c["max_points"])) for c in rubric["criteria"]) == Decimal(str(grading["max_score"])),
+            "rubric total differs from max_score",
+        )
         require(all(t.strip() for t in grading["expected_responses"]), "empty reference answer")
         engine = grading["engine"]
         if grading["strategy"] == "RUBRIC":
             require(engine is None, "manual rubric cannot declare automatic engine")
         elif grading["strategy"] == "AI":
-            require(engine is not None and engine["provider"] == "xai" and
-                    all(engine[k] for k in ("model", "prompt_id", "prompt_version")), "AI grading needs provider/model/prompt version")
-            require(all(engine[k] is None for k in ("semantic_model_id", "semantic_model_revision", "calibration_id")), "AI rubric cannot masquerade as semantic calibration")
+            require(
+                engine is not None
+                and engine["provider"] == "xai"
+                and all(engine[k] for k in ("model", "prompt_id", "prompt_version")),
+                "AI grading needs provider/model/prompt version",
+            )
+            require(
+                all(engine[k] is None for k in ("semantic_model_id", "semantic_model_revision", "calibration_id")),
+                "AI rubric cannot masquerade as semantic calibration",
+            )
         elif grading["strategy"] == "SEMANTIC":
-            require(engine is not None and all(engine[k] for k in ("semantic_model_id", "semantic_model_revision", "calibration_id")), "semantic grading needs versioned calibrated engine")
-            require(all(engine[k] is None for k in ("provider", "model", "prompt_id", "prompt_version")), "semantic engine cannot declare AI generation metadata")
+            require(
+                engine is not None
+                and all(engine[k] for k in ("semantic_model_id", "semantic_model_revision", "calibration_id")),
+                "semantic grading needs versioned calibrated engine",
+            )
+            require(
+                all(engine[k] is None for k in ("provider", "model", "prompt_id", "prompt_version")),
+                "semantic engine cannot declare AI generation metadata",
+            )
     return q
 
 
 def practice_eligible(q, mode="GENERAL", as_of=None):
-    """Normative definition for later selectors, not a replacement of current selection."""
+    """Normative eligibility definition for practice selection."""
     require(as_of is not None, "eligibility needs explicit reference date")
+    if q.get("question_type") == "OPEN_ENDED":
+        return False
     validity = q["validity"]
     if q["status"] != "ACTIVE" or validity["status"] in ("OBSOLETE", "UNDER_REVIEW"):
         return False
@@ -136,13 +156,21 @@ def practice_eligible(q, mode="GENERAL", as_of=None):
 def validate_suggestion(s, question, catalog):
     shape("suggestion", s)
     require(s["question_id"] == question["_id"]["$oid"], "suggestion references another question")
-    require(s["catalog_version"] == catalog["catalog_version"], "suggestion catalog mismatch")
+    require(1 <= s["catalog_version"] <= catalog["catalog_version"], "suggestion catalog mismatch")
     require(taxonomy_links(s["proposed_links"], catalog, False) == 1, "suggestion must propose one primary link")
-    current = s["question_content_revision"] == question["content_revision"] and s["expected_classification_revision"] == question["classification"]["revision"]
+    current = (
+        s["question_content_revision"] == question["content_revision"]
+        and s["expected_classification_revision"] == question["classification"]["revision"]
+    )
     if s["status"] in ("PENDING", "ACCEPTED"):
-        require(current or s["status"] == "ACCEPTED" and s["resolution"] is not None and
-                s["resolution"]["resulting_classification_revision"] == question["classification"]["revision"]
-                and s["question_content_revision"] == question["content_revision"], "stale suggestion must be marked STALE")
+        require(
+            current
+            or s["status"] == "ACCEPTED"
+            and s["resolution"] is not None
+            and s["resolution"]["resulting_classification_revision"] == question["classification"]["revision"]
+            and s["question_content_revision"] == question["content_revision"],
+            "stale suggestion must be marked STALE",
+        )
     if s["status"] in ("ACCEPTED", "REJECTED"):
         require(s["resolution"] is not None and s["resolution"]["actor"]["type"] == "HUMAN", "suggestion resolution requires human")
     if s["status"] == "PENDING":
@@ -150,25 +178,53 @@ def validate_suggestion(s, question, catalog):
     if s["status"] == "REJECTED":
         require(s["resolution"]["resulting_classification_revision"] is None, "rejection cannot claim applied classification")
     if s["status"] == "ACCEPTED":
-        require(s["resolution"]["resulting_classification_revision"] == s["expected_classification_revision"] + 1, "acceptance must increment classification revision")
+        require(
+            s["resolution"]["resulting_classification_revision"] == s["expected_classification_revision"] + 1,
+            "acceptance must increment classification revision",
+        )
         confirmed = {(l["subject_id"], l["topic_id"], l["role"], l["coverage"]) for l in question["classification"]["links"]}
-        require(all((l["subject_id"], l["topic_id"], l["role"], l["coverage"]) in confirmed for l in s["proposed_links"]), "accepted proposal absent from confirmed links")
+        require(
+            all((l["subject_id"], l["topic_id"], l["role"], l["coverage"]) in confirmed for l in s["proposed_links"]),
+            "accepted proposal absent from confirmed links",
+        )
         accepted_topics = {l["topic_id"] for l in s["proposed_links"]}
-        require(all(l["provenance"]["source_suggestion_id"] == s["_id"] for l in question["classification"]["links"] if l["topic_id"] in accepted_topics), "accepted classification lost suggestion provenance")
+        require(
+            all(
+                l["provenance"]["source_suggestion_id"] == s["_id"]
+                for l in question["classification"]["links"]
+                if l["topic_id"] in accepted_topics
+            ),
+            "accepted classification lost suggestion provenance",
+        )
     return s
 
 
 def validate_compatibility(c, question, catalog, exam):
     shape("compatibility", c)
-    require(c["question_id"] == question["_id"]["$oid"] and c["question_content_revision"] == question["content_revision"], "stale compatibility question")
-    require(c["catalog_version"] == catalog["catalog_version"], "compatibility catalog mismatch")
-    require(c["owner_user_id"] == exam["owner_user_id"] and c["exam_id"] == exam["exam_id"] and c["exam_revision"] == exam["revision"], "compatibility owner/exam revision mismatch")
+    require(
+        c["question_id"] == question["_id"]["$oid"] and c["question_content_revision"] == question["content_revision"],
+        "stale compatibility question",
+    )
+    require(1 <= c["catalog_version"] <= catalog["catalog_version"], "compatibility catalog mismatch")
+    require(
+        c["owner_user_id"] == exam["owner_user_id"]
+        and c["exam_id"] == exam["exam_id"]
+        and c["exam_revision"] == exam["revision"],
+        "compatibility owner/exam revision mismatch",
+    )
     component = next((s for s in exam["components"] if s["component_id"] == c["component_id"]), None)
     require(component is not None, "compatibility component absent")
     require(len(set(c["matched_topic_ids"])) == len(c["matched_topic_ids"]), "duplicate matched topics")
     if c["relation"] == "DIRECT":
-        direct = {l["topic_id"] for l in question["classification"]["links"] if l["coverage"] == "DIRECT" and l["role"] == "PRIMARY"}
-        require(bool(c["matched_topic_ids"]) and set(c["matched_topic_ids"]) <= direct.intersection(component["topic_ids"]), "compatibility lacks confirmed grade intersection")
+        direct = {
+            l["topic_id"]
+            for l in question["classification"]["links"]
+            if l["coverage"] == "DIRECT" and l["role"] == "PRIMARY"
+        }
+        require(
+            bool(c["matched_topic_ids"]) and set(c["matched_topic_ids"]) <= direct.intersection(component["topic_ids"]),
+            "compatibility lacks confirmed grade intersection",
+        )
     if c["status"] == "CONFIRMED":
         require(human_review(c["provenance"]), "explicit compatibility requires review")
     return c
@@ -176,10 +232,16 @@ def validate_compatibility(c, question, catalog, exam):
 
 def validate_evaluation(e, question):
     shape("evaluation", e)
-    require(e["question_id"] == question["_id"]["$oid"] and e["question_content_revision"] == question["content_revision"], "evaluation references stale question")
+    require(
+        e["question_id"] == question["_id"]["$oid"] and e["question_content_revision"] == question["content_revision"],
+        "evaluation references stale question",
+    )
     require(e["supersedes_evaluation_id"] != e["_id"], "evaluation cannot supersede itself")
     g = question["grading"]
-    require(e["strategy"] == g["strategy"] and e["max_score"] == g["max_score"] and e["engine"] == g["engine"], "evaluation grading snapshot mismatch")
+    require(
+        e["strategy"] == g["strategy"] and e["max_score"] == g["max_score"] and e["engine"] == g["engine"],
+        "evaluation grading snapshot mismatch",
+    )
     objective = question["question_type"] != "OPEN_ENDED"
     require(e["submission"]["type"] == ("OPTION" if objective else "TEXT"), "submission type mismatch")
     if objective:
@@ -194,26 +256,47 @@ def validate_evaluation(e, question):
     require(e["score"] is not None and 0 <= e["score"] <= e["max_score"], "score outside bounds")
     if objective:
         correct = e["submission"]["selected_index"] == question["correct_answer_indices"][0]
-        require(e["status"] == "CONFIRMED" and e["is_correct"] == correct and e["score"] == (g["max_score"] if correct else 0), "objective result disagrees with answer key")
-        require(e["decision"] is not None and e["decision"]["actor"]["type"] == "SYSTEM" and e["decision"]["method"] == "RULE_BASED", "objective decision needs exact engine provenance")
+        require(
+            e["status"] == "CONFIRMED" and e["is_correct"] == correct and e["score"] == (g["max_score"] if correct else 0),
+            "objective result disagrees with answer key",
+        )
+        require(
+            e["decision"] is not None
+            and e["decision"]["actor"]["type"] == "SYSTEM"
+            and e["decision"]["method"] == "RULE_BASED",
+            "objective decision needs exact engine provenance",
+        )
     else:
         criteria = {c["criterion_id"]: c for c in g["rubric"]["criteria"]}
         results = e["criterion_results"]
-        require(len(results) == len(criteria) and {r["criterion_id"] for r in results} == set(criteria), "missing or duplicate evaluated criterion")
+        require(
+            len(results) == len(criteria) and {r["criterion_id"] for r in results} == set(criteria),
+            "missing or duplicate evaluated criterion",
+        )
         require(all(0 <= r["awarded_points"] <= criteria[r["criterion_id"]]["max_points"] for r in results), "criterion score outside bounds")
         require(sum(Decimal(str(r["awarded_points"])) for r in results) == Decimal(str(e["score"])), "evaluation score does not equal criteria")
         if e["status"] == "PROVISIONAL":
             require(e["is_correct"] is None, "provisional score cannot count as confirmed correctness")
             require(e["decision"] is not None, "provisional result needs provenance")
             if e["strategy"] == "AI":
-                require(e["decision"]["actor"]["type"] == "AI" and e["decision"]["method"] == "AI_SUGGESTION" and
-                        all(e["decision"][key] == g["engine"][key] for key in ("model", "prompt_id", "prompt_version")), "AI decision provenance differs from engine")
+                require(
+                    e["decision"]["actor"]["type"] == "AI"
+                    and e["decision"]["method"] == "AI_SUGGESTION"
+                    and all(e["decision"][key] == g["engine"][key] for key in ("model", "prompt_id", "prompt_version")),
+                    "AI decision provenance differs from engine",
+                )
             if e["strategy"] == "SEMANTIC":
-                require(e["decision"]["actor"]["type"] == "SYSTEM" and e["decision"]["method"] == "RULE_BASED" and
-                        e["decision"]["model"] == g["engine"]["semantic_model_id"], "semantic decision provenance differs from engine")
+                require(
+                    e["decision"]["actor"]["type"] == "SYSTEM"
+                    and e["decision"]["method"] == "RULE_BASED"
+                    and e["decision"]["model"] == g["engine"]["semantic_model_id"],
+                    "semantic decision provenance differs from engine",
+                )
         else:
             require(human_review(e["decision"]), "open grading confirmation requires human review")
-            passed = e["score"] >= g["pass_score"] and all(not criteria[r["criterion_id"]]["essential"] or r["awarded_points"] > 0 for r in results)
+            passed = e["score"] >= g["pass_score"] and all(
+                not criteria[r["criterion_id"]]["essential"] or r["awarded_points"] > 0 for r in results
+            )
             require(e["is_correct"] == passed, "confirmed correctness disagrees with rubric")
     return e
 
@@ -221,12 +304,21 @@ def validate_evaluation(e, question):
 def validate_evaluation_binding(e, attempt, previous=None):
     """Bind a result to the independently stored attempt, never model-supplied identity."""
     require(e["attempt_id"] == attempt["attempt_id"] and e["user_id"] == attempt["owner_user_id"], "evaluation attempt owner mismatch")
-    require(e["question_id"] == attempt["question_id"] and e["question_content_revision"] == attempt["question_content_revision"]
-            and e["submission"] == attempt["submission"], "evaluation changed submitted answer or snapshot")
+    require(
+        e["question_id"] == attempt["question_id"]
+        and e["question_content_revision"] == attempt["question_content_revision"]
+        and e["submission"] == attempt["submission"],
+        "evaluation changed submitted answer or snapshot",
+    )
     if e["supersedes_evaluation_id"] is not None:
-        require(previous is not None and previous["_id"] == e["supersedes_evaluation_id"] and
-                previous["attempt_id"] == e["attempt_id"] and previous["user_id"] == e["user_id"] and
-                previous["question_content_revision"] == e["question_content_revision"], "superseded evaluation belongs to another attempt")
+        require(
+            previous is not None
+            and previous["_id"] == e["supersedes_evaluation_id"]
+            and previous["attempt_id"] == e["attempt_id"]
+            and previous["user_id"] == e["user_id"]
+            and previous["question_content_revision"] == e["question_content_revision"],
+            "superseded evaluation belongs to another attempt",
+        )
     return e
 
 
@@ -244,7 +336,11 @@ def main():
     counts["questions"] = len(questions)
     exam = read(base / "exam-context.json")
     attempts = {a["attempt_id"]: a for a in read(base / "attempt-contexts.json")}
-    for kind, function in (("suggestion", validate_suggestion), ("compatibility", validate_compatibility), ("evaluation", validate_evaluation)):
+    for kind, function in (
+        ("suggestion", validate_suggestion),
+        ("compatibility", validate_compatibility),
+        ("evaluation", validate_evaluation),
+    ):
         paths = sorted(base.glob(f"{kind}-*.json"))
         for path in paths:
             record = read(path)
@@ -258,7 +354,7 @@ def main():
                 validate_evaluation_binding(record, attempts[record["attempt_id"]])
         counts[kind] = len(paths)
     require(bool(questions) and all(counts.values()), "missing contract examples")
-    print(json.dumps({"contract": "STAGED_NOT_DEPLOYED", "examples_validated": counts}, indent=2))
+    print(json.dumps({"contract": "COGNIVA_V2_ACTIVE", "examples_validated": counts}, indent=2))
 
 
 if __name__ == "__main__":

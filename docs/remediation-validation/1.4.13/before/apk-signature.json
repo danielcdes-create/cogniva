@@ -1,9 +1,0 @@
-{
-  "version_name": "1.4.11",
-  "version_code": 18,
-  "apk_sha256": "f020d1f6ecba659b323257468647657fc1cd9af8ba63c4171e9b81f5156bf049",
-  "verified_min_sdk": 28,
-  "verified_max_sdk": 35,
-  "v3_verified": true,
-  "signer_certificate_sha256": "0a5b2b2e8feb9fabdbae4fa68a4b73a691f4e060622e60b494fb75e866f5f560"
-}

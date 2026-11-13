@@ -35,6 +35,7 @@ class QuestionPracticeTest {
         val name = "practice_fixture_${UUID.randomUUID()}.db"
         val db = Room.databaseBuilder(context, AppDatabase::class.java, name).build()
         val store = ViewModelStore()
+        var repo: ConcursoRepository? = null
         try {
             val archived = ExamCatalog.systemExams().first { it.examId == "CPNU" }
                 .copy(lifecycleStatus = "ARQUIVADO", isActiveInLadder = false)
@@ -54,6 +55,7 @@ class QuestionPracticeTest {
                 }
             } as ConcursoApiService
             val repository = ConcursoRepository(api, db.concursoDao(), db.examDao(), durable = db.durableDao(), database = db, ownerUserId = 123)
+            repo = repository
             lateinit var model: MainViewModel
             rule.runOnUiThread {
                 model = MainViewModel(repository)
@@ -87,6 +89,7 @@ class QuestionPracticeTest {
             assertTrue(repository.pausedSession()!!.answers.getValue(q.id).submitted)
         } finally {
             rule.runOnUiThread { store.clear() }
+            repo?.awaitIdleForClose()
             db.close()
             check(name.startsWith("practice_fixture_")); context.deleteDatabase(name)
         }

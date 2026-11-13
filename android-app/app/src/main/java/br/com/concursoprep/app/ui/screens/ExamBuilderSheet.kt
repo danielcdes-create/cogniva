@@ -307,6 +307,8 @@ internal fun ExamFormContent(
     var dateMode by rememberSaveable(formKey) { mutableStateOf(editingExam?.dateType ?: "UNDEFINED") }
     var exactDate by rememberSaveable(formKey) { mutableStateOf(editingExam?.exactDateIso ?: "") }
     var windowLabel by rememberSaveable(formKey) { mutableStateOf(editingExam?.estimatedWindowLabel ?: "Sem previsão") }
+    var customSortDate by rememberSaveable(formKey) { mutableStateOf(editingExam?.estimatedSortDateIso ?: "") }
+    var isActiveInLadder by rememberSaveable(formKey) { mutableStateOf(editingExam?.isActiveInLadder ?: true) }
     var ladderPriority by rememberSaveable(formKey) { mutableIntStateOf(editingExam?.ladderPriority ?: 2) }
     var wrongPenalty by rememberSaveable(formKey) { mutableStateOf(editingExam?.wrongAnswerPenalty ?: 0.0) }
     var cutoff by rememberSaveable(formKey) { mutableStateOf(editingExam?.historicalCutoffScore?.toFloat() ?: 0f) }
@@ -393,6 +395,7 @@ internal fun ExamFormContent(
                                     step += 1
                                 } else {
                                     val name = organ.ifBlank { trunks.first { it.slug == trunkSlug }.name }
+                                    val presetSortDates = mapOf("1º sem/2027" to "2027-06-30", "2º sem/2027" to "2027-12-31", "1º sem/2028" to "2028-06-30")
                                     onSave(
                                         ExamDraft(
                                             title = "$name · ${role.ifBlank { "Cargo" }}",
@@ -407,13 +410,14 @@ internal fun ExamFormContent(
                                             estimatedWindowLabel = if (dateMode == "ESTIMATED_WINDOW") windowLabel else null,
                                             estimatedSortDateIso = when (dateMode) {
                                                 "EXACT_DATE" -> exactDate
-                                                "ESTIMATED_WINDOW" -> mapOf("1º sem/2027" to "2027-06-30", "2º sem/2027" to "2027-12-31", "1º sem/2028" to "2028-06-30")[windowLabel] ?: editingExam?.estimatedSortDateIso.orEmpty()
+                                                "ESTIMATED_WINDOW" -> customSortDate.trim().ifBlank { presetSortDates[windowLabel] ?: editingExam?.estimatedSortDateIso ?: "2027-12-31" }
                                                 else -> ""
                                             },
                                             historicalCutoffScore = cutoff.toDouble(),
                                             ladderPriority = ladderPriority,
                                             subjects = subjects,
-                                            wrongAnswerPenalty = wrongPenalty
+                                            wrongAnswerPenalty = wrongPenalty,
+                                            isActiveInLadder = isActiveInLadder && status != "ARQUIVADO"
                                         )
                                     )
                                 }
@@ -472,6 +476,7 @@ internal fun ExamFormContent(
                     }
                 }
                 2 -> {
+                    val presetSortDates = mapOf("1º sem/2027" to "2027-06-30", "2º sem/2027" to "2027-12-31", "1º sem/2028" to "2028-06-30")
                     Text("Status do edital", style = MaterialTheme.typography.titleMedium)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         listOf("RUMOR_PREVISTO" to "Pré-edital", "AUTORIZADO" to "Autorizado", "BANCA_DEFINIDA" to "Banca definida", "EDITAL_PUBLICADO" to "Edital publicado", "PROVA_REALIZADA" to "Prova realizada").forEach { (value, label) ->
@@ -481,15 +486,44 @@ internal fun ExamFormContent(
                     Text("Data da prova", style = MaterialTheme.typography.titleMedium)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         FilterChip(selected = dateMode == "EXACT_DATE", onClick = { dateMode = "EXACT_DATE" }, label = { Text("Data exata") }, modifier = Modifier.heightIn(min = 48.dp))
-                        FilterChip(selected = dateMode != "EXACT_DATE", onClick = { dateMode = if (windowLabel == "Sem previsão") "UNDEFINED" else "ESTIMATED_WINDOW" }, label = { Text("Janela estimada") }, modifier = Modifier.heightIn(min = 48.dp))
+                        FilterChip(selected = dateMode != "EXACT_DATE", onClick = { dateMode = if (windowLabel.isBlank() || windowLabel == "Sem previsão") "UNDEFINED" else "ESTIMATED_WINDOW" }, label = { Text("Janela estimada") }, modifier = Modifier.heightIn(min = 48.dp))
                     }
                     if (dateMode == "EXACT_DATE") {
                         OutlinedTextField(value = exactDate, onValueChange = { exactDate = it }, label = { Text("Data ISO (AAAA-MM-DD)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                     } else {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             listOf("1º sem/2027", "2º sem/2027", "1º sem/2028", "Sem previsão").forEach { label ->
-                                FilterChip(selected = windowLabel == label, onClick = { windowLabel = label; dateMode = if (label == "Sem previsão") "UNDEFINED" else "ESTIMATED_WINDOW" }, label = { Text(label) }, modifier = Modifier.heightIn(min = 48.dp))
+                                FilterChip(
+                                    selected = windowLabel == label,
+                                    onClick = {
+                                        windowLabel = label
+                                        dateMode = if (label == "Sem previsão") "UNDEFINED" else "ESTIMATED_WINDOW"
+                                        customSortDate = presetSortDates[label].orEmpty()
+                                    },
+                                    label = { Text(label) },
+                                    modifier = Modifier.heightIn(min = 48.dp)
+                                )
                             }
+                        }
+                        OutlinedTextField(
+                            value = if (windowLabel == "Sem previsão") "" else windowLabel,
+                            onValueChange = { value ->
+                                val trimmed = value.take(60)
+                                windowLabel = trimmed.ifBlank { "Sem previsão" }
+                                dateMode = if (trimmed.isBlank()) "UNDEFINED" else "ESTIMATED_WINDOW"
+                            },
+                            label = { Text("Rótulo da janela estimada (ex.: 2º trim/2027)") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                        if (dateMode == "ESTIMATED_WINDOW") {
+                            OutlinedTextField(
+                                value = customSortDate,
+                                onValueChange = { customSortDate = it.take(10) },
+                                label = { Text("Data de referência ISO (AAAA-MM-DD)") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
                         }
                     }
                     Text("Desconto por resposta errada (conforme a regra da prova)")
@@ -502,6 +536,12 @@ internal fun ExamFormContent(
                             FilterChip(selected = ladderPriority == priority, onClick = { ladderPriority = priority }, label = { Text(label) }, modifier = Modifier.heightIn(min = 48.dp))
                         }
                     }
+                    FilterChip(
+                        selected = isActiveInLadder,
+                        onClick = { isActiveInLadder = !isActiveInLadder },
+                        label = { Text(if (isActiveInLadder) "Ativo na escada de concursos" else "Pausado na escada") },
+                        modifier = Modifier.heightIn(min = 48.dp)
+                    )
                     Text("Nota de corte histórica: ${cutoff.roundToInt()}%", style = MaterialTheme.typography.bodyLarge)
                     Slider(value = cutoff, onValueChange = { cutoff = it }, valueRange = 0f..100f)
                 }

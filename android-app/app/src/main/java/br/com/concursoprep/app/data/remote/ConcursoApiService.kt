@@ -19,20 +19,25 @@ import retrofit2.http.Path
 import retrofit2.http.Query
 
 @Serializable
-data class TelegramLinkPayload(
-    @SerialName("user_id") val userId: Long? = null,
-    val username: String? = null,
-    @SerialName("display_name") val displayName: String? = null,
-    @SerialName("link_code") val linkCode: String? = null,
-    @SerialName("installation_id") val installationId: String? = null,
-    @SerialName("installation_secret") val installationSecret: String? = null
-)
-
-@Serializable
 data class NativeSessionPayload(
     @SerialName("installation_id") val installationId: String,
     @SerialName("installation_secret") val installationSecret: String,
     @SerialName("display_name") val displayName: String? = null
+)
+
+@Serializable
+data class AuthLoginPayload(
+    val email: String,
+    val password: String,
+    val client: String = "mobile"
+)
+
+@Serializable
+data class AuthRegisterPayload(
+    val email: String,
+    val password: String,
+    @SerialName("display_name") val displayName: String? = null,
+    val client: String = "mobile"
 )
 
 @Serializable
@@ -116,7 +121,11 @@ data class ExamBlueprintPayload(
     @SerialName("is_active_in_ladder") val isActiveInLadder: Boolean,
     @SerialName("ladder_priority") val ladderPriority: Int,
     val subjects: List<ExamSubjectPayload>,
-    @SerialName("sync_status") val syncStatus: String
+    @SerialName("sync_status") val syncStatus: String,
+    @SerialName("template_source_id") val templateSourceId: String? = null,
+    @SerialName("template_revision_synced") val templateRevisionSynced: Long? = null,
+    @SerialName("is_customized") val isCustomized: Boolean = false,
+    @SerialName("upstream_update_available") val upstreamUpdateAvailable: Boolean = false
 )
 
 @Serializable data class CacheStatePayload(@SerialName("question_ids") val questionIds:List<String>)
@@ -138,11 +147,24 @@ interface ConcursoApiService {
     @POST("admin/questions/import/assist") suspend fun assistQuestionImport(@Body payload: JsonObject): JsonObject
     @POST("questions/cache-state") suspend fun cacheState(@Body payload:CacheStatePayload):CacheStateResponse
     @GET("catalog/knowledge") suspend fun knowledgeCatalog(): JsonObject
-    @GET("auth/profile")
+
+    @GET("auth/me")
     suspend fun profile(): UserProfileDto
+
+    @POST("auth/guest")
+    suspend fun guestSession(@Body payload: NativeSessionPayload): AuthSessionDto
 
     @POST("auth/native-session")
     suspend fun nativeSession(@Body payload: NativeSessionPayload): AuthSessionDto
+
+    @POST("auth/login")
+    suspend fun login(@Body payload: AuthLoginPayload): AuthSessionDto
+
+    @POST("auth/register")
+    suspend fun register(@Body payload: AuthRegisterPayload): AuthSessionDto
+
+    @POST("auth/logout")
+    suspend fun logout(): JsonObject
 
     @GET("exams")
     suspend fun listExams(): List<ExamBlueprintPayload>
@@ -156,10 +178,8 @@ interface ConcursoApiService {
     @POST("exams/{examId}/publish-edital")
     suspend fun publishEdital(@Path("examId") examId: String, @Body payload: PublishEditalPayload): ExamBlueprintPayload
 
-    @POST("auth/telegram-link")
-    suspend fun linkTelegramOrLogin(
-        @Body payload: TelegramLinkPayload
-    ): AuthSessionDto
+    @POST("exams/{examId}/adopt-template")
+    suspend fun adoptExamTemplate(@Path("examId") examId: String): ExamBlueprintPayload
 
     @PUT("auth/onboarding")
     suspend fun saveOnboardingPreferences(

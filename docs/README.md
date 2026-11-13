@@ -1,40 +1,25 @@
 # Documentação do Ecossistema Cogniva
 
-Este diretório centraliza os documentos de referência técnica, manuais operacionais, especificações de dados e registros de auditoria do sistema **Cogniva** (`concursoprep`).
+Este diretório reúne as especificações arquiteturais, contratos normativos, manuais operacionais e guias de administração da plataforma **Cogniva `2.0.0`**.
 
 ---
 
-## 🗺️ Mapa de Documentação Ativa
+## 🗺️ Mapa de Documentação Viva
 
-### 1. Operação, Infraestrutura e Distribuição
-- **[OPERACAO.md](OPERACAO.md):** Manual completo de operação em produção na VPS DigitalOcean. Cobre limites de recursos, credenciais seguras, gestão de gates de deploy, verificação de releases, procedimentos de rollback atômico, renovação de certificados TLS (Let's Encrypt) e diagnóstico do banco.
-- **[LICAO-APRENDIDA-OTA-APK.md](LICAO-APRENDIDA-OTA-APK.md):** Pós-morte e invariantes de engenharia do pipeline de atualização OTA. Registra o diagnóstico da recompressão gzip indevida de binários, regras de streaming direto (`proxy_buffering off`, `no-transform`), validação de certificados no Android (API 28+) e checklist de teste pós-promoção.
+### 1. Arquitetura, Operação e Distribuição
+- **[ARQUITETURA.md](ARQUITETURA.md):** Visão sistêmica da versão `2.0.0` — autenticação nativa (`Argon2id` + sessões revogáveis), banco `cogniva` 100% V2, separação `exam_templates` vs. `user_exams`, simetria Rust ↔ Kotlin e governança xAI.
+- **[OPERACAO.md](OPERACAO.md):** Runbook de produção — configuração `.env`, concessão administrativa (`ADMIN_EMAILS` / `--grant-admin`), migração *read-only* `CNU → cogniva`, TLS IPv4/IPv6, promoção atômica e rollback verificado.
+- **[LICAO-APRENDIDA-OTA-APK.md](LICAO-APRENDIDA-OTA-APK.md):** Registro técnico de engenharia sobre streaming binário direto de APKs (`no-transform`, `proxy_buffering off`), validação de certificados Android (API 28+) e checklist pós-deploy.
+- **[CHANGELOG.md](../CHANGELOG.md):** Notas de versão consolidadas do ecossistema.
 
-### 2. Catálogo de Conhecimentos e Modelagem de Dados
-- **[RELEASE-1.4.17.md](RELEASE-1.4.17.md):** Ajustes no editor de concursos Android, modal tela cheia edge-to-edge e centralização da ajuda da estrutura em Ajustes.
-- **[GUIA-ADMINISTRACAO.md](GUIA-ADMINISTRACAO.md):** Os 14 tópicos da Ajuda do portal, gerados da mesma fonte da interface, com procedimentos e dúvidas frequentes.
-- **[RELEASE-1.4.16.md](RELEASE-1.4.16.md):** Central de Ajuda pesquisável, atalhos por tela e guia de administração alinhado à interface.
-- **[ESTRUTURA-ESTUDOS.md](ESTRUTURA-ESTUDOS.md):** Significados e relações entre troncos, concursos, editais, grades, componentes, disciplinas, assuntos, subassuntos e questões.
-- **[RELEASE-1.4.15.md](RELEASE-1.4.15.md):** Hierarquia visível, cadastro de questões com origem completa e sessão web de 30 dias.
-- **[ADMIN-WEB.md](ADMIN-WEB.md):** Painel web, login, administração de concursos/editais e questões, edição/ativação global do catálogo, histórico, recuperação e publicação.
-- **[CONCILIACAO-ANTIGRAVITY-2026-11-07.md](CONCILIACAO-ANTIGRAVITY-2026-11-07.md):** Conferência das correções anteriores, causa da publicação interrompida da 1.4.12 e conciliação com painel/importador.
-- **[RELEASE-1.4.14.md](RELEASE-1.4.14.md):** Promoção e aceite da 1.4.14/build 21, com todas as chamadas novas de IA em `grok-4.7`.
-- **[RELEASE-1.4.13.md](RELEASE-1.4.13.md):** Conteúdo, preparação, promoção e aceite da release conciliada 1.4.13/build 20.
-- **[INSERCAO-QUESTOES.md](INSERCAO-QUESTOES.md):** Cadastro individual e em lote no Android, formatos de entrada, assistência opcional de IA, revisão, permissões e recuperação de envios.
-- **[CATALOGO-CONHECIMENTOS.md](CATALOGO-CONHECIMENTOS.md):** Especificação normativa do catálogo de conhecimentos compartilhados (`shared/knowledge-catalog.json`). Define a hierarquia de disciplinas, assuntos, subassuntos, troncos de carreira, aliases editoriais e regras de mapeamento canônico.
-- **[SCHEMA-QUESTOES-V2.md](SCHEMA-QUESTOES-V2.md):** Especificação técnica dos contratos de questões v2, schemas JSON 2020-12 e validações BSON no MongoDB. Detalha validação normativa, hashing JCS/SHA-256 de conteúdo, idempotência com `operation_id`, outbox transacional e suporte a questões objetivas e discursivas.
-- **[catalogo/CONHECIMENTOS.md](catalogo/CONHECIMENTOS.md):** Tabela legível e formatada de todas as disciplinas, assuntos e subassuntos do catálogo compartilhado, gerada pelo script de validação de catálogo.
+### 2. Administração, Catálogo e Contratos de Dados
+- **[ADMIN-WEB.md](ADMIN-WEB.md):** Arquitetura, segurança (`HttpOnly` + CSRF), rotas e fluxos do painel `/admin/` (templates globais, questões V2, **Reportes**, **Classificação IA** e ativação colaborativa do catálogo).
+- **[GUIA-ADMINISTRACAO.md](GUIA-ADMINISTRACAO.md):** Guia passo a passo da Central de Ajuda do painel, exportado automaticamente de [`web-admin/help.js`](../web-admin/help.js) e validado em CI.
+- **[ESTRUTURA-ESTUDOS.md](ESTRUTURA-ESTUDOS.md):** Hierarquia conceitual entre troncos de carreira, templates globais, grades pessoais, componentes por etapa, disciplinas, assuntos, subassuntos e questões.
+- **[CATALOGO-CONHECIMENTOS.md](CATALOGO-CONHECIMENTOS.md):** Especificação do catálogo unificado [`shared/knowledge-catalog.json`](../shared/knowledge-catalog.json) (`catalog_version: 2`), templates globais [`shared/exam-templates.json`](../shared/exam-templates.json) e preservação de identidades.
+- **[catalogo/CONHECIMENTOS.md](catalogo/CONHECIMENTOS.md):** Listagem completa de troncos, disciplinas, assuntos e subassuntos gerada por `scripts/knowledge_catalog.py --export`.
+- **[SCHEMA-QUESTOES-V2.md](SCHEMA-QUESTOES-V2.md):** Contratos JSON Schema 2020-12 de questões 100% V2, hash canônico JCS/SHA-256 (RFC 8785), revisão de validade, modo preparatório `OPEN_ENDED`, compatibilidade por edital e isolamento de reportes.
+- **[INSERCAO-QUESTOES.md](INSERCAO-QUESTOES.md):** Fluxo individual e em lote (JSON/JSONL) no Android e no `/admin/`, recibos idempotentes e estruturação assistida por IA.
 
-### 3. Inteligência Artificial e Automação Controlada
-- **[IA-XAI.md](IA-XAI.md):** Arquitetura de integração com a API xAI (Grok). Descreve os prompts de tutoria e classificação, armazenamento persistente no MongoDB, contratos de rate-limit (`reserve_tutor` / `release_tutor`), concorrência com exclusão mútua (`LOCKS`) e isolamento de chaves privadas.
-- **[CLASSIFICACAO-LEGADO-SOB-DEMANDA.md](CLASSIFICACAO-LEGADO-SOB-DEMANDA.md):** Regras, cotas diárias e limites de custo da classificação sob demanda do acervo congelado (618 questões). Define salvaguardas contra loops de repetição e preservação da proveniência.
-
----
-
-## 🏛️ Arquivo Histórico e Auditorias
-
-Para consultar decisões de arquitetura de fases anteriores, marcos de entrega e notas de correção:
-
-- **[Arquivo Histórico](historico/README.md):** Reúne relatórios de fechamento de etapas ([Etapas 3](historico/etapas/ETAPA-3-BACKEND-MONGO.md), [4](historico/etapas/ETAPA-4-CADASTRO-CATALOGO.md) e [5–7](historico/etapas/ETAPAS-5-7-CLASSIFICACAO-SELECAO.md)), notas de patches de versões anteriores ([1.4.1](historico/releases/CORRECAO-VINCULO-1.4.1.md), [1.4.2](historico/releases/CORRECAO-QUESTOES-1.4.2.md), [1.4.4](historico/releases/GESTAO-CONCURSOS-1.4.4.md)) e a auditoria inicial de novembro de 2026 ([FECHAMENTO-AUDITORIA.md](historico/auditoria-2026-11-01/FECHAMENTO-AUDITORIA.md) e [REMEDIACAO.md](historico/auditoria-2026-11-01/REMEDIACAO.md)).
-- **[Auditoria de 01/11/2026](auditoria/2026-11-01/AUDITORIA-COGNIVA.md):** Diagnóstico original congelado contendo a análise profunda dos achados C01 a C39 com evidências e snapshots de fontes preservados.
-- **Evidências de Validação de Releases:** Diretório [`remediation-validation/`](remediation-validation/) contendo logs, inventários e resultados de aceite das entregas, incluindo a 1.4.15.
+### 3. Inteligência Artificial
+- **[IA-XAI.md](IA-XAI.md):** Integração com a API xAI — obrigatoriedade de `XAI_MODEL`, dupla proteção de cota (`XAI_DAILY_USER_LIMIT` + `XAI_DAILY_GLOBAL_LIMIT`), estorno em falhas, cache persistente com `ai_resource_meta` e curadoria de classificação V2.

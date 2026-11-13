@@ -125,7 +125,7 @@ interface ConcursoLocalDao {
         LearningRecordEntity::class, PendingReportEntity::class, QuizSessionEntity::class, LocalMetadataEntity::class,
         CanonicalMasteryEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

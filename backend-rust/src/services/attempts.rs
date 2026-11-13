@@ -316,6 +316,33 @@ pub async fn commit(
 ) -> Result<ProcessedAttemptResult, AppError> {
     let qid = ObjectId::parse_str(&item.question_id)?;
     let hash = payload_hash(item);
+    let receipt_id = format!("{user_id}:{}", item.attempt_id);
+    let receipts = state.db.collection_with_options::<Document>(
+        "attempt_receipts",
+        CollectionOptions::builder()
+            .write_concern(
+                WriteConcern::builder()
+                    .w(mongodb::options::Acknowledgment::Majority)
+                    .journal(true)
+                    .w_timeout(std::time::Duration::from_secs(10))
+                    .build(),
+            )
+            .build(),
+    );
+    if let Some(stored_receipt) = receipts.find_one(doc! { "_id": &receipt_id }).await? {
+        if stored_receipt.get_str("payload_sha256").ok() != Some(hash.as_str()) {
+            return Err(AppError::Conflict(
+                "O identificador da tentativa já existe com outro conteúdo".into(),
+            ));
+        }
+        let ack_doc = stored_receipt
+            .get_document("ack")
+            .map_err(|_| AppError::Conflict("Recibo incompleto; preservada a tentativa".into()))?
+            .clone();
+        return bson::from_document(ack_doc)
+            .map_err(|_| AppError::Conflict("Formato do recibo exige revisão".into()));
+    }
+
     let activities = state.db.collection_with_options::<Document>(
         "userActivityLog",
         CollectionOptions::builder()
@@ -330,24 +357,40 @@ pub async fn commit(
     );
     for _ in 0..12 {
         let existing = activities
-            .find_one(doc! {"user_id":user_id,"question_id":qid})
+            .find_one(doc! { "user_id": user_id, "question_id": qid })
             .await?;
         if let Some(raw) = &existing {
             if let Some(ack) = receipt(raw, item, &hash)? {
+                let _ = receipts
+                    .update_one(
+                        doc! { "_id": &receipt_id },
+                        doc! {
+                            "$setOnInsert": {
+                                "user_id": user_id,
+                                "attempt_id": &item.attempt_id,
+                                "question_id": qid,
+                                "payload_sha256": &hash,
+                                "ack": bson::to_document(&ack).unwrap(),
+                                "recorded_at": bson::DateTime::now()
+                            }
+                        },
+                    )
+                    .upsert(true)
+                    .await;
                 return Ok(ack);
             }
         }
         let question = state
             .db
             .collection::<Document>("todasQuestoes")
-            .find_one(doc! {"_id":qid})
+            .find_one(doc! { "_id": qid })
             .await?
             .ok_or_else(|| {
                 AppError::NotFound(
                     "Questão não encontrada; tentativa preservada para revisão".into(),
                 )
             })?;
-        let question=crate::services::question_compatibility::decode(question)?;
+        let question = crate::services::question_compatibility::decode(question)?;
         let at = validate(item, &question)?;
         let activity = match &existing {
             Some(raw) => bson::from_document(raw.clone()).map_err(|_| {
@@ -369,23 +412,49 @@ pub async fn commit(
                 .ok()
                 .or_else(|| d.get_i32("state_revision").ok().map(i64::from))
         });
-        let mut filter = doc! {"_id":id,"pastSessions.attempt_id":{"$ne":&item.attempt_id}};
+        let mut filter = doc! { "_id": id, "pastSessions.attempt_id": { "$ne": &item.attempt_id } };
         if let Some(revision) = revision {
             filter.insert("state_revision", revision);
         } else {
-            filter.insert("state_revision", doc! {"$exists":false});
+            filter.insert("state_revision", doc! { "$exists": false });
         }
         let write = activities
             .update_one(
                 filter,
-                doc! {"$set":fields,"$push":{"pastSessions":event},"$inc":{"state_revision":1_i64},
-                "$setOnInsert":{"user_id":user_id,"question_id":qid}},
+                doc! {
+                    "$set": fields,
+                    "$push": {
+                        "pastSessions": {
+                            "$each": [event],
+                            "$sort": { "data": 1, "attempt_id": 1 },
+                            "$slice": -50
+                        }
+                    },
+                    "$inc": { "state_revision": 1_i64 },
+                    "$setOnInsert": { "user_id": user_id, "question_id": qid }
+                },
             )
             .upsert(existing.is_none())
             .await;
         match write {
             Ok(result) if result.matched_count == 1 || result.upserted_id.is_some() => {
-                return Ok(ack)
+                let _ = receipts
+                    .update_one(
+                        doc! { "_id": &receipt_id },
+                        doc! {
+                            "$setOnInsert": {
+                                "user_id": user_id,
+                                "attempt_id": &item.attempt_id,
+                                "question_id": qid,
+                                "payload_sha256": &hash,
+                                "ack": bson::to_document(&ack).unwrap(),
+                                "recorded_at": bson::DateTime::now()
+                            }
+                        },
+                    )
+                    .upsert(true)
+                    .await;
+                return Ok(ack);
             }
             Ok(_) => continue,
             Err(e) if e.to_string().contains("E11000") => continue,

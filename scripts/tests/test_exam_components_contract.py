@@ -1,4 +1,4 @@
-"""Wire-shape parity for the editable component contract (semantic rules live in Rust)."""
+"""Wire-shape parity for editable exam components and global exam templates."""
 import copy
 import json
 import pathlib
@@ -10,12 +10,17 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 class ExamComponentContractTest(unittest.TestCase):
     def setUp(self):
-        self.validator = Draft202012Validator(json.loads((ROOT / "shared/schemas/exam-component.schema.json").read_text(encoding="utf-8")))
-        self.components = json.loads((ROOT / "shared/canonical-catalog.json").read_text(encoding="utf-8"))["exams"][0]["subjects"]
+        self.validator = Draft202012Validator(
+            json.loads((ROOT / "shared/schemas/exam-component.schema.json").read_text(encoding="utf-8"))
+        )
+        self.templates = json.loads((ROOT / "shared/exam-templates.json").read_text(encoding="utf-8"))["templates"]
+        self.components = self.templates[0]["subjects"]
 
-    def test_legacy_components_and_same_subject_in_two_stages(self):
-        for component in self.components:
-            self.validator.validate(component)
+    def test_global_templates_and_same_subject_in_two_stages(self):
+        self.assertEqual({t["_id"] for t in self.templates}, {"CPNU", "RFB", "BNDES", "AFT"})
+        for tpl in self.templates:
+            for component in tpl["subjects"]:
+                self.validator.validate(component)
         second = copy.deepcopy(self.components[0])
         second.update(local_subject_id="second-stage", stage="2ª etapa")
         self.validator.validate(second)

@@ -1,7 +1,8 @@
 pub mod config;
 #[cfg(test)]
+mod catalog_activation_tests;
+#[cfg(test)]
 mod contract_tests;
-#[cfg(test)] mod catalog_activation_tests;
 pub mod error;
 pub mod models;
 pub mod routes;
@@ -9,6 +10,8 @@ pub mod security;
 pub mod services;
 
 use axum::{
+    extract::DefaultBodyLimit,
+    http::{header, HeaderValue, Method},
     routing::{get, post, put},
     Json, Router,
 };
@@ -20,7 +23,7 @@ use std::future::IntoFuture;
 use std::{net::SocketAddr, sync::Arc};
 use tower_http::{
     compression::CompressionLayer,
-    cors::{Any, CorsLayer},
+    cors::{AllowOrigin, CorsLayer},
     trace::TraceLayer,
 };
 
@@ -32,7 +35,11 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(db: Database, config: AppConfig) -> Self {
-        Self { db, config, catalog:services::catalog_runtime::Runtime::default() }
+        Self {
+            db,
+            config,
+            catalog: services::catalog_runtime::Runtime::default(),
+        }
     }
 }
 
@@ -41,26 +48,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info,api_rust_core=debug".into()),
+                .unwrap_or_else(|_| "info,cogniva_api=debug".into()),
         )
         .init();
 
-    if std::env::args().nth(1).as_deref() == Some("--export-catalog") {
+    let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some("--export-catalog") {
         println!(
             "{}",
             serde_json::to_string_pretty(&services::exam_engine::system_catalog())?
         );
         return Ok(());
     }
-    if std::env::args().nth(1).as_deref() == Some("--validate-legacy-export") {
-        let path = std::env::args()
-            .nth(2)
-            .ok_or("Informe o diretório privado de BSON")?;
-        services::legacy_validation::inspect(std::path::Path::new(&path))?;
-        return Ok(());
-    }
+
     let config = AppConfig::from_env();
-    if std::env::args().nth(1).as_deref() == Some("--health-check") {
+    if args.get(1).map(String::as_str) == Some("--health-check") {
         reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(5))
             .build()?
@@ -73,65 +75,65 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if config.jwt_secret.len() < 32 {
         return Err("JWT_SECRET deve ter pelo menos 32 caracteres aleatórios".into());
     }
-    let args: Vec<String> = std::env::args().collect();
-    if args.get(1).map(String::as_str) == Some("--issue-link-code") {
-        let user_id: i64 = args.get(2).ok_or("Informe o ID histórico")?.parse()?;
-        if user_id == 0 {
-            return Err("Informe uma conta não nula; o operador deve comprovar o proprietário antes de emitir".into());
-        }
-        println!(
-            "{}",
-            security::issue(&config.jwt_secret, user_id, "legacy_link", 600)?
-        );
-        return Ok(());
-    }
-    if args.get(1).map(String::as_str) == Some("--issue-web-code") {
-        let user_id:i64=args.get(2).ok_or("Informe a conta administrativa comprovada")?.parse()?;
-        if !security::is_admin(user_id) { return Err("Conta ausente em ADMIN_USER_IDS".into()); }
-        println!("{}",security::issue(&config.jwt_secret,user_id,"web_login",600)?);
-        return Ok(());
-    }
+
     tracing::info!(
-        "Conectando ao MongoDB Atlas (database: {})...",
+        "Conectando ao MongoDB (database: {})...",
         config.mongodb_db
     );
 
     let client = Client::with_uri_str(&config.mongodb_uri).await?;
     let db = client.database(&config.mongodb_db);
-    if std::env::args().nth(1).as_deref()==Some("--legacy-classification-status") {
-        println!("{}",services::legacy_classification::status(&db,&config).await?);return Ok(());
+
+    if args.get(1).map(String::as_str) == Some("--grant-admin") {
+        let email = args
+            .get(2)
+            .ok_or("Informe o e-mail da conta cadastrada: cogniva-api --grant-admin <email>")?;
+        let updated = routes::auth::grant_admin_by_email(&db, email).await?;
+        println!("{}", serde_json::to_string_pretty(&updated)?);
+        return Ok(());
     }
 
-    if std::env::args().nth(1).as_deref()==Some("--prepare-question-storage") {
-        let result=services::question_storage::prepare(&db).await?;
-        services::legacy_classification::prepare_guard(&db).await?;
-        let runtime=services::catalog_runtime::Runtime::default();let catalog=runtime.refresh(&db).await?;
-        services::catalog_runtime::scope(catalog,async{
-        services::question_storage::recover_audit(&db).await?;
-        services::classification::recover(&db).await?;
-        Ok::<_,error::AppError>(())}).await?;
-        println!("{}",result);return Ok(());
+    if matches!(
+        args.get(1).map(String::as_str),
+        Some("--prepare-storage" | "--prepare-question-storage")
+    ) {
+        let result = services::question_storage::prepare(&db).await?;
+        let runtime = services::catalog_runtime::Runtime::default();
+        let catalog = runtime.refresh(&db).await?;
+        services::catalog_runtime::scope(catalog, async {
+            services::question_storage::recover_audit(&db).await?;
+            services::classification::recover(&db).await?;
+            Ok::<_, error::AppError>(())
+        })
+        .await?;
+        println!("{}", result);
+        return Ok(());
     }
+
+    config.validate_server()?;
 
     let state = Arc::new(AppState::new(db.clone(), config.clone()));
-    let catalog=state.catalog.refresh(&db).await?;
-    services::catalog_runtime::scope(catalog,async {
-    services::legacy_classification::recover_guard(&db).await?;
-    services::legacy_classification::recover_jobs(&db).await?;
-    services::question_storage::recover_audit(&db).await?;
-    services::classification::recover(&db).await?;
-    Ok::<_,error::AppError>(())
-    }).await?;
-    // Inicia agendador diário em background (substitui schedule do AFTBot.py + countdown.py)
-    spawn_background_daily_scheduler(db.clone());
+    let catalog = state.catalog.refresh(&db).await?;
+    services::catalog_runtime::scope(catalog, async {
+        services::question_storage::prepare(&db).await?;
+        services::question_storage::recover_audit(&db).await?;
+        services::classification::recover(&db).await?;
+        Ok::<_, error::AppError>(())
+    })
+    .await?;
 
-    services::legacy_classification::spawn(state.clone());
+    spawn_background_daily_scheduler(db.clone());
 
     let app = build_router(state);
 
-    let bind_address:std::net::IpAddr=std::env::var("BIND_ADDRESS").unwrap_or_else(|_|"0.0.0.0".into()).parse()?;
-    let addr = SocketAddr::new(bind_address,config.port);
-    tracing::info!("🚀 api-rust-core escutando em http://{}", addr);
+    let addr = match std::env::var("BIND_ADDRESS") {
+        Ok(raw) if !raw.trim().is_empty() => raw
+            .trim()
+            .parse::<SocketAddr>()
+            .or_else(|_| raw.trim().parse::<std::net::IpAddr>().map(|ip| SocketAddr::new(ip, config.port)))?,
+        _ => SocketAddr::new(config.bind_ip, config.port),
+    };
+    tracing::info!("🚀 cogniva-api v{} escutando em http://{}", env!("CARGO_PKG_VERSION"), addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
@@ -140,58 +142,156 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 pub fn build_router(state: Arc<AppState>) -> Router {
+    let allowed_origin = state.config.public_origin.trim().to_string();
     let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+        .allow_origin(AllowOrigin::predicate(move |origin: &HeaderValue, _| {
+            let Ok(text) = origin.to_str() else {
+                return false;
+            };
+            (!allowed_origin.is_empty() && text.eq_ignore_ascii_case(&allowed_origin))
+                || text.starts_with("http://127.0.0.1:")
+                || text.starts_with("http://localhost:")
+        }))
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::OPTIONS])
+        .allow_headers([
+            header::AUTHORIZATION,
+            header::CONTENT_TYPE,
+            header::ACCEPT,
+        ]);
 
-    Router::new()
-        .route("/api/v1/admin/catalog/activate",post(routes::admin_data::catalog_activate))
-        .route("/api/v1/admin/catalog/activations/:operation",get(routes::admin_data::catalog_activation_status))
-        .route("/api/v1/admin/catalog/history",get(routes::admin_data::catalog_history))
-        .route("/api/v1/admin/catalog/versions/:version",get(routes::admin_data::catalog_version))
-        .route("/api/v1/admin/catalog/base",get(routes::admin_data::catalog_base))
-        .route("/api/v1/admin/catalog/validate",post(routes::admin_data::catalog_validate))
-        .route("/api/v1/admin/catalog/drafts",get(routes::admin_data::catalog_list).post(routes::admin_data::catalog_save))
-        .route("/api/v1/admin/catalog/drafts/:id",get(routes::admin_data::catalog_get))
-        .route("/api/v1/admin/summary",get(routes::admin_data::summary))
-        .route("/api/v1/admin/questions",get(routes::admin_data::questions))
-        .route("/api/v1/admin/questions/:id/prepare-edit",post(routes::admin_data::prepare_question))
-        .route("/api/v1/admin/web/me",get(routes::web_admin::me))
-        .route("/api/v1/admin/web/logout",post(routes::web_admin::logout))
-        .route("/api/v1/admin/questions/import/capabilities",get(routes::questions_v2::import_capabilities))
-        .route("/api/v1/admin/questions/import/preview",post(routes::questions_v2::import_preview))
-        .route("/api/v1/admin/questions/import/commit",post(routes::questions_v2::import_commit))
-        .route("/api/v1/admin/questions/import/assist",post(routes::questions_v2::import_assist))
-        .route("/api/v1/admin/questions/v2",post(routes::questions_v2::save))
-        .route("/api/v1/admin/questions/v2/:id",get(routes::questions_v2::get))
-        .route("/api/v1/admin/classification/proposals", post(routes::questions_v2::generate_proposals))
-        .route("/api/v1/admin/classification/proposals/:id", get(routes::questions_v2::review_proposals))
-        .route("/api/v1/admin/classification/decisions", post(routes::questions_v2::decide_proposal))
-        .route("/api/v1/admin/classification/compatibility", post(routes::questions_v2::decide_compatibility).get(routes::questions_v2::list_compatibility))
-        .route("/api/v1/catalog/knowledge",get(routes::questions_v2::catalog))
-        .route("/api/v1/questions/cache-state",post(routes::questions_v2::cache_state))
-        .route("/api/v1/admin/canonical-mapping",post(routes::canonical_mapping::apply))
+    let admin_routes = Router::new()
+        .route(
+            "/api/v1/admin/catalog/activate",
+            post(routes::admin_data::catalog_activate),
+        )
+        .route(
+            "/api/v1/admin/catalog/activations/:operation",
+            get(routes::admin_data::catalog_activation_status),
+        )
+        .route(
+            "/api/v1/admin/catalog/history",
+            get(routes::admin_data::catalog_history),
+        )
+        .route(
+            "/api/v1/admin/catalog/versions/:version",
+            get(routes::admin_data::catalog_version),
+        )
+        .route(
+            "/api/v1/admin/catalog/base",
+            get(routes::admin_data::catalog_base),
+        )
+        .route(
+            "/api/v1/admin/catalog/validate",
+            post(routes::admin_data::catalog_validate),
+        )
+        .route(
+            "/api/v1/admin/catalog/drafts",
+            get(routes::admin_data::catalog_list).post(routes::admin_data::catalog_save),
+        )
+        .route(
+            "/api/v1/admin/catalog/drafts/:id",
+            get(routes::admin_data::catalog_get),
+        )
+        .route("/api/v1/admin/summary", get(routes::admin_data::summary))
+        .route(
+            "/api/v1/admin/questions",
+            get(routes::admin_data::questions),
+        )
+        .route(
+            "/api/v1/admin/questions/:id/prepare-edit",
+            post(routes::admin_data::prepare_question),
+        )
+        .route(
+            "/api/v1/admin/exam-templates",
+            get(routes::admin_data::list_exam_templates)
+                .post(routes::admin_data::create_exam_template),
+        )
+        .route(
+            "/api/v1/admin/exam-templates/:id",
+            put(routes::admin_data::update_exam_template),
+        )
+        .route(
+            "/api/v1/admin/exam-templates/:id/publish-edital",
+            post(routes::admin_data::publish_template_edital),
+        )
+        .route(
+            "/api/v1/admin/reports",
+            get(routes::admin_data::list_reports),
+        )
+        .route(
+            "/api/v1/admin/reports/:id/resolve",
+            post(routes::admin_data::resolve_report),
+        )
+        .route("/api/v1/admin/web/me", get(routes::web_admin::me))
+        .route("/api/v1/admin/web/logout", post(routes::web_admin::logout))
+        .route(
+            "/api/v1/admin/questions/import/capabilities",
+            get(routes::questions_v2::import_capabilities),
+        )
+        .route(
+            "/api/v1/admin/questions/import/preview",
+            post(routes::questions_v2::import_preview),
+        )
+        .route(
+            "/api/v1/admin/questions/import/commit",
+            post(routes::questions_v2::import_commit),
+        )
+        .route(
+            "/api/v1/admin/questions/import/assist",
+            post(routes::questions_v2::import_assist),
+        )
+        .route(
+            "/api/v1/admin/questions/v2",
+            post(routes::questions_v2::save),
+        )
+        .route(
+            "/api/v1/admin/questions/v2/:id",
+            get(routes::questions_v2::get),
+        )
+        .route(
+            "/api/v1/admin/classification/proposals",
+            get(routes::questions_v2::list_proposals)
+                .post(routes::questions_v2::generate_proposals),
+        )
+        .route(
+            "/api/v1/admin/classification/proposals/:id",
+            get(routes::questions_v2::review_proposals),
+        )
+        .route(
+            "/api/v1/admin/classification/decisions",
+            post(routes::questions_v2::decide_proposal),
+        )
+        .route(
+            "/api/v1/admin/run-daily-maintenance",
+            post(routes::auth::handle_trigger_daily_maintenance),
+        )
+        .route_layer(axum::middleware::from_fn(security::require_admin));
+
+    let authenticated_routes = Router::new()
+        .merge(admin_routes)
+        .route("/api/v1/auth/me", get(routes::auth::get_profile))
         .route("/api/v1/auth/profile", get(routes::auth::get_profile))
         .route(
             "/api/v1/auth/onboarding",
             put(routes::auth::handle_save_onboarding),
         )
         .route(
-            "/api/v1/admin/run-daily-maintenance",
-            post(routes::auth::handle_trigger_daily_maintenance),
+            "/api/v1/catalog/knowledge",
+            get(routes::questions_v2::catalog),
+        )
+        .route(
+            "/api/v1/catalog/trunks",
+            get(routes::exams::get_trunk_catalog),
+        )
+        .route(
+            "/api/v1/questions/cache-state",
+            post(routes::questions_v2::cache_state),
+        )
+        .route(
+            "/api/v1/questions/batch/trunk-common",
+            post(routes::exams::trunk_common_batch),
         )
         .route("/api/v1/learning/state", get(routes::learning::get_state))
-        .route("/api/v1/home/today", get(routes::home::get_today_dashboard))
-        .route("/api/v1/contests", get(routes::contests::list_contests))
-        .route(
-            "/api/v1/contests/:contest_id/syllabus",
-            get(routes::contests::get_contest_syllabus),
-        )
-        .route(
-            "/api/v1/contests/:contest_id/diff",
-            get(routes::contests::get_contest_edital_diff),
-        )
         .route(
             "/api/v1/quiz/generate",
             post(routes::quiz::handle_generate_quiz),
@@ -209,11 +309,6 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             post(routes::quiz::handle_report_problem),
         )
         .route(
-            "/api/v1/analytics/progress",
-            get(routes::analytics::get_user_progress_analytics),
-        )
-        .route("/api/v1/catalog/trunks", get(routes::exams::get_trunk_catalog))
-        .route(
             "/api/v1/exams",
             get(routes::exams::list_exams).post(routes::exams::create_exam),
         )
@@ -223,32 +318,65 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             post(routes::exams::publish_edital),
         )
         .route(
+            "/api/v1/exams/:exam_id/adopt-template",
+            post(routes::exams::adopt_template),
+        )
+        .route(
             "/api/v1/exams/:exam_id/weighted-simulado",
             post(routes::exams::weighted_simulado),
         )
         .route(
-            "/api/v1/questions/batch/trunk-common",
-            post(routes::exams::trunk_common_batch),
+            "/api/v1/exams/:exam_id/compatibility",
+            get(routes::exams::get_compatibility).post(routes::exams::decide_compatibility),
         )
-        .route_layer(axum::middleware::from_fn_with_state(state.clone(), security::authenticate))
-        .merge(Router::new()
-            .route("/admin",get(routes::web_admin::index))
-            .route("/admin/",get(routes::web_admin::index))
-            .route("/admin/assets/:name",get(routes::web_admin::asset))
-            .route("/api/v1/auth/web-session",post(routes::web_admin::login))
-            .route("/api/v1/auth/web-logout",post(routes::web_admin::logout))
-            .route("/api/v1/health", get(|| async { Json(json!({"status":"ok","service":"api-rust-core", "version":env!("CARGO_PKG_VERSION"), "revision":option_env!("BUILD_REVISION").unwrap_or("local"), "contract_version":2})) }))
-            .route("/api/v1/ready", get(readiness))
-            .route("/api/v1/auth/native-session", post(routes::auth::handle_native_session))
-            .route("/api/v1/auth/telegram-link", post(routes::auth::handle_telegram_link_or_login))
-            .route("/api/v1/apk/info", get(routes::apk_ota::get_apk_info))
-            .route("/api/app/latest-apk", get(routes::apk_ota::get_latest_apk)))
+        .route_layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            security::authenticate,
+        ));
+
+    let public_routes = Router::new()
+        .route("/admin", get(routes::web_admin::index))
+        .route("/admin/", get(routes::web_admin::index))
+        .route("/admin/assets/:name", get(routes::web_admin::asset))
+        .route(
+            "/api/v1/health",
+            get(|| async {
+                Json(json!({
+                    "status": "ok",
+                    "service": "cogniva-api",
+                    "version": env!("CARGO_PKG_VERSION"),
+                    "revision": option_env!("BUILD_REVISION").unwrap_or("local"),
+                    "contract_version": 3
+                }))
+            }),
+        )
+        .route("/api/v1/ready", get(readiness))
+        .route(
+            "/api/v1/auth/guest",
+            post(routes::auth::handle_guest_session),
+        )
+        .route(
+            "/api/v1/auth/native-session",
+            post(routes::auth::handle_guest_session),
+        )
+        .route(
+            "/api/v1/auth/register",
+            post(routes::auth::handle_register),
+        )
+        .route("/api/v1/auth/login", post(routes::auth::handle_login))
+        .route("/api/v1/auth/logout", post(routes::auth::handle_logout))
+        .route("/api/v1/auth/web-logout", post(routes::web_admin::logout))
+        .route("/api/v1/apk/info", get(routes::apk_ota::get_apk_info));
+
+    authenticated_routes
+        .merge(public_routes)
+        .layer(DefaultBodyLimit::max(2 * 1024 * 1024))
         .layer(CompressionLayer::new())
         .merge(
-            Router::new()
-                .route("/api/v1/apk/download", get(routes::apk_ota::download_apk))
-                .route("/apk", get(routes::apk_ota::download_apk))
-                .route("/cogniva.apk", get(routes::apk_ota::download_apk)),
+            Router::new().route(
+                "/api/v1/apk/download",
+                get(routes::apk_ota::download_apk),
+            ),
         )
         .layer(TraceLayer::new_for_http())
         .layer(cors)
@@ -260,13 +388,16 @@ async fn readiness(
 ) -> Result<Json<serde_json::Value>, error::AppError> {
     tokio::time::timeout(
         std::time::Duration::from_secs(3),
-        state.db.run_command(bson::doc! {"ping":1}).into_future(),
+        state.db.run_command(bson::doc! { "ping": 1 }).into_future(),
     )
     .await
     .map_err(|_| error::AppError::Internal("Banco não respondeu a tempo".into()))??;
-    Ok(Json(
-        json!({"status":"ready","contract_version":2,"revision":option_env!("BUILD_REVISION").unwrap_or("local")}),
-    ))
+    Ok(Json(json!({
+        "status": "ready",
+        "service": "cogniva-api",
+        "contract_version": 3,
+        "revision": option_env!("BUILD_REVISION").unwrap_or("local")
+    })))
 }
 
 #[cfg(test)]
@@ -285,32 +416,32 @@ mod latest_apk_tests {
     }
 
     #[tokio::test]
-    async fn latest_apk_size_and_sha256_come_from_the_file_and_repeat() {
-        let dir = std::env::temp_dir().join(format!("cogniva-latest-apk-{}", uuid::Uuid::new_v4()));
+    async fn apk_info_size_and_sha256_come_from_the_file_and_repeat() {
+        let dir = std::env::temp_dir().join(format!("cogniva-apk-info-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
-        let apk_path = dir.join("app-debug.apk");
+        let apk_path = dir.join("cogniva.apk");
         let meta_path = dir.join("output-metadata.json");
-        let apk_bytes = b"cogniva-fixture-apk-bytes-v1-not-a-constant-hash";
+        let apk_bytes = b"cogniva-fixture-apk-bytes-v2-not-a-constant-hash";
         std::fs::write(&apk_path, apk_bytes).unwrap();
         std::fs::write(
             &meta_path,
-            r#"{"elements":[{"versionCode":3,"versionName":"1.2.0"}]}"#,
+            r#"{"elements":[{"versionCode":25,"versionName":"2.0.0"}]}"#,
         )
         .unwrap();
 
         let config = AppConfig {
+            bind_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
             port: 0,
             mongodb_uri: "mongodb://127.0.0.1:27017".to_string(),
-            mongodb_db: "CNU".to_string(),
-            openai_api_key: None,
-            openai_model: "gpt-4o-mini".to_string(),
-            gemini_api_key: None,
-            gemini_model: "gemini-1.5-flash".to_string(),
+            mongodb_db: "cogniva".to_string(),
+            public_origin: "https://cogniva.local".to_string(),
+            admin_emails: std::collections::HashSet::new(),
             xai_api_key: None,
             xai_base_url: "https://api.x.ai/v1".into(),
-            legacy_auto_classification_enabled: false,
-            xai_model: "grok-4.7".into(),
-            jwt_secret: "test".to_string(),
+            xai_model: Some("grok-4".into()),
+            xai_daily_user_limit: 120,
+            xai_daily_global_limit: 500,
+            jwt_secret: "test-secret-with-at-least-32-characters".to_string(),
             apk_storage_path: apk_path.clone(),
             apk_metadata_path: meta_path,
         };
@@ -326,7 +457,7 @@ mod latest_apk_tests {
                 .clone()
                 .oneshot(
                     Request::builder()
-                        .uri("/api/app/latest-apk")
+                        .uri("/api/v1/apk/info")
                         .body(Body::empty())
                         .unwrap(),
                 )
@@ -341,6 +472,8 @@ mod latest_apk_tests {
 
         assert_eq!(bodies[0], bodies[1], "repeat request changed the body");
         let json: serde_json::Value = serde_json::from_str(&bodies[0]).unwrap();
+        assert_eq!(json["version_code"].as_i64(), Some(25));
+        assert_eq!(json["version_name"].as_str(), Some("2.0.0"));
         assert_eq!(json["size_bytes"].as_u64().unwrap(), apk_bytes.len() as u64);
         assert_eq!(
             json["sha256_checksum"].as_str().unwrap(),

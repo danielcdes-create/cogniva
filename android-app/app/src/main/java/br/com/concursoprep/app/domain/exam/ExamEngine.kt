@@ -105,6 +105,10 @@ data class StoredExam(
     val revision: Long = 0,
     val wrongAnswerPenalty: Double = 0.0,
     val syncError: String? = null,
+    val templateSourceId: String? = null,
+    val templateRevisionSynced: Long? = null,
+    val isCustomized: Boolean = false,
+    val upstreamUpdateAvailable: Boolean = false,
     val subjects: List<StoredSubject> = emptyList()
 )
 
@@ -123,7 +127,8 @@ data class ExamDraft(
     val historicalCutoffScore: Double,
     val ladderPriority: Int,
     val subjects: List<StoredSubject>,
-    val wrongAnswerPenalty: Double = 0.0
+    val wrongAnswerPenalty: Double = 0.0,
+    val isActiveInLadder: Boolean = true
 )
 
 data class LeverageSubject(
@@ -619,17 +624,18 @@ object OfflineExamQueue {
             estimatedWindowLabel = draft.estimatedWindowLabel,
             estimatedSortDateIso = draft.estimatedSortDateIso,
             historicalCutoffScore = draft.historicalCutoffScore,
-            isActiveInLadder = true,
+            isActiveInLadder = draft.isActiveInLadder && draft.lifecycleStatus != "ARQUIVADO",
             ladderPriority = draft.ladderPriority,
             syncStatus = "PENDING_CREATE",
             wrongAnswerPenalty = draft.wrongAnswerPenalty,
+            isCustomized = true,
             subjects = draft.subjects
         )
     }
 
     fun markUpdate(existing: StoredExam): StoredExam {
         val status = if (existing.syncStatus == "PENDING_CREATE") "PENDING_CREATE" else "PENDING_UPDATE"
-        return existing.copy(syncStatus = status)
+        return existing.copy(syncStatus = status, isCustomized = true)
     }
 
     fun mergeByClientId(store: Map<String, StoredExam>, incoming: StoredExam): Map<String, StoredExam> {
@@ -760,41 +766,43 @@ object ExamCatalog {
     }
     fun equivalentLabels(label:String):Set<String> = knowledge.array("subjects").map { it.jsonObject }.find { it.text("label")==label||it.array("aliases").any { alias->alias.jsonPrimitive.content==label } }?.let { legacyLabels(it.text("subject_id")) }?:setOf(label)
     fun legacyLabels(subjectId:String):Set<String> = knowledge.array("subjects").map { it.jsonObject }.find { it.text("subject_id")==subjectId }?.let { setOf(it.text("label"))+it.array("aliases").map { alias->alias.jsonPrimitive.content } }?:emptySet()
-    @Volatile private var installed: JsonObject? = null
-    private val bundled: JsonObject by lazy {
-        val stream=checkNotNull(ExamCatalog::class.java.getResourceAsStream("/canonical-catalog.json")) { "Catálogo canônico ausente" }
+    @Volatile private var installedExams: JsonArray? = null
+    private val bundledTemplates: JsonObject by lazy {
+        val stream = checkNotNull(ExamCatalog::class.java.getResourceAsStream("/exam-templates.json")) { "Templates globais de concurso ausentes" }
         stream.bufferedReader(Charsets.UTF_8).use { Json.parseToJsonElement(it.readText()).jsonObject }
     }
-    private val catalog: JsonObject get() = installed ?: bundled
     fun installCatalog(value: JsonObject) {
-        require((value["trunks"] as? JsonArray)?.isNotEmpty()==true && value["exams"] is JsonArray && value["subjects"] is JsonArray)
-        installed=value
+        val exams = (value["exams"] as? JsonArray) ?: (value["templates"] as? JsonArray)
+        require(exams != null) { "Payload de catálogo inválido: 'exams' ou 'templates' ausente" }
+        installedExams = exams
     }
     private fun JsonObject.text(key:String):String = getValue(key).jsonPrimitive.content
     private fun JsonObject.array(key:String):JsonArray = getValue(key).jsonArray
-    private fun topic(value:JsonObject,subjectId:String)=StoredTopic(value.text("topic_id"),value.text("topic_id"),subjectId,value.text("title"),"PRE_EDITAL_BASE")
     fun trunks(): List<TrunkTemplate> {
-        if(knowledgeVersion()>bundledKnowledge.getValue("catalog_version").jsonPrimitive.long) {
-            return knowledge.array("trunks").map { it.jsonObject }.filter { it.text("status")=="ACTIVE" }.map { trunk ->
-                val slug=trunk.text("trunk_id")
-                val subjects=knowledge.array("subjects").map { it.jsonObject }.filter { s ->s.text("status")=="ACTIVE" && s.array("trunk_links").any { it.jsonObject.text("trunk_id")==slug } }.mapNotNull { s ->
-                    val topics=catalogTopics(s.text("subject_id"));val first=topics.firstOrNull()?:return@mapNotNull null
-                    val link=s.array("trunk_links").first { it.jsonObject.text("trunk_id")==slug }.jsonObject
-                    val old=catalog.array("trunks").map { it.jsonObject }.firstOrNull { it.text("slug")==slug }
-                    val weight=old?.let { it.array("core_subjects")+it.array("complementary_subjects") }?.map { it.jsonObject }?.firstOrNull { it.text("canonical_subject_id")==s.text("subject_id") }?.get("default_weight")?.jsonPrimitive?.double?:1.0
-                    TrunkSubjectTemplate(s.text("subject_id"),s.text("label"),weight,if(link.text("role")=="FOUNDATIONAL")"CORE"else"COMPLEMENTARY",first.canonicalTopicId,first.displayTitle,topics)
+        return knowledge.array("trunks").map { it.jsonObject }.filter { it.text("status") == "ACTIVE" }.map { trunk ->
+            val slug = trunk.text("trunk_id")
+            val iconKey = trunk["icon_key"]?.jsonPrimitive?.contentOrNull ?: "work"
+            val subjects = knowledge.array("subjects")
+                .map { it.jsonObject }
+                .filter { s -> s.text("status") == "ACTIVE" && s.array("trunk_links").any { it.jsonObject.text("trunk_id") == slug } }
+                .mapNotNull { s ->
+                    val topics = catalogTopics(s.text("subject_id"))
+                    val first = topics.firstOrNull() ?: return@mapNotNull null
+                    val link = s.array("trunk_links").first { it.jsonObject.text("trunk_id") == slug }.jsonObject
+                    val weight = link["default_weight"]?.jsonPrimitive?.doubleOrNull
+                        ?: if (link.text("role") == "FOUNDATIONAL") 2.0 else 1.0
+                    TrunkSubjectTemplate(
+                        s.text("subject_id"),
+                        s.text("label"),
+                        weight,
+                        if (link.text("role") == "FOUNDATIONAL") "CORE" else "COMPLEMENTARY",
+                        first.canonicalTopicId,
+                        first.displayTitle,
+                        topics
+                    )
                 }
-                TrunkTemplate(slug,trunk.text("label"),"work",subjects)
-            }
+            TrunkTemplate(slug, trunk.text("label"), iconKey, subjects)
         }
-        return catalog.array("trunks").map { element ->
-        val t=element.jsonObject
-        val subjects=(t.array("core_subjects")+t.array("complementary_subjects")).map { raw ->
-            val item=raw.jsonObject;val id=item.text("canonical_subject_id");val topics=item.array("topics").map { topic(it.jsonObject,id) };val first=topics.first()
-            TrunkSubjectTemplate(id,item.text("name"),item.getValue("default_weight").jsonPrimitive.double,item.text("relevance_tier"),first.canonicalTopicId,first.displayTitle,topics)
-        }
-        TrunkTemplate(t.text("slug"),t.text("name"),t.text("icon_key"),subjects)
-    } + knowledge.array("trunks").map { it.jsonObject }.filter { t -> t.text("status")=="ACTIVE" && catalog.array("trunks").none { it.jsonObject.text("slug")==t.text("trunk_id") } }.map { TrunkTemplate(it.text("trunk_id"),it.text("label"),"work",emptyList()) }
     }
     fun subjectsForTrunk(trunkSlug:String):List<StoredSubject> = trunks().find { it.slug==trunkSlug }?.subjects.orEmpty().mapIndexed { index,s ->
         StoredSubject("${s.canonicalSubjectId}-$index",s.canonicalSubjectId,s.name,if(s.relevanceTier=="CORE")"CONHECIMENTOS_ESPECIFICOS"else"CONHECIMENTOS_GERAIS",s.defaultWeight,kotlin.math.round(s.defaultWeight*5).toInt(),s.relevanceTier,s.topics)
@@ -803,13 +811,43 @@ object ExamCatalog {
         val id=s.text("subject_id")
         StoredSubject(id,id,s.text("label"),"CONHECIMENTOS_ESPECIFICOS",1.0,0,"SPECIFIC",emptyList())
     }
-    fun systemExams():List<StoredExam> = catalog.array("exams").map { element ->
-        val e=element.jsonObject;val date=e.getValue("target_date").jsonObject
-        StoredExam(examId=e.text("_id"),title=e.text("title"),shortName=e.text("short_name"),institution=e.text("institution"),role=e.text("role"),trunkSlug=e.text("trunk_slug"),lifecycleStatus=e.text("status"),examBoards=e.array("exam_boards").map { it.jsonPrimitive.content },
-            dateType=date.text("type"),exactDateIso=date["iso_date"]?.jsonPrimitive?.contentOrNull,estimatedWindowLabel=date["label"]?.jsonPrimitive?.contentOrNull,estimatedSortDateIso=date["estimated_sort_date"]?.jsonPrimitive?.contentOrNull.orEmpty(),historicalCutoffScore=e.getValue("historical_cutoff_score").jsonPrimitive.double,
-            isActiveInLadder=e.getValue("is_active_in_ladder").jsonPrimitive.boolean,ladderPriority=e.getValue("ladder_priority").jsonPrimitive.int,revision=e["revision"]?.jsonPrimitive?.long?:0,wrongAnswerPenalty=e["wrong_answer_penalty"]?.jsonPrimitive?.double?:0.0,
+    fun systemExams():List<StoredExam> = (installedExams ?: bundledTemplates.array("templates")).map { element ->
+        val e=element.jsonObject;val date=e.getValue("target_date").jsonObject;val examId=e.text("_id");val rev=e["revision"]?.jsonPrimitive?.long?:1L
+        StoredExam(
+            examId=examId,
+            title=e.text("title"),
+            shortName=e.text("short_name"),
+            institution=e.text("institution"),
+            role=e.text("role"),
+            trunkSlug=e.text("trunk_slug"),
+            lifecycleStatus=e.text("status"),
+            examBoards=e.array("exam_boards").map { it.jsonPrimitive.content },
+            dateType=date.text("type"),
+            exactDateIso=date["iso_date"]?.jsonPrimitive?.contentOrNull,
+            estimatedWindowLabel=date["label"]?.jsonPrimitive?.contentOrNull,
+            estimatedSortDateIso=date["estimated_sort_date"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+            historicalCutoffScore=e.getValue("historical_cutoff_score").jsonPrimitive.double,
+            isActiveInLadder=e.getValue("is_active_in_ladder").jsonPrimitive.boolean,
+            ladderPriority=e.getValue("ladder_priority").jsonPrimitive.int,
+            revision=rev,
+            wrongAnswerPenalty=e["wrong_answer_penalty"]?.jsonPrimitive?.double?:0.0,
+            templateSourceId=e["template_source_id"]?.jsonPrimitive?.contentOrNull ?: examId,
+            templateRevisionSynced=e["template_revision_synced"]?.jsonPrimitive?.longOrNull ?: rev,
+            isCustomized=e["is_customized"]?.jsonPrimitive?.booleanOrNull ?: false,
+            upstreamUpdateAvailable=e["upstream_update_available"]?.jsonPrimitive?.booleanOrNull ?: false,
             subjects=e.array("subjects").map { raw ->val x=raw.jsonObject
-                StoredSubject(x.text("local_subject_id"),x.text("canonical_subject_id"),x.text("display_name"),x.text("category"),x.getValue("weight").jsonPrimitive.double,x["question_count"]?.jsonPrimitive?.intOrNull,x.text("relevance_tier"),x.array("topics").map { rawTopic ->val t=rawTopic.jsonObject;StoredTopic(t.text("local_topic_id"),t.text("canonical_topic_id"),t.text("canonical_subject_id"),t.text("display_title"),t.text("diff_status")) })
-            })
+                StoredSubject(
+                    x.text("local_subject_id"),
+                    x.text("canonical_subject_id"),
+                    x.text("display_name"),
+                    x.text("category"),
+                    x.getValue("weight").jsonPrimitive.double,
+                    x["question_count"]?.jsonPrimitive?.intOrNull,
+                    x.text("relevance_tier"),
+                    x.array("topics").map { rawTopic ->val t=rawTopic.jsonObject;StoredTopic(t.text("local_topic_id"),t.text("canonical_topic_id"),t.text("canonical_subject_id"),t.text("display_title"),t.text("diff_status")) },
+                    x["stage"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                )
+            }
+        )
     }
 }

@@ -100,7 +100,7 @@ class RepositoryContractTest {
                 "submitAttemptsBatch"->submit(args[0] as SubmitBatchPayload)
                 "listExams"->remoteExams
                 "updateExam"->updateExam(args[1] as ExamBlueprintPayload)
-                "catalog"->Json.parseToJsonElement(checkNotNull(javaClass.getResourceAsStream("/canonical-catalog.json")).bufferedReader().readText()).jsonObject
+                "catalog"->Json.parseToJsonElement(checkNotNull(javaClass.getResourceAsStream("/exam-templates.json")).bufferedReader().readText()).jsonObject
                 "knowledgeCatalog"->Json.parseToJsonElement(checkNotNull(javaClass.getResourceAsStream("/knowledge-catalog.json")).bufferedReader().readText()).jsonObject
                 "cacheState"->CacheStateResponse(1,(args[0] as CacheStatePayload).questionIds.map { CacheStateItem(it,questions[it]?.let { q->QuestionCacheMapping.toDto(q,json) }) })
                 "learningState"->LearningPage(emptyList())
@@ -384,5 +384,24 @@ class RepositoryContractTest {
         assertEquals("EXCLUIDO",deleted.lifecycleStatus)
         assertEquals("SYNCED",deleted.syncStatus)
         assertEquals(4L,deleted.revision)
+    }
+    @Test fun topicScopedPracticeFiltersOfflineCacheToTheRequestedCanonicalTopic()=runBlocking {
+        val store=Store()
+        val template=ExamCatalog.systemExams().find { it.examId=="CPNU" }!!
+        val component=template.subjects.first { it.canonicalSubjectId=="FIN_PUB" }
+        store.putExam(template.copy(subjects=listOf(component)))
+        val qTopic1=question("000000000000000000000011").copy(canonicalSubjectId="FIN_PUB",canonicalTopicId="FIN_PUB_01",syllabusTopicIds=listOf("FIN_PUB_01"))
+        val qTopic2=question("000000000000000000000012").copy(canonicalSubjectId="FIN_PUB",canonicalTopicId="FIN_PUB_02",syllabusTopicIds=listOf("FIN_PUB_02"))
+        store.questions[qTopic1.id]=QuestionCacheMapping.toEntity(qTopic1,json)
+        store.questions[qTopic2.id]=QuestionCacheMapping.toEntity(qTopic2,json)
+        val selected=store.repository().fetchOrGetOfflineQuiz(
+            userId=123,
+            mode=QuizMode.STANDARD,
+            quantity=10,
+            contestId="CPNU",
+            componentId=component.localSubjectId,
+            syllabusTopicId="FIN_PUB_01"
+        )
+        assertEquals(listOf(qTopic1.id),selected.map { it.id })
     }
 }

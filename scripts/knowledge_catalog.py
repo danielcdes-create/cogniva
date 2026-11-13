@@ -1,7 +1,4 @@
-"""Offline validation and readable export of the staged knowledge catalog.
-
-Never reads/writes Mongo, calls AI, or changes the runtime catalog.
-"""
+"""Offline validation and readable export of the unified Cogniva knowledge catalog and exam templates."""
 import argparse
 import hashlib
 import json
@@ -18,19 +15,81 @@ def read(path):
 
 
 def normalized(value):
-    return " ".join("".join(c if c.isalnum() else " " for c in
-        unicodedata.normalize("NFKD", value.casefold()) if not unicodedata.combining(c)).split())
+    return " ".join(
+        "".join(
+            c if c.isalnum() else " "
+            for c in unicodedata.normalize("NFKD", value.casefold())
+            if not unicodedata.combining(c)
+        ).split()
+    )
 
 
 def digest(value):
-    return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True,
-                                    separators=(",", ":")).encode()).hexdigest()
+    return hashlib.sha256(
+        json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
 
 
-def validate(catalog, legacy, registry, schema):
+def validate_templates(templates_doc, catalog, templates_schema=None, component_schema=None):
+    if templates_schema is None:
+        templates_schema = read(ROOT / "shared/schemas/exam-templates.schema.json")
+    if component_schema is None:
+        component_schema = read(ROOT / "shared/schemas/exam-component.schema.json")
+
+    Draft202012Validator.check_schema(templates_schema)
+    Draft202012Validator.check_schema(component_schema)
+
+    t_errors = sorted(
+        Draft202012Validator(templates_schema, format_checker=FormatChecker()).iter_errors(templates_doc),
+        key=lambda e: str(list(e.path)),
+    )
+    if t_errors:
+        raise ValueError(f"exam-templates schema {list(t_errors[0].path)}: {t_errors[0].message}")
+
+    comp_validator = Draft202012Validator(component_schema, format_checker=FormatChecker())
+    trunks = {t["trunk_id"]: t for t in catalog["trunks"] if t["status"] == "ACTIVE"}
+    subjects = {s["subject_id"]: s for s in catalog["subjects"] if s["status"] == "ACTIVE"}
+    topics = {t["topic_id"]: t for t in catalog["topics"] if t["status"] == "ACTIVE"}
+
+    seen_ids = set()
+    for tpl in templates_doc["templates"]:
+        tid = tpl["_id"]
+        if tid in seen_ids:
+            raise ValueError(f"duplicate template _id: {tid}")
+        seen_ids.add(tid)
+        if tpl["trunk_slug"] not in trunks:
+            raise ValueError(f"template {tid} uses unknown/inactive trunk: {tpl['trunk_slug']}")
+        total_q = sum(s.get("question_count") or 0 for s in tpl["subjects"])
+        if total_q > 500:
+            raise ValueError(f"template {tid} exceeds 500 questions: {total_q}")
+        local_sids = set()
+        local_tids = set()
+        for comp in tpl["subjects"]:
+            c_errors = sorted(comp_validator.iter_errors(comp), key=lambda e: str(list(e.path)))
+            if c_errors:
+                raise ValueError(f"template {tid} component {comp.get('local_subject_id')}: {c_errors[0].message}")
+            if comp["local_subject_id"] in local_sids:
+                raise ValueError(f"template {tid} duplicate local_subject_id: {comp['local_subject_id']}")
+            local_sids.add(comp["local_subject_id"])
+            csid = comp["canonical_subject_id"]
+            if csid not in subjects:
+                raise ValueError(f"template {tid} references unknown/inactive subject: {csid}")
+            for top in comp["topics"]:
+                if top["local_topic_id"] in local_tids:
+                    raise ValueError(f"template {tid} duplicate local_topic_id: {top['local_topic_id']}")
+                local_tids.add(top["local_topic_id"])
+                ctid = top["canonical_topic_id"]
+                if ctid not in topics or topics[ctid]["subject_id"] != csid or top["canonical_subject_id"] != csid:
+                    raise ValueError(f"template {tid} invalid topic link: {csid}/{ctid}")
+    return len(templates_doc["templates"])
+
+
+def validate(catalog, registry, schema, templates_doc=None):
     Draft202012Validator.check_schema(schema)
-    errors = sorted(Draft202012Validator(schema, format_checker=FormatChecker()).iter_errors(catalog),
-                    key=lambda e: str(list(e.path)))
+    errors = sorted(
+        Draft202012Validator(schema, format_checker=FormatChecker()).iter_errors(catalog),
+        key=lambda e: str(list(e.path)),
+    )
     if errors:
         raise ValueError(f"schema {list(errors[0].path)}: {errors[0].message}")
 
@@ -59,15 +118,17 @@ def validate(catalog, legacy, registry, schema):
             require(n not in seen, f"duplicate normalized alias: {identity}/{name}")
             seen.add(n)
             key = (scope, n)
-            require(key not in alias_owners or alias_owners[key] == identity,
-                    f"ambiguous alias: {identity}/{name}")
+            require(key not in alias_owners or alias_owners[key] == identity, f"ambiguous alias: {identity}/{name}")
             alias_owners[key] = identity
 
     for rows in (trunks, subjects, topics):
         for identity, row in rows.items():
             require(set(row["source_ids"]) <= sources.keys(), f"unknown source: {identity}")
-            scope = ("TRUNK",) if rows is trunks else (("SUBJECT",) if rows is subjects
-                     else ("TOPIC", row["subject_id"], row["parent_topic_id"]))
+            scope = (
+                ("TRUNK",)
+                if rows is trunks
+                else (("SUBJECT",) if rows is subjects else ("TOPIC", row["subject_id"], row["parent_topic_id"]))
+            )
             names(row, identity, scope)
 
     for identity, subject in subjects.items():
@@ -76,8 +137,10 @@ def validate(catalog, legacy, registry, schema):
             require(link["trunk_id"] in trunks, f"unknown trunk: {identity}")
             require(link["trunk_id"] not in seen, f"duplicate trunk relation: {identity}")
             seen.add(link["trunk_id"])
-        require(any(t["subject_id"] == identity and t["kind"] == "TOPIC" for t in topics.values()),
-                f"subject without topics: {identity}")
+        require(
+            any(t["subject_id"] == identity and t["kind"] == "TOPIC" for t in topics.values()),
+            f"subject without topics: {identity}",
+        )
 
     for identity, topic in topics.items():
         require(topic["subject_id"] in subjects, f"unknown subject: {identity}")
@@ -88,8 +151,7 @@ def validate(catalog, legacy, registry, schema):
             require(parent != identity and topics[parent]["kind"] == "TOPIC", f"invalid hierarchy: {identity}")
             require(topics[parent]["subject_id"] == topic["subject_id"], f"cross-subject parent: {identity}")
         else:
-            require(any(t["parent_topic_id"] == identity for t in topics.values()),
-                    f"topic without subtopics: {identity}")
+            require(any(t["parent_topic_id"] == identity for t in topics.values()), f"topic without subtopics: {identity}")
 
     relations = set()
     for link in catalog["relations"]:
@@ -101,22 +163,9 @@ def validate(catalog, legacy, registry, schema):
         relations.add(key)
 
     compat = catalog["compatibility"]
-    require(digest(legacy) == compat["runtime_catalog_sha256"], "runtime catalog changed: review compatibility")
-    require(set(compat["legacy_subject_ids"]) == {s["canonical_subject_id"] for s in legacy["subjects"]},
-            "legacy subject inventory changed")
-    require(set(compat["legacy_topic_ids"]) == {t["topic_id"] for s in legacy["subjects"] for t in s["topics"]},
-            "legacy topic inventory changed")
-    for subject in legacy["subjects"]:
-        sid = subject["canonical_subject_id"]
-        require(sid in subjects and subject["name"] in [subjects[sid]["label"], *subjects[sid]["aliases"]], f"legacy subject renamed: {sid}")
-        require(set(subject["aliases"]) <= set(subjects[sid]["aliases"]), f"legacy alias removed: {sid}")
-        require(set(subject["trunk_slugs"]) <= {l["trunk_id"] for l in subjects[sid]["trunk_links"]},
-                f"legacy trunk link removed: {sid}")
-        for old in subject["topics"]:
-            require(old["topic_id"] in topics, f"legacy topic removed: {old['topic_id']}")
-            new = topics[old["topic_id"]]
-            require(new["subject_id"] == sid and old["title"] in [new["label"], *new["aliases"]] and new["parent_topic_id"] is None,
-                    f"legacy topic repurposed: {old['topic_id']}")
+    require(set(compat["legacy_subject_ids"]) <= set(subjects), "legacy subject removed")
+    for tid in compat["legacy_topic_ids"]:
+        require(tid in topics and topics[tid]["parent_topic_id"] is None, f"legacy topic removed or repurposed: {tid}")
 
     require(registry.get("catalog_id") == catalog["catalog_id"], "registry catalog mismatch")
     registered = unique(registry["entries"], "id")
@@ -124,39 +173,83 @@ def validate(catalog, legacy, registry, schema):
     for entity, rows in (("TRUNK", trunks), ("SUBJECT", subjects), ("TOPIC", topics)):
         for identity, row in rows.items():
             pin = registered[identity]
-            require(pin["entity"] == entity and pin["subject_id"] == row.get("subject_id")
-                    and pin["parent_topic_id"] == row.get("parent_topic_id"), f"identity repurposed: {identity}")
+            require(
+                pin["entity"] == entity
+                and pin["subject_id"] == row.get("subject_id")
+                and pin["parent_topic_id"] == row.get("parent_topic_id"),
+                f"identity repurposed: {identity}",
+            )
             require(pin["initial_label"] in [row["label"], *row["aliases"]], f"original label lost: {identity}")
 
-    return {"catalog_version": catalog["catalog_version"], "trunks": len(trunks), "subjects": len(subjects),
-            "topics": sum(t["kind"] == "TOPIC" for t in topics.values()),
-            "subtopics": sum(t["kind"] == "SUBTOPIC" for t in topics.values()),
-            "subject_aliases": sum(len(s["aliases"]) for s in subjects.values()),
-            "legacy_subjects_preserved": len(compat["legacy_subject_ids"]),
-            "legacy_topics_preserved": len(compat["legacy_topic_ids"]),
-            "runtime_catalog_sha256": digest(legacy), "catalog_sha256": digest(catalog),
-            "runtime_transition": compat["runtime_transition"]}
+    templates_count = 0
+    if templates_doc is not None:
+        templates_count = validate_templates(templates_doc, catalog)
+
+    return {
+        "catalog_version": catalog["catalog_version"],
+        "status": catalog["status"],
+        "trunks": len(trunks),
+        "subjects": len(subjects),
+        "topics": sum(t["kind"] == "TOPIC" for t in topics.values()),
+        "subtopics": sum(t["kind"] == "SUBTOPIC" for t in topics.values()),
+        "subject_aliases": sum(len(s["aliases"]) for s in subjects.values()),
+        "legacy_subjects_preserved": len(compat["legacy_subject_ids"]),
+        "legacy_topics_preserved": len(compat["legacy_topic_ids"]),
+        "exam_templates": templates_count,
+        "catalog_sha256": digest(catalog),
+    }
 
 
 def render(catalog):
-    lines = ["# Catálogo de conhecimentos — consulta", "", "Gerado de `shared/knowledge-catalog.json`. "
-             "Base editorial para revisão; relações de carreira não são exigências de edital. "
-             "Ainda não substitui o catálogo usado pelo aplicativo.", "", "## Troncos de carreira", "",
-             "| ID | Nome |", "| --- | --- |"]
-    lines += [f"| `{t['trunk_id']}` | {t['label']} |" for t in catalog["trunks"]]
+    lines = [
+        "# Catálogo unificado de conhecimentos — Cogniva 2.0",
+        "",
+        "Gerado automaticamente a partir de `shared/knowledge-catalog.json` (`python3 scripts/knowledge_catalog.py --export`). "
+        "Este é o catálogo único ativo utilizado pelo backend Rust (`cogniva-api`), pelo painel `/admin/` e pelo aplicativo Android.",
+        "",
+        "## Troncos de carreira",
+        "",
+        "| ID | Nome | Ícone | Status |",
+        "| --- | --- | --- | --- |",
+    ]
+    lines += [f"| `{t['trunk_id']}` | {t['label']} | `{t['icon_key']}` | `{t['status']}` |" for t in catalog["trunks"]]
     for subject in catalog["subjects"]:
-        lines += ["", f"## {subject['subject_id']} — {subject['label']}", "", subject["scope_note"], "",
-                  "Nomes alternativos: " + "; ".join(subject["aliases"]) + ".", "",
-                  "Carreiras: " + "; ".join(f"`{l['trunk_id']}` ({l['role']}; {l['basis']})"
-                      for l in subject["trunk_links"]) + ".", "",
-                  "| ID | Nível | Nome | Assunto pai |", "| --- | --- | --- | --- |"]
+        aliases = "; ".join(subject["aliases"]) if subject["aliases"] else "—"
+        links = "; ".join(
+            f"`{l['trunk_id']}` ({l['role']}, peso padrão `{l['default_weight']}`)"
+            for l in subject["trunk_links"]
+        )
+        lines += [
+            "",
+            f"## {subject['subject_id']} — {subject['label']}",
+            "",
+            subject["scope_note"],
+            "",
+            f"Nomes alternativos: {aliases}.",
+            "",
+            f"Carreiras vinculadas: {links}.",
+            "",
+            "| ID | Nível | Nome | Assunto pai |",
+            "| --- | --- | --- | --- |",
+        ]
         for topic in [t for t in catalog["topics"] if t["subject_id"] == subject["subject_id"]]:
-            lines.append(f"| `{topic['topic_id']}` | {'Assunto' if topic['kind']=='TOPIC' else 'Subassunto'} | "
-                         f"{topic['label']} | {topic['parent_topic_id'] or '—'} |")
-    lines += ["", "## Relações entre conteúdos", "", "Estas relações não representam equivalência nem transferência automática de domínio.", "",
-              "| Origem | Destino | Relação | Justificativa |", "| --- | --- | --- | --- |"]
-    lines += [f"| `{r['from_topic_id']}` | `{r['to_topic_id']}` | {r['relation']} | {r['note']} |"
-              for r in catalog["relations"]]
+            lines.append(
+                f"| `{topic['topic_id']}` | {'Assunto' if topic['kind'] == 'TOPIC' else 'Subassunto'} | "
+                f"{topic['label']} | {topic['parent_topic_id'] or '—'} |"
+            )
+    lines += [
+        "",
+        "## Relações entre conteúdos",
+        "",
+        "Estas relações apoiam navegação e diagnóstico editorial; não transferem domínio automaticamente sem confirmação.",
+        "",
+        "| Origem | Destino | Relação | Justificativa |",
+        "| --- | --- | --- | --- |",
+    ]
+    lines += [
+        f"| `{r['from_topic_id']}` | `{r['to_topic_id']}` | {r['relation']} | {r['note']} |"
+        for r in catalog["relations"]
+    ]
     return "\n".join(lines) + "\n"
 
 
@@ -166,8 +259,13 @@ def main():
     p.add_argument("--export", action="store_true", help="regenerate the readable export")
     a = p.parse_args()
     catalog = read(ROOT / "shared/knowledge-catalog.json")
-    summary = validate(catalog, read(ROOT / "shared/canonical-catalog.json"),
-                       read(ROOT / "shared/knowledge-id-registry.json"), read(ROOT / "shared/knowledge-catalog.schema.json"))
+    templates = read(ROOT / "shared/exam-templates.json")
+    summary = validate(
+        catalog,
+        read(ROOT / "shared/knowledge-id-registry.json"),
+        read(ROOT / "shared/knowledge-catalog.schema.json"),
+        templates,
+    )
     output = ROOT / "docs/catalogo/CONHECIMENTOS.md"
     if a.export:
         output.parent.mkdir(parents=True, exist_ok=True)

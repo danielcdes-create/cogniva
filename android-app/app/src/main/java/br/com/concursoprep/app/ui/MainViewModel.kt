@@ -24,7 +24,11 @@ class MainViewModel(private val repository:ConcursoRepository,private val appCon
     private val prefs=appContext?.getSharedPreferences("cogniva_prefs",Context.MODE_PRIVATE)
     private val _userId=MutableStateFlow(repository.ownerUserId);val userId=_userId.asStateFlow()
     private val _userProfile=MutableStateFlow(UserProfileDto(repository.ownerUserId,
-        username=prefs?.getString("username",null),displayName=prefs?.getString("display_name","Concurseiro"),
+        email=prefs?.getString("email",null),
+        displayName=prefs?.getString("display_name","Estudante"),
+        role=prefs?.getString("role","student")?:"student",
+        isGuest=prefs?.getBoolean("is_guest",true)?:true,
+        isAdmin=prefs?.getBoolean("is_admin",false)?:false,
         dailyQuestionsTarget=prefs?.getInt("daily_questions_target",50)?:50,
         dailyStudyHoursTarget=(prefs?.getFloat("daily_study_hours_target",2f)?:2f).toDouble(),
         activeContestIds=(prefs?.getString("active_contests","CPNU")?:"CPNU").split(',').filter { it.isNotBlank() },currentDailyStreak=0,streakFreezesAvailable=0));val userProfile=_userProfile.asStateFlow()
@@ -50,7 +54,7 @@ class MainViewModel(private val repository:ConcursoRepository,private val appCon
     private val _pendingSyncCount=MutableStateFlow(0);val pendingSyncCount=_pendingSyncCount.asStateFlow()
     private val _userFeedbackMessage=MutableSharedFlow<String>(extraBufferCapacity=16);val userFeedbackMessage=_userFeedbackMessage.asSharedFlow()
     private val _accountChanged=MutableSharedFlow<Long>(extraBufferCapacity=1);val accountChanged=_accountChanged.asSharedFlow()
-    private val _accountLinkState=MutableStateFlow(AccountLinkUiState());val accountLinkState=_accountLinkState.asStateFlow()
+    private val _accountAuthState=MutableStateFlow(AccountAuthUiState(isAuthenticated=!(prefs?.getBoolean("is_guest",true)?:true)));val accountAuthState=_accountAuthState.asStateFlow()
     private val _isStartingQuiz=MutableStateFlow(false);val isStartingQuiz=_isStartingQuiz.asStateFlow()
     private val _apkUpdateState=MutableStateFlow(ApkUpdateUiState(installedVersionCode=BuildConfig.VERSION_CODE,installedVersionName=BuildConfig.VERSION_NAME));val apkUpdateState=_apkUpdateState.asStateFlow()
     private val _apkInstallEvents=MutableSharedFlow<ApkInstallEvent>();val apkInstallEvents=_apkInstallEvents.asSharedFlow()
@@ -67,53 +71,91 @@ class MainViewModel(private val repository:ConcursoRepository,private val appCon
     }
     init { refreshAllData();checkApkUpdate();appContext?.let { OfflineSyncWorker.enqueueNow(it) };operation { repository.observeSync().distinctUntilChanged().collect { refreshAllData() } } }
     private fun saveProfile(profile:UserProfileDto){
-        check(prefs?.edit()?.putLong("user_id",profile.userId)?.putString("username",profile.username)?.putString("display_name",profile.displayName)
-            ?.putInt("daily_questions_target",profile.dailyQuestionsTarget)?.putFloat("daily_study_hours_target",profile.dailyStudyHoursTarget.toFloat())
-            ?.putString("active_contests",profile.activeContestIds.joinToString(","))?.putBoolean("onboarding_completed",true)?.commit()?:true)
+        check(prefs?.edit()?.putLong("user_id",profile.userId)
+            ?.putString("email",profile.email)
+            ?.putString("display_name",profile.displayName)
+            ?.putString("role",profile.role)
+            ?.putBoolean("is_guest",profile.isGuest)
+            ?.putBoolean("is_admin",profile.isAdmin)
+            ?.putInt("daily_questions_target",profile.dailyQuestionsTarget)
+            ?.putFloat("daily_study_hours_target",profile.dailyStudyHoursTarget.toFloat())
+            ?.putString("active_contests",profile.activeContestIds.joinToString(","))
+            ?.putBoolean("onboarding_completed",true)?.commit()?:true)
     }
-    fun completeOnboarding(telegramUserId:Long?,telegramUsername:String?,displayName:String,selectedContests:List<String>,dailyQuestionsTarget:Int,dailyHoursTarget:Double,linkCode:String?=null){
+    fun completeOnboarding(displayName:String,selectedContests:List<String>,dailyQuestionsTarget:Int,dailyHoursTarget:Double,email:String?=null,password:String?=null,authMode:String="guest"){
         operation {
-            val session=repository.linkTelegramAccountOrLogin(telegramUserId,telegramUsername,displayName,linkCode)
-            val profile=repository.saveOnboarding(session.profile.userId,selectedContests,dailyQuestionsTarget,dailyHoursTarget,displayName)
+            val session=when(authMode){
+                "login"->repository.loginWithEmail(email.orEmpty(),password.orEmpty())
+                "register"->repository.registerAccount(email.orEmpty(),password.orEmpty(),displayName)
+                else->repository.startGuestOrOfflineSession(displayName)
+            }
+            val savedOnboarding=repository.saveOnboarding(session.profile.userId,selectedContests,dailyQuestionsTarget,dailyHoursTarget,displayName)
+            val profile=savedOnboarding.copy(email=session.profile.email?:savedOnboarding.email,role=session.profile.role,isGuest=session.profile.isGuest,isAdmin=session.profile.isAdmin)
             saveProfile(profile);_isOnboardingCompleted.value=true
+            _accountAuthState.value=AccountAuthUiState(isAuthenticated=!profile.isGuest)
             if(profile.userId!=repository.ownerUserId){_accountChanged.emit(profile.userId);return@operation}
             _userProfile.value=profile;refreshAllData();appContext?.let{OfflineSyncWorker.enqueueNow(it)}
             _userFeedbackMessage.emit(if(session.token.isBlank())"Perfil salvo neste aparelho. A sincronização aguardará conexão." else "Perfil salvo. Sincronização agendada.")
         }
     }
-    fun updateUserSettings(telegramUserId:Long?,telegramUsername:String?,displayName:String,selectedContests:List<String>,dailyQuestionsTarget:Int,dailyHoursTarget:Double,linkCode:String?=null){
-        if(_accountLinkState.value.isSubmitting)return
-        if(!linkCode.isNullOrBlank()||(telegramUserId!=null&&telegramUserId!=repository.ownerUserId)){
-            completeOnboarding(telegramUserId,telegramUsername,displayName,selectedContests,dailyQuestionsTarget,dailyHoursTarget,linkCode);return
+    fun updateUserSettings(displayName:String,selectedContests:List<String>,dailyQuestionsTarget:Int,dailyHoursTarget:Double){
+        if(_accountAuthState.value.isSubmitting)return
+        operation {
+            val saved=repository.saveOnboarding(repository.ownerUserId,selectedContests,dailyQuestionsTarget,dailyHoursTarget,displayName)
+            val profile=saved.copy(email=_userProfile.value.email?:saved.email,role=_userProfile.value.role,isGuest=_userProfile.value.isGuest,isAdmin=_userProfile.value.isAdmin)
+            saveProfile(profile);_userProfile.value=profile;refreshAllData();appContext?.let{OfflineSyncWorker.enqueueNow(it)}
+            _userFeedbackMessage.emit("Preferências salvas neste aparelho. Confira o estado da sincronização em Hoje.")
         }
-        operation {val profile=repository.saveOnboarding(repository.ownerUserId,selectedContests,dailyQuestionsTarget,dailyHoursTarget,displayName);saveProfile(profile);_userProfile.value=profile;refreshAllData();appContext?.let{OfflineSyncWorker.enqueueNow(it)};_userFeedbackMessage.emit("Preferências salvas neste aparelho. Confira o estado da sincronização em Hoje.")}
     }
-    fun confirmAccountLink(userId:Long,username:String?,code:String){
-        if(_accountLinkState.value.isSubmitting)return
-        if(userId<=0 || code.isBlank()){
-            _accountLinkState.value=AccountLinkUiState(message="Informe o ID numérico da conta e o código de vínculo.",isError=true)
+    fun authenticateAccount(email:String,password:String,displayName:String?=null,isRegister:Boolean=false){
+        if(_accountAuthState.value.isSubmitting)return
+        val normalizedEmail=email.trim()
+        if(!normalizedEmail.contains("@") || (isRegister && password.length<10) || (!isRegister && password.isBlank())){
+            _accountAuthState.value=AccountAuthUiState(
+                isAuthenticated=!_userProfile.value.isGuest,
+                message=if(isRegister)"Informe um e-mail válido e senha com no mínimo 10 caracteres." else "Informe seu e-mail e sua senha.",
+                isError=true
+            )
             return
         }
-        _accountLinkState.value=AccountLinkUiState(isSubmitting=true)
+        _accountAuthState.value=AccountAuthUiState(isSubmitting=true,isAuthenticated=!_userProfile.value.isGuest)
         viewModelScope.launch {
             try {
-                // Linking authenticates the destination account. It does not copy
-                // this screen's unsaved name, goals or contests to that account.
-                val session=repository.linkTelegramAccountOrLogin(userId,username,null,code.trim())
+                val session=if(isRegister) repository.registerAccount(normalizedEmail,password,displayName?:_userProfile.value.displayName) else repository.loginWithEmail(normalizedEmail,password)
                 saveProfile(session.profile);_isOnboardingCompleted.value=true
                 if(session.profile.userId!=repository.ownerUserId){_accountChanged.emit(session.profile.userId);return@launch}
                 _userProfile.value=session.profile;refreshAllData()
                 appContext?.let{OfflineSyncWorker.enqueueNow(it)}
-                _accountLinkState.value=AccountLinkUiState(isLinked=true,message="Vínculo confirmado. Sincronização do histórico agendada.")
-            } catch(e:CancellationException){_accountLinkState.value=AccountLinkUiState();throw e}
+                _accountAuthState.value=AccountAuthUiState(
+                    isAuthenticated=true,
+                    message=if(isRegister)"Conta criada e vinculada ao seu progresso atual." else "Sessão autenticada. Sincronização agendada."
+                )
+            } catch(e:CancellationException){_accountAuthState.value=AccountAuthUiState(isAuthenticated=!_userProfile.value.isGuest);throw e}
             catch(e:Exception){
                 val message=when(e){
-                    is retrofit2.HttpException->br.com.concursoprep.app.domain.model.AccountLinkMessages.fromHttp(e.code(), runCatching { e.response()?.errorBody()?.string().orEmpty() }.getOrDefault(""))
-                    is java.io.IOException->br.com.concursoprep.app.domain.model.AccountLinkMessages.OFFLINE
-                    else->"Não foi possível concluir o vínculo. Seus registros foram preservados."
+                    is retrofit2.HttpException->AccountLinkMessages.fromHttp(e.code(), runCatching { e.response()?.errorBody()?.string().orEmpty() }.getOrDefault(""))
+                    is java.io.IOException->AccountLinkMessages.OFFLINE
+                    else->e.message?:"Não foi possível concluir a autenticação. Seus registros foram preservados."
                 }
-                _accountLinkState.value=AccountLinkUiState(message=message,isError=true)
+                _accountAuthState.value=AccountAuthUiState(isAuthenticated=!_userProfile.value.isGuest,message=message,isError=true)
             }
+        }
+    }
+    fun logoutAccount(){
+        if(_accountAuthState.value.isSubmitting)return
+        operation {
+            val nextUserId=repository.logoutAccount()
+            _accountAuthState.value=AccountAuthUiState(isAuthenticated=false,message="Sessão encerrada neste aparelho.")
+            if(nextUserId!=repository.ownerUserId){_accountChanged.emit(nextUserId);return@operation}
+            _userProfile.value=_userProfile.value.copy(email=null,role="student",isGuest=true,isAdmin=false)
+            refreshAllData()
+        }
+    }
+    fun adoptExamTemplate(examId:String){
+        operation {
+            val updated=repository.adoptExamTemplate(examId)
+            refreshAllData()
+            _userFeedbackMessage.emit("Template oficial adotado para \"${updated.shortName}\".")
         }
     }
     fun skipOnboarding(){_isOnboardingCompleted.value=true;prefs?.edit()?.putBoolean("onboarding_completed",true)?.apply();refreshAllData()}
@@ -127,8 +169,21 @@ class MainViewModel(private val repository:ConcursoRepository,private val appCon
     fun refreshAllData(){
         refreshJob?.cancel();refreshJob=operation {
             val uid=repository.ownerUserId
-            val profile=_userProfile.value.copy(displayName=prefs?.getString("display_name",_userProfile.value.displayName),dailyQuestionsTarget=prefs?.getInt("daily_questions_target",50)?:50,dailyStudyHoursTarget=(prefs?.getFloat("daily_study_hours_target",2f)?:2f).toDouble(),activeContestIds=(prefs?.getString("active_contests","CPNU")?:"CPNU").split(',').filter { it.isNotBlank() })
+            val isGuest=prefs?.getBoolean("is_guest",_userProfile.value.isGuest)?:_userProfile.value.isGuest
+            val profile=_userProfile.value.copy(
+                email=prefs?.getString("email",_userProfile.value.email),
+                displayName=prefs?.getString("display_name",_userProfile.value.displayName),
+                role=prefs?.getString("role",_userProfile.value.role)?:_userProfile.value.role,
+                isGuest=isGuest,
+                isAdmin=prefs?.getBoolean("is_admin",_userProfile.value.isAdmin)?:_userProfile.value.isAdmin,
+                dailyQuestionsTarget=prefs?.getInt("daily_questions_target",50)?:50,
+                dailyStudyHoursTarget=(prefs?.getFloat("daily_study_hours_target",2f)?:2f).toDouble(),
+                activeContestIds=(prefs?.getString("active_contests","CPNU")?:"CPNU").split(',').filter { it.isNotBlank() }
+            )
             _userProfile.value=profile
+            if(!_accountAuthState.value.isSubmitting && _accountAuthState.value.isAuthenticated != !isGuest){
+                _accountAuthState.value=_accountAuthState.value.copy(isAuthenticated=!isGuest)
+            }
             val allStored=repository.loadStoredExams(includeDeleted=true);_pendingExamDeletions.value=allStored.filter { it.lifecycleStatus=="EXCLUIDO" && it.syncStatus!="SYNCED" };val stored=allStored.filter { it.lifecycleStatus!="EXCLUIDO" };_storedExams.value=stored
             val selected=PracticeScope.selected(stored,_selectedContestId.value)
             if(selected!=_selectedContestId.value){_selectedContestId.value=selected;prefs?.edit()?.putString("selected_contest_id",selected)?.apply()}
@@ -158,12 +213,23 @@ class MainViewModel(private val repository:ConcursoRepository,private val appCon
     fun dismissExamBuilder(){_showExamBuilder.value=false;_editingExam.value=null}
     fun saveExamDraft(draft:ExamDraft){operation {
         val previous=_editingExam.value
-        val created=if(previous==null)repository.createExamOffline(draft)else{
-            val next=OfflineExamQueue.createPendingExam(draft).copy(examId=previous.examId,revision=previous.revision,isActiveInLadder=draft.lifecycleStatus!="ARQUIVADO",wrongAnswerPenalty=draft.wrongAnswerPenalty,syncStatus=if(previous.syncStatus=="PENDING_CREATE")"PENDING_CREATE"else"PENDING_UPDATE")
+        val activeInLadder=draft.isActiveInLadder && draft.lifecycleStatus!="ARQUIVADO"
+        val created=if(previous==null)repository.createExamOffline(draft.copy(isActiveInLadder=activeInLadder))else{
+            val next=OfflineExamQueue.createPendingExam(draft).copy(
+                examId=previous.examId,
+                revision=previous.revision,
+                isActiveInLadder=activeInLadder,
+                wrongAnswerPenalty=draft.wrongAnswerPenalty,
+                templateSourceId=previous.templateSourceId,
+                templateRevisionSynced=previous.templateRevisionSynced,
+                isCustomized=true,
+                upstreamUpdateAvailable=previous.upstreamUpdateAvailable,
+                syncStatus=if(previous.syncStatus=="PENDING_CREATE")"PENDING_CREATE"else"PENDING_UPDATE"
+            )
             repository.editExamOffline(next);next
         }
         _selectedContestId.value=created.examId;_showExamBuilder.value=false;_editingExam.value=null
-        val profile=_userProfile.value.copy(activeContestIds=if(created.lifecycleStatus=="ARQUIVADO")_userProfile.value.activeContestIds-created.examId else (_userProfile.value.activeContestIds+created.examId).distinct());saveProfile(profile);_userProfile.value=profile
+        val profile=_userProfile.value.copy(activeContestIds=if(!created.isActiveInLadder || created.lifecycleStatus=="ARQUIVADO")_userProfile.value.activeContestIds-created.examId else (_userProfile.value.activeContestIds+created.examId).distinct());saveProfile(profile);_userProfile.value=profile
         repository.saveOnboarding(profile.userId,profile.activeContestIds,profile.dailyQuestionsTarget,profile.dailyStudyHoursTarget,profile.displayName)
         refreshAllData();appContext?.let{OfflineSyncWorker.enqueueNow(it)};_userFeedbackMessage.emit("Concurso salvo neste aparelho. A confirmação do servidor aparecerá após sincronizar.")
     }}
@@ -180,13 +246,13 @@ class MainViewModel(private val repository:ConcursoRepository,private val appCon
         feedbackMessage?.let { _userFeedbackMessage.emit(it) }
     }}
     fun applyEditalDiffUpdate(id:String){operation {val before=_storedExams.value.find{it.examId==id}?.revision;repository.syncPendingAttempts(repository.ownerUserId);refreshAllData();_userFeedbackMessage.emit(if(repository.loadStoredExams().find{it.examId==id}?.revision!=before)"Nova revisão de edital salva. Histórico preservado."else"Nenhuma revisão nova de edital foi publicada para este concurso.")}}
-    fun startQuizSession(mode:QuizMode,quantity:Int,contestId:String?=null,disciplina:String?=null,componentId:String?=null){
+    fun startQuizSession(mode:QuizMode,quantity:Int,contestId:String?=null,disciplina:String?=null,componentId:String?=null,syllabusTopicId:String?=null){
         startJob?.cancel()
         val id=PracticeScope.contest(mode,if(mode==QuizMode.SIMULADO)contestId?:_selectedContestId.value else contestId)
         startJob=operation {
             _isStartingQuiz.value=true
             try{
-                val questions=repository.fetchOrGetOfflineQuiz(repository.ownerUserId,mode,quantity,id,disciplina,componentId)
+                val questions=repository.fetchOrGetOfflineQuiz(repository.ownerUserId,mode,quantity,id,disciplina,componentId,syllabusTopicId)
                 if(questions.isEmpty()){
                     _userFeedbackMessage.emit(when(mode){
                         QuizMode.SRS_REVIEW->"Nenhuma revisão válida disponível agora. Use o Shuffle Geral para praticar o acervo."

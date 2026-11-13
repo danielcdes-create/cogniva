@@ -1,9 +1,8 @@
-//! Additive read adapter. It never writes inferred classifications to Mongo.
+//! Lightweight read adapter for objective practice. Full JSON Schema validation runs on write.
 use crate::{error::AppError, models::question::QuestionDocument};
-use bson::Document;
+use bson::{doc, Bson, Document};
 
 pub fn canonical_filter(filter: Document) -> Document {
-    use bson::{doc, Bson};
     let mut clauses = Vec::new();
     for (key, value) in filter {
         if key == "canonical_subject_id" || key == "canonical_topic_id" {
@@ -12,10 +11,12 @@ pub fn canonical_filter(filter: Document) -> Document {
             } else {
                 "topic_id"
             };
-            let mut link = doc! {"role":"PRIMARY","coverage":"DIRECT"};
-            link.insert(leaf, value.clone());
-            let legacy = doc! {"$and":[{key.clone():value.clone()},{"schema_version":{"$ne":2}},{"classification":{"$exists":false}}]};
-            clauses.push(doc!{"$or":[legacy,{"classification.state":{"$in":["CONFIRMED","PARTIAL"]},"classification.links":{"$elemMatch":link}}]});
+            let mut link = doc! { "role": "PRIMARY", "coverage": "DIRECT" };
+            link.insert(leaf, value);
+            clauses.push(doc! {
+                "classification.state": { "$in": ["CONFIRMED", "PARTIAL"] },
+                "classification.links": { "$elemMatch": link }
+            });
         } else if ["$and", "$or", "$nor"].contains(&key.as_str()) {
             if let Bson::Array(a) = value {
                 let mapped: Vec<Bson> = a
@@ -25,48 +26,27 @@ pub fn canonical_filter(filter: Document) -> Document {
                         other => other,
                     })
                     .collect();
-                clauses.push(doc! {key:mapped});
+                clauses.push(doc! { key: mapped });
             } else {
-                clauses.push(doc! {key:value});
+                clauses.push(doc! { key: value });
             }
         } else {
-            clauses.push(doc! {key:value});
+            clauses.push(doc! { key: value });
         }
     }
     if clauses.is_empty() {
         Document::new()
     } else {
-        doc! {"$and":clauses}
+        doc! { "$and": clauses }
     }
 }
 
 pub fn decode(mut raw: Document) -> Result<QuestionDocument, AppError> {
-    let modern = raw.get_i32("schema_version").ok() == Some(2)
-        || raw.get_i64("schema_version").ok() == Some(2);
-    if modern {
-        crate::services::question_contracts::validate(
-            &bson::Bson::Document(raw.clone()).into_relaxed_extjson(),
-        )?;
-    }
-    let modern_unknown = raw
-        .get_document("validity")
-        .ok()
-        .and_then(|v| v.get_str("status").ok())
-        == Some("UNKNOWN");
-    if (!modern || modern_unknown)
-        && raw
-            .get_document("legal_validity")
-            .ok()
-            .and_then(|v| v.get_str("status").ok())
-            .is_some_and(|s| s != "ACTIVE" && s != "VIGENTE")
-    {
-        return Err(AppError::Conflict("Validade legada exige revisão".into()));
-    }
     if raw.get_str("question_type").ok() == Some("OPEN_ENDED")
         || raw.get_str("status").ok() == Some("ARCHIVED")
     {
         return Err(AppError::Conflict(
-            "Formato ou estado fora da prática atual".into(),
+            "Formato discursivo ou estado arquivado fora da prática objetiva atual".into(),
         ));
     }
     if let Ok(validity) = raw.get_document("validity") {
@@ -85,20 +65,13 @@ pub fn decode(mut raw: Document) -> Result<QuestionDocument, AppError> {
         }
     }
     if let Ok(classification) = raw.get_document("classification").cloned() {
-        crate::services::question_contracts::shape(
-            "classification",
-            &bson::Bson::Document(classification.clone()).into_relaxed_extjson(),
-        )?;
-        let version=classification
+        let version = classification
             .get("catalog_version")
             .and_then(|v| v.as_i64().or_else(|| v.as_i32().map(i64::from)));
         if !version.is_some_and(crate::services::catalog_runtime::version_known) {
             return Err(AppError::Conflict(
                 "Versão de classificação desconhecida".into(),
             ));
-        }
-        if !modern {
-            crate::services::classification::content_revision_of(&raw)?;
         }
         if matches!(
             classification.get_str("state").ok(),
@@ -115,7 +88,8 @@ pub fn decode(mut raw: Document) -> Result<QuestionDocument, AppError> {
                             .is_some_and(|a| a.get_str("type").ok() == Some("HUMAN"))
                 });
                 if !human
-                    || !crate::services::catalog_runtime::topic_at(version.unwrap(),
+                    || !crate::services::catalog_runtime::topic_at(
+                        version.unwrap(),
                         link.get_str("subject_id").unwrap_or(""),
                         link.get_str("topic_id").unwrap_or(""),
                     )
@@ -134,49 +108,58 @@ pub fn decode(mut raw: Document) -> Result<QuestionDocument, AppError> {
                 })
                 .collect();
             if primary.is_empty() && classification.get_str("state").ok() == Some("PARTIAL") {
-                raw.insert("canonical_subject_id", bson::Bson::Null);
-                raw.insert("canonical_topic_id", bson::Bson::Null);
-                return bson::from_document(raw)
-                    .map_err(|_| AppError::Conflict("Questão inválida".into()));
-            }
-            if primary.len() != 1 {
-                return Err(AppError::Conflict("Classificação principal ambígua".into()));
-            }
-            let subject = primary[0]
-                .get_str("subject_id")
-                .map_err(|_| AppError::Conflict("Disciplina ausente".into()))?
-                .to_owned();
-            let topic = primary[0]
-                .get_str("topic_id")
-                .map_err(|_| AppError::Conflict("Tópico ausente".into()))?
-                .to_owned();
-            for (field, value) in [
-                ("canonical_subject_id", subject),
-                ("canonical_topic_id", topic),
-            ] {
-                if let Ok(old) = raw.get_str(field) {
-                    if old != value {
-                        return Err(AppError::Conflict(
-                            "Vínculo canônico legado divergente".into(),
-                        ));
-                    }
+                raw.insert("canonical_subject_id", Bson::Null);
+                raw.insert("canonical_topic_id", Bson::Null);
+            } else {
+                if primary.len() != 1 {
+                    return Err(AppError::Conflict("Classificação principal ambígua".into()));
                 }
-                raw.insert(field, value);
+                let subject = primary[0]
+                    .get_str("subject_id")
+                    .map_err(|_| AppError::Conflict("Disciplina ausente".into()))?
+                    .to_owned();
+                let topic = primary[0]
+                    .get_str("topic_id")
+                    .map_err(|_| AppError::Conflict("Tópico ausente".into()))?
+                    .to_owned();
+                for (field, value) in [
+                    ("canonical_subject_id", subject),
+                    ("canonical_topic_id", topic),
+                ] {
+                    if let Ok(old) = raw.get_str(field) {
+                        if old != value {
+                            return Err(AppError::Conflict(
+                                "Vínculo canônico divergente".into(),
+                            ));
+                        }
+                    }
+                    raw.insert(field, value);
+                }
             }
         } else {
-            raw.insert("canonical_subject_id", bson::Bson::Null);
-            raw.insert("canonical_topic_id", bson::Bson::Null);
+            raw.insert("canonical_subject_id", Bson::Null);
+            raw.insert("canonical_topic_id", Bson::Null);
         }
+    } else {
+        raw.insert("canonical_subject_id", Bson::Null);
+        raw.insert("canonical_topic_id", Bson::Null);
     }
+
     let mut q: QuestionDocument = bson::from_document(raw.clone())
         .map_err(|_| AppError::Conflict("Documento de questão inválido".into()))?;
-    if let (Some(subject),Some(topic))=(&q.canonical_subject_id,&q.canonical_topic_id){
-        if !crate::services::question_contracts::known_topic(subject,topic){return Err(AppError::Conflict("Conteúdo desativado no catálogo corrente; histórico preservado".into()));}
+    let computed_rev = q.revision()?;
+    if !q.content_revision.is_empty() && q.content_revision != computed_rev {
+        return Err(AppError::Conflict(
+            "Revisão de conteúdo divergente do enunciado atual".into(),
+        ));
     }
-    if raw.contains_key("legacy_auto_classification") && !raw.contains_key("classification")
-        && !raw.contains_key("canonical_mapping_revision")
-        && crate::services::legacy_classification::binding(&raw).is_none() {
-        return Err(AppError::Conflict("Classificação automática legada desatualizada; exige revisão".into()));
+    q.content_revision = computed_rev;
+    if let (Some(subject), Some(topic)) = (&q.canonical_subject_id, &q.canonical_topic_id) {
+        if !crate::services::question_contracts::known_topic(subject, topic) {
+            return Err(AppError::Conflict(
+                "Conteúdo desativado no catálogo corrente; histórico preservado".into(),
+            ));
+        }
     }
     q.knowledge_binding_verified = crate::services::knowledge::reviewed_binding(&raw, &q);
     Ok(q)
@@ -185,18 +168,29 @@ pub fn decode(mut raw: Document) -> Result<QuestionDocument, AppError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bson::{doc, oid::ObjectId};
+    use bson::oid::ObjectId;
+
     #[test]
-    fn legacy_and_confirmed_projection_keep_identity_and_answer_key() {
-        let mut raw = doc! {"_id":ObjectId::new(),"question":"Fixture","answers":["A","B"],"correct_answers":["B"]};
+    fn confirmed_projection_keeps_identity_and_rejects_unreviewed_or_tampered_docs() {
+        let mut raw = doc! {
+            "_id": ObjectId::new(),
+            "question": "Fixture",
+            "answers": ["A", "B"],
+            "correct_answers": ["B"]
+        };
         let before = decode(raw.clone()).unwrap();
-        raw.insert("classification",doc!{"state":"CONFIRMED","links":[{"role":"PRIMARY","coverage":"DIRECT","subject_id":"PORT","topic_id":"PORT_01"}]});
-        assert!(decode(raw.clone()).is_err()); // A bare label is not reviewed provenance.
-        raw.remove("classification");
-        assert_eq!(
-            before.revision().unwrap(),
-            decode(raw).unwrap().revision().unwrap()
+        raw.insert(
+            "classification",
+            doc! {
+                "catalog_version": 2_i64,
+                "state": "CONFIRMED",
+                "links": [{"role": "PRIMARY", "coverage": "DIRECT", "subject_id": "PORT", "topic_id": "PORT_01_001"}]
+            },
         );
+        assert!(decode(raw.clone()).is_err());
+        raw.remove("classification");
+        assert_eq!(before.revision().unwrap(), decode(raw).unwrap().revision().unwrap());
+
         let q: serde_json::Value = serde_json::from_str(include_str!(
             "../../../shared/examples/question-contracts/question-multiple-choice.json"
         ))
@@ -208,6 +202,7 @@ mod tests {
             .clone();
         let projected = decode(raw.clone()).unwrap();
         assert_eq!(projected.canonical_topic_id.as_deref(), Some("MAT_01_001"));
+        assert!(projected.knowledge_binding_verified);
         raw.insert("canonical_topic_id", "OTHER");
         assert!(decode(raw).is_err());
     }

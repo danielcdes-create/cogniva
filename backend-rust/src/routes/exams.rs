@@ -5,8 +5,8 @@ use crate::services::{
 use crate::{
     error::AppError,
     models::exam_hierarchy::{
-        ExamBlueprint, PublishEditalRequest, SimuladoCandidate, SubjectOutcome, TrunkCatalog,
-        TrunkFocus,
+        CanonicalTopicStatus, ExamBlueprint, ExamLifecycleStatus, PublishEditalRequest,
+        SimuladoCandidate, SubjectOutcome, TopicRef, TrunkCatalog, TrunkFocus,
     },
     services::exam_engine::{
         apply_publish, blueprint_to_leverage, card_from_canonical_activity, core_subject_ids,
@@ -16,11 +16,12 @@ use crate::{
 };
 use crate::{security::SessionUser, services::exam_store};
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     Extension, Json,
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::{collections::HashMap, sync::Arc};
 
 #[derive(Debug, Deserialize)]
@@ -71,17 +72,19 @@ pub async fn list_exams(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<SessionUser>,
 ) -> Result<Json<Vec<ExamBlueprint>>, AppError> {
-    exam_store::list(&state, user.0).await.map(Json)
+    exam_store::list(&state, user.user_id).await.map(Json)
 }
+
 pub async fn create_exam(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<SessionUser>,
     Json(payload): Json<ExamBlueprint>,
 ) -> Result<Json<ExamBlueprint>, AppError> {
-    exam_store::save(&state, user.0, payload, true)
+    exam_store::save(&state, user.user_id, payload, true)
         .await
         .map(Json)
 }
+
 pub async fn update_exam(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<SessionUser>,
@@ -93,31 +96,40 @@ pub async fn update_exam(
             "ID diferente do concurso editado".into(),
         ));
     }
-    let command_hash = exam_store::command_hash(user.0, &payload);
-    let mut previous = match exam_store::get(&state, user.0, &id).await {
+    let command_hash = exam_store::command_hash(user.user_id, &payload);
+    let mut previous = match exam_store::get(&state, user.user_id, &id).await {
         Ok(exam) => exam,
         Err(AppError::NotFound(_)) if payload.revision == 0 => {
-            return exam_store::save_command(&state, user.0, payload, false, Some(command_hash))
-                .await
-                .map(Json)
+            return exam_store::save_command(
+                &state,
+                user.user_id,
+                payload,
+                false,
+                Some(command_hash),
+            )
+            .await
+            .map(Json)
         }
         Err(error) => return Err(error),
     };
-    if payload.status == crate::models::exam_hierarchy::ExamLifecycleStatus::Excluido {
-        // A deletion request expresses intent over the whole exam: it must not be
-        // blocked by a stale revision or by grade fields edited on another device.
-        // The stored grade stays intact in the document and in revision_history.
-        if previous.status == crate::models::exam_hierarchy::ExamLifecycleStatus::Excluido {
+    if payload.status == ExamLifecycleStatus::Excluido {
+        if previous.status == ExamLifecycleStatus::Excluido {
             return Ok(Json(previous));
         }
         let mut tombstone = previous;
-        tombstone.status = crate::models::exam_hierarchy::ExamLifecycleStatus::Excluido;
+        tombstone.status = ExamLifecycleStatus::Excluido;
         tombstone.is_active_in_ladder = false;
-        return exam_store::save_command(&state, user.0, tombstone, false, Some(command_hash))
-            .await
-            .map(Json);
+        return exam_store::save_command(
+            &state,
+            user.user_id,
+            tombstone,
+            false,
+            Some(command_hash),
+        )
+        .await
+        .map(Json);
     }
-    if payload.status == crate::models::exam_hierarchy::ExamLifecycleStatus::EditalPublicado
+    if payload.status == ExamLifecycleStatus::EditalPublicado
         && previous.revision == payload.revision
     {
         let request = PublishEditalRequest {
@@ -125,17 +137,19 @@ pub async fn update_exam(
             published_topics: payload
                 .subjects
                 .iter()
-                .flat_map(|s| &s.topics)
-                .filter(|t| {
-                    t.diff_status != crate::models::exam_hierarchy::CanonicalTopicStatus::Arquivado
-                })
-                .map(|t| crate::models::exam_hierarchy::TopicRef {
-                    canonical_topic_id: t.canonical_topic_id.clone(),
-                    canonical_subject_id: t.canonical_subject_id.clone(),
-                    display_title: t.display_title.clone(),
+                .flat_map(|s| {
+                    s.topics
+                        .iter()
+                        .filter(|t| t.diff_status != CanonicalTopicStatus::Arquivado)
+                        .map(move |t| TopicRef {
+                            canonical_topic_id: t.canonical_topic_id.clone(),
+                            canonical_subject_id: t.canonical_subject_id.clone(),
+                            display_title: t.display_title.clone(),
+                            local_subject_id: Some(s.local_subject_id.clone()),
+                        })
                 })
                 .collect(),
-            practiced_canonical_topic_ids: load_canonical_slices(&state.db, user.0)
+            practiced_canonical_topic_ids: load_canonical_slices(&state.db, user.user_id)
                 .await?
                 .into_iter()
                 .map(|s| s.canonical_topic_id)
@@ -144,22 +158,26 @@ pub async fn update_exam(
         };
         let captured_summary = previous.edital_diff_summary.clone();
         let diff = apply_publish(&mut previous, &request);
-        for topic in payload.subjects.iter_mut().flat_map(|s| &mut s.topics) {
-            if let Some(classified) = diff
-                .topics
-                .iter()
-                .find(|t| t.canonical_topic_id == topic.canonical_topic_id)
-            {
-                topic.diff_status = classified.diff_status.clone();
+        for subject in &mut payload.subjects {
+            for topic in &mut subject.topics {
+                if let Some(classified) = diff.topics.iter().find(|t| {
+                    t.canonical_topic_id == topic.canonical_topic_id
+                        && (t.local_subject_id.as_deref()
+                            == Some(subject.local_subject_id.as_str())
+                            || t.local_subject_id.is_none())
+                }) {
+                    topic.diff_status = classified.diff_status.clone();
+                }
             }
         }
         payload.keep_summary_captured_before_publish(captured_summary);
     }
     payload.id = id;
-    exam_store::save_command(&state, user.0, payload, false, Some(command_hash))
+    exam_store::save_command(&state, user.user_id, payload, false, Some(command_hash))
         .await
         .map(Json)
 }
+
 pub async fn publish_edital(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<SessionUser>,
@@ -174,13 +192,28 @@ pub async fn publish_edital(
                 .map_err(|_| AppError::BadRequest("Publicação inválida".into()))?
         )
     );
-    if let Some(confirmed) = exam_store::replay(&state, user.0, &id, &command_hash).await? {
+    if let Some(confirmed) =
+        exam_store::replay(&state, user.user_id, &id, &command_hash).await?
+    {
         return Ok(Json(confirmed));
     }
-    let mut exam = exam_store::get(&state, user.0, &id).await?;
+    let mut exam = exam_store::get(&state, user.user_id, &id).await?;
+    // If the grade has the same canonical discipline across multiple stages, require
+    // local_subject_id on published_topics so stage scoping stays unambiguous.
     let mut disciplines = std::collections::HashSet::new();
-    if exam.subjects.iter().any(|s| !disciplines.insert(&s.canonical_subject_id)) {
-        return Err(AppError::BadRequest("Grade com disciplina em várias etapas: publique pela atualização completa dos componentes".into()));
+    let has_multi_stage_subject = exam
+        .subjects
+        .iter()
+        .any(|s| !disciplines.insert(&s.canonical_subject_id));
+    if has_multi_stage_subject
+        && request
+            .published_topics
+            .iter()
+            .any(|t| t.local_subject_id.is_none())
+    {
+        return Err(AppError::BadRequest(
+            "Grade com disciplina em várias etapas: informe local_subject_id nos tópicos publicados ou salve pela atualização completa".into(),
+        ));
     }
     if exam.revision != request.expected_revision {
         return Err(AppError::Conflict(
@@ -188,14 +221,64 @@ pub async fn publish_edital(
         ));
     }
     let mut request = request;
-    request.practiced_canonical_topic_ids = load_canonical_slices(&state.db, user.0)
+    request.practiced_canonical_topic_ids = load_canonical_slices(&state.db, user.user_id)
         .await?
         .into_iter()
         .map(|s| s.canonical_topic_id)
         .collect();
     request.published_at_iso = Some(Utc::now().to_rfc3339());
     apply_publish(&mut exam, &request);
-    exam_store::save_command(&state, user.0, exam, false, Some(command_hash))
+    exam_store::save_command(&state, user.user_id, exam, false, Some(command_hash))
+        .await
+        .map(Json)
+}
+
+pub async fn adopt_template(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<SessionUser>,
+    Path(exam_id): Path<String>,
+) -> Result<Json<ExamBlueprint>, AppError> {
+    exam_store::adopt_template(&state, user.user_id, &exam_id)
+        .await
+        .map(Json)
+}
+
+pub async fn get_compatibility(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<SessionUser>,
+    Path(exam_id): Path<String>,
+    Query(query): Query<HashMap<String, String>>,
+) -> Result<Json<Value>, AppError> {
+    crate::services::classification::current_compatibility(
+        &state,
+        user.user_id,
+        &exam_id,
+        query.get("question_id").map(String::as_str).unwrap_or(""),
+    )
+    .await
+    .map(Json)
+}
+
+pub async fn decide_compatibility(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<SessionUser>,
+    Path(exam_id): Path<String>,
+    Json(mut body): Json<Value>,
+) -> Result<Json<Value>, AppError> {
+    if let Some(obj) = body.as_object_mut() {
+        match obj.get("exam_id").and_then(Value::as_str) {
+            Some(existing) if existing != exam_id => {
+                return Err(AppError::BadRequest(
+                    "Concurso divergente na decisão de compatibilidade".into(),
+                ));
+            }
+            None => {
+                obj.insert("exam_id".to_string(), Value::String(exam_id));
+            }
+            _ => {}
+        }
+    }
+    crate::services::classification::decide_compatibility(&state, user.user_id, &body)
         .await
         .map(Json)
 }
@@ -206,10 +289,16 @@ pub async fn weighted_simulado(
     Path(exam_id): Path<String>,
     Json(request): Json<WeightedSimuladoRequest>,
 ) -> Result<Json<WeightedSimuladoResponse>, AppError> {
-    let exam = exam_store::get(&state, user.0, &exam_id).await?;
+    let exam = exam_store::get(&state, user.user_id, &exam_id).await?;
     let question_ids = selection_v2::generate(
         &state,
-        &generate_request(user.0, QuizMode::Simulado, 120, Some(exam_id), Vec::new()),
+        &generate_request(
+            user.user_id,
+            QuizMode::Simulado,
+            120,
+            Some(exam_id),
+            Vec::new(),
+        ),
     )
     .await?
     .into_iter()
@@ -218,17 +307,25 @@ pub async fn weighted_simulado(
     let net_score = if request.outcomes.is_empty() {
         None
     } else {
-        // This is an explicit score preview, never a write to learning history.
-        // Caller weights and penalties are discarded in favour of the saved grade.
         let mut seen = std::collections::HashSet::new();
         let mut normalized = Vec::new();
         for outcome in request.outcomes {
             let candidates: Vec<_> = exam
                 .subjects
                 .iter()
-                .filter(|s| s.canonical_subject_id == outcome.canonical_subject_id && outcome.local_subject_id.as_ref().is_none_or(|id| id == &s.local_subject_id))
+                .filter(|s| {
+                    s.canonical_subject_id == outcome.canonical_subject_id
+                        && outcome
+                            .local_subject_id
+                            .as_ref()
+                            .is_none_or(|id| id == &s.local_subject_id)
+                })
                 .collect();
-            if candidates.len() != 1 { return Err(AppError::BadRequest("Resultado ambíguo: informe local_subject_id do componente".into())); }
+            if candidates.len() != 1 {
+                return Err(AppError::BadRequest(
+                    "Resultado ambíguo: informe local_subject_id do componente".into(),
+                ));
+            }
             let subject = candidates[0];
             let count = subject.question_count.unwrap_or(0);
             if !seen.insert(subject.local_subject_id.clone())
@@ -250,10 +347,9 @@ pub async fn weighted_simulado(
             .iter()
             .filter(|s| {
                 s.question_count.unwrap_or(0) > 0
-                    && s.topics.iter().any(|t| {
-                        t.diff_status
-                            != crate::models::exam_hierarchy::CanonicalTopicStatus::Arquivado
-                    })
+                    && s.topics
+                        .iter()
+                        .any(|t| t.diff_status != CanonicalTopicStatus::Arquivado)
             })
             .count();
         if normalized.len() != expected {
@@ -275,7 +371,7 @@ pub async fn trunk_common_batch(
     Extension(user): Extension<SessionUser>,
     Json(request): Json<TrunkCommonRequest>,
 ) -> Result<Json<TrunkCommonResponse>, AppError> {
-    let inputs = exam_store::list(&state, user.0)
+    let inputs = exam_store::list(&state, user.user_id)
         .await?
         .iter()
         .map(blueprint_to_leverage)
@@ -286,7 +382,7 @@ pub async fn trunk_common_batch(
     });
     let today = crate::services::exam_engine::study_today();
     let focuses = focus.into_iter().collect::<Vec<_>>();
-    let rows = load_canonical_slices(&state.db, user.0).await?;
+    let rows = load_canonical_slices(&state.db, user.user_id).await?;
     let quantity = request.suggested_questions.clamp(1, 120);
     let card = card_from_canonical_activity(&inputs, &rows, &focuses, quantity, today).ok_or_else(
         || AppError::NotFound("nenhuma disciplina elegível para o tronco comum".to_string()),
@@ -294,7 +390,7 @@ pub async fn trunk_common_batch(
     let question_ids = selection_v2::generate(
         &state,
         &generate_request(
-            user.0,
+            user.user_id,
             QuizMode::CommonTrunk,
             quantity as usize,
             None,
@@ -322,7 +418,7 @@ fn generate_request(
     trunk_focus_slugs: Vec<String>,
 ) -> QuizGenerateRequest {
     QuizGenerateRequest {
-        component_id:None,
+        component_id: None,
         user_id,
         mode,
         quantity,

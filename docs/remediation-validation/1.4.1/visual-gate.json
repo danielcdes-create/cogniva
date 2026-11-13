@@ -1,7 +1,0 @@
-{
-  "verify_1": "executed and passed, 9 screenshots",
-  "verify_2": "executed and passed, 9 screenshots",
-  "negative_control": "valid 1x1 account form golden rejected",
-  "golden": "br.com.concursoprep.app_AccountLinkScreenshotTest_fieldsAndConfirmationStayTogether[1].png",
-  "restored_sha256": "6e11835d15daacb6019f78b7b59c966311ef02b4fe389a8a68f6b10bde3090cb"
-}

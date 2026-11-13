@@ -1,162 +1,286 @@
-use crate::{error::AppError, AppState};
+use crate::{error::AppError, models::user::UserDocument, AppState};
 use axum::{
-    body::{to_bytes, Body},
     extract::{Request, State},
+    http::{header, HeaderMap, Method},
     middleware::Next,
     response::Response,
+    Extension,
 };
+use bson::{doc, Document};
+use chrono::Utc;
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Claims {
-    pub sub: String,
+pub const MOBILE_SESSION_TTL_SECS: i64 = 30 * 24 * 60 * 60;
+pub const WEB_SESSION_TTL_SECS: i64 = 12 * 60 * 60;
+pub const WEB_COOKIE_NAME: &str = "cogniva_web_session";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SessionUser {
     pub user_id: i64,
-    pub exp: usize,
+    pub is_admin: bool,
+    pub is_guest: bool,
+}
+
+impl SessionUser {
+    pub fn id(self) -> i64 {
+        self.user_id
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TokenClaims {
+    pub v: u8,
+    pub uid: i64,
+    pub sid: String,
     pub purpose: String,
-    #[serde(default)]
-    pub nonce: String,
+    pub iat: i64,
+    pub exp: i64,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct SessionUser(pub i64);
-
-pub fn is_admin(user_id: i64) -> bool {
-    std::env::var("ADMIN_USER_IDS").unwrap_or_default().split(',')
-        .any(|id| id.trim().parse::<i64>().ok() == Some(user_id))
-}
-
-pub fn same_origin(headers: &axum::http::HeaderMap) -> bool {
-    let Some(host) = headers.get("host").and_then(|v|v.to_str().ok()) else { return false };
-    let Some(origin) = headers.get("origin").and_then(|v|v.to_str().ok()) else { return false };
-    reqwest::Url::parse(origin).ok().is_some_and(|url| {
-        matches!(url.scheme(), "http" | "https") && url.username().is_empty() && url.password().is_none()
-            && url.path()=="/" && url.query().is_none() && url.fragment().is_none()
-            && reqwest::Url::parse(&format!("{}://{host}",url.scheme())).ok().is_some_and(|expected| expected.path()=="/" && expected.username().is_empty() && expected.origin()==url.origin())
-    })
-}
-
-pub fn issue(secret: &str, user_id: i64, purpose: &str, seconds: i64) -> Result<String, AppError> {
-    let claims = Claims {
-        sub: user_id.to_string(),
-        user_id,
-        exp: (chrono::Utc::now().timestamp() + seconds) as usize,
-        purpose: purpose.into(),
-        nonce: uuid::Uuid::new_v4().to_string(),
+pub fn sign_session_token(
+    secret: &str,
+    user_id: i64,
+    session_id: &str,
+    purpose: &str,
+    ttl_seconds: i64,
+) -> Result<String, AppError> {
+    if secret.len() < 32 {
+        return Err(AppError::Internal(
+            "Segredo de sessão não configurado".into(),
+        ));
+    }
+    if user_id <= 0
+        || session_id.trim().is_empty()
+        || !matches!(purpose, "mobile" | "web")
+        || ttl_seconds <= 0
+    {
+        return Err(AppError::BadRequest(
+            "Parâmetros inválidos para emissão de sessão".into(),
+        ));
+    }
+    let now = Utc::now().timestamp();
+    let claims = TokenClaims {
+        v: 2,
+        uid: user_id,
+        sid: session_id.to_string(),
+        purpose: purpose.to_string(),
+        iat: now,
+        exp: now + ttl_seconds,
     };
     encode(
-        &Header::default(),
+        &Header::new(Algorithm::HS256),
         &claims,
         &EncodingKey::from_secret(secret.as_bytes()),
     )
-    .map_err(|_| AppError::Internal("Não foi possível emitir a sessão".into()))
+    .map_err(|_| AppError::Internal("Falha ao assinar sessão".into()))
 }
 
-pub fn verify(secret: &str, token: &str, purpose: &str) -> Result<Claims, AppError> {
+pub fn verify_session_token(
+    secret: &str,
+    token: &str,
+    expected_purpose: &str,
+) -> Result<TokenClaims, AppError> {
+    if secret.len() < 32 {
+        return Err(AppError::Unauthorized("Sessão indisponível".into()));
+    }
     let mut validation = Validation::new(Algorithm::HS256);
-    validation.leeway = 0;
-    let claims = decode::<Claims>(
-        token,
+    validation.validate_exp = false;
+    validation.required_spec_claims.clear();
+    let data = decode::<TokenClaims>(
+        token.trim(),
         &DecodingKey::from_secret(secret.as_bytes()),
         &validation,
     )
-    .map_err(|_| AppError::Unauthorized("Sessão inválida ou expirada".into()))?
-    .claims;
-    if claims.purpose != purpose || claims.user_id == 0 || claims.sub != claims.user_id.to_string()
+    .map_err(|_| AppError::Unauthorized("Token de sessão inválido".into()))?;
+    let claims = data.claims;
+    let now = Utc::now().timestamp();
+    if claims.v != 2
+        || claims.uid <= 0
+        || claims.sid.is_empty()
+        || claims.purpose != expected_purpose
+        || claims.exp <= now
+        || claims.iat > now + 300
     {
-        return Err(AppError::Unauthorized(
-            "Credencial não serve para esta operação".into(),
-        ));
+        return Err(AppError::Unauthorized("Sessão expirada ou inválida".into()));
     }
     Ok(claims)
 }
 
+pub fn extract_web_cookies(headers: &HeaderMap) -> Vec<String> {
+    headers
+        .get_all(header::COOKIE)
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .flat_map(|raw| raw.split(';'))
+        .map(str::trim)
+        .filter_map(|pair| pair.strip_prefix("cogniva_web_session="))
+        .map(|val| val.trim().to_string())
+        .filter(|val| !val.is_empty())
+        .collect()
+}
+
+pub fn extract_bearer_token(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+}
+
+pub fn verify_csrf_same_origin(
+    headers: &HeaderMap,
+    method: &Method,
+    public_origin: &str,
+) -> Result<(), AppError> {
+    if matches!(method, &Method::GET | &Method::HEAD | &Method::OPTIONS) {
+        return Ok(());
+    }
+    if headers
+        .get("x-cogniva-csrf")
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        != Some("1")
+    {
+        return Err(AppError::Forbidden(
+            "Cabeçalho CSRF ausente na mutação da sessão web".into(),
+        ));
+    }
+    let origin = headers
+        .get(header::ORIGIN)
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.trim().trim_end_matches('/'))
+        .ok_or_else(|| AppError::Forbidden("Origem ausente na mutação da sessão web".into()))?;
+    let expected = public_origin.trim().trim_end_matches('/');
+    if origin == expected {
+        return Ok(());
+    }
+    if let Some(host) = headers.get(header::HOST).and_then(|v| v.to_str().ok()) {
+        let host = host.trim();
+        let proto = headers
+            .get("x-forwarded-proto")
+            .and_then(|v| v.to_str().ok())
+            .map(str::trim)
+            .filter(|s| *s == "https" || *s == "http")
+            .unwrap_or("http");
+        if origin == format!("{proto}://{host}") || origin == format!("http://{host}") {
+            return Ok(());
+        }
+    }
+    Err(AppError::Forbidden(
+        "Origem inválida na sessão web".into(),
+    ))
+}
+
+async fn resolve_db_session(
+    state: &AppState,
+    claims: &TokenClaims,
+) -> Result<SessionUser, AppError> {
+    let now = bson::DateTime::now();
+    let session = state
+        .db
+        .collection::<Document>("sessions")
+        .find_one(doc! {
+            "_id": &claims.sid,
+            "user_id": claims.uid,
+            "purpose": &claims.purpose,
+            "revoked": false,
+            "expires_at": { "$gt": now }
+        })
+        .await?
+        .ok_or_else(|| AppError::Unauthorized("Sessão revogada ou expirada".into()))?;
+    let _ = session;
+
+    let user = state
+        .db
+        .collection::<UserDocument>("usuarios")
+        .find_one(doc! { "user_id": claims.uid })
+        .await?
+        .ok_or_else(|| AppError::Unauthorized("Conta da sessão não encontrada".into()))?;
+
+    let is_admin = user.is_admin()
+        || user
+            .email_normalized
+            .as_deref()
+            .is_some_and(|e| state.config.is_bootstrap_admin_email(e));
+
+    Ok(SessionUser {
+        user_id: user.user_id,
+        is_admin,
+        is_guest: user.is_guest,
+    })
+}
+
 pub async fn authenticate(
-    State(state): State<Arc<AppState>>,
+    State(state): State< std::sync::Arc<AppState> >,
+    mut request: Request,
+    next: Next,
+) -> Result<Response, AppError> {
+    let user = if let Some(bearer) = extract_bearer_token(request.headers()) {
+        let claims = verify_session_token(&state.config.jwt_secret, &bearer, "mobile")?;
+        resolve_db_session(&state, &claims).await?
+    } else {
+        let cookies = extract_web_cookies(request.headers());
+        if cookies.is_empty() {
+            return Err(AppError::Unauthorized("Sessão obrigatória".into()));
+        }
+        verify_csrf_same_origin(
+            request.headers(),
+            request.method(),
+            &state.config.public_origin,
+        )?;
+        let mut resolved = None;
+        for token in cookies {
+            if let Ok(claims) = verify_session_token(&state.config.jwt_secret, &token, "web") {
+                if let Ok(session_user) = resolve_db_session(&state, &claims).await {
+                    resolved = Some(session_user);
+                    break;
+                }
+            }
+        }
+        resolved.ok_or_else(|| AppError::Unauthorized("Sessão web inválida ou expirada".into()))?
+    };
+
+    let catalog = state.catalog.refresh(&state.db).await?;
+    request.extensions_mut().insert(user);
+    Ok(crate::services::catalog_runtime::scope(catalog, next.run(request)).await)
+}
+
+pub async fn require_admin(
+    Extension(user): Extension<SessionUser>,
     request: Request,
     next: Next,
 ) -> Result<Response, AppError> {
-    let bearer = request
-        .headers()
-        .get("authorization")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "));
-    let web_cookie = request.headers().get("cookie").and_then(|v|v.to_str().ok()).and_then(|cookies|cookies.split(';').find_map(|entry|entry.trim().strip_prefix("cogniva_web_session=")));
-    let is_web = bearer.is_none() && web_cookie.is_some();
-    let claims = if let Some(token)=bearer {
-        verify(&state.config.jwt_secret, token, "session")?
-    } else if let Some(token)=web_cookie {
-        let claims=verify(&state.config.jwt_secret, token, "web_session")?;
-        if !matches!(*request.method(),axum::http::Method::GET | axum::http::Method::HEAD | axum::http::Method::OPTIONS)
-            && (!same_origin(request.headers()) || request.headers().get("x-cogniva-csrf").and_then(|v|v.to_str().ok())!=Some("1")) {
-            return Err(AppError::Forbidden("Origem da ação web não autorizada".into()));
-        }
-        if crate::services::question_storage::collection(&state.db,"web_sessions").find_one(bson::doc!{"_id":&claims.nonce,"user_id":claims.user_id,"revoked":false}).await?.is_none() {
-            return Err(AppError::Unauthorized("Sessão web encerrada".into()));
-        }
-        claims
-    } else { return Err(AppError::Unauthorized("Entre na sua conta para sincronizar".into())); };
-    if request.uri().path().starts_with("/api/v1/admin/") {
-        if !is_admin(claims.user_id) {
-            return Err(AppError::Forbidden("Operação administrativa".into()));
-        }
+    if !user.is_admin {
+        return Err(AppError::Forbidden(
+            "Acesso restrito a administradores".into(),
+        ));
     }
-    if let Some(query) = request.uri().query() {
-        let url = reqwest::Url::parse(&format!("http://localhost/?{query}"))
-            .map_err(|_| AppError::BadRequest("Consulta inválida".into()))?;
-        for (key, value) in url.query_pairs() {
-            if key == "user_id" {
-                if value.parse::<i64>().ok() != Some(claims.user_id) {
-                    return Err(AppError::Forbidden("Identidade diferente da sessão".into()));
-                }
-            }
-        }
-    }
-    let (mut parts, body) = request.into_parts();
-    let bytes = to_bytes(body, 2 * 1024 * 1024)
-        .await
-        .map_err(|_| AppError::BadRequest("Requisição excede o limite".into()))?;
-    if !bytes.is_empty() {
-        if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&bytes) {
-            if let Some(id) = json.get("user_id") {
-                if id.as_i64() != Some(claims.user_id) {
-                    return Err(AppError::Forbidden("Identidade diferente da sessão".into()));
-                }
-            }
-        }
-    }
-    parts.extensions.insert(SessionUser(claims.user_id));
-    let catalog=state.catalog.refresh(&state.db).await?;
-    let mut response = crate::services::catalog_runtime::scope(catalog,next.run(Request::from_parts(parts, Body::from(bytes)))).await;
-    if is_web {
-        response.headers_mut().insert(axum::http::header::CACHE_CONTROL,axum::http::HeaderValue::from_static("no-store"));
-        response.headers_mut().append(axum::http::header::VARY,axum::http::HeaderValue::from_static("Cookie"));
-    }
-    Ok(response)
+    Ok(next.run(request).await)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const SECRET: &str = "0123456789abcdef0123456789abcdef";
+
     #[test]
-    fn browser_origin_and_token_purposes_are_separate() {
-        let mut headers=axum::http::HeaderMap::new();
-        headers.insert("host","127.0.0.1:8876".parse().unwrap());
-        assert!(!same_origin(&headers));
-        headers.insert("origin","http://127.0.0.1:8876".parse().unwrap());assert!(same_origin(&headers));
-        headers.insert("origin","http://127.0.0.1:8877".parse().unwrap());assert!(!same_origin(&headers));
-        headers.insert("origin","https://example.test".parse().unwrap());assert!(!same_origin(&headers));
-        headers.insert("origin","null".parse().unwrap());assert!(!same_origin(&headers));
-        let code=issue("synthetic-secret",123,"web_login",600).unwrap();
-        assert!(verify("synthetic-secret",&code,"web_session").is_err());
-        assert!(verify("synthetic-secret",&code,"session").is_err());
-    }
-    #[test]
-    fn a_pairing_credential_cannot_be_used_as_session_or_with_another_key() {
-        let token = issue("synthetic-secret", 123, "legacy_link", 600).unwrap();
-        assert!(verify("synthetic-secret", &token, "legacy_link").is_ok());
-        assert!(verify("synthetic-secret", &token, "session").is_err());
-        assert!(verify("other-secret", &token, "legacy_link").is_err());
+    fn signs_verifies_and_separates_mobile_and_web_purposes() {
+        let mobile = sign_session_token(SECRET, 42, "sid-1", "mobile", 3600).unwrap();
+        let claims = verify_session_token(SECRET, &mobile, "mobile").unwrap();
+        assert_eq!(claims.uid, 42);
+        assert_eq!(claims.sid, "sid-1");
+        assert!(verify_session_token(SECRET, &mobile, "web").is_err());
+
+        let mut headers = HeaderMap::new();
+        headers.append(
+            header::COOKIE,
+            "cogniva_web_session=stale; other=1; cogniva_web_session=fresh"
+                .parse()
+                .unwrap(),
+        );
+        assert_eq!(extract_web_cookies(&headers), vec!["stale", "fresh"]);
     }
 }

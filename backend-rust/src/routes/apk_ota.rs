@@ -102,8 +102,6 @@ pub async fn read_apk_meta(configured: &Path) -> Result<ApkMeta, ApkError> {
 }
 
 async fn read_release(state: &AppState) -> Result<(ApkMeta, i64, String), ApkError> {
-    // Resolve current once. Metadata and streamed digest come from the same immutable
-    // release directory even if a promotion swaps the symlink concurrently.
     let meta = read_apk_meta(&state.config.apk_storage_path).await?;
     let metadata =
         if state.config.apk_storage_path.parent() == state.config.apk_metadata_path.parent() {
@@ -156,11 +154,6 @@ pub async fn get_apk_info(State(state): State<Arc<AppState>>) -> Result<Json<Val
         "sha256_checksum": meta.sha256,
         "download_path": "/api/v1/apk/download"
     })))
-}
-
-/// Public route, independent of MongoDB; metadata is measured from the APK bytes.
-pub async fn get_latest_apk(state: State<Arc<AppState>>) -> Result<Json<Value>, ApkError> {
-    get_apk_info(state).await
 }
 
 pub async fn download_apk(

@@ -1,6 +1,9 @@
 use crate::{
     error::AppError,
-    services::ai_tutor::{get_or_generate_ai_assist_budget as get_or_generate_ai_assist, AiAssistKind, AiAssistResponse},
+    services::ai_tutor::{
+        get_or_generate_ai_assist_budget as get_or_generate_ai_assist, AiAssistKind,
+        AiAssistResponse,
+    },
     AppState,
 };
 use axum::{
@@ -30,7 +33,7 @@ pub async fn handle_question_ai_assist(
         &question_id,
         kind,
         query.hint_index,
-        Some(user.0),
+        Some(user.user_id),
     )
     .await?;
 

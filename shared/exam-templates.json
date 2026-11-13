@@ -1,0 +1,609 @@
+{
+  "$schema": "schemas/exam-templates.schema.json",
+  "schema_version": 1,
+  "updated_at": "2026-11-12",
+  "templates": [
+    {
+      "_id": "CPNU",
+      "revision": 1,
+      "owner_user_id": null,
+      "title": "CPNU - AFT",
+      "short_name": "CPNU - AFT",
+      "institution": "MTE",
+      "role": "Auditor-Fiscal do Trabalho",
+      "trunk_slug": "controle",
+      "status": "RUMOR_PREVISTO",
+      "exam_boards": [],
+      "target_date": {
+        "type": "UNDEFINED"
+      },
+      "historical_cutoff_score": 0.0,
+      "is_active_in_ladder": true,
+      "ladder_priority": 1,
+      "subjects": [
+        {
+          "local_subject_id": "SST-0",
+          "canonical_subject_id": "SST",
+          "display_name": "Segurança e Saúde do Trabalhador",
+          "category": "CONHECIMENTOS_ESPECIFICOS",
+          "weight": 1.0,
+          "question_count": 5,
+          "relevance_tier": "COMPLEMENTARY",
+          "topics": [
+            {
+              "local_topic_id": "SST_01",
+              "canonical_topic_id": "SST_01",
+              "canonical_subject_id": "SST",
+              "display_title": "NR-01 — Gerenciamento de riscos ocupacionais",
+              "diff_status": "PRE_EDITAL_BASE"
+            },
+            {
+              "local_topic_id": "SST_02",
+              "canonical_topic_id": "SST_02",
+              "canonical_subject_id": "SST",
+              "display_title": "NR-15 — Atividades e operações insalubres",
+              "diff_status": "PRE_EDITAL_BASE"
+            }
+          ],
+          "stage": ""
+        },
+        {
+          "local_subject_id": "DIR_TRAB-1",
+          "canonical_subject_id": "DIR_TRAB",
+          "display_name": "Direito do Trabalho",
+          "category": "CONHECIMENTOS_ESPECIFICOS",
+          "weight": 1.0,
+          "question_count": 5,
+          "relevance_tier": "COMPLEMENTARY",
+          "topics": [
+            {
+              "local_topic_id": "DIR_TRAB_01",
+              "canonical_topic_id": "DIR_TRAB_01",
+              "canonical_subject_id": "DIR_TRAB",
+              "display_title": "Relação de emprego e proteção do trabalhador",
+              "diff_status": "PRE_EDITAL_BASE"
+            }
+          ],
+          "stage": ""
+        },
+        {
+          "local_subject_id": "SOC_TRAB-2",
+          "canonical_subject_id": "SOC_TRAB",
+          "display_name": "Sociologia e Psicologia Aplicadas ao Trabalho",
+          "category": "CONHECIMENTOS_ESPECIFICOS",
+          "weight": 1.0,
+          "question_count": 5,
+          "relevance_tier": "COMPLEMENTARY",
+          "topics": [
+            {
+              "local_topic_id": "SOC_TRAB_01",
+              "canonical_topic_id": "SOC_TRAB_01",
+              "canonical_subject_id": "SOC_TRAB",
+              "display_title": "Trabalho e relações sociais",
+              "diff_status": "PRE_EDITAL_BASE"
+            }
+          ],
+          "stage": ""
+        },
+        {
+          "local_subject_id": "POL_PUB-3",
+          "canonical_subject_id": "POL_PUB",
+          "display_name": "Políticas Públicas",
+          "category": "CONHECIMENTOS_ESPECIFICOS",
+          "weight": 1.0,
+          "question_count": 5,
+          "relevance_tier": "COMPLEMENTARY",
+          "topics": [
+            {
+              "local_topic_id": "POL_PUB_01",
+              "canonical_topic_id": "POL_PUB_01",
+              "canonical_subject_id": "POL_PUB",
+              "display_title": "Formulação, implementação e avaliação de políticas",
+              "diff_status": "PRE_EDITAL_BASE"
+            }
+          ],
+          "stage": ""
+        },
+        {
+          "local_subject_id": "GOV-4",
+          "canonical_subject_id": "GOV",
+          "display_name": "Gestão Governamental e Governança Pública",
+          "category": "CONHECIMENTOS_ESPECIFICOS",
+          "weight": 1.0,
+          "question_count": 5,
+          "relevance_tier": "COMPLEMENTARY",
+          "topics": [
+            {
+              "local_topic_id": "GOV_01",
+              "canonical_topic_id": "GOV_01",
+              "canonical_subject_id": "GOV",
+              "display_title": "Governança e gestão pública",
+              "diff_status": "PRE_EDITAL_BASE"
+            }
+          ],
+          "stage": ""
+        },
+        {
+          "local_subject_id": "ESTADO-5",
+          "canonical_subject_id": "ESTADO",
+          "display_name": "Desafios do Estado de Direito",
+          "category": "CONHECIMENTOS_ESPECIFICOS",
+          "weight": 1.0,
+          "question_count": 5,
+          "relevance_tier": "COMPLEMENTARY",
+          "topics": [
+            {
+              "local_topic_id": "ESTADO_01",
+              "canonical_topic_id": "ESTADO_01",
+              "canonical_subject_id": "ESTADO",
+              "display_title": "Estado de direito e democracia",
+              "diff_status": "PRE_EDITAL_BASE"
+            }
+          ],
+          "stage": ""
+        },
+        {
+          "local_subject_id": "ETICA-6",
+          "canonical_subject_id": "ETICA",
+          "display_name": "Ética e Integridade",
+          "category": "CONHECIMENTOS_ESPECIFICOS",
+          "weight": 1.0,
+          "question_count": 5,
+          "relevance_tier": "COMPLEMENTARY",
+          "topics": [
+            {
+              "local_topic_id": "ETICA_01",
+              "canonical_topic_id": "ETICA_01",
+              "canonical_subject_id": "ETICA",
+              "display_title": "Integridade no serviço público",
+              "diff_status": "PRE_EDITAL_BASE"
+            }
+          ],
+          "stage": ""
+        },
+        {
+          "local_subject_id": "APF-7",
+          "canonical_subject_id": "APF",
+          "display_name": "Administração Pública Federal",
+          "category": "CONHECIMENTOS_ESPECIFICOS",
+          "weight": 1.0,
+          "question_count": 5,
+          "relevance_tier": "COMPLEMENTARY",
+          "topics": [
+            {
+              "local_topic_id": "APF_01",
+              "canonical_topic_id": "APF_01",
+              "canonical_subject_id": "APF",
+              "display_title": "Organização e gestão da administração federal",
+              "diff_status": "PRE_EDITAL_BASE"
+            }
+          ],
+          "stage": ""
+        },
+        {
+          "local_subject_id": "DIVERSIDADE-8",
+          "canonical_subject_id": "DIVERSIDADE",
+          "display_name": "Diversidade e Inclusão na Sociedade",
+          "category": "CONHECIMENTOS_ESPECIFICOS",
+          "weight": 1.0,
+          "question_count": 5,
+          "relevance_tier": "COMPLEMENTARY",
+          "topics": [
+            {
+              "local_topic_id": "DIVERSIDADE_01",
+              "canonical_topic_id": "DIVERSIDADE_01",
+              "canonical_subject_id": "DIVERSIDADE",
+              "display_title": "Diversidade e inclusão",
+              "diff_status": "PRE_EDITAL_BASE"
+            }
+          ],
+          "stage": ""
+        },
+        {
+          "local_subject_id": "FIN_PUB-9",
+          "canonical_subject_id": "FIN_PUB",
+          "display_name": "Finanças Públicas",
+          "category": "CONHECIMENTOS_ESPECIFICOS",
+          "weight": 1.0,
+          "question_count": 5,
+          "relevance_tier": "COMPLEMENTARY",
+          "topics": [
+            {
+              "local_topic_id": "FIN_PUB_01",
+              "canonical_topic_id": "FIN_PUB_01",
+              "canonical_subject_id": "FIN_PUB",
+              "display_title": "Orçamento público: PPA, LDO e LOA",
+              "diff_status": "PRE_EDITAL_BASE"
+            },
+            {
+              "local_topic_id": "FIN_PUB_02",
+              "canonical_topic_id": "FIN_PUB_02",
+              "canonical_subject_id": "FIN_PUB",
+              "display_title": "Receita e despesa públicas",
+              "diff_status": "PRE_EDITAL_BASE"
+            }
+          ],
+          "stage": ""
+        }
+      ],
+      "edital_diff_summary": null,
+      "sync_status": "SYNCED",
+      "wrong_answer_penalty": 0.0
+    },
+    {
+      "_id": "RFB",
+      "revision": 1,
+      "owner_user_id": null,
+      "title": "Receita Federal",
+      "short_name": "Receita Federal",
+      "institution": "RFB",
+      "role": "Auditor Fiscal",
+      "trunk_slug": "fiscal",
+      "status": "RUMOR_PREVISTO",
+      "exam_boards": [],
+      "target_date": {
+        "type": "UNDEFINED"
+      },
+      "historical_cutoff_score": 0.0,
+      "is_active_in_ladder": false,
+      "ladder_priority": 2,
+      "subjects": [
+        {
+          "local_subject_id": "DIR_TRIB-0",
+          "canonical_subject_id": "DIR_TRIB",
+          "display_name": "Direito Tributário",
+          "category": "CONHECIMENTOS_ESPECIFICOS",
+          "weight": 3.0,
+          "question_count": 15,
+          "relevance_tier": "CORE",
+          "topics": [
+            {
+              "local_topic_id": "DIR_TRIB_01-0",
+              "canonical_topic_id": "DIR_TRIB_01",
+              "canonical_subject_id": "DIR_TRIB",
+              "display_title": "Competência tributária e crédito",
+              "diff_status": "PRE_EDITAL_BASE"
+            }
+          ],
+          "stage": ""
+        },
+        {
+          "local_subject_id": "FIN_PUB-1",
+          "canonical_subject_id": "FIN_PUB",
+          "display_name": "Finanças Públicas",
+          "category": "CONHECIMENTOS_ESPECIFICOS",
+          "weight": 2.0,
+          "question_count": 10,
+          "relevance_tier": "CORE",
+          "topics": [
+            {
+              "local_topic_id": "FIN_PUB_01-0",
+              "canonical_topic_id": "FIN_PUB_01",
+              "canonical_subject_id": "FIN_PUB",
+              "display_title": "Orçamento público: PPA, LDO e LOA",
+              "diff_status": "PRE_EDITAL_BASE"
+            },
+            {
+              "local_topic_id": "FIN_PUB_02-1",
+              "canonical_topic_id": "FIN_PUB_02",
+              "canonical_subject_id": "FIN_PUB",
+              "display_title": "Receita e despesa públicas",
+              "diff_status": "PRE_EDITAL_BASE"
+            }
+          ],
+          "stage": ""
+        },
+        {
+          "local_subject_id": "CONTAB-2",
+          "canonical_subject_id": "CONTAB",
+          "display_name": "Contabilidade Geral",
+          "category": "CONHECIMENTOS_ESPECIFICOS",
+          "weight": 2.0,
+          "question_count": 10,
+          "relevance_tier": "CORE",
+          "topics": [
+            {
+              "local_topic_id": "CONTAB_01-0",
+              "canonical_topic_id": "CONTAB_01",
+              "canonical_subject_id": "CONTAB",
+              "display_title": "Demonstrações contábeis",
+              "diff_status": "PRE_EDITAL_BASE"
+            }
+          ],
+          "stage": ""
+        },
+        {
+          "local_subject_id": "PORT-3",
+          "canonical_subject_id": "PORT",
+          "display_name": "Língua Portuguesa",
+          "category": "CONHECIMENTOS_GERAIS",
+          "weight": 1.0,
+          "question_count": 5,
+          "relevance_tier": "COMPLEMENTARY",
+          "topics": [
+            {
+              "local_topic_id": "PORT_01-0",
+              "canonical_topic_id": "PORT_01",
+              "canonical_subject_id": "PORT",
+              "display_title": "Interpretação e gramática aplicada",
+              "diff_status": "PRE_EDITAL_BASE"
+            }
+          ],
+          "stage": ""
+        }
+      ],
+      "edital_diff_summary": null,
+      "sync_status": "SYNCED",
+      "wrong_answer_penalty": 0.0
+    },
+    {
+      "_id": "BNDES",
+      "revision": 1,
+      "owner_user_id": null,
+      "title": "BNDES",
+      "short_name": "BNDES",
+      "institution": "BNDES",
+      "role": "Analista",
+      "trunk_slug": "bancaria",
+      "status": "RUMOR_PREVISTO",
+      "exam_boards": [],
+      "target_date": {
+        "type": "UNDEFINED"
+      },
+      "historical_cutoff_score": 0.0,
+      "is_active_in_ladder": false,
+      "ladder_priority": 3,
+      "subjects": [
+        {
+          "local_subject_id": "ECON-0",
+          "canonical_subject_id": "ECON",
+          "display_name": "Economia",
+          "category": "CONHECIMENTOS_ESPECIFICOS",
+          "weight": 2.0,
+          "question_count": 10,
+          "relevance_tier": "CORE",
+          "topics": [
+            {
+              "local_topic_id": "ECON_01-0",
+              "canonical_topic_id": "ECON_01",
+              "canonical_subject_id": "ECON",
+              "display_title": "Política monetária e fiscal",
+              "diff_status": "PRE_EDITAL_BASE"
+            }
+          ],
+          "stage": ""
+        },
+        {
+          "local_subject_id": "MFIN-1",
+          "canonical_subject_id": "MFIN",
+          "display_name": "Mercado Financeiro",
+          "category": "CONHECIMENTOS_ESPECIFICOS",
+          "weight": 2.0,
+          "question_count": 10,
+          "relevance_tier": "CORE",
+          "topics": [
+            {
+              "local_topic_id": "MFIN_01-0",
+              "canonical_topic_id": "MFIN_01",
+              "canonical_subject_id": "MFIN",
+              "display_title": "Sistema financeiro nacional",
+              "diff_status": "PRE_EDITAL_BASE"
+            }
+          ],
+          "stage": ""
+        },
+        {
+          "local_subject_id": "FIN_PUB-2",
+          "canonical_subject_id": "FIN_PUB",
+          "display_name": "Finanças Públicas",
+          "category": "CONHECIMENTOS_ESPECIFICOS",
+          "weight": 2.0,
+          "question_count": 10,
+          "relevance_tier": "CORE",
+          "topics": [
+            {
+              "local_topic_id": "FIN_PUB_01-0",
+              "canonical_topic_id": "FIN_PUB_01",
+              "canonical_subject_id": "FIN_PUB",
+              "display_title": "Orçamento público: PPA, LDO e LOA",
+              "diff_status": "PRE_EDITAL_BASE"
+            },
+            {
+              "local_topic_id": "FIN_PUB_02-1",
+              "canonical_topic_id": "FIN_PUB_02",
+              "canonical_subject_id": "FIN_PUB",
+              "display_title": "Receita e despesa públicas",
+              "diff_status": "PRE_EDITAL_BASE"
+            }
+          ],
+          "stage": ""
+        },
+        {
+          "local_subject_id": "PORT-3",
+          "canonical_subject_id": "PORT",
+          "display_name": "Língua Portuguesa",
+          "category": "CONHECIMENTOS_GERAIS",
+          "weight": 1.0,
+          "question_count": 5,
+          "relevance_tier": "COMPLEMENTARY",
+          "topics": [
+            {
+              "local_topic_id": "PORT_01-0",
+              "canonical_topic_id": "PORT_01",
+              "canonical_subject_id": "PORT",
+              "display_title": "Interpretação e gramática aplicada",
+              "diff_status": "PRE_EDITAL_BASE"
+            }
+          ],
+          "stage": ""
+        }
+      ],
+      "edital_diff_summary": null,
+      "sync_status": "SYNCED",
+      "wrong_answer_penalty": 0.0
+    },
+    {
+      "_id": "AFT",
+      "revision": 1,
+      "owner_user_id": null,
+      "title": "Auditor-Fiscal do Trabalho (Carreira MTE)",
+      "short_name": "AFT - MTE",
+      "institution": "MTE",
+      "role": "Auditor-Fiscal do Trabalho",
+      "trunk_slug": "fiscalizacao_trabalho",
+      "status": "RUMOR_PREVISTO",
+      "exam_boards": [],
+      "target_date": {
+        "type": "UNDEFINED"
+      },
+      "historical_cutoff_score": 0.0,
+      "is_active_in_ladder": false,
+      "ladder_priority": 4,
+      "subjects": [
+        {
+          "local_subject_id": "SST-0",
+          "canonical_subject_id": "SST",
+          "display_name": "Segurança e Saúde do Trabalhador",
+          "stage": "",
+          "category": "CONHECIMENTOS_ESPECIFICOS",
+          "weight": 3.0,
+          "question_count": 20,
+          "relevance_tier": "CORE",
+          "topics": [
+            {
+              "local_topic_id": "SST_01",
+              "canonical_topic_id": "SST_01",
+              "canonical_subject_id": "SST",
+              "display_title": "NR-01 — Gerenciamento de riscos ocupacionais",
+              "diff_status": "PRE_EDITAL_BASE"
+            },
+            {
+              "local_topic_id": "SST_02",
+              "canonical_topic_id": "SST_02",
+              "canonical_subject_id": "SST",
+              "display_title": "NR-15 — Atividades e operações insalubres",
+              "diff_status": "PRE_EDITAL_BASE"
+            }
+          ]
+        },
+        {
+          "local_subject_id": "DIR_TRAB-1",
+          "canonical_subject_id": "DIR_TRAB",
+          "display_name": "Direito do Trabalho",
+          "stage": "",
+          "category": "CONHECIMENTOS_ESPECIFICOS",
+          "weight": 3.0,
+          "question_count": 20,
+          "relevance_tier": "CORE",
+          "topics": [
+            {
+              "local_topic_id": "DIR_TRAB_01",
+              "canonical_topic_id": "DIR_TRAB_01",
+              "canonical_subject_id": "DIR_TRAB",
+              "display_title": "Relação de emprego e proteção do trabalhador",
+              "diff_status": "PRE_EDITAL_BASE"
+            }
+          ]
+        },
+        {
+          "local_subject_id": "SOC_TRAB-2",
+          "canonical_subject_id": "SOC_TRAB",
+          "display_name": "Sociologia e Psicologia Aplicadas ao Trabalho",
+          "stage": "",
+          "category": "CONHECIMENTOS_ESPECIFICOS",
+          "weight": 2.0,
+          "question_count": 10,
+          "relevance_tier": "CORE",
+          "topics": [
+            {
+              "local_topic_id": "SOC_TRAB_01",
+              "canonical_topic_id": "SOC_TRAB_01",
+              "canonical_subject_id": "SOC_TRAB",
+              "display_title": "Trabalho e relações sociais",
+              "diff_status": "PRE_EDITAL_BASE"
+            }
+          ]
+        },
+        {
+          "local_subject_id": "DIR_CONST-3",
+          "canonical_subject_id": "DIR_CONST",
+          "display_name": "Direito Constitucional",
+          "stage": "",
+          "category": "CONHECIMENTOS_GERAIS",
+          "weight": 1.5,
+          "question_count": 10,
+          "relevance_tier": "COMPLEMENTARY",
+          "topics": [
+            {
+              "local_topic_id": "DIR_CONST_01",
+              "canonical_topic_id": "DIR_CONST_01",
+              "canonical_subject_id": "DIR_CONST",
+              "display_title": "Direitos fundamentais e organização do Estado",
+              "diff_status": "PRE_EDITAL_BASE"
+            }
+          ]
+        },
+        {
+          "local_subject_id": "DIR_ADM-4",
+          "canonical_subject_id": "DIR_ADM",
+          "display_name": "Direito Administrativo",
+          "stage": "",
+          "category": "CONHECIMENTOS_GERAIS",
+          "weight": 1.0,
+          "question_count": 10,
+          "relevance_tier": "COMPLEMENTARY",
+          "topics": [
+            {
+              "local_topic_id": "DIR_ADM_01",
+              "canonical_topic_id": "DIR_ADM_01",
+              "canonical_subject_id": "DIR_ADM",
+              "display_title": "Atos administrativos e licitações",
+              "diff_status": "PRE_EDITAL_BASE"
+            }
+          ]
+        },
+        {
+          "local_subject_id": "PORT-5",
+          "canonical_subject_id": "PORT",
+          "display_name": "Língua Portuguesa",
+          "stage": "",
+          "category": "CONHECIMENTOS_GERAIS",
+          "weight": 1.0,
+          "question_count": 10,
+          "relevance_tier": "COMPLEMENTARY",
+          "topics": [
+            {
+              "local_topic_id": "PORT_01",
+              "canonical_topic_id": "PORT_01",
+              "canonical_subject_id": "PORT",
+              "display_title": "Interpretação e gramática aplicada",
+              "diff_status": "PRE_EDITAL_BASE"
+            }
+          ]
+        },
+        {
+          "local_subject_id": "ETICA-6",
+          "canonical_subject_id": "ETICA",
+          "display_name": "Ética e Integridade",
+          "stage": "",
+          "category": "CONHECIMENTOS_GERAIS",
+          "weight": 1.0,
+          "question_count": 5,
+          "relevance_tier": "COMPLEMENTARY",
+          "topics": [
+            {
+              "local_topic_id": "ETICA_01",
+              "canonical_topic_id": "ETICA_01",
+              "canonical_subject_id": "ETICA",
+              "display_title": "Integridade no serviço público",
+              "diff_status": "PRE_EDITAL_BASE"
+            }
+          ]
+        }
+      ],
+      "edital_diff_summary": null,
+      "sync_status": "SYNCED",
+      "wrong_answer_penalty": 0.0
+    }
+  ]
+}

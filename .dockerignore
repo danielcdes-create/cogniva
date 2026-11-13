@@ -1,10 +1,16 @@
 **/target
 **/build
 **/.gradle
+**/node_modules
 .git
+.github
 docs
-Notas Conversao Kotlin_Rust
+deploy
 android-app
 scripts
+shared/examples
+web-admin/tests
 .env*
 *.apk
+*.log
+*.md

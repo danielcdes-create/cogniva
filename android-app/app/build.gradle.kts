@@ -16,8 +16,8 @@ android {
         applicationId = "br.com.concursoprep.app"
         minSdk = 28
         targetSdk = 35
-        versionCode = 24
-        versionName = "1.4.17"
+        versionCode = 25
+        versionName = "2.0.0"
 
         val doApiBaseUrl = (project.findProperty("DO_API_BASE_URL") as? String)
             ?: "https://198.199.65.103/api/v1/"
@@ -27,11 +27,24 @@ android {
     }
 
     signingConfigs {
-        getByName("debug") {
-            storeFile = file("debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
+        if (file("debug.keystore").exists()) {
+            getByName("debug") {
+                storeFile = file("debug.keystore")
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 
@@ -60,7 +73,17 @@ android {
     }
 }
 
-android.sourceSets.getByName("main").resources.srcDir(rootProject.file("../shared"))
+val syncSharedContracts = tasks.register<Sync>("syncSharedContracts") {
+    from(rootProject.file("../shared")) {
+        include("knowledge-catalog.json", "exam-templates.json", "domain-contracts.json")
+    }
+    into(layout.buildDirectory.dir("generated/sharedContracts"))
+}
+
+android.sourceSets.getByName("main").resources.srcDir(syncSharedContracts)
+tasks.matching { it.name.contains("JavaRes") || it.name.startsWith("lint") }.configureEach {
+    dependsOn(syncSharedContracts)
+}
 
 dependencies {
     implementation("androidx.core:core-ktx:1.15.0")

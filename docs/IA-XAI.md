@@ -1,15 +1,47 @@
-# Tutores xAI e cache por questão
+# Integração com IA (xAI) — Tutores, Classificação e Governança de Cotas
 
-**Migração publicada na 1.4.3/build 10**, revisão `601cf2c56bf7412191f89d286fe6e3fadf43e770`, promovida em 01/11/2026 às 22:46 (UTC−03:00). [Pipeline 41372861958](https://github.com/danielcdes-create/cogniva/actions/runs/41372861958) integralmente aprovado. Modelo escolhido pelo proprietário: `grok-4.3`; a chave autenticou, mas `grok-4.7` não constava no catálogo e sua consulta direta retornou 404. Uma chamada curta real ao Grok 4.3 concluiu com sucesso. Credencial somente no ambiente privado da VPS, com backup de configuração fora do Git; nenhum segredo é incluído no APK.
+O **Cogniva `2.0.0`** integra a Responses API da **xAI** de forma estritamente governada no backend Rust (`cogniva-api`), atendendo a três fluxos: os **8 tutores pedagógicos por questão**, a **assistência de importação de questões** e a **geração de propostas de classificação V2**.
 
-Os oito recursos usam a Responses API xAI e os prompts pedagógicos existentes: explicação, dicas contextuais, Dr. Sincero, simplificação pré-resposta, explicação infantil posterior, conceitos extras, mnemônico e plausibilidade. O servidor consulta primeiro o campo próprio do documento `todasQuestoes`; conteúdo existente é reutilizado, inclusive cache legado. Não há geração automática de todos os documentos.
+---
 
-Quando falta o recurso, o servidor valida o gabarito, reserva a cota de geração e chama o modelo. Somente texto de resposta concluída e não vazia é persistido no campo correspondente. Raciocínio interno não entra no cache. Escrita usa confirmação majority/journal, verifica que o enunciado/alternativas/gabarito não mudaram durante a chamada e propaga falhas de armazenamento. Recursos existentes e campos legados são preservados. Plausibilidade usa `plausibilityMarkdown`; dicas usam posições estáveis no array `contextualHint`.
+## 1. Configuração Explícita e Cliente Compartilhado
 
-Chamadas concorrentes para a mesma questão/recurso são serializadas no processo e releem o Mongo. Cache hit não consome cota diária de geração. O limite de geração por conta permanece 120/dia. Timeout do provedor: 40 segundos, abaixo dos 45 segundos do cliente Android. Falhas, respostas incompletas ou vazias não são persistidas como conteúdo pedagógico. Nenhum outro provedor é chamado como contingência.
+- **Sem Modelo Hardcoded no Código:** Se `XAI_API_KEY` estiver configurada no ambiente, `XAI_MODEL` **deve** ser declarada explicitamente (ex.: `XAI_MODEL=grok-4.20-non-reasoning`). Caso `XAI_API_KEY` esteja presente sem `XAI_MODEL`, o backend recusa iniciar com erro claro de configuração (`config.rs`).
+- **Isolamento de Segredos:** A chave `XAI_API_KEY` reside exclusivamente no servidor; nenhum segredo ou token da xAI é embarcado no APK Android ou nos assets web.
+- **Conexão Reutilizada:** Todas as chamadas xAI compartilham um único `reqwest::Client` com TLS `rustls` e timeout de 40 segundos mantido em `AppState`.
 
-Validação: teste integrado com Mongo isolado e provedor HTTP sintético confirma uma geração em solicitações concorrentes, persistência no documento, reutilização posterior sem nova chamada e preservação de campos não relacionados. Os 26 testes Rust passaram. 47 testes JVM, nove imagens, lint e seis instrumentados aprovados no CI. Rollback controlado e promoção concluídos. Na prova real, um mnemônico ausente foi gerado por Grok 4.3 e persistido; segunda solicitação retornou `from_cache=true` com conteúdo idêntico (296 caracteres, SHA-256 `493b508c63be94429bdb49a7fdbdc48347810c39a5cc7d7d00b113c13ffdda3a`). Mongo e resposta têm o mesmo hash.
+---
 
-Antes/depois: 618 documentos de questões; somente o campo `mnemonico` da questão testada mudou intencionalmente. Os demais campos e documentos permaneceram preservados, assim como os 15 documentos/27 eventos históricos (hash protegido inalterado). Evidências em `remediation-validation/1.4.3/xai-live-cache.json`, `data-preservation.json`, `production-release.json` e logs `ci-*.log`. A credencial não integra esses relatórios.
+## 2. Dupla Proteção de Orçamento e Estorno em Falhas
 
-Medições da validação 1.4.3: runtime 25.809.658 bytes; APK release 12.725.237 bytes, pacote/versão/assinatura verificados, sem modo de depuração, download idêntico ao bundle assinado. SHA-256 do APK: `83441ccdf32eff2bf5dcb34bf24d9948deacab3f904ed1b5aec64b6fb26af89f`. Validação nativa em emulador API 35/Android 15; sem instalação física por ADB.
+Para impedir exaustão acidental de créditos ou abuso por criação massiva de sessões convidadas (*Sybil*), [`services/rate_limit.rs`](../backend-rust/src/services/rate_limit.rs) impõe duas cotas atômicas simultâneas na coleção `ai_daily_quotas` (fuso `UTC`):
+
+1. **Cota Diária por Conta (`XAI_DAILY_USER_LIMIT`):** Padrão de `120` gerações novas por dia por `user_id`.
+2. **Teto Global Diário (`XAI_DAILY_GLOBAL_LIMIT`):** Padrão de `500` gerações novas por dia somando todo o servidor.
+
+- **Cache Hit Custo Zero:** Consultar explicações, dicas, mnemônicos ou análises de plausibilidade já gravadas em `todasQuestoes` retorna imediatamente do MongoDB (`from_cache = true`) sem consumir cota.
+- **Estorno Automático (`release_tutor`):** A reserva é efetuada usando a chave de dia capturada no início da operação; caso o provedor xAI retorne erro HTTP, timeout ou resposta vazia/incompleta, a reserva é estornada tanto na cota do usuário quanto no teto global, e nada inválido é persistido no acervo.
+
+---
+
+## 3. Os 8 Tutores Pedagógicos e `ai_resource_meta`
+
+Os recursos pedagógicos cacheados em `cogniva.todasQuestoes` são:
+1. Explicação detalhada pós-resposta (`explanation`);
+2. Dicas contextuais progressivas pré-resposta (`contextualHint`, sem revelar o gabarito);
+3. Dr. Sincero (`drSincero`);
+4. Simplificação pré-resposta (`childFriendlyPre`, nunca faz fallback para `explanation` quando offline);
+5. Explicação didática pós-resposta (`childFriendlyPost`);
+6. Conceitos extras (`extraConcepts`);
+7. Mnemônico (`mnemonico`);
+8. Plausibilidade das alternativas (`plausibilityMarkdown`).
+
+- **Exclusão Mútua por Questão/Recurso:** Solicitações concorrentes para o mesmo recurso da mesma questão são serializadas em processo e releem o documento antes de chamar a xAI.
+- **Proveniência Estruturada (`ai_resource_meta`):** Toda nova geração grava metadados auditáveis no documento da questão registrando `provider: "xai"`, `model` efetivo (`XAI_MODEL`), versão do prompt, `content_revision` JCS SHA-256 avaliado e timestamp UTC de geração. Se a questão for editada durante a chamada externa, a escrita condicional CAS impede gravar texto gerado sobre enunciado antigo.
+
+---
+
+## 4. Curadoria Assistida no `/admin/`
+
+- **Propostas de Classificação V2 (`/api/v1/admin/classification/proposals`):** Gera sugestões estruturadas apontando para disciplinas, assuntos e subassuntos ativos do catálogo `knowledge-catalog.json` vigente, sempre como `PENDING` até confirmação ou rejeição humana na aba **Classificação IA**.
+- **Estruturação e Geração de Rascunhos (`/api/v1/admin/questions/import/assist`):** Converte texto bruto em rascunhos JSON ou sugere itens autorais com proveniência `AI`, exigindo revisão e confirmação explícitas antes de inserir no acervo.

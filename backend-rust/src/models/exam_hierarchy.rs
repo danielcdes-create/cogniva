@@ -119,7 +119,7 @@ pub struct EditalDiffSummary {
     pub published_at_iso: String,
 }
 
-/// Concurso oficial ou criado pelo usuário. `id` é o identificador do cliente (UUID ou código estável).
+/// Template global (`exam_templates`) ou cópia personalizada pelo aluno (`user_exams`).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ExamBlueprint {
     #[serde(rename = "_id", alias = "id")]
@@ -146,6 +146,12 @@ pub struct ExamBlueprint {
     pub edital_diff_summary: Option<EditalDiffSummary>,
     #[serde(default)]
     pub sync_status: String,
+    #[serde(default)]
+    pub base_template_revision: Option<i64>,
+    #[serde(default)]
+    pub upstream_update_available: bool,
+    #[serde(default)]
+    pub is_custom_copy: bool,
 }
 
 impl ExamBlueprint {
@@ -153,60 +159,10 @@ impl ExamBlueprint {
         self.owner_user_id = Some(user_id.to_string());
     }
 
-    /// Restores the summary taken from storage before `apply_publish`.
-    /// That call rewrites `published_at_iso`; this function puts the captured value back.
     pub fn keep_summary_captured_before_publish(&mut self, captured: Option<EditalDiffSummary>) {
         if self.status == ExamLifecycleStatus::EditalPublicado {
             self.edital_diff_summary = captured;
         }
-    }
-}
-
-#[cfg(test)]
-mod owner_summary_tests {
-    use super::*;
-
-    fn blueprint(raw: &str) -> ExamBlueprint {
-        serde_json::from_str(raw).unwrap()
-    }
-
-    #[test]
-    fn omitted_owner_and_summary_default_and_a_published_update_keeps_the_previous_summary() {
-        let body = r#"{
-            "id":"exam-1","title":"T","short_name":"T","institution":"I","role":"R",
-            "trunk_slug":"fiscal","status":"EDITAL_PUBLICADO","exam_boards":[],
-            "target_date":{"type":"UNDEFINED"},"historical_cutoff_score":0,
-            "is_active_in_ladder":true,"ladder_priority":1,"subjects":[],"revision":4
-        }"#;
-        let mut incoming = blueprint(body);
-        assert_eq!(incoming.owner_user_id, None);
-        assert_eq!(incoming.edital_diff_summary, None);
-        let mut previous = incoming.clone();
-        previous.edital_diff_summary = Some(EditalDiffSummary {
-            confirmed_count: 2,
-            new_count: 1,
-            archived_count: 0,
-            published_at_iso: "2026-11-02T12:00:00-03:00".into(),
-        });
-        let captured = previous.edital_diff_summary.clone();
-        let rewritten = PublishEditalRequest {
-            expected_revision: previous.revision,
-            published_topics: vec![],
-            practiced_canonical_topic_ids: vec![],
-            published_at_iso: Some("2026-11-05T03:00:00Z".into()),
-        };
-        let _diff = crate::services::exam_engine::apply_publish(&mut previous, &rewritten);
-        assert_eq!(
-            previous.edital_diff_summary.as_ref().unwrap().published_at_iso,
-            "2026-11-05T03:00:00Z"
-        );
-        incoming.keep_summary_captured_before_publish(captured);
-        incoming.assign_session_owner(77);
-        assert_eq!(incoming.owner_user_id.as_deref(), Some("77"));
-        assert_eq!(
-            incoming.edital_diff_summary.unwrap().published_at_iso,
-            "2026-11-02T12:00:00-03:00"
-        );
     }
 }
 
@@ -219,6 +175,8 @@ pub struct TrunkCatalog {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TopicRef {
+    #[serde(default)]
+    pub local_subject_id: Option<String>,
     pub canonical_topic_id: String,
     pub canonical_subject_id: String,
     pub display_title: String,
@@ -226,11 +184,12 @@ pub struct TopicRef {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ClassifiedTopic {
+    #[serde(default)]
+    pub local_subject_id: Option<String>,
     pub canonical_topic_id: String,
     pub canonical_subject_id: String,
     pub display_title: String,
     pub diff_status: CanonicalTopicStatus,
-    /// Preenchida quando o tópico novo já foi estudado em outro concurso.
     pub coverage_already_filled: bool,
 }
 
@@ -354,4 +313,52 @@ pub struct ProjectedTopicCoverage {
     pub mastery: f64,
     pub practiced: bool,
     pub hidden_from_study_queue: bool,
+}
+
+#[cfg(test)]
+mod owner_summary_tests {
+    use super::*;
+
+    fn blueprint(raw: &str) -> ExamBlueprint {
+        serde_json::from_str(raw).unwrap()
+    }
+
+    #[test]
+    fn omitted_owner_and_summary_default_and_a_published_update_keeps_the_previous_summary() {
+        let body = r#"{
+            "id":"exam-1","title":"T","short_name":"T","institution":"I","role":"R",
+            "trunk_slug":"fiscal","status":"EDITAL_PUBLICADO","exam_boards":[],
+            "target_date":{"type":"UNDEFINED"},"historical_cutoff_score":0,
+            "is_active_in_ladder":true,"ladder_priority":1,"subjects":[],"revision":4
+        }"#;
+        let mut incoming = blueprint(body);
+        assert_eq!(incoming.owner_user_id, None);
+        assert_eq!(incoming.edital_diff_summary, None);
+        let mut previous = incoming.clone();
+        previous.edital_diff_summary = Some(EditalDiffSummary {
+            confirmed_count: 2,
+            new_count: 1,
+            archived_count: 0,
+            published_at_iso: "2026-11-02T12:00:00-03:00".into(),
+        });
+        let captured = previous.edital_diff_summary.clone();
+        let rewritten = PublishEditalRequest {
+            expected_revision: previous.revision,
+            published_topics: vec![],
+            practiced_canonical_topic_ids: vec![],
+            published_at_iso: Some("2026-11-05T03:00:00Z".into()),
+        };
+        let _diff = crate::services::exam_engine::apply_publish(&mut previous, &rewritten);
+        assert_eq!(
+            previous.edital_diff_summary.as_ref().unwrap().published_at_iso,
+            "2026-11-05T03:00:00Z"
+        );
+        incoming.keep_summary_captured_before_publish(captured);
+        incoming.assign_session_owner(77);
+        assert_eq!(incoming.owner_user_id.as_deref(), Some("77"));
+        assert_eq!(
+            incoming.edital_diff_summary.unwrap().published_at_iso,
+            "2026-11-02T12:00:00-03:00"
+        );
+    }
 }

@@ -121,7 +121,7 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
     val activeAiSheetTitle by viewModel.activeAiSheetTitle.collectAsState()
     val apkUpdateState by viewModel.apkUpdateState.collectAsState()
     val userProfile by viewModel.userProfile.collectAsState()
-    val accountLinkState by viewModel.accountLinkState.collectAsState()
+    val accountAuthState by viewModel.accountAuthState.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
     val cachedQuestionsCount by viewModel.cachedQuestionsCount.collectAsState()
     val pendingSyncCount by viewModel.pendingSyncCount.collectAsState()
@@ -193,20 +193,21 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
         val intent=Intent(Intent.ACTION_SEND).setType("application/json").putExtra(Intent.EXTRA_STREAM,uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         context.startActivity(Intent.createChooser(intent,"Exportar registros preservados"))
     }}
-    // 1. Rota de Onboarding (para novos usuários ou vínculo inicial com o Bot Telegram)
+    // 1. Rota de Onboarding (boas-vindas nativas Cogniva com modo convidado imediato ou conta por e-mail)
     if (!isOnboardingCompleted) {
         OnboardingScreen(
             onSkipOnboarding = { viewModel.skipOnboarding() },
             snackbarState = snackbarHostState,
-            onCompleteOnboarding = { telegramUserId, telegramUsername, displayName, contests, dailyQ, dailyH, linkCode ->
+            availableExams = storedExams.ifEmpty { br.com.concursoprep.app.domain.exam.ExamCatalog.systemExams() },
+            onCompleteOnboarding = { displayName, contests, dailyQ, dailyH, email, password, authMode ->
                 viewModel.completeOnboarding(
-                    telegramUserId = telegramUserId,
-                    telegramUsername = telegramUsername,
                     displayName = displayName,
                     selectedContests = contests,
                     dailyQuestionsTarget = dailyQ,
                     dailyHoursTarget = dailyH,
-                    linkCode = linkCode
+                    email = email,
+                    password = password,
+                    authMode = authMode
                 )
             }
         )
@@ -325,12 +326,16 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                         onSelectTrunk = { trunkSlug = it },
                         onEditContest = { cid -> storedExams.find { it.examId == cid }?.let { viewModel.editExam(it) } },
                         onDeleteContest = { cid -> storedExams.find { it.examId == cid }?.let { viewModel.deleteExam(it) } },
-                        onPracticeDiscipline = { disc, component ->
+                        upstreamUpdateAvailable = storedExams.find { it.examId == selectedContestId }?.upstreamUpdateAvailable == true,
+                        onAdoptTemplate = { cid -> viewModel.adoptExamTemplate(cid) },
+                        onPracticeDiscipline = { disc, component, topicId ->
                             viewModel.startQuizSession(
                                 mode = QuizMode.STANDARD,
                                 quantity = 10,
                                 contestId = selectedContestId,
-                                disciplina = disc, componentId=component
+                                disciplina = disc,
+                                componentId = component,
+                                syllabusTopicId = topicId
                             )
                         },
                         onApplyDiffConsent = { cid ->
@@ -377,8 +382,11 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                     SettingsScreen(
                         onOpenQuestionImport = { questionImportOpen = true },
                         userProfile = userProfile,
-                        accountLinkState = accountLinkState,
-                        onConfirmAccountLink = { id, username, code -> viewModel.confirmAccountLink(id, username, code) },
+                        accountAuthState = accountAuthState,
+                        onAuthenticateAccount = { email, password, dispName, isRegister ->
+                            viewModel.authenticateAccount(email, password, dispName, isRegister)
+                        },
+                        onLogoutAccount = { viewModel.logoutAccount() },
                         themeMode = themeMode,
                         apkUpdateState = apkUpdateState,
                         cachedQuestionsCount = cachedQuestionsCount,
@@ -386,15 +394,12 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                         onSelectThemeMode = { mode ->
                             viewModel.setThemeMode(mode)
                         },
-                        onSaveUserSettings = { tgId, tgUsername, dispName, contests, dailyQ, dailyH, linkCode ->
+                        onSaveUserSettings = { dispName, contests, dailyQ, dailyH ->
                             viewModel.updateUserSettings(
-                                telegramUserId = tgId,
-                                telegramUsername = tgUsername,
                                 displayName = dispName,
                                 selectedContests = contests,
                                 dailyQuestionsTarget = dailyQ,
-                                dailyHoursTarget = dailyH,
-                                linkCode = linkCode
+                                dailyHoursTarget = dailyH
                             )
                         },
                         onCheckApkUpdate = { viewModel.checkApkUpdate() },
@@ -411,6 +416,7 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                         onDeleteExam = { viewModel.deleteExam(it) },
                         onCreateExam = { viewModel.openExamBuilder() },
                         onUseServerExam = { viewModel.useServerExam(it) },
+                        onAdoptTemplate = { viewModel.adoptExamTemplate(it.examId) },
                         onOpenPending = { viewModel.openPendingReview() },
                         onReopenOnboarding = {
                             currentTab = BottomTab.HOJE

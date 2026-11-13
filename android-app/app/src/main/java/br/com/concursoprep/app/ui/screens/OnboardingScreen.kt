@@ -53,32 +53,37 @@ import androidx.compose.ui.unit.dp
 import br.com.concursoprep.app.ui.theme.CognivaBrandHeader
 
 /**
- * Fluxo de Onboarding em 4 Passos:
- * 1. Vínculo com conta do Bot Telegram ou novo perfil
- * 2. Escolha de concurso(s) em escada
+ * Fluxo de Onboarding Cogniva 2.0 em 4 Passos:
+ * 1. Perfil inicial (estudo imediato como convidado ou conta nativa com e-mail e senha)
+ * 2. Escolha dinâmica de concurso(s) em escada a partir dos templates oficiais
  * 3. Disponibilidade diária (Horas/dia e Meta de Questões) com alto contraste WCAG
- * 4. Calibração / Ativação do Edital Verticalizado
+ * 4. Resumo e ativação do Edital Verticalizado
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun OnboardingScreen(
+    availableExams: List<br.com.concursoprep.app.domain.exam.StoredExam> = br.com.concursoprep.app.domain.exam.ExamCatalog.systemExams(),
     onSkipOnboarding: () -> Unit = {},
     snackbarState: androidx.compose.material3.SnackbarHostState? = null,
     onCompleteOnboarding: (
-        telegramUserId: Long?,
-        telegramUsername: String?,
         displayName: String,
         selectedContests: List<String>,
         dailyQuestionsTarget: Int,
         dailyHoursTarget: Double,
-        linkCode: String?
+        email: String?,
+        password: String?,
+        authMode: String
     ) -> Unit
 ) {
     var currentStep by rememberSaveable { mutableIntStateOf(1) }
     var displayName by rememberSaveable { mutableStateOf("") }
-    var linkCode by rememberSaveable { mutableStateOf("") }
-    var telegramInput by rememberSaveable { mutableStateOf("") }
-    val selectedContests = remember { mutableStateListOf("CPNU", "RFB") }
+    var authMode by rememberSaveable { mutableStateOf("guest") }
+    var email by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
+    val defaultSelection = remember(availableExams) {
+        availableExams.take(2).map { it.examId }.ifEmpty { listOf("CPNU") }
+    }
+    val selectedContests = remember { mutableStateListOf<String>().apply { addAll(defaultSelection) } }
     var dailyQuestions by rememberSaveable { mutableIntStateOf(50) }
     var dailyHours by rememberSaveable { mutableDoubleStateOf(2.0) }
 
@@ -86,18 +91,18 @@ fun OnboardingScreen(
         currentStep -= 1
     }
 
-    val availableContests = listOf(
-        Triple("CPNU", "CPNU · Auditor-Fiscal do Trabalho", "Modelo para configurar · confira o edital"),
-        Triple("RFB", "Receita Federal · Auditor Fiscal", "Modelo para configurar · confira a autorização"),
-        Triple("BNDES", "BNDES · Analista", "Modelo para configurar · confira as fontes")
-    )
-
     val chipColors = FilterChipDefaults.filterChipColors(
         selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
         selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         labelColor = MaterialTheme.colorScheme.onSurface
     )
+
+    val step1Valid = when (authMode) {
+        "login" -> email.trim().contains("@") && password.isNotBlank()
+        "register" -> email.trim().contains("@") && password.length >= 10
+        else -> true
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -172,21 +177,18 @@ fun OnboardingScreen(
                                 if (currentStep < 4) {
                                     currentStep += 1
                                 } else {
-                                    val parsedId = telegramInput.trim().toLongOrNull()
-                                    val parsedUsername = if (parsedId == null && telegramInput.isNotBlank()) {
-                                        telegramInput.trim().removePrefix("@").ifBlank { null }
-                                    } else null
                                     onCompleteOnboarding(
-                                        parsedId,
-                                        parsedUsername,
-                                        displayName.trim().ifBlank { "Concurseiro" },
+                                        displayName.trim().ifBlank { "Estudante" },
                                         selectedContests.toList(),
                                         dailyQuestions,
                                         dailyHours,
-                                linkCode.takeIf { it.isNotBlank() }
+                                        email.trim().takeIf { authMode != "guest" && it.isNotBlank() },
+                                        password.takeIf { authMode != "guest" && it.isNotEmpty() },
+                                        authMode
                                     )
                                 }
                             },
+                            enabled = currentStep != 1 || step1Valid,
                             modifier = Modifier
                                 .weight(1f)
                                 .heightIn(min = 48.dp)
@@ -201,7 +203,7 @@ fun OnboardingScreen(
                             modifier = Modifier.align(Alignment.CenterHorizontally)
                         ) {
                             Text(
-                                text = "Pular configuração inicial e usar perfil padrão",
+                                text = "Pular configuração inicial e estudar agora",
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -222,28 +224,62 @@ fun OnboardingScreen(
             when (currentStep) {
                 1 -> {
                     Text(
-                        text = "Vincular Histórico do Bot Telegram",
+                        text = "Bem-vindo ao Cogniva",
                         style = MaterialTheme.typography.headlineMedium,
                         color = MaterialTheme.colorScheme.onBackground
                     )
                     Text(
-                        text = "Se você já respondeu questões no nosso QuizBot do Telegram, informe seu ID numérico ou @username para importar imediatamente todo o seu histórico, SRS e estatísticas do banco CNU.",
+                        text = "Comece a estudar imediatamente neste aparelho como convidado — você poderá criar sua conta com e-mail e senha a qualquer momento em Ajustes sem perder nenhuma questão respondida.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     OutlinedTextField(
                         value = displayName,
                         onValueChange = { displayName = it },
-                        label = { Text("Seu nome de exibição") },
+                        label = { Text("Como prefere ser chamado?") },
+                        singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
-                    OutlinedTextField(value=linkCode,onValueChange={linkCode=it},label={Text("Código de vínculo da conta histórica (opcional)")},supportingText={Text("Sem código, use um perfil local próprio. ID e @username não comprovam identidade.")},visualTransformation=androidx.compose.ui.text.input.PasswordVisualTransformation(),modifier=Modifier.fillMaxWidth(),singleLine=true)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        FilterChip(
+                            selected = authMode == "guest",
+                            onClick = { authMode = "guest" },
+                            label = { Text("Estudar sem cadastro") },
+                            colors = chipColors
+                        )
+                        FilterChip(
+                            selected = authMode == "register",
+                            onClick = { authMode = "register" },
+                            label = { Text("Criar conta") },
+                            colors = chipColors
+                        )
+                        FilterChip(
+                            selected = authMode == "login",
+                            onClick = { authMode = "login" },
+                            label = { Text("Já tenho conta") },
+                            colors = chipColors
+                        )
+                    }
+                    if (authMode != "guest") {
                         OutlinedTextField(
-                        value = telegramInput,
-                        onValueChange = { telegramInput = it },
-                        label = { Text("ID do Telegram ou @username (Opcional)") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                            value = email,
+                            onValueChange = { email = it },
+                            label = { Text("Seu e-mail") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = password,
+                            onValueChange = { password = it },
+                            label = { Text(if (authMode == "register") "Senha (mín. 10 caracteres)" else "Senha") },
+                            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
 
                 2 -> {
@@ -253,11 +289,12 @@ fun OnboardingScreen(
                         color = MaterialTheme.colorScheme.onBackground
                     )
                     Text(
-                        text = "A escada de concursos é regra: selecione 1 ou mais concursos. O app ativará automaticamente o Tronco Comum para matérias compartilhadas.",
+                        text = "A escada de concursos é regra: selecione 1 ou mais templates oficiais. O Cogniva cruza automaticamente o Tronco Comum para matérias compartilhadas e permite personalizar qualquer grade depois.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    availableContests.forEach { (code, title, subtitle) ->
+                    availableExams.forEach { exam ->
+                        val code = exam.examId
                         val isSelected = selectedContests.contains(code)
                         val toggleContest: () -> Unit = {
                             if (isSelected && selectedContests.size > 1) {
@@ -284,7 +321,7 @@ fun OnboardingScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = title,
+                                        text = "${exam.shortName} · ${exam.role}",
                                         style = MaterialTheme.typography.titleMedium,
                                         modifier = Modifier.weight(1f)
                                     )
@@ -297,7 +334,7 @@ fun OnboardingScreen(
                                 }
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = subtitle,
+                                    text = "${exam.institution} · ${exam.subjects.size} disciplina(s) no template",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                                     else MaterialTheme.colorScheme.onSurfaceVariant
@@ -383,7 +420,13 @@ fun OnboardingScreen(
                             )
                             Text("• Concursos em Escada: ${selectedContests.joinToString(" + ")}")
                             Text("• Meta Diária: $dailyQuestions questões (${dailyHours.toInt()}h/dia)")
-                            Text("• Tronco Comum: Ativado (Finanças Públicas, Constitucional, Administrativo)")
+                            Text(
+                                "• Modo de Conta: " + when (authMode) {
+                                    "register" -> "Nova conta Cogniva (${email.trim()})"
+                                    "login" -> "Conta existente (${email.trim()})"
+                                    else -> "Convidado local (sincronizável depois em Ajustes)"
+                                }
+                            )
                             Text("• Modo Offline-First: Sincronizado localmente no Room")
                         }
                     }

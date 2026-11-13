@@ -16,7 +16,8 @@ fun ExamManagementScreen(
     exams: List<StoredExam>, pendingCount: Int, onBack: ()->Unit,
     onCreate: ()->Unit, onEdit: (StoredExam)->Unit, onArchive: (StoredExam)->Unit,
     onRestore: (StoredExam)->Unit, onDelete: (StoredExam)->Unit,
-    onPending: ()->Unit, onUseServer: (StoredExam)->Unit
+    onPending: ()->Unit, onUseServer: (StoredExam)->Unit,
+    onAdoptTemplate: (StoredExam)->Unit = {}
 ) {
     var archived by rememberSaveable { mutableStateOf(false) }
     var deletingId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -40,6 +41,10 @@ fun ExamManagementScreen(
                         OutlinedButton(onClick={onEdit(exam)},modifier=Modifier.fillMaxWidth()) { Text("Editar concurso e componentes") }
                         OutlinedButton(onClick={if(archived)onRestore(exam)else onArchive(exam)},modifier=Modifier.fillMaxWidth()) { Text(if(archived)"Restaurar concurso"else"Arquivar concurso") }
                         OutlinedButton(onClick={deletingId=exam.examId},modifier=Modifier.fillMaxWidth()) { Text("Excluir concurso") }
+                        if(exam.upstreamUpdateAvailable) {
+                            Text("Nova revisão oficial do template disponível para este concurso.",color=MaterialTheme.colorScheme.primary,style=MaterialTheme.typography.bodySmall)
+                            OutlinedButton(onClick={onAdoptTemplate(exam)},modifier=Modifier.fillMaxWidth()) { Text("Adotar template oficial") }
+                        }
                         exam.syncError?.let { Text(it,color=MaterialTheme.colorScheme.error) }
                         if(exam.syncError?.startsWith("Conflito de revisão")==true) OutlinedButton(onClick={onUseServer(exam)},modifier=Modifier.fillMaxWidth()) { Text("Preservar edição e usar versão do servidor") }
                     }

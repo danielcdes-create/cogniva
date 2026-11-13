@@ -76,7 +76,7 @@ class QuestionImportViewModel(private val repository: ConcursoRepository) : View
         if (e is CancellationException) throw e
         val message = if (e is HttpException) when (e.code()) {
             401 -> "Entre na conta para enviar. O rascunho foi preservado."
-            403 -> "A inserção exige uma conta autorizada em ADMIN_USER_IDS no servidor. O rascunho foi preservado."
+            403 -> "A inserção exige uma conta administrativa autorizada (ADMIN_EMAILS ou --grant-admin). O rascunho foi preservado."
             else -> e.backendMessage() ?: "Servidor indisponível (HTTP ${e.code()})."
         } else e.message ?: "Não foi possível concluir a operação. O rascunho atual continua na tela."
         mutable.value = mutable.value.copy(busy = false, message = message)
@@ -131,17 +131,25 @@ class QuestionImportViewModel(private val repository: ConcursoRepository) : View
         // Persist the exact commands and uncertain-send flag BEFORE accessing the network.
         mutable.value = mutable.value.copy(draft = draft.copy(submitted = true))
         persist()
-        val response = repository.commitQuestionImport(buildJsonObject {
-            put("reviewed", true)
-            put("commands", JsonArray(preview.getValue("items").jsonArray.map { it.jsonObject.getValue("command") }))
-        })
+        val response = try {
+            repository.commitQuestionImport(buildJsonObject {
+                put("reviewed", true)
+                put("commands", JsonArray(preview.getValue("items").jsonArray.map { it.jsonObject.getValue("command") }))
+            })
+        } catch (e: HttpException) {
+            if (e.code() in 400..499) {
+                mutable.value = mutable.value.copy(draft = mutable.value.draft.copy(submitted = false))
+                persist()
+            }
+            throw e
+        }
         verifyQuestionImportReceipt(preview, response)
         mutable.value = mutable.value.copy(draft = mutable.value.draft.copy(result = response))
     }
     fun newDraft() {
         if (mutable.value.busy || mutable.value.loading || !mutable.value.storageReady) return
         val d = mutable.value.draft
-        if (d.submitted && d.result?.get("complete")?.jsonPrimitive?.booleanOrNull != true) return
+        if (d.submitted && d.result == null) return
         mutable.value = mutable.value.copy(draft = QuestionImportDraft(), message = null)
         viewModelScope.launch { try { persist() } catch (e: Exception) { fail(e) } }
     }

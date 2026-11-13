@@ -1,11 +1,11 @@
 [package]
-name = "api-rust-core"
-version = "1.4.17"
+name = "cogniva-api"
+version = "2.0.0"
 edition = "2021"
-authors = ["Daniel Caires <daniel.caires@yahoo.com>"]
-description = "Backend em Rust (Axum + MongoDB) para Plataforma de Preparação de Concursos Públicos"
+description = "Backend em Rust (Axum + MongoDB) da plataforma de estudos Cogniva"
 
 [dependencies]
+argon2 = { version = "0.5", features = ["std"] }
 axum = { version = "0.7", features = ["macros", "json"] }
 tokio = { version = "1.40", features = ["full"] }
 tower = "0.5"

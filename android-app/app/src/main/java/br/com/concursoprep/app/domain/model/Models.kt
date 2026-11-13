@@ -66,22 +66,25 @@ enum class AppThemeMode(val label: String) {
 @Serializable
 data class UserProfileDto(
     @SerialName("user_id") val userId: Long,
-    val username: String? = null,
+    val email: String? = null,
     @SerialName("display_name") val displayName: String? = null,
+    val role: String = "student",
+    @SerialName("is_guest") val isGuest: Boolean = true,
+    @SerialName("is_admin") val isAdmin: Boolean = false,
     @SerialName("daily_questions_target") val dailyQuestionsTarget: Int = 50,
     @SerialName("daily_study_hours_target") val dailyStudyHoursTarget: Double = 2.0,
     @SerialName("active_contest_ids") val activeContestIds: List<String> = listOf("CPNU", "RFB"),
-    @SerialName("current_daily_streak") val currentDailyStreak: Int = 1,
-    @SerialName("streak_freezes_available") val streakFreezesAvailable: Int = 1,
+    @SerialName("current_daily_streak") val currentDailyStreak: Int = 0,
+    @SerialName("streak_freezes_available") val streakFreezesAvailable: Int = 0,
     @SerialName("xp_total") val xpTotal: Long = 0
 )
 
 @Serializable
 data class AuthSessionDto(
     val token: String,
+    @SerialName("expires_in_days") val expiresInDays: Long = 30,
     val profile: UserProfileDto,
-    @SerialName("historical_questions_count") val historicalQuestionsCount: Long,
-    @SerialName("is_existing_telegram_user") val isExistingTelegramUser: Boolean
+    @SerialName("historical_questions_count") val historicalQuestionsCount: Long = 0
 )
 
 @Serializable
@@ -136,6 +139,7 @@ data class SyllabusTopicDto(
     val title: String,
     val order: Int,
     @SerialName("common_trunk_id") val commonTrunkId: String? = null,
+    @SerialName("canonical_topic_id") val canonicalTopicId: String? = null,
     val estimation: EstimationMetadata,
     @SerialName("diff_status") val diffStatus: TopicDiffStatus
 )
@@ -185,9 +189,9 @@ data class QuestionDto(
     val answers: List<String>,
     @SerialName("correct_answer_indices") val correctAnswerIndices: List<Int>,
     val disciplina: String,
-    val source: String,
+    val source: String = "",
     @SerialName("exam_year") val examYear: Int? = null,
-    val level: String,
+    val level: String = "",
     @SerialName("syllabus_topic_ids") val syllabusTopicIds: List<String> = emptyList(),
     @SerialName("common_trunk_id") val commonTrunkId: String? = null,
     @SerialName("canonical_subject_id") val canonicalSubjectId: String? = null,
@@ -308,7 +312,7 @@ data class ProgressAnalyticsDto(
 )
 
 /**
- * Lista oficial das 20 categorias de reporte de problemas herdada do AFTBot.py (`VALID_PROBLEM_LIST`)
+ * Lista oficial das 20 categorias de reporte de problemas do Cogniva (`VALID_PROBLEM_LIST`)
  */
 val VALID_PROBLEM_CATEGORIES = listOf(
     "Questão com Erros de Conteúdo",
@@ -342,9 +346,9 @@ data class ApkInfoDto(
     @SerialName("download_path") val downloadPath: String = "/api/v1/apk/download"
 )
 
-data class AccountLinkUiState(
+data class AccountAuthUiState(
     val isSubmitting: Boolean = false,
-    val isLinked: Boolean = false,
+    val isAuthenticated: Boolean = false,
     val message: String? = null,
     val isError: Boolean = false
 )
@@ -353,7 +357,7 @@ data class ApkUpdateUiState(
     val isChecking: Boolean = false,
     val isDownloading: Boolean = false,
     val installedVersionCode: Int = 1,
-    val installedVersionName: String = "1.0.0",
+    val installedVersionName: String = "2.0.0",
     val remoteInfo: ApkInfoDto? = null,
     val hasUpdate: Boolean = false,
     val statusMessage: String = "Toque em 'Verificar Versão' para consultar o servidor COGNIVA."

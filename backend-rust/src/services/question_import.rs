@@ -279,8 +279,23 @@ pub struct AssistRequest {
     pub text: String,
 }
 
+pub fn strip_json_fences(raw: &str) -> &str {
+    let trimmed = raw.trim();
+    if let Some(rest) = trimmed.strip_prefix("```") {
+        let rest = rest
+            .strip_prefix("json")
+            .or_else(|| rest.strip_prefix("JSON"))
+            .unwrap_or(rest);
+        if let Some(inner) = rest.trim_start().strip_suffix("```") {
+            return inner.trim();
+        }
+    }
+    trimmed
+}
+
 pub fn parse_assistance(raw: &str) -> Result<Vec<Value>, AppError> {
-    let items: Vec<Value> = serde_json::from_str(raw)
+    let cleaned = strip_json_fences(raw);
+    let items: Vec<Value> = serde_json::from_str(cleaned)
         .map_err(|_| bad("A IA não retornou um array JSON; nenhuma questão foi inserida"))?;
     bounded(&items)?;
     if items.len() > 10
@@ -312,11 +327,12 @@ pub async fn assist(state: &AppState, user: i64, r: AssistRequest) -> Result<Val
     {
         return Err(bad("Informe modo e material de até 40.000 bytes"));
     }
-    if state.config.xai_model != crate::config::XAI_MODEL || state.config.xai_api_key.is_none() {
+    if state.config.xai_api_key.is_none() {
         return Err(AppError::ExternalAiError(
-            "Configure xAI/Grok 4.7 no servidor".into(),
+            "Configure XAI_API_KEY e XAI_MODEL no servidor".into(),
         ));
     }
+    let model = state.config.require_xai_model()?.to_string();
     let key = format!("{user}:{}", r.operation_id);
     let hash = digest(&json!(r))?;
     let coll = question_storage::collection(&state.db, "question_import_ai_requests");
@@ -331,9 +347,27 @@ pub async fn assist(state: &AppState, user: i64, r: AssistRequest) -> Result<Val
         }
         return Err(AppError::Conflict("Solicitação de IA já reservada; confira o resultado. Para nova chamada, inicie outra operação explicitamente".into()));
     }
-    // Reserve before the provider call. Uncertain/failed calls cannot be blindly billed again.
-    coll.insert_one(doc!{"_id":&key,"payload_sha256":hash,"status":"reserved","mode":&r.mode,"model":&state.config.xai_model,"recorded_at":chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs,true)}).await?;
-    crate::services::rate_limit::reserve_tutor(&state.db, user).await?;
+    let reservation = crate::services::rate_limit::reserve_xai_quota(
+        &state.db,
+        Some(user),
+        state.config.xai_daily_user_limit,
+        state.config.xai_daily_global_limit,
+    )
+    .await?;
+    if let Err(err) = coll
+        .insert_one(doc! {
+            "_id": &key,
+            "payload_sha256": hash,
+            "status": "reserved",
+            "mode": &r.mode,
+            "model": &model,
+            "recorded_at": chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+        })
+        .await
+    {
+        crate::services::rate_limit::release_xai_quota(&state.db, &reservation).await;
+        return Err(err.into());
+    }
     let result = async {
         let raw = crate::services::ai_tutor::call_xai_text(
             &state.config,
@@ -354,8 +388,10 @@ pub async fn assist(state: &AppState, user: i64, r: AssistRequest) -> Result<Val
     }
     .await;
     if result.is_err() {
-        coll.update_one(doc! {"_id":&key}, doc! {"$set":{"status":"failed"}})
-            .await?;
+        crate::services::rate_limit::release_xai_quota(&state.db, &reservation).await;
+        let _ = coll
+            .update_one(doc! {"_id":&key}, doc! {"$set":{"status":"failed"}})
+            .await;
     }
     result
 }

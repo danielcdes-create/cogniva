@@ -1,18 +1,19 @@
-# Standalone Cogniva example. DO NOT replace the shared /opt/apps/docker-compose.yml.
-# Production promotion uses a per-service override against the existing apps project.
+# Standalone Cogniva Compose reference.
+# IMPORTANT: On the shared VPS, DO NOT replace /opt/apps/docker-compose.yml;
+# deploy/promote.py updates only the target service override inside project "apps".
 services:
-  api-rust-core:
-    image: ${COGNIVA_IMAGE:?Set an immutable ghcr.io image@sha256 digest}
-    container_name: api-rust-core
+  cogniva-api:
+    image: ${COGNIVA_IMAGE:?Set an immutable ghcr.io/danielcdes-create/cogniva-api@sha256 digest}
+    container_name: cogniva-api
     restart: unless-stopped
-    env_file: .env.rust
+    env_file: .env
     ports: ['127.0.0.1:8001:8000']
     volumes: ['./apk:/app/apk:ro']
     read_only: true
     tmpfs: ['/tmp:size=16m']
     security_opt: ['no-new-privileges:true']
     cap_drop: ['ALL']
-    mem_limit: 160m
+    mem_limit: 192m
     cpus: 0.75
     pids_limit: 128
     logging:

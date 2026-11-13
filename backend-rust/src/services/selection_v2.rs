@@ -15,14 +15,25 @@ use crate::{
 use bson::{doc, oid::ObjectId, Document};
 use futures::TryStreamExt;
 use rand::seq::SliceRandom;
-use std::collections::HashMap;
-pub const INVALID_REPORTS: [&str;6]=["Questão com Erros de Conteúdo","Alternativas Corretas em Duplicidade","Alternativas Mal Formuladas","Enunciado c/ Erros de Conteúdo","Alternativas Incorretas","Questão Completamente Problemática"];
+use std::collections::{HashMap, HashSet};
+
+pub const INVALID_REPORTS: [&str; 9] = [
+    "Questão com Erros de Conteúdo",
+    "Questão Mal Formulada",
+    "Enunciado Mal Formulado",
+    "Alternativas Corretas em Duplicidade",
+    "Alternativas Mal Formuladas",
+    "Alternativas c/ Erros de Conteúdo",
+    "Enunciado c/ Erros de Conteúdo",
+    "Alternativas Incorretas",
+    "Questão Completamente Problemática",
+];
 
 #[derive(Default)]
 struct UserHistoryBuckets {
-    mastered_ids: std::collections::HashSet<ObjectId>,
-    all_attempted_ids: std::collections::HashSet<ObjectId>,
-    recent_attempted_ids: std::collections::HashSet<ObjectId>,
+    mastered_ids: HashSet<ObjectId>,
+    all_attempted_ids: HashSet<ObjectId>,
+    recent_attempted_ids: HashSet<ObjectId>,
 }
 
 async fn fetch_user_history_buckets(
@@ -94,18 +105,28 @@ fn apply_anti_repetition_tiers(
     selected
 }
 
+/// Isola reportes abertos por `user_id` (um reporte de um aluno nunca derruba a questão para toda a base).
 pub(crate) async fn pool(
     state: &AppState,
+    user_id: i64,
     filter: Document,
     limit: usize,
 ) -> Result<Vec<QuestionDocument>, AppError> {
     let mut matchers = vec![
         crate::services::question_compatibility::canonical_filter(filter),
-        doc! {"validity.status":{"$nin":["OBSOLETE","UNDER_REVIEW"]}},
-        doc! {"question_type":{"$ne":"OPEN_ENDED"}},
-        doc! {"$or":[{"schema_version":2},{"legal_validity.status":{"$in":[bson::Bson::Null,bson::Bson::String("ACTIVE".into()),bson::Bson::String("VIGENTE".into())]}}]},
+        doc! { "validity.status": { "$nin": ["OBSOLETE", "UNDER_REVIEW"] } },
+        doc! { "question_type": { "$ne": "OPEN_ENDED" } },
+        doc! { "status": { "$ne": "ARCHIVED" } },
     ];
-    let mut reports=state.db.collection::<Document>("reportedQuestoes").find(doc!{"fix.status_solved":false,"problemas":{"$in":INVALID_REPORTS.as_slice()}}).await?;
+    let mut reports = state
+        .db
+        .collection::<Document>("reportedQuestoes")
+        .find(doc! {
+            "user_id": user_id,
+            "fix.status_solved": false,
+            "problemas": { "$in": INVALID_REPORTS.as_slice() }
+        })
+        .await?;
     let mut excluded = Vec::new();
     while let Some(report) = reports.try_next().await? {
         if let Ok(id) = report.get_object_id("questao_id") {
@@ -113,13 +134,14 @@ pub(crate) async fn pool(
         }
     }
     if !excluded.is_empty() {
-        matchers.push(doc! {"_id":{"$nin":excluded}});
+        matchers.push(doc! { "_id": { "$nin": excluded } });
     }
+    let fetch_cap = limit.clamp(64, 2500) as i64;
     let mut cursor = state
         .db
         .collection::<Document>("todasQuestoes")
-        .find(doc! {"$and":matchers})
-        .limit(10000)
+        .find(doc! { "$and": matchers })
+        .limit(fetch_cap)
         .await?;
     let mut result = Vec::new();
     while let Some(raw) = cursor.try_next().await? {
@@ -141,30 +163,57 @@ pub async fn generate(
 ) -> Result<Vec<QuestionDto>, AppError> {
     let quantity = req.quantity.clamp(1, 120);
     let exams = exam_store::list(state, req.user_id).await?;
-    // General shuffle and personal history queues are independent of the
-    // planner's selected tab, including requests from older Android clients.
-    let scoped_contest = if matches!(req.mode, QuizMode::Shuffle | QuizMode::SrsReview | QuizMode::ErrorNotebook | QuizMode::MostBadass | QuizMode::CommonTrunk) { None } else { req.contest_id.as_deref() };
+    let scoped_contest = if matches!(
+        req.mode,
+        QuizMode::Shuffle
+            | QuizMode::SrsReview
+            | QuizMode::ErrorNotebook
+            | QuizMode::MostBadass
+            | QuizMode::CommonTrunk
+    ) {
+        None
+    } else {
+        req.contest_id.as_deref()
+    };
     let exam = match scoped_contest {
         Some("Geral") | None => None,
         Some(id) => Some(exams.iter().find(|e| e.id == id).ok_or_else(|| {
             AppError::NotFound("Concurso não pertence à escada desta conta".into())
         })?),
     };
-    let component_exam=if let Some(id)=&req.component_id {
-        if req.mode!=QuizMode::Standard{return Err(AppError::BadRequest("Componente aplica-se ao treino específico".into()));}
-        let mut selected=exam.cloned().ok_or_else(||AppError::BadRequest("Componente exige concurso".into()))?;
-        selected.subjects.retain(|s|s.local_subject_id==*id);
-        if selected.subjects.is_empty(){return Err(AppError::BadRequest("Componente fora deste concurso".into()));}
+    let component_exam = if let Some(id) = &req.component_id {
+        if req.mode != QuizMode::Standard {
+            return Err(AppError::BadRequest(
+                "Componente aplica-se ao treino específico".into(),
+            ));
+        }
+        let mut selected = exam
+            .cloned()
+            .ok_or_else(|| AppError::BadRequest("Componente exige concurso".into()))?;
+        selected.subjects.retain(|s| s.local_subject_id == *id);
+        if selected.subjects.is_empty() {
+            return Err(AppError::BadRequest(
+                "Componente fora deste concurso".into(),
+            ));
+        }
         Some(selected)
-    }else{None};
-    let exam=component_exam.as_ref().or(exam);
+    } else {
+        None
+    };
+    let exam = component_exam.as_ref().or(exam);
     if req.mode != QuizMode::CommonTrunk
-        && exam.is_some_and(|e| matches!(e.status, ExamLifecycleStatus::Arquivado | ExamLifecycleStatus::Excluido))
+        && exam.is_some_and(|e| {
+            matches!(
+                e.status,
+                ExamLifecycleStatus::Arquivado | ExamLifecycleStatus::Excluido
+            )
+        })
     {
         return Err(AppError::BadRequest(
             "Concurso arquivado; revise sua seleção de estudo".into(),
         ));
     }
+
     let mut filter = Document::new();
     if let Some(exam) = exam {
         let topics: Vec<_> = exam
@@ -195,18 +244,21 @@ pub async fn generate(
                 .find(|s| s.canonical_subject_id == subject.canonical_subject_id)
             {
                 subjects.extend(known.aliases.clone());
+                subjects.push(known.name.clone());
             }
         }
-        // An exact legacy subject may be studied, but is never assigned a canonical leaf by inference.
+        subjects.sort();
+        subjects.dedup();
+        // Migrated questions with normalized `disciplina` remain playable in Discipline/Free study until topic V2 curation completes.
         filter.insert(
             "$or",
             vec![
-                doc! {"canonical_topic_id":{"$in":topics}},
-                doc! {"canonical_topic_id":bson::Bson::Null,"disciplina":{"$in":subjects}},
+                doc! { "canonical_topic_id": { "$in": topics } },
+                doc! { "canonical_topic_id": bson::Bson::Null, "disciplina": { "$in": subjects } },
             ],
         );
-        // Component scope is already applied on `exam` above; preserve the `$or` legacy fallback.
     }
+
     if let Some(disc) = req.disciplina.as_ref().filter(|d| !d.is_empty()) {
         let trimmed = disc.trim();
         let base = trimmed
@@ -218,6 +270,7 @@ pub async fn generate(
         let known = canonical_subjects().into_iter().find(|s| {
             s.name == trimmed
                 || s.name == base
+                || s.canonical_subject_id == trimmed
                 || s.aliases.iter().any(|a| a == trimmed || a == base)
         });
         if let Some(subject) = known {
@@ -252,29 +305,24 @@ pub async fn generate(
         filter.insert("source", source);
     }
     if let Some(topic) = req.syllabus_topic_id.as_ref().filter(|s| !s.trim().is_empty()) {
-        filter.insert("canonical_topic_id", topic);
+        filter.insert("canonical_topic_id", topic.trim());
     }
+
     let mut components = HashMap::new();
-    // Demand only, bounded globally; no provider wait on the request path.
-    if exam.is_some() || matches!(req.mode,QuizMode::CommonTrunk) {
-        let labels:Vec<String>=exam.map(|e|e.subjects.iter().map(|s|s.display_name.clone()).collect()).unwrap_or_else(||exams.iter().filter(|e|e.is_active_in_ladder && !matches!(e.status,ExamLifecycleStatus::Arquivado|ExamLifecycleStatus::Excluido)).flat_map(|e|e.subjects.iter().map(|s|s.display_name.clone())).collect());
-        if !labels.is_empty() {if let Err(error)=super::legacy_classification::seed(state,&labels).await {tracing::warn!("Fila legada indisponível: {}",error);}}
-    }
     let questions = match req.mode {
         QuizMode::Shuffle => {
-            let mut candidates = pool(state, filter, 10000).await?;
-            if state.config.legacy_auto_classification_enabled {
-                if let Err(error) = super::legacy_classification::prioritize(&state.db, &mut candidates).await {
-                    tracing::warn!("Prioridade legada indisponível: {}", error);
-                }
-            }
+            let candidates = pool(state, req.user_id, filter, 2000).await?;
             let recent_window = (quantity * 4).clamp(40, 150);
             let buckets = fetch_user_history_buckets(&state.db, req.user_id, recent_window).await?;
-            apply_anti_repetition_tiers(candidates, &buckets, if exam.is_some() { 10000 } else { quantity })
+            apply_anti_repetition_tiers(
+                candidates,
+                &buckets,
+                if exam.is_some() { 2000 } else { quantity },
+            )
         }
         QuizMode::Simulado => {
-            let exam =
-                exam.ok_or_else(|| AppError::BadRequest("Selecione a grade do simulado".into()))?;
+            let exam = exam
+                .ok_or_else(|| AppError::BadRequest("Selecione a grade do simulado".into()))?;
             let mut selected = Vec::new();
             for subject in &exam.subjects {
                 let topics: Vec<_> = subject
@@ -290,8 +338,14 @@ pub async fn generate(
                 if count == 0 {
                     continue;
                 }
-                let mut scope = doc! {"canonical_subject_id":&subject.canonical_subject_id,"canonical_topic_id":{"$in":topics}};
-                scope.insert("_id", doc! {"$nin": selected.iter().map(|q: &QuestionDocument| q.id).collect::<Vec<_>>()});
+                let mut scope = doc! {
+                    "canonical_subject_id": &subject.canonical_subject_id,
+                    "canonical_topic_id": { "$in": topics }
+                };
+                scope.insert(
+                    "_id",
+                    doc! { "$nin": selected.iter().map(|q: &QuestionDocument| q.id).collect::<Vec<_>>() },
+                );
                 let mut boards = exam
                     .exam_boards
                     .iter()
@@ -302,15 +356,29 @@ pub async fn generate(
                     if boards.iter().any(|b| b == "Cebraspe") {
                         boards.extend(["CESPE".into(), "CEBRASPE".into()]);
                     }
-                    scope.insert("source", doc! {"$in":boards});
+                    scope.insert("source", doc! { "$in": boards });
                 }
-                let candidates=pool(state,scope,10000).await?;
-                let mut drawn=crate::services::practice_context::filter(state,req.user_id,exam,Some(subject),candidates).await?;
+                let candidates = pool(state, req.user_id, scope, (count * 8).max(120)).await?;
+                let mut drawn = crate::services::practice_context::filter(
+                    state,
+                    req.user_id,
+                    exam,
+                    Some(subject),
+                    candidates,
+                )
+                .await?;
                 drawn.truncate(count);
                 if drawn.len() != count {
-                    return Err(AppError::BadRequest(format!("Questões canônicas válidas insuficientes em {}: {}/{}. Revise a grade ou o mapeamento do banco.",subject.display_name,drawn.len(),count)));
+                    return Err(AppError::BadRequest(format!(
+                        "Questões canônicas válidas insuficientes em {}: {}/{}. Revise a grade ou a classificação do banco.",
+                        subject.display_name,
+                        drawn.len(),
+                        count
+                    )));
                 }
-                for q in &drawn { components.insert(q.id.to_hex(), subject.local_subject_id.clone()); }
+                for q in &drawn {
+                    components.insert(q.id.to_hex(), subject.local_subject_id.clone());
+                }
                 selected.append(&mut drawn);
             }
             if selected.is_empty() {
@@ -324,6 +392,7 @@ pub async fn generate(
         QuizMode::CommonTrunk => {
             let rows = load_canonical_slices(&state.db, req.user_id).await?;
             let inputs: Vec<_> = exams.iter().map(blueprint_to_leverage).collect();
+            let mastery_by_subject = mastery_by_subject_for_blueprints(&exams, &rows);
             let focuses = req
                 .trunk_focus_slugs
                 .iter()
@@ -332,9 +401,9 @@ pub async fn generate(
                     core_subject_ids: core_subject_ids(slug),
                 })
                 .collect::<Vec<_>>();
-            let card = card_from_canonical_activity(
+            let card = select_common_trunk_for_focuses(
                 &inputs,
-                &rows,
+                &mastery_by_subject,
                 &focuses,
                 quantity as u32,
                 study_today(),
@@ -348,13 +417,49 @@ pub async fn generate(
                     .filter(|t| t.diff_status != CanonicalTopicStatus::Arquivado)
                     .map(|t| t.canonical_topic_id.clone())
                     .collect();
-                let candidates=pool(state,doc!{"canonical_subject_id":card.canonical_subject_id,"canonical_topic_id":{"$in":live}},10000).await?;
-                let mut allowed=std::collections::HashSet::new();
-                for exam in exams.iter().filter(|e|e.is_active_in_ladder && !matches!(e.status,ExamLifecycleStatus::Arquivado|ExamLifecycleStatus::Excluido)) {
-                    let scoped:Vec<_>=candidates.iter().filter(|q|exam.subjects.iter().any(|s|s.topics.iter().any(|t|t.diff_status!=CanonicalTopicStatus::Arquivado && q.canonical_topic_id.as_deref()==Some(t.canonical_topic_id.as_str())))).cloned().collect();
-                    for q in crate::services::practice_context::filter(state,req.user_id,exam,None,scoped).await?{allowed.insert(q.id);}
+                let candidates = pool(
+                    state,
+                    req.user_id,
+                    doc! {
+                        "canonical_subject_id": card.canonical_subject_id,
+                        "canonical_topic_id": { "$in": live }
+                    },
+                    1000,
+                )
+                .await?;
+                let mut allowed = HashSet::new();
+                for exam in exams.iter().filter(|e| {
+                    e.is_active_in_ladder
+                        && !matches!(
+                            e.status,
+                            ExamLifecycleStatus::Arquivado | ExamLifecycleStatus::Excluido
+                        )
+                }) {
+                    let scoped: Vec<_> = candidates
+                        .iter()
+                        .filter(|q| {
+                            exam.subjects.iter().any(|s| {
+                                s.topics.iter().any(|t| {
+                                    t.diff_status != CanonicalTopicStatus::Arquivado
+                                        && q.canonical_topic_id.as_deref()
+                                            == Some(t.canonical_topic_id.as_str())
+                                })
+                            })
+                        })
+                        .cloned()
+                        .collect();
+                    for q in
+                        crate::services::practice_context::filter(state, req.user_id, exam, None, scoped)
+                            .await?
+                    {
+                        allowed.insert(q.id);
+                    }
                 }
-                candidates.into_iter().filter(|q|allowed.contains(&q.id)).take(quantity).collect()
+                candidates
+                    .into_iter()
+                    .filter(|q| allowed.contains(&q.id))
+                    .take(quantity)
+                    .collect()
             } else {
                 Vec::new()
             }
@@ -363,7 +468,7 @@ pub async fn generate(
             let mut activities = state
                 .db
                 .collection::<UserActivityDocument>("userActivityLog")
-                .find(doc! {"user_id":req.user_id})
+                .find(doc! { "user_id": req.user_id })
                 .await?;
             let mut eligible = Vec::new();
             while let Some(row) = activities.try_next().await? {
@@ -387,7 +492,8 @@ pub async fn generate(
                 }
                 QuizMode::SrsReview => {
                     eligible.sort_by(|a, b| {
-                        a.datas.ultima_sessao
+                        a.datas
+                            .ultima_sessao
                             .cmp(&b.datas.ultima_sessao)
                             .then_with(|| a.points_with_decay.total_cmp(&b.points_with_decay))
                             .then_with(|| a.percentual_acertos.total_cmp(&b.percentual_acertos))
@@ -403,8 +509,8 @@ pub async fn generate(
                 }
             }
             let ids: Vec<_> = eligible.iter().map(|a| a.question_id).collect();
-            filter.insert("_id", doc! {"$in":ids});
-            let candidates = pool(state, filter, 10000).await?;
+            filter.insert("_id", doc! { "$in": ids });
+            let candidates = pool(state, req.user_id, filter, 2000).await?;
             let mut by_id: HashMap<_, _> = candidates.into_iter().map(|q| (q.id, q)).collect();
             let mut available: Vec<_> = eligible
                 .into_iter()
@@ -427,7 +533,7 @@ pub async fn generate(
         QuizMode::Single => {
             if let Some(id) = &req.single_question_id {
                 filter.insert("_id", ObjectId::parse_str(id)?);
-                pool(state, filter, 1).await?
+                pool(state, req.user_id, filter, 1).await?
             } else {
                 return Err(AppError::BadRequest(
                     "Informe o ID da questão; buscas livres por regex não são aceitas".into(),
@@ -435,23 +541,40 @@ pub async fn generate(
             }
         }
         _ => {
-            let candidates = pool(state, filter, 10000).await?;
+            let candidates = pool(state, req.user_id, filter, 2000).await?;
             let recent_window = (quantity * 4).clamp(40, 150);
             let buckets = fetch_user_history_buckets(&state.db, req.user_id, recent_window).await?;
-            apply_anti_repetition_tiers(candidates, &buckets, if exam.is_some() { 10000 } else { quantity })
-        },
+            apply_anti_repetition_tiers(
+                candidates,
+                &buckets,
+                if exam.is_some() { 2000 } else { quantity },
+            )
+        }
     };
-    let questions=if req.mode!=QuizMode::Simulado {
-        if let Some(exam)=exam {let mut q=crate::services::practice_context::filter(state,req.user_id,exam,None,questions).await?;q.truncate(quantity);q}else{questions}
-    }else{questions};
+
+    let questions = if req.mode != QuizMode::Simulado {
+        if let Some(exam) = exam {
+            let mut q =
+                crate::services::practice_context::filter(state, req.user_id, exam, None, questions)
+                    .await?;
+            q.truncate(quantity);
+            q
+        } else {
+            questions
+        }
+    } else {
+        questions
+    };
+
     let mut result = enrich_questions_with_user_stats(&state.db, req.user_id, questions).await?;
-    if req.mode==QuizMode::Shuffle {
-        if let Err(error)=super::legacy_classification::enqueue(state,&result.iter().filter_map(|q|ObjectId::parse_str(&q.id).ok()).collect::<Vec<_>>()).await {tracing::warn!("Fila legada indisponível: {}",error);}
+    for q in &mut result {
+        q.exam_component_id = req
+            .component_id
+            .clone()
+            .or_else(|| components.get(&q.id).cloned());
     }
-    for q in &mut result { q.exam_component_id = req.component_id.clone().or_else(||components.get(&q.id).cloned()); }
     Ok(result)
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -463,33 +586,33 @@ mod tests {
     fn anti_repetition_prioritizes_ineditas_over_recent_and_mastered() {
         let q_inedita = QuestionDocument {
             id: ObjectId::new(),
-            knowledge_binding_verified: false,
-            validity: None,
             question: "Inedita".into(),
-            question_type: Default::default(),
+            question_type: None,
             answers: vec!["A".into(), "B".into()],
             correct_answers: vec!["A".into()],
             correct_answer_indices: vec![0],
+            content_revision: String::new(),
+            grading: None,
+            classification: None,
             disciplina: "Direito".into(),
-            concursos: bson::Bson::Null,
             source: None,
-            exam_year: None,
             level: None,
+            exam_year: None,
+            concursos: vec![],
             syllabus_topic_ids: vec![],
-            common_trunk_id: None,
             canonical_subject_id: None,
             canonical_topic_id: None,
-            is_borrowed_analogous: false,
-            legal_validity: None,
+            knowledge_binding_verified: false,
+            validity: None,
             explanation: None,
-            contextual_hint: vec![],
+            explanation_extra: None,
             dr_sincero: None,
             ajuda_infantil: None,
             explicacao_infantil: None,
-            explanation_extra: None,
             mnemonico: None,
-            plausibility_analysis: None,
+            contextual_hint: vec![],
             plausibility_markdown: None,
+            plausibility_analysis: None,
         };
 
         let mut q_recente = q_inedita.clone();
@@ -510,8 +633,14 @@ mod tests {
         let selected = apply_anti_repetition_tiers(candidates, &buckets, 2);
 
         assert_eq!(selected.len(), 2);
-        assert_eq!(selected[0].id, q_inedita.id, "Tier 1 (Inedita) deve vir primeiro");
-        assert_eq!(selected[1].id, q_recente.id, "Tier 3 (Recente nao dominada) deve vir antes de Dominada");
+        assert_eq!(
+            selected[0].id, q_inedita.id,
+            "Tier 1 (Inedita) deve vir primeiro"
+        );
+        assert_eq!(
+            selected[1].id, q_recente.id,
+            "Tier 3 (Recente nao dominada) deve vir antes de Dominada"
+        );
     }
 
     #[test]
@@ -553,16 +682,10 @@ mod tests {
             canonical_topic_id: None,
         };
 
-        // Com in_error_notebook = false e streak_atual = 2, nao deve estar no caderno de erros
         assert!(!act.error_notebook());
-
-        // Se errar de novo (in_error_notebook = true, streak_atual = 0)
         act.in_error_notebook = true;
         act.streak_atual = 0;
         assert!(act.error_notebook());
-
-
-        // Se dominada for true, sempre sai do caderno
         act.dominada = true;
         assert!(!act.error_notebook());
     }
@@ -630,62 +753,5 @@ mod tests {
         assert!(!act.error_notebook());
         act.past_sessions[0].nivel_confianca = 0;
         assert!(act.error_notebook());
-        act.streak_atual = 1;
-
-    }
-
-    #[test]
-    fn component_scoped_exam_filter_preserves_legacy_null_topic_fallback_and_ignores_blank_syllabus_topic() {
-        let mut exam = crate::services::exam_engine::system_exam_blueprints().remove(0);
-        let target_component = exam.subjects[0].local_subject_id.clone();
-        exam.subjects.retain(|s| s.local_subject_id == target_component);
-        assert_eq!(exam.subjects.len(), 1);
-
-        let topics: Vec<_> = exam
-            .subjects
-            .iter()
-            .flat_map(|s| &s.topics)
-            .filter(|t| t.diff_status != CanonicalTopicStatus::Arquivado)
-            .map(|t| t.canonical_topic_id.clone())
-            .collect();
-        let mut subjects: Vec<_> = exam
-            .subjects
-            .iter()
-            .map(|s| s.display_name.clone())
-            .collect();
-        let catalog = canonical_subjects();
-        for subject in &exam.subjects {
-            if let Some(known) = catalog
-                .iter()
-                .find(|s| s.canonical_subject_id == subject.canonical_subject_id)
-            {
-                subjects.extend(known.aliases.clone());
-            }
-        }
-
-        let mut filter = Document::new();
-        filter.insert(
-            "$or",
-            vec![
-                doc! {"canonical_topic_id":{"$in":&topics}},
-                doc! {"canonical_topic_id":bson::Bson::Null,"disciplina":{"$in":&subjects}},
-            ],
-        );
-        let blank_syllabus = Some("   ".to_string());
-        if let Some(topic) = blank_syllabus.as_ref().filter(|s| !s.trim().is_empty()) {
-            filter.insert("canonical_topic_id", topic);
-        }
-
-        assert!(
-            !filter.contains_key("canonical_topic_id"),
-            "Component filter must not overwrite top-level canonical_topic_id and kill the legacy $or branch"
-        );
-        let or_clauses = filter.get_array("$or").unwrap();
-        assert_eq!(or_clauses.len(), 2);
-        assert_eq!(
-            or_clauses[1].as_document().unwrap().get("canonical_topic_id"),
-            Some(&bson::Bson::Null)
-        );
-
     }
 }

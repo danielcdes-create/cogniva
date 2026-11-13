@@ -3,15 +3,17 @@ use crate::{
     error::AppError,
     models::question::{PlausibilityAnalysis, QuestionDocument},
 };
-use bson::{doc, oid::ObjectId};
+use bson::{doc, oid::ObjectId, Bson, Document};
+use chrono::Utc;
 use mongodb::Database;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 use tokio::sync::Mutex;
 
-/// Tipos de Assistência Pedagógica por IA (100% compatíveis com os campos cacheados pelo AFTBot.py)
+/// Tipos de Assistência Pedagógica por IA cacheados em `todasQuestoes`
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum AiAssistKind {
@@ -22,7 +24,22 @@ pub enum AiAssistKind {
     ChildFriendlyPost, // campo `explicacaoInfantil`
     ExtraConcepts,     // campo `explanationExtra`
     Mnemonic,          // campo `mnemonico`
-    Plausibility,      // objeto `plausibilityAnalysis`
+    Plausibility,      // campo `plausibilityMarkdown` / `plausibilityAnalysis`
+}
+
+impl AiAssistKind {
+    fn meta_key(&self, hint_index: Option<usize>) -> String {
+        match self {
+            Self::Explanation => "explanation".to_string(),
+            Self::ContextualHint => format!("contextualHint_{}", hint_index.unwrap_or(0)),
+            Self::DrSincero => "drSincero".to_string(),
+            Self::ChildFriendlyPre => "ajudaInfantil".to_string(),
+            Self::ChildFriendlyPost => "explicacaoInfantil".to_string(),
+            Self::ExtraConcepts => "explanationExtra".to_string(),
+            Self::Mnemonic => "mnemonico".to_string(),
+            Self::Plausibility => "plausibilityMarkdown".to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,6 +59,19 @@ Explique cada alternativa individualmente:
 Seja conciso, objetivo e didático. Não utilize marcadores de letras ou números (A, B, C, 1, 2, 3) pois as alternativas são embaralhadas."#;
 
 static LOCKS: OnceLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> = OnceLock::new();
+static SHARED_HTTP: OnceLock<reqwest::Client> = OnceLock::new();
+static COLLAPSE_NL_RE: OnceLock<Regex> = OnceLock::new();
+static DR_SINCERO_PREFIX_RE: OnceLock<Regex> = OnceLock::new();
+
+pub fn shared_http_client() -> &'static reqwest::Client {
+    SHARED_HTTP.get_or_init(|| {
+        reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(40))
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .build()
+            .expect("Cliente HTTP compartilhado para xAI")
+    })
+}
 
 pub async fn acquire_generation_lock(
     db_name: &str,
@@ -60,7 +90,7 @@ pub async fn acquire_generation_lock(
         .clone()
 }
 
-/// Obtém o conteúdo pedagógico de IA do cache no MongoDB (`todasQuestoes`) ou gera via LLM e persiste
+/// Obtém o conteúdo pedagógico de IA do cache no MongoDB (`todasQuestoes`) ou gera via xAI e persiste
 pub async fn get_or_generate_ai_assist(
     db: &Database,
     config: &AppConfig,
@@ -95,7 +125,7 @@ pub async fn get_or_generate_ai_assist_budget(
     );
 
     let original = db
-        .collection::<bson::Document>("todasQuestoes")
+        .collection::<Document>("todasQuestoes")
         .find_one(doc! { "_id": oid })
         .await?
         .ok_or_else(|| AppError::NotFound(format!("Questão {} não encontrada", question_id)))?;
@@ -105,16 +135,14 @@ pub async fn get_or_generate_ai_assist_budget(
     // 1. Verificar se já existe no cache do documento MongoDB
     match &kind {
         AiAssistKind::Explanation => {
-            if let Some(exp) = &questao.explanation {
-                if !exp.trim().is_empty() {
-                    return Ok(AiAssistResponse {
-                        question_id: question_id.to_string(),
-                        kind,
-                        content_markdown: sanitize_ai_content(exp),
-                        from_cache: true,
-                        plausibility_structured: None,
-                    });
-                }
+            if let Some(exp) = questao.explanation.as_ref().filter(|s| !s.trim().is_empty()) {
+                return Ok(AiAssistResponse {
+                    question_id: question_id.to_string(),
+                    kind,
+                    content_markdown: sanitize_ai_content(exp),
+                    from_cache: true,
+                    plausibility_structured: None,
+                });
             }
         }
         AiAssistKind::ContextualHint => {
@@ -136,72 +164,78 @@ pub async fn get_or_generate_ai_assist_budget(
             }
         }
         AiAssistKind::DrSincero => {
-            if let Some(txt) = &questao.dr_sincero {
-                if !txt.trim().is_empty() {
-                    return Ok(AiAssistResponse {
-                        question_id: question_id.to_string(),
-                        kind,
-                        content_markdown: sanitize_ai_content(txt),
-                        from_cache: true,
-                        plausibility_structured: None,
-                    });
-                }
+            if let Some(txt) = questao.dr_sincero.as_ref().filter(|s| !s.trim().is_empty()) {
+                return Ok(AiAssistResponse {
+                    question_id: question_id.to_string(),
+                    kind,
+                    content_markdown: sanitize_ai_content(txt),
+                    from_cache: true,
+                    plausibility_structured: None,
+                });
             }
         }
         AiAssistKind::ChildFriendlyPre => {
-            if let Some(txt) = &questao.ajuda_infantil {
-                if !txt.trim().is_empty() {
-                    return Ok(AiAssistResponse {
-                        question_id: question_id.to_string(),
-                        kind,
-                        content_markdown: sanitize_ai_content(txt),
-                        from_cache: true,
-                        plausibility_structured: None,
-                    });
-                }
+            if let Some(txt) = questao
+                .ajuda_infantil
+                .as_ref()
+                .filter(|s| !s.trim().is_empty())
+            {
+                return Ok(AiAssistResponse {
+                    question_id: question_id.to_string(),
+                    kind,
+                    content_markdown: sanitize_ai_content(txt),
+                    from_cache: true,
+                    plausibility_structured: None,
+                });
             }
         }
         AiAssistKind::ChildFriendlyPost => {
-            if let Some(txt) = &questao.explicacao_infantil {
-                if !txt.trim().is_empty() {
-                    return Ok(AiAssistResponse {
-                        question_id: question_id.to_string(),
-                        kind,
-                        content_markdown: sanitize_ai_content(txt),
-                        from_cache: true,
-                        plausibility_structured: None,
-                    });
-                }
+            if let Some(txt) = questao
+                .explicacao_infantil
+                .as_ref()
+                .filter(|s| !s.trim().is_empty())
+            {
+                return Ok(AiAssistResponse {
+                    question_id: question_id.to_string(),
+                    kind,
+                    content_markdown: sanitize_ai_content(txt),
+                    from_cache: true,
+                    plausibility_structured: None,
+                });
             }
         }
         AiAssistKind::ExtraConcepts => {
-            if let Some(txt) = &questao.explanation_extra {
-                if !txt.trim().is_empty() {
-                    return Ok(AiAssistResponse {
-                        question_id: question_id.to_string(),
-                        kind,
-                        content_markdown: sanitize_ai_content(txt),
-                        from_cache: true,
-                        plausibility_structured: None,
-                    });
-                }
+            if let Some(txt) = questao
+                .explanation_extra
+                .as_ref()
+                .filter(|s| !s.trim().is_empty())
+            {
+                return Ok(AiAssistResponse {
+                    question_id: question_id.to_string(),
+                    kind,
+                    content_markdown: sanitize_ai_content(txt),
+                    from_cache: true,
+                    plausibility_structured: None,
+                });
             }
         }
         AiAssistKind::Mnemonic => {
-            if let Some(txt) = &questao.mnemonico {
-                if !txt.trim().is_empty() {
-                    return Ok(AiAssistResponse {
-                        question_id: question_id.to_string(),
-                        kind,
-                        content_markdown: sanitize_ai_content(txt),
-                        from_cache: true,
-                        plausibility_structured: None,
-                    });
-                }
+            if let Some(txt) = questao.mnemonico.as_ref().filter(|s| !s.trim().is_empty()) {
+                return Ok(AiAssistResponse {
+                    question_id: question_id.to_string(),
+                    kind,
+                    content_markdown: sanitize_ai_content(txt),
+                    from_cache: true,
+                    plausibility_structured: None,
+                });
             }
         }
         AiAssistKind::Plausibility => {
-            if let Some(markdown) = &questao.plausibility_markdown {
+            if let Some(markdown) = questao
+                .plausibility_markdown
+                .as_ref()
+                .filter(|s| !s.trim().is_empty())
+            {
                 return Ok(AiAssistResponse {
                     question_id: question_id.into(),
                     kind,
@@ -233,11 +267,23 @@ pub async fn get_or_generate_ai_assist_budget(
         .next()
         .ok_or_else(|| AppError::BadRequest("Questão sem gabarito válido".into()))?;
     let correct_answer = questao.answers[correct_index].clone();
+    let content_revision = questao.revision()?;
+    let model_name = config.require_xai_model()?.to_string();
 
-    // 2. Conteúdo ausente: reserva a cota ANTES de chamar a API paga da xAI e devolve em caso de falha.
-    if let Some(user) = budget_user {
-        crate::services::rate_limit::reserve_tutor(db, user).await?;
-    }
+    // 2. Conteúdo ausente: reserva a cota (global + usuário) ANTES da API paga e devolve se falhar.
+    let reservation = if budget_user.is_some() {
+        Some(
+            crate::services::rate_limit::reserve_xai_quota(
+                db,
+                budget_user,
+                config.xai_daily_user_limit,
+                config.xai_daily_global_limit,
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
 
     let generated_result = match &kind {
         AiAssistKind::Explanation => {
@@ -338,42 +384,56 @@ pub async fn get_or_generate_ai_assist_budget(
     let generated_text = match generated_result {
         Ok(text) if crate::services::rate_limit::charges_tutor_budget(false, Some(&text)) => text,
         Ok(_) => {
-            if let Some(user) = budget_user {
-                crate::services::rate_limit::release_tutor(db, user).await;
+            if let Some(res) = &reservation {
+                crate::services::rate_limit::release_xai_quota(db, res).await;
             }
             return Err(AppError::ExternalAiError(
                 "xAI devolveu conteúdo vazio".into(),
             ));
         }
         Err(err) => {
-            if let Some(user) = budget_user {
-                crate::services::rate_limit::release_tutor(db, user).await;
+            if let Some(res) = &reservation {
+                crate::services::rate_limit::release_xai_quota(db, res).await;
             }
             return Err(err);
         }
     };
 
-    // 3. Persistir no MongoDB para nunca gastar tokens duas vezes na mesma questão
-    let update_doc = match &kind {
-        AiAssistKind::Explanation => doc! { "$set": { "explanation": &generated_text } },
+    // 3. Persistir no MongoDB com `ai_resource_meta` rastreando modelo e `content_revision`
+    let mut ai_meta = match original.get("ai_resource_meta") {
+        Some(Bson::Document(existing)) => existing.clone(),
+        _ => Document::new(),
+    };
+    ai_meta.insert(
+        kind.meta_key(hint_index),
+        doc! {
+            "provider": "xai",
+            "model": &model_name,
+            "generated_at": Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+            "evaluated_content_revision": &content_revision,
+        },
+    );
+
+    let mut set_doc = match &kind {
+        AiAssistKind::Explanation => doc! { "explanation": &generated_text },
         AiAssistKind::ContextualHint => {
             let index = hint_index.unwrap_or(0);
             let mut hints = questao.contextual_hint.clone();
             hints.resize(hints.len().max(index + 1), String::new());
             hints[index] = generated_text.clone();
-            doc! {"$set":{"contextualHint":hints}}
+            doc! { "contextualHint": hints }
         }
-        AiAssistKind::DrSincero => doc! { "$set": { "drSincero": &generated_text } },
-        AiAssistKind::ChildFriendlyPre => doc! { "$set": { "ajudaInfantil": &generated_text } },
-        AiAssistKind::ChildFriendlyPost => {
-            doc! { "$set": { "explicacaoInfantil": &generated_text } }
-        }
-        AiAssistKind::ExtraConcepts => doc! { "$set": { "explanationExtra": &generated_text } },
-        AiAssistKind::Mnemonic => doc! { "$set": { "mnemonico": &generated_text } },
-        AiAssistKind::Plausibility => doc! { "$set": { "plausibilityMarkdown": &generated_text } },
+        AiAssistKind::DrSincero => doc! { "drSincero": &generated_text },
+        AiAssistKind::ChildFriendlyPre => doc! { "ajudaInfantil": &generated_text },
+        AiAssistKind::ChildFriendlyPost => doc! { "explicacaoInfantil": &generated_text },
+        AiAssistKind::ExtraConcepts => doc! { "explanationExtra": &generated_text },
+        AiAssistKind::Mnemonic => doc! { "mnemonico": &generated_text },
+        AiAssistKind::Plausibility => doc! { "plausibilityMarkdown": &generated_text },
     };
+    set_doc.insert("ai_resource_meta", ai_meta);
+    let update_doc = doc! { "$set": set_doc };
 
-    let mut guard = doc! {"_id":oid};
+    let mut guard = doc! { "_id": oid };
     for field in [
         "question",
         "answers",
@@ -383,28 +443,28 @@ pub async fn get_or_generate_ai_assist_budget(
         "grading",
         "status",
         "validity",
-        "legal_validity",
+        "ai_resource_meta",
     ] {
         guard.insert(
             field,
             original
                 .get(field)
                 .cloned()
-                .unwrap_or_else(|| bson::Bson::Document(doc! {"$exists":false})),
+                .unwrap_or_else(|| Bson::Document(doc! { "$exists": false })),
         );
     }
     let result = match coll.update_one(guard, update_doc).await {
         Ok(res) => res,
         Err(err) => {
-            if let Some(user) = budget_user {
-                crate::services::rate_limit::release_tutor(db, user).await;
+            if let Some(res) = &reservation {
+                crate::services::rate_limit::release_xai_quota(db, res).await;
             }
             return Err(err.into());
         }
     };
     if result.matched_count != 1 {
-        if let Some(user) = budget_user {
-            crate::services::rate_limit::release_tutor(db, user).await;
+        if let Some(res) = &reservation {
+            crate::services::rate_limit::release_xai_quota(db, res).await;
         }
         return Err(AppError::Conflict(
             "Questão alterada ou removida durante a geração; conteúdo não confirmado".into(),
@@ -423,13 +483,17 @@ pub async fn get_or_generate_ai_assist_budget(
 }
 
 pub fn sanitize_ai_content(raw: &str) -> String {
-    let collapsed = regex::Regex::new(r"\n{3,}")
-        .unwrap()
-        .replace_all(raw.trim(), "\n\n");
-    let cleaned = regex::Regex::new(r"(?i)^\s*(?:🔥\s*)?(?:\*\*Dr\.\s*Sincero:?\*\*:?\s*)")
-        .unwrap()
-        .replace(&collapsed, "");
-    cleaned.trim().to_string()
+    let nl_re = COLLAPSE_NL_RE.get_or_init(|| Regex::new(r"\n{3,}").unwrap());
+    let prefix_re = DR_SINCERO_PREFIX_RE
+        .get_or_init(|| Regex::new(r"(?i)^\s*(?:🔥\s*)?(?:\*\*Dr\.\s*Sincero:?\*\*:?\s*)").unwrap());
+    let collapsed = nl_re.replace_all(raw.trim(), "\n\n");
+    let cleaned = prefix_re.replace(&collapsed, "");
+    let trimmed = cleaned.trim();
+    if trimmed.chars().count() > 20_000 {
+        trimmed.chars().take(20_000).collect::<String>()
+    } else {
+        trimmed.to_string()
+    }
 }
 
 fn format_plausibility_markdown(pa: &PlausibilityAnalysis) -> String {
@@ -463,28 +527,31 @@ pub(crate) async fn call_xai_text(
         .xai_api_key
         .as_ref()
         .ok_or_else(|| AppError::ExternalAiError("xAI não configurada".into()))?;
+    let model = config.require_xai_model()?;
     let base = config.xai_base_url.trim_end_matches('/');
     if !base.starts_with("https://") && !(cfg!(test) && base.starts_with("http://127.0.0.1:")) {
         return Err(AppError::ExternalAiError(
             "Endpoint xAI deve usar HTTPS".into(),
         ));
     }
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(40))
-        .connect_timeout(std::time::Duration::from_secs(10))
-        .build()
-        .map_err(|_| AppError::Internal("Cliente xAI indisponível".into()))?;
-    let response = client
+    let response = shared_http_client()
         .post(format!("{base}/responses"))
         .bearer_auth(key)
         .json(&json!({
-            "model":config.xai_model,"store":false,"max_output_tokens":4096,
-            "reasoning":{"effort":"low"},
-            "input":[{"role":"system","content":system_prompt},{"role":"user","content":user_prompt}]
+            "model": model,
+            "store": false,
+            "max_output_tokens": 4096,
+            "reasoning": { "effort": "low" },
+            "input": [
+                { "role": "system", "content": system_prompt },
+                { "role": "user", "content": user_prompt }
+            ]
         }))
         .send()
         .await
-        .map_err(|_| AppError::ExternalAiError("Não foi possível receber a resposta da xAI".into()))?;
+        .map_err(|_| {
+            AppError::ExternalAiError("Não foi possível receber a resposta da xAI".into())
+        })?;
     if !response.status().is_success() {
         let status = response.status().as_u16();
         let detail = response
@@ -541,23 +608,59 @@ mod tests {
 
     #[tokio::test]
     async fn provider_errors_keep_http_reason_in_the_android_and_import_contract() {
-        use axum::{routing::post, Router, response::IntoResponse, http::StatusCode};
-        for (status,body,detail) in [
-            (403, r#"{"error":"Limite de créditos atingido"}"#, Some("Limite de créditos atingido")),
-            (429, r#"{"error":{"message":"Aguarde antes de tentar novamente"}}"#, Some("Aguarde antes de tentar novamente")),
-            (503, r#"{"message":"Serviço em manutenção"}"#, Some("Serviço em manutenção")),
+        use axum::{http::StatusCode, response::IntoResponse, routing::post, Router};
+        for (status, body, detail) in [
+            (
+                403,
+                r#"{"error":"Limite de créditos atingido"}"#,
+                Some("Limite de créditos atingido"),
+            ),
+            (
+                429,
+                r#"{"error":{"message":"Aguarde antes de tentar novamente"}}"#,
+                Some("Aguarde antes de tentar novamente"),
+            ),
+            (
+                503,
+                r#"{"message":"Serviço em manutenção"}"#,
+                Some("Serviço em manutenção"),
+            ),
             (502, "<html>Bad gateway</html>", None),
         ] {
-            let listener=tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-            let address=listener.local_addr().unwrap();
-            let provider=tokio::spawn(async move { axum::serve(listener,Router::new().route("/responses",post(move || async move {(StatusCode::from_u16(status).unwrap(),body)}))).await.unwrap(); });
-            let mut config=crate::integration_tests::config("mongodb://127.0.0.1:27048/");
-            config.xai_api_key=Some("synthetic-only".into());config.xai_base_url=format!("http://{address}");
-            let error=call_xai_text(&config,"synthetic system","synthetic question").await.unwrap_err();
-            let response=error.into_response();assert_eq!(response.status(),StatusCode::BAD_GATEWAY);
-            let bytes=axum::body::to_bytes(response.into_body(),4096).await.unwrap();let payload:serde_json::Value=serde_json::from_slice(&bytes).unwrap();
-            let message=payload["message"].as_str().unwrap();assert!(message.contains(&format!("HTTP {status}")));assert!(!message.contains("synthetic-only"));
-            if let Some(detail)=detail {assert!(message.contains(detail));} else {assert!(!message.contains("<html>"));}
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let provider = tokio::spawn(async move {
+                axum::serve(
+                    listener,
+                    Router::new().route(
+                        "/responses",
+                        post(move || async move { (StatusCode::from_u16(status).unwrap(), body) }),
+                    ),
+                )
+                .await
+                .unwrap();
+            });
+            let mut config = crate::integration_tests::config("mongodb://127.0.0.1:27048/");
+            config.xai_api_key = Some("synthetic-only".into());
+            config.xai_model = Some("grok-4.20-non-reasoning".into());
+            config.xai_base_url = format!("http://{address}");
+            let error = call_xai_text(&config, "synthetic system", "synthetic question")
+                .await
+                .unwrap_err();
+            let response = error.into_response();
+            assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+            let bytes = axum::body::to_bytes(response.into_body(), 4096)
+                .await
+                .unwrap();
+            let payload: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+            let message = payload["message"].as_str().unwrap();
+            assert!(message.contains(&format!("HTTP {status}")));
+            assert!(!message.contains("synthetic-only"));
+            if let Some(detail) = detail {
+                assert!(message.contains(detail));
+            } else {
+                assert!(!message.contains("<html>"));
+            }
             provider.abort();
         }
     }
@@ -576,9 +679,11 @@ mod tests {
     }
 
     #[test]
-    fn test_sanitize_ai_content_collapses_newlines() {
+    fn test_sanitize_ai_content_collapses_newlines_and_caps_length() {
         let raw = "Linha 1\n\n\n\nLinha 2";
         assert_eq!(sanitize_ai_content(raw), "Linha 1\n\nLinha 2");
+        let huge = "a".repeat(25_000);
+        assert_eq!(sanitize_ai_content(&huge).chars().count(), 20_000);
     }
 
     #[tokio::test]
@@ -587,7 +692,6 @@ mod tests {
         assert!(Arc::strong_count(&lock_a) >= 2);
         drop(lock_a);
 
-        // Acquiring another lock triggers retain(|_, arc| Arc::strong_count(arc) > 1), pruning q1
         let lock_b = acquire_generation_lock("test_db", "q2", &AiAssistKind::Explanation).await;
         let map = LOCKS.get().unwrap().lock().await;
         assert!(!map.contains_key("test_db:q1:Mnemonic"));

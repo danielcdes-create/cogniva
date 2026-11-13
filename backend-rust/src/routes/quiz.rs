@@ -4,12 +4,13 @@ use crate::{
         activity::ConfidenceQuadrant,
         question::{QuestionDto, VALID_PROBLEM_LIST},
     },
+    security::SessionUser,
     services::quiz_selector::QuizGenerateRequest,
     AppState,
 };
 use axum::{
     extract::{Path, State},
-    Json,
+    Extension, Json,
 };
 use bson::{doc, oid::ObjectId};
 use serde::{Deserialize, Serialize};
@@ -17,8 +18,8 @@ use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnswerAttemptItem {
-    #[serde(default,skip_serializing_if="Option::is_none")]
-    pub exam_component_id:Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exam_component_id: Option<String>,
     pub attempt_id: String,
     pub occurred_at: String,
     pub question_revision: String,
@@ -42,6 +43,7 @@ pub struct AnswerAttemptItem {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct SubmitBatchRequest {
+    #[serde(default)]
     pub user_id: i64,
     pub attempts: Vec<AnswerAttemptItem>,
 }
@@ -78,6 +80,7 @@ pub struct SubmitBatchResponse {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ReportProblemRequest {
+    #[serde(default)]
     pub user_id: i64,
     pub problem_category: String,
 }
@@ -90,22 +93,34 @@ pub struct RejectedAttemptResult {
     pub retryable: bool,
 }
 
-/// Endpoint `POST /api/v1/quiz/generate`: Gera fila de questões para qualquer modo
+/// Endpoint `POST /api/v1/quiz/generate`: Gera fila de questões vinculada à sessão autenticada
 pub async fn handle_generate_quiz(
     State(state): State<Arc<AppState>>,
-    Json(req): Json<QuizGenerateRequest>,
+    Extension(user): Extension<SessionUser>,
+    Json(mut req): Json<QuizGenerateRequest>,
 ) -> Result<Json<Vec<QuestionDto>>, AppError> {
+    if req.user_id != 0 && req.user_id != user.user_id {
+        return Err(AppError::Forbidden(
+            "Não é permitido consultar filas de outra conta".into(),
+        ));
+    }
+    req.user_id = user.user_id;
     let questions = crate::services::selection_v2::generate(&state, &req).await?;
     Ok(Json(questions))
 }
 
 /// Endpoint `POST /api/v1/quiz/submit-batch`:
-/// Processa 1 ou N tentativas (ideal para sincronização Offline-First do Room via WorkManager),
-/// executando toda a matemática do `update_user_question_performance` do AFTBot.py em Rust nativo.
+/// Processa 1 ou N tentativas vinculadas à sessão autenticada (com recibo durável de idempotência).
 pub async fn handle_submit_batch(
     State(state): State<Arc<AppState>>,
+    Extension(user): Extension<SessionUser>,
     Json(req): Json<SubmitBatchRequest>,
 ) -> Result<Json<SubmitBatchResponse>, AppError> {
+    if req.user_id != 0 && req.user_id != user.user_id {
+        return Err(AppError::Forbidden(
+            "Não é permitido registrar tentativas em outra conta".into(),
+        ));
+    }
     if req.attempts.len() > 120 {
         return Err(AppError::BadRequest(
             "Envie no máximo 120 tentativas por lote".into(),
@@ -114,7 +129,7 @@ pub async fn handle_submit_batch(
     let mut results = Vec::new();
     let mut rejected = Vec::new();
     for item in &req.attempts {
-        match crate::services::attempts::commit(&state, req.user_id, item).await {
+        match crate::services::attempts::commit(&state, user.user_id, item).await {
             Ok(ack) => results.push(ack),
             Err(error) => {
                 let retryable = matches!(
@@ -144,12 +159,18 @@ pub async fn handle_submit_batch(
     }))
 }
 
-/// Endpoint `POST /api/v1/questions/:id/report`: Salva reporte de problema em `reportedQuestoes`
+/// Endpoint `POST /api/v1/questions/:id/report`: Salva reporte isolado por usuário em `reportedQuestoes`
 pub async fn handle_report_problem(
     State(state): State<Arc<AppState>>,
+    Extension(user): Extension<SessionUser>,
     Path(question_id): Path<String>,
     Json(req): Json<ReportProblemRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
+    if req.user_id != 0 && req.user_id != user.user_id {
+        return Err(AppError::Forbidden(
+            "Não é permitido reportar questões em nome de outra conta".into(),
+        ));
+    }
     if !VALID_PROBLEM_LIST.contains(&req.problem_category.as_str()) {
         return Err(AppError::BadRequest(format!(
             "Categoria de problema inválida: {}",
@@ -161,7 +182,7 @@ pub async fn handle_report_problem(
     if state
         .db
         .collection::<bson::Document>("todasQuestoes")
-        .find_one(doc! {"_id":q_oid})
+        .find_one(doc! { "_id": q_oid })
         .await?
         .is_none()
     {
@@ -174,13 +195,16 @@ pub async fn handle_report_problem(
 
     rep_coll
         .update_one(
-            doc! { "questao_id": q_oid, "user_id": req.user_id },
+            doc! { "questao_id": q_oid, "user_id": user.user_id },
             doc! {
                 "$addToSet": { "problemas": &req.problem_category },
-                "$set": { "ultima_atualizacao": now },
+                "$set": {
+                    "ultima_atualizacao": now,
+                    "fix.status_solved": false,
+                    "fix.data_solved": bson::Bson::Null,
+                },
                 "$setOnInsert": {
                     "data_report": now,
-                    "fix": { "data_solved": bson::Bson::Null, "status_solved": false }
                 }
             },
         )
@@ -193,7 +217,10 @@ pub async fn handle_report_problem(
     state
         .db
         .collection::<bson::Document>("todasQuestoes")
-        .update_one(doc! { "_id": q_oid }, doc! { "$max": { "reports": unique_reports as i64, "reports_unique": unique_reports as i64 } })
+        .update_one(
+            doc! { "_id": q_oid },
+            doc! { "$max": { "reports": unique_reports as i64, "reports_unique": unique_reports as i64 } },
+        )
         .await?;
 
     Ok(Json(serde_json::json!({

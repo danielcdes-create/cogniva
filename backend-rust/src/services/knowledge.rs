@@ -1,4 +1,4 @@
-//! Read-only knowledge projection v1. Never re-tags or duplicates learning events.
+//! Read-only knowledge projection v2. Never re-tags or duplicates learning events.
 use crate::{error::AppError, services::question_compatibility};
 use bson::{doc, oid::ObjectId, Document};
 use futures::TryStreamExt;
@@ -72,8 +72,8 @@ pub fn project(activity: &Document, question: &Document) -> Option<Evidence> {
         .collect();
     let confidence =
         Some((recent.iter().sum::<i32>() as f64 / recent.len() as f64 + 0.5).floor() as i32);
-        let recorded_practices = activity.get_i32("quantidade_praticas").unwrap_or(0) as usize;
-        let last = events.last()?;
+    let recorded_practices = activity.get_i32("quantidade_praticas").unwrap_or(0) as usize;
+    let last = events.last()?;
     Some(Evidence {
         canonical_subject_id: subject.clone(),
         canonical_topic_id: topic.clone(),
@@ -107,10 +107,22 @@ pub fn project(activity: &Document, question: &Document) -> Option<Evidence> {
 
 pub async fn questions(
     db: &Database,
+    user: i64,
     ids: Vec<ObjectId>,
 ) -> Result<HashMap<ObjectId, Document>, AppError> {
+    if ids.is_empty() {
+        return Ok(HashMap::new());
+    }
     let mut result = HashMap::new();
-    let mut reports=db.collection::<Document>("reportedQuestoes").find(doc!{"fix.status_solved":false,"questao_id":{"$in":&ids},"problemas":{"$in":super::selection_v2::INVALID_REPORTS.as_slice()}}).await?;
+    let mut reports = db
+        .collection::<Document>("reportedQuestoes")
+        .find(doc! {
+            "user_id": user,
+            "fix.status_solved": false,
+            "questao_id": { "$in": &ids },
+            "problemas": { "$in": super::selection_v2::INVALID_REPORTS.as_slice() }
+        })
+        .await?;
     let mut excluded = HashSet::new();
     while let Some(row) = reports.try_next().await? {
         if let Ok(id) = row.get_object_id("questao_id") {
@@ -119,7 +131,7 @@ pub async fn questions(
     }
     let mut cursor = db
         .collection::<Document>("todasQuestoes")
-        .find(doc! {"_id":{"$in":ids}})
+        .find(doc! { "_id": { "$in": ids } })
         .await?;
     while let Some(q) = cursor.try_next().await? {
         if let Ok(id) = q.get_object_id("_id") {
@@ -134,12 +146,13 @@ pub async fn questions(
 pub async fn load(db: &Database, user: i64) -> Result<Vec<Evidence>, AppError> {
     let rows: Vec<Document> = db
         .collection::<Document>("userActivityLog")
-        .find(doc! {"user_id":user})
+        .find(doc! { "user_id": user })
         .await?
         .try_collect()
         .await?;
     let questions = questions(
         db,
+        user,
         rows.iter()
             .filter_map(|r| r.get_object_id("question_id").ok())
             .collect(),
@@ -169,6 +182,7 @@ pub fn slice(e: Evidence) -> super::exam_engine::CanonicalActivitySlice {
         high_confidence_error: e.high_confidence_error,
     }
 }
+
 pub async fn slices(
     db: &Database,
     user: i64,
@@ -176,11 +190,35 @@ pub async fn slices(
     Ok(load(db, user).await?.into_iter().map(slice).collect())
 }
 
+/// Verified V2 human classification binding check.
+pub fn reviewed_binding(
+    question: &Document,
+    q: &crate::models::question::QuestionDocument,
+) -> bool {
+    let Some(subject) = q.canonical_subject_id.as_ref() else {
+        return false;
+    };
+    let Some(topic) = q.canonical_topic_id.as_ref() else {
+        return false;
+    };
+    if !super::question_contracts::known_topic(subject, topic) || q.revision().is_err() {
+        return false;
+    }
+    let Ok(classification) = question.get_document("classification") else {
+        return false;
+    };
+    matches!(
+        classification.get_str("state").ok(),
+        Some("CONFIRMED" | "PARTIAL")
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
-    fn legacy_coverage_requires_the_operator_receipt_for_exact_content() {
+    fn unreviewed_or_unclassified_questions_do_not_project_topic_coverage() {
         let value: serde_json::Value = serde_json::from_str(include_str!(
             "../../../shared/examples/question-contracts/question-multiple-choice.json"
         ))
@@ -190,29 +228,13 @@ mod tests {
             .as_document()
             .unwrap()
             .clone();
-        q.remove("schema_version");
         q.remove("classification");
-        q.insert("canonical_subject_id", "MAT");
-        q.insert("canonical_topic_id", "MAT_01_001");
         let typed = question_compatibility::decode(q.clone()).unwrap();
         let revision = typed.revision().unwrap();
-        let row = doc! {"pastSessions":[{"attempt_id":"a","question_revision":&revision,"status":true,"nivel_confianca":3}]};
+        let row = doc! { "pastSessions": [{ "attempt_id": "a", "question_revision": &revision, "status": true, "nivel_confianca": 3 }] };
         assert!(project(&row, &q).is_none());
-        let entry = crate::routes::canonical_mapping::MappingEntry {
-            operation_id: uuid::Uuid::new_v4().to_string(),
-            question_id: typed.id.to_hex(),
-            question_revision: revision,
-            expected_mapping_revision: 0,
-            canonical_subject_id: "MAT".into(),
-            canonical_topic_id: "MAT_01_001".into(),
-            reviewed_reason: "Manual review for this exact content.".into(),
-        };
-        use sha2::{Digest, Sha256};
-        let hash = format!("{:x}", Sha256::digest(serde_json::to_vec(&entry).unwrap()));
-        q.insert("canonical_mapping_revision", 1_i64);
-        q.insert("canonical_mapping_history",vec![doc!{"operation_id":entry.operation_id,"payload_sha256":hash,"reviewed_by":123_i64,"reviewed_reason":entry.reviewed_reason}]);
-        assert_eq!(project(&row, &q).unwrap().attempts, 1);
     }
+
     #[test]
     fn only_same_content_unique_events_support_the_primary_topic() {
         let value: serde_json::Value = serde_json::from_str(include_str!(
@@ -228,8 +250,8 @@ mod tests {
             .unwrap()
             .revision()
             .unwrap();
-        let event = doc! {"attempt_id":"a","question_revision":&revision,"status":true,"nivel_confianca":3,"data":bson::DateTime::now()};
-        let row = doc! {"quantidade_praticas":3,"dominada":true,"pastSessions":[event.clone(),event,{"attempt_id":"old","question_revision":"old-body","status":true},{"attempt_id":"unknown","status":true}]};
+        let event = doc! { "attempt_id": "a", "question_revision": &revision, "status": true, "nivel_confianca": 3, "data": bson::DateTime::now() };
+        let row = doc! { "quantidade_praticas": 3, "dominada": true, "pastSessions": [event.clone(), event, { "attempt_id": "old", "question_revision": "old-body", "status": true }, { "attempt_id": "unknown", "status": true }] };
         let before = row.clone();
         let evidence = project(&row, &q).unwrap();
         assert_eq!(evidence.attempts, 1);
@@ -242,7 +264,7 @@ mod tests {
     }
 
     #[test]
-    fn legacy_practice_count_above_events_len_allows_mastery_when_current_revision_is_mastered() {
+    fn practice_count_above_events_len_allows_mastery_when_current_revision_is_mastered() {
         let value: serde_json::Value = serde_json::from_str(include_str!(
             "../../../shared/examples/question-contracts/question-multiple-choice.json"
         ))
@@ -256,14 +278,14 @@ mod tests {
             .unwrap()
             .revision()
             .unwrap();
-        let ev1 = doc! {"attempt_id":"a1","question_revision":&revision,"status":true,"nivel_confianca":3,"data":bson::DateTime::from_millis(1000)};
-        let ev2 = doc! {"attempt_id":"a2","question_revision":&revision,"status":true,"nivel_confianca":3,"data":bson::DateTime::from_millis(2000)};
-        let ev3 = doc! {"attempt_id":"a3","question_revision":&revision,"status":true,"nivel_confianca":3,"data":bson::DateTime::from_millis(3000)};
+        let ev1 = doc! { "attempt_id": "a1", "question_revision": &revision, "status": true, "nivel_confianca": 3, "data": bson::DateTime::from_millis(1000) };
+        let ev2 = doc! { "attempt_id": "a2", "question_revision": &revision, "status": true, "nivel_confianca": 3, "data": bson::DateTime::from_millis(2000) };
+        let ev3 = doc! { "attempt_id": "a3", "question_revision": &revision, "status": true, "nivel_confianca": 3, "data": bson::DateTime::from_millis(3000) };
         let row = doc! {
             "quantidade_praticas": 6,
             "dominada": true,
             "pastSessions": [
-                {"attempt_id": "legacy-unversioned", "status": false},
+                { "attempt_id": "legacy-unversioned", "status": false },
                 ev1,
                 ev2,
                 ev3
@@ -276,65 +298,4 @@ mod tests {
         q.insert("question", "Edited content");
         assert!(project(&row, &q).is_none());
     }
-}
-
-/// Called only after the read adapter validates structured classification.
-pub fn reviewed_binding(
-    question: &Document,
-    q: &crate::models::question::QuestionDocument,
-) -> bool {
-    (|| -> Option<()> {
-        let subject = q.canonical_subject_id.as_ref()?;
-        let topic = q.canonical_topic_id.as_ref()?;
-        if !super::question_contracts::known_topic(subject, topic) {
-            return None;
-        }
-        let revision = q.revision().ok()?;
-        if !question.contains_key("classification") && !question.contains_key("canonical_mapping_revision")
-            && super::legacy_classification::binding(question).is_some() {return Some(());}
-        if !question.contains_key("classification") {
-            // Singular legacy IDs remain readable, but coverage requires the
-            // operator's original review receipt for this exact content/mapping.
-            let mapping_revision = question
-                .get_i64("canonical_mapping_revision")
-                .ok()
-                .or_else(|| {
-                    question
-                        .get_i32("canonical_mapping_revision")
-                        .ok()
-                        .map(i64::from)
-                })?;
-            if mapping_revision < 1 {
-                return None;
-            }
-            let review = question
-                .get_array("canonical_mapping_history")
-                .ok()?
-                .last()?
-                .as_document()?;
-            let reviewer = review
-                .get_i64("reviewed_by")
-                .ok()
-                .or_else(|| review.get_i32("reviewed_by").ok().map(i64::from))?;
-            if reviewer < 1 {
-                return None;
-            }
-            let entry = crate::routes::canonical_mapping::MappingEntry {
-                operation_id: review.get_str("operation_id").ok()?.into(),
-                question_id: q.id.to_hex(),
-                question_revision: revision.clone(),
-                expected_mapping_revision: mapping_revision - 1,
-                canonical_subject_id: subject.clone(),
-                canonical_topic_id: topic.clone(),
-                reviewed_reason: review.get_str("reviewed_reason").ok()?.into(),
-            };
-            use sha2::{Digest, Sha256};
-            let digest = format!("{:x}", Sha256::digest(serde_json::to_vec(&entry).ok()?));
-            if review.get_str("payload_sha256").ok() != Some(digest.as_str()) {
-                return None;
-            }
-        }
-        Some(())
-    })()
-    .is_some()
 }

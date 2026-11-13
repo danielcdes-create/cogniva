@@ -1,13 +1,11 @@
-"""Dry-run inventory of raw question documents. Never writes the bank or learning events."""
+"""Dry-run inventory of question documents against Cogniva V2 contracts. Never writes to MongoDB."""
 import argparse
 import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 STATES = (
-    "legacy_unclassified",
-    "legacy_auto_applied",
-    "existing_singular_canonical",
+    "legacy_needs_migration",
     "v2_confirmed",
     "v2_partial",
     "v2_unclassified",
@@ -27,14 +25,6 @@ def _topics(catalog):
 
 def _subjects(catalog):
     return {subject["subject_id"]: subject for subject in catalog["subjects"] if subject["status"] == "ACTIVE"}
-
-
-def _labels(catalog):
-    names = set()
-    for subject in catalog["subjects"]:
-        names.add(subject["label"].casefold())
-        names.update(alias.casefold() for alias in subject.get("aliases", []))
-    return names
 
 
 def _text_list(value):
@@ -63,11 +53,15 @@ def _answer_key_ambiguous(document):
             return True
         if mapped and sorted(set(mapped)) != sorted(set(indices)):
             return True
-    return len(indices if isinstance(indices,list) and indices else mapped)!=1
+    return len(indices if isinstance(indices, list) and indices else mapped) != 1
 
 
 def _human(provenance):
-    return isinstance(provenance, dict) and provenance.get("actor", {}).get("type") == "HUMAN" and provenance.get("method") == "MANUAL_REVIEW"
+    return (
+        isinstance(provenance, dict)
+        and provenance.get("actor", {}).get("type") == "HUMAN"
+        and provenance.get("method") == "MANUAL_REVIEW"
+    )
 
 
 def _valid_links(links, topics):
@@ -92,66 +86,55 @@ def _valid_links(links, topics):
 
 
 def classify_document(document, catalog):
-    """One bucket per document. A textual label is never a canonical reference."""
+    """Classify a raw or V2 document into an inventory bucket without mutating it."""
     if not isinstance(document, dict):
         return "insufficient_metadata"
     question = document.get("question")
     if not isinstance(question, str) or not question.strip():
         return "insufficient_metadata"
-    if document.get("schema_version")==2:
+
+    if document.get("schema_version") == 2:
         from question_contracts import validate_question
+
         try:
-            validate_question(document,catalog)
-        except (ValueError,KeyError,TypeError):
+            validate_question(document, catalog)
+        except (ValueError, KeyError, TypeError):
             return "invalid_ambiguous"
-    elif not _text_list(document.get("answers")):
-        return "insufficient_metadata"
-    validity = document.get("validity") if isinstance(document.get("validity"), dict) else {}
-    if document.get("status") == "ARCHIVED" or validity.get("status") in ("OBSOLETE", "UNDER_REVIEW"):
-        return "obsolete_under_review"
-    topics = _topics(catalog)
-    classification = document.get("classification") if isinstance(document.get("classification"), dict) else None
-    schema_version = document.get("schema_version")
-    if schema_version == 2 and isinstance(classification, dict):
+        validity = document.get("validity") if isinstance(document.get("validity"), dict) else {}
+        if document.get("status") == "ARCHIVED" or validity.get("status") in ("OBSOLETE", "UNDER_REVIEW"):
+            return "obsolete_under_review"
+        classification = document.get("classification", {})
         state = classification.get("state")
-        links = classification.get("links")
+        links = classification.get("links", [])
         if state == "UNCLASSIFIED" and links == []:
             return "v2_unclassified"
-        elif state in ("CONFIRMED", "PARTIAL") and isinstance(links, list) and links:
-            primaries = _valid_links(links, topics)
+        if state in ("CONFIRMED", "PARTIAL") and isinstance(links, list) and links:
+            primaries = _valid_links(links, _topics(catalog))
             if primaries is None or len(primaries) > 1 or (state == "CONFIRMED" and len(primaries) != 1):
                 return "invalid_ambiguous"
-            if state == "CONFIRMED":
-                return "v2_confirmed"
-            return "v2_partial"
-        elif state == "UNCLASSIFIED":
-            return "invalid_ambiguous"
-        else:
-            return "invalid_ambiguous"
+            return "v2_confirmed" if state == "CONFIRMED" else "v2_partial"
+        return "invalid_ambiguous"
+
+    if not _text_list(document.get("answers")):
+        return "insufficient_metadata"
+    validity = document.get("validity") if isinstance(document.get("validity"), dict) else {}
+    legal_validity = document.get("legal_validity") if isinstance(document.get("legal_validity"), dict) else {}
+    if (
+        document.get("status") == "ARCHIVED"
+        or validity.get("status") in ("OBSOLETE", "UNDER_REVIEW")
+        or legal_validity.get("status") in ("OUTDATED_LAW", "UNDER_REVIEW")
+    ):
+        return "obsolete_under_review"
+    if _answer_key_ambiguous(document):
+        return "invalid_ambiguous"
     subject_id = document.get("canonical_subject_id")
-    if _answer_key_ambiguous(document):
-        return "invalid_ambiguous"
-    if "legacy_auto_classification" in document and not classification:
-        from legacy_classification_preservation import validate_auto
-        try:
-            validate_auto(document)
-            return "legacy_auto_applied"
-        except (ValueError, KeyError, TypeError, StopIteration):
-            return "invalid_ambiguous"
     topic_id = document.get("canonical_topic_id")
-    labels = _labels(catalog)
-    if isinstance(subject_id, str) and subject_id.casefold() in labels and subject_id not in _subjects(catalog):
-        return "legacy_unclassified"
-    if isinstance(subject_id, str) or isinstance(topic_id, str):
-        topic = topics.get(topic_id) if isinstance(topic_id, str) else None
-        subject_known = isinstance(subject_id, str) and subject_id in _subjects(catalog)
-        if topic is not None and subject_known and topic["subject_id"] == subject_id:
-            return "existing_singular_canonical"
-        if subject_id not in (None, "") or topic_id not in (None, ""):
+    if subject_id not in (None, "") or topic_id not in (None, ""):
+        topics = _topics(catalog)
+        subjects = _subjects(catalog)
+        if subject_id not in subjects or (topic_id not in (None, "") and (topic_id not in topics or topics[topic_id]["subject_id"] != subject_id)):
             return "invalid_ambiguous"
-    if _answer_key_ambiguous(document):
-        return "invalid_ambiguous"
-    return "legacy_unclassified"
+    return "legacy_needs_migration"
 
 
 def inventory(documents, catalog):
@@ -162,9 +145,6 @@ def inventory(documents, catalog):
         "dry_run": True,
         "documents_read": len(documents),
         "documents_modified": 0,
-        "learning_events_modified": 0,
-        "legacy_singular_assumed_human_review": False,
-        "textual_name_counted_as_canonical": 0,
         "counts": counts,
     }
 
@@ -172,19 +152,15 @@ def inventory(documents, catalog):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, required=True)
-    parser.add_argument("--learning", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     if not args.dry_run:
-        raise SystemExit("O inventário da etapa 5 só executa com --dry-run e não altera documentos.")
+        raise SystemExit("inventory_questions.py só executa com --dry-run e nunca altera documentos.")
     documents = json.loads(args.input.read_text(encoding="utf-8"))
     if not isinstance(documents, list):
-        raise SystemExit("A entrada deve ser uma lista de documentos brutos.")
+        raise SystemExit("A entrada deve ser uma lista de documentos JSON.")
     report = inventory(documents, load_catalog())
-    if args.learning:
-        events = json.loads(args.learning.read_text(encoding="utf-8"))
-        report["learning_event_count"] = len(events) if isinstance(events, list) else 0
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(json.dumps(report, indent=2))

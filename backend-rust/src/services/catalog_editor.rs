@@ -320,24 +320,25 @@ pub async fn save(state: &AppState, user: i64, r: DraftRequest) -> Result<Value,
     let validation=if r.status=="REVIEW_READY"{validate(&r.catalog)?}else{json!(null)};
     let catalog =
         Bson::try_from(payload["catalog"].clone()).map_err(|_| bad("Catálogo não armazenável"))?;
-    let version = doc! {"_id":&version_key,"draft_id":&r.draft_id,"owner_user_id":user,"revision":revision,"payload_sha256":&payload_hash,"base_catalog_sha256":&r.base_catalog_sha256,"status":&r.status,"catalog":catalog,"saved_at":bson::DateTime::now()};
-    if let Some(old) = versions.find_one(doc! {"_id":&version_key}).await? {
-        if old.get_str("payload_sha256").ok() != Some(&payload_hash) {
-            return Err(AppError::Conflict(
-                "Outra proposta já reservou esta revisão".into(),
-            ));
-        }
-    } else {
-        versions.insert_one(version.clone()).await?;
-    }
-    let mut head = version;
+    let version_doc = doc! {
+        "_id": &version_key,
+        "draft_id": &r.draft_id,
+        "owner_user_id": user,
+        "revision": revision,
+        "payload_sha256": &payload_hash,
+        "base_catalog_sha256": &r.base_catalog_sha256,
+        "status": &r.status,
+        "catalog": catalog,
+        "saved_at": bson::DateTime::now()
+    };
+    let mut head = version_doc.clone();
     head.insert("_id", &key);
     if r.expected_revision == 0 {
         heads.insert_one(head.clone()).await?;
     } else {
         let result = heads
             .replace_one(
-                doc! {"_id":&key,"revision":r.expected_revision},
+                doc! { "_id": &key, "revision": r.expected_revision },
                 head.clone(),
             )
             .await?;
@@ -347,14 +348,19 @@ pub async fn save(state: &AppState, user: i64, r: DraftRequest) -> Result<Value,
             ));
         }
     }
-    Ok(json!({"draft":Bson::Document(head).into_relaxed_extjson(),"validation":validation}))
+    versions
+        .update_one(doc! { "_id": &version_key }, doc! { "$setOnInsert": version_doc })
+        .upsert(true)
+        .await?;
+    Ok(json!({ "draft": Bson::Document(head).into_relaxed_extjson(), "validation": validation }))
 }
+
 pub async fn list(state: &AppState, user: i64) -> Result<Value, AppError> {
     let rows: Vec<Document> = question_storage::collection(&state.db, "catalog_editor_drafts")
-        .find(doc! {"owner_user_id":user})
-        .sort(doc! {"saved_at":-1})
+        .find(doc! { "$or": [{ "owner_user_id": user }, { "status": "REVIEW_READY" }] })
+        .sort(doc! { "saved_at": -1 })
         .limit(50)
-        .projection(doc! {"catalog":0})
+        .projection(doc! { "catalog": 0 })
         .await?
         .try_collect()
         .await?;
@@ -363,11 +369,23 @@ pub async fn list(state: &AppState, user: i64) -> Result<Value, AppError> {
         .map(|d| Bson::Document(d).into_relaxed_extjson())
         .collect::<Vec<_>>()))
 }
+
 pub async fn get(state: &AppState, user: i64, id: &str) -> Result<Value, AppError> {
-    let row = question_storage::collection(&state.db, "catalog_editor_drafts")
-        .find_one(doc! {"_id":format!("{user}:{id}"),"owner_user_id":user})
+    get_for_review(state, user, id).await
+}
+
+pub async fn get_for_review(state: &AppState, user: i64, id: &str) -> Result<Value, AppError> {
+    let coll = question_storage::collection(&state.db, "catalog_editor_drafts");
+    let row = match coll
+        .find_one(doc! { "_id": format!("{user}:{id}"), "owner_user_id": user })
         .await?
-        .ok_or_else(|| AppError::NotFound("Rascunho ausente nesta conta".into()))?;
+    {
+        Some(doc) => doc,
+        None => coll
+            .find_one(doc! { "draft_id": id, "status": "REVIEW_READY" })
+            .await?
+            .ok_or_else(|| AppError::NotFound("Rascunho ausente ou não liberado para revisão".into()))?,
+    };
     Ok(Bson::Document(row).into_relaxed_extjson())
 }
 
@@ -376,14 +394,14 @@ mod tests {
     use super::*;
     fn next() -> Value {
         let mut c = question_contracts::catalog();
-        c["catalog_version"] = json!(2);
+        c["catalog_version"] = json!(c["catalog_version"].as_i64().unwrap() + 1);
         c
     }
     #[test]
     fn next_version_exports_registry_without_touching_baseline() {
         let c = next();
         assert!(validate(&c).is_ok());
-        assert_eq!(question_contracts::catalog_ref()["catalog_version"], 1);
+        assert_eq!(question_contracts::catalog_ref()["catalog_version"], 2);
     }
     #[test]
     fn rejects_deletion_reparenting_and_lost_names() {

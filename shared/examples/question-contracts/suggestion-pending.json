@@ -4,7 +4,7 @@
   "question_id": "000000000000000000000007",
   "question_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
   "expected_classification_revision": 0,
-  "catalog_version": 1,
+  "catalog_version": 2,
   "status": "PENDING",
   "proposed_links": [
     {

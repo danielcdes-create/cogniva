@@ -170,16 +170,48 @@ class AuditFindingsTest {
     }
 
     @Test
-    fun reusedLinkCodeIsNotShownAsExpired() {
+    fun invalidCredentialsAreDistinguishedFromExpiredSessionsAndConflicts() {
         assertEquals(
-            AccountLinkMessages.REUSED,
-            AccountLinkMessages.fromHttp(401, "Código de vínculo já utilizado em outra sessão"),
+            AccountLinkMessages.INVALID_CREDENTIALS,
+            AccountLinkMessages.fromHttp(401, "E-mail ou senha incorretos"),
         )
         assertEquals(AccountLinkMessages.EXPIRED, AccountLinkMessages.fromHttp(401, "Sessão inválida ou expirada"))
+        assertEquals(AccountLinkMessages.EMAIL_IN_USE, AccountLinkMessages.fromHttp(409, "E-mail já cadastrado"))
+        assertEquals(AccountLinkMessages.RATE_LIMITED, AccountLinkMessages.fromHttp(429, "Limite atingido"))
         assertNotEquals(
-            AccountLinkMessages.fromHttp(401, "Código de vínculo já utilizado em outra sessão"),
+            AccountLinkMessages.fromHttp(401, "E-mail ou senha incorretos"),
             AccountLinkMessages.fromHttp(401, "Sessão inválida ou expirada"),
         )
+    }
+
+    @Test
+    fun examBoardsWithCommasAndTemplateMetadataSurviveLocalMapping() {
+        val original = exam("rfb", "AUTORIZADO", emptyList()).copy(
+            examBoards = listOf("FGV, Projetos", "Cebraspe"),
+            templateSourceId = "RFB",
+            templateRevisionSynced = 2L,
+            isCustomized = true,
+            upstreamUpdateAvailable = true,
+        )
+        val entity = br.com.concursoprep.app.data.local.ExamLocalMapping.toEntity(original)
+        val restored = br.com.concursoprep.app.data.local.ExamLocalMapping.assemble(
+            entity,
+            br.com.concursoprep.app.data.local.ExamLocalMapping.subjectsOf(original),
+            emptyList(),
+        )
+        assertEquals(listOf("FGV, Projetos", "Cebraspe"), restored.examBoards)
+        assertEquals("RFB", restored.templateSourceId)
+        assertEquals(2L, restored.templateRevisionSynced)
+        assertTrue(restored.isCustomized)
+        assertTrue(restored.upstreamUpdateAvailable)
+
+        val legacyCsv = entity.copy(examBoardsCsv = "FGV,Cebraspe")
+        val restoredLegacy = br.com.concursoprep.app.data.local.ExamLocalMapping.assemble(
+            legacyCsv,
+            br.com.concursoprep.app.data.local.ExamLocalMapping.subjectsOf(original),
+            emptyList(),
+        )
+        assertEquals(listOf("FGV", "Cebraspe"), restoredLegacy.examBoards)
     }
 
     @Test

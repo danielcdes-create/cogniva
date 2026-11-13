@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Cogniva knowledge catalog v1",
+  "title": "Cogniva unified knowledge catalog",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -24,7 +24,7 @@
       "const": "knowledge-catalog.schema.json"
     },
     "schema_version": {
-      "const": 1
+      "const": 2
     },
     "catalog_id": {
       "const": "cogniva-knowledge"
@@ -38,10 +38,16 @@
       "format": "date"
     },
     "status": {
-      "const": "EDITORIAL_BASELINE"
+      "enum": [
+        "ACTIVE",
+        "EDITORIAL_BASELINE"
+      ]
     },
     "review_status": {
-      "const": "EDITORIAL_PROPOSAL"
+      "enum": [
+        "APPROVED",
+        "EDITORIAL_PROPOSAL"
+      ]
     },
     "language": {
       "const": "pt-BR"
@@ -90,20 +96,10 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "runtime_catalog_path",
-        "runtime_catalog_sha256",
         "legacy_subject_ids",
-        "legacy_topic_ids",
-        "runtime_transition"
+        "legacy_topic_ids"
       ],
       "properties": {
-        "runtime_catalog_path": {
-          "const": "shared/canonical-catalog.json"
-        },
-        "runtime_catalog_sha256": {
-          "type": "string",
-          "pattern": "^[a-f0-9]{64}$"
-        },
         "legacy_subject_ids": {
           "type": "array",
           "items": {
@@ -121,9 +117,6 @@
           },
           "uniqueItems": true,
           "minItems": 1
-        },
-        "runtime_transition": {
-          "const": "NOT_APPLIED"
         }
       }
     }
@@ -168,6 +161,7 @@
       "required": [
         "trunk_id",
         "label",
+        "icon_key",
         "aliases",
         "source_ids",
         "status"
@@ -181,6 +175,11 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 1000
+        },
+        "icon_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
         },
         "aliases": {
           "type": "array",
@@ -215,6 +214,7 @@
       "required": [
         "trunk_id",
         "role",
+        "default_weight",
         "basis",
         "note"
       ],
@@ -228,6 +228,11 @@
             "FOUNDATIONAL",
             "RELATED"
           ]
+        },
+        "default_weight": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 10.0
         },
         "basis": {
           "enum": [
