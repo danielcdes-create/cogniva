@@ -259,7 +259,7 @@ jobs:
             --python-version "$py_ver" \
             --only-binary=:all: \
             --target "$bundle/deps" \
-            jsonschema==4.26.0 rfc8785==0.1.4 pymongo==4.11.2 dnspython
+            'jsonschema>=4.26.0' 'rfc8785>=0.1.4' 'pymongo>=4.15.2' dnspython
 
           remote_tmp="/tmp/cogniva-mig-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           tar -C "$bundle" -czf - . | ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" \
