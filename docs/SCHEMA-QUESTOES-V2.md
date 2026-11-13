@@ -1,121 +1,67 @@
-# Contratos de questões, classificação, validade e correção
+# Contratos e Schema de Questões V2
 
-O módulo de [inserção individual, em lote e assistida por IA](INSERCAO-QUESTOES.md) implementa o cadastro e a revisão no Android sobre estes contratos. Sua implantação é independente das evidências históricas descritas abaixo; ele não ativa correção aberta automática nem muda o schema validado.
+No **Cogniva `2.0.0`**, 100% do acervo em `cogniva.todasQuestoes` segue estritamente o contrato `schema_version = 2`, formalizado em [`shared/schemas/question-contracts.schema.json`](../shared/schemas/question-contracts.schema.json), exemplificado em [`shared/examples/question-contracts/`](../shared/examples/question-contracts/) e validado por [`scripts/question_contracts.py`](../scripts/question_contracts.py) e pelo backend Rust.
 
-Exceção autorizada posterior, restrita ao inventário de 618 IDs: [classificação automática sob demanda](CLASSIFICACAO-LEGADO-SOB-DEMANDA.md). Ela usa uma extensão própria com proveniência AI, sem transformar sugestões em confirmação humana do contrato v2. Documentos novos continuam sujeitos ao schema v2 completo; a migração `legacy-cohort-guard/1` fecha a permissão de formato legado fora do inventário.
+---
 
-Etapa 2 formalizada em `shared/schemas/question-contracts.schema.json`, com exemplos em `shared/examples/question-contracts/` e regras executáveis em `scripts/question_contracts.py`. As etapas [3](ETAPA-3-BACKEND-MONGO.md) e [4](ETAPA-4-CADASTRO-CATALOGO.md), implementadas para 1.4.5/build 12, acrescentam validação e escrita no backend, preparação aditiva do Mongo e cadastro associado no Android. Estado de publicação e aceite: `remediation-validation/1.4.5/`. Não há reclassificação automática do acervo nem chamada paga de IA nesta adaptação. A etapa 5 grava sugestões e decisões neste mesmo contrato. O exemplo `suggestion-pending.json` continua pendente: confiança do modelo não confirma classificação nem entra na seleção. Nenhum lote de produção reclassificou o acervo.
+## 1. Coleções e Separação de Autoridade
 
-O arquivo usa JSON Schema draft 2020-12 e Extended JSON para `_id: {"$oid":"..."}`. Ele não pode ser aplicado diretamente como `collMod`: a etapa 3 precisa adaptar tipos BSON e o subconjunto de validação do Mongo, além de implementar no Rust as regras entre documentos e a autenticação. [Validação no MongoDB](https://www.mongodb.com/docs/manual/core/schema-validation/), [condicionais em JSON Schema](https://json-schema.org/understanding-json-schema/reference/conditionals).
+| Contrato / Coleção | Autoridade |
+| :--- | :--- |
+| `todasQuestoes` | Documento V2 completo: enunciado, alternativas/gabarito ou rubrica, origens, classificação confirmada, validade, revisões CAS e caches pedagógicos. |
+| `question_classification_suggestions` | Sugestões geradas por IA (`PENDING`, `ACCEPTED`, `REJECTED`, `STALE`, `SUPERSEDED`); nunca alteram seleção de treino sem aceitação humana explícita. |
+| `question_exam_compatibility` | Decisões explícitas (`DIRECT`, `ANALOGOUS`, `EXCLUDED`) vinculadas ao proprietário da grade (`POST /api/v1/exams/:id/compatibility`), componente e revisão. |
+| `question_reports` | Reportes de problemas abertos por estudantes, isolados por `user_id` denunciante até resolução administrativa na aba **Reportes**. |
+| `answer_evaluations` | Avaliações imutáveis de respostas discursivas referenciando tentativa, rubrica e política de revisão. |
 
-## Separação de responsabilidades
+---
 
-| Contrato / coleção planejada | Autoridade |
-| --- | --- |
-| `question` / `todasQuestoes` | Enunciado, alternativas, gabarito/rubrica, classificação confirmada e validade |
-| `suggestion` / `question_classification_suggestions` | Propostas pendentes e sua resolução, sem participação automática na seleção |
-| `compatibility` / `question_exam_compatibility` | Decisão explícita para questão/componente/revisão de edital de um proprietário |
-| `evaluation` / `answer_evaluations` | Resultado de correção de uma tentativa, com referência à questão, rubrica e motor utilizados |
+## 2. Tipos de Questão e Modo Preparatório `OPEN_ENDED`
 
-`origins` registra de onde a questão veio, não onde ela pode ser utilizada. `classification` registra o conteúdo cobrado, não o concurso de origem. A compatibilidade resulta da interseção com o edital e, quando registrada explicitamente, pertence ao proprietário e à revisão do concurso. Etapa, grupo de conhecimentos, peso e quantidade continuam no componente do edital.
+| `question_type` | `answers` | `correct_answer_indices` | Correção / Seleção |
+| :--- | :--- | :--- | :--- |
+| `MULTIPLE_CHOICE` | 5 alternativas não vazias e distintas | `[0..4]` (1 índice válido) | `EXACT_OPTION` · elegível para prática objetiva |
+| `TRUE_FALSE` | Exatamente `["Certo", "Errado"]` | `[0]` ou `[1]` | `EXACT_OPTION` · elegível para prática objetiva |
+| `OPEN_ENDED` | `[]` | `[]` | `RUBRIC` (`max_score = 100`) · **modo preparatório** |
 
-Cada ocorrência de disciplina no edital tem identidade própria: `local_subject_id`, referenciada como `component_id` na compatibilidade. A etapa 4 permite a mesma disciplina canônica em várias etapas, com IDs locais distintos e tópicos, grupos, pesos e quotas independentes. O contrato de componente está em `shared/schemas/exam-component.schema.json`. Itens `custom-UUID` continuam disponíveis enquanto aguardam associação explícita.
+- **Invariante `OPEN_ENDED`:** Questões discursivas possuem validação completa de rubrica (soma dos critérios igual a `max_score`, critérios essenciais identificados e `confirmation_policy = "HUMAN_REVIEW"`) e `content_revision` JCS SHA-256 consistente, mas permanecem **fora de todas as filas de prática objetiva** até a ativação futura de fluxo discursivo dedicado. Tanto o `/admin/` quanto o módulo de inserção Android exibem aviso explícito ao operador.
 
-## Tipos e gabarito
+---
 
-| `question_type` | Alternativas | Gabarito | Correção |
-| --- | --- | --- | --- |
-| `MULTIPLE_CHOICE` | Exatamente cinco textos não vazios e sem duplicação após trim | Um índice entre 0 e 4 | `EXACT_OPTION` |
-| `TRUE_FALSE` | Exatamente `["Certo", "Errado"]` | Um índice: 0 ou 1 | `EXACT_OPTION` |
-| `OPEN_ENDED` | Array vazio | Sem índice nem alternativa fictícia; referências e rubrica em `grading` | `RUBRIC`, `SEMANTIC` ou `AI` |
+## 3. Hash Canônico Único (`content_revision` — RFC 8785 JCS)
 
-`correct_answer_indices` é a autoridade objetiva; `correct_answers` deve ser sua projeção textual exata. Não há fallback para alternativa A. O contrato v2 exige um gabarito utilizável para documentos objetivos validados. Registros legados com gabarito ambíguo permanecem preservados como legado/em revisão até a conferência; não recebem conteúdo inventado para passar na validação.
+O Cogniva 2.0 aposenta definitivamente hashes binários legados e adota um único cálculo determinístico em todo o ecossistema ([`shared/domain-contracts.json`](../shared/domain-contracts.json), `contract_version: 3`):
 
-O backup validado de 02/11/2026, `20261102T155257Z`, tinha 618 questões com cinco alternativas cada. Isso é evidência daquele inventário, não uma afirmação de validade pedagógica dos gabaritos.
+1. Constrói-se o objeto JSON contendo exatamente os cinco campos de conteúdo:
+   - `question_type`
+   - `question`
+   - `answers`
+   - `correct_answer_indices`
+   - `grading`
+2. Serializa-se esse objeto segundo a **RFC 8785 (JSON Canonicalization Scheme — JCS)** em UTF-8, sem normalização Unicode implícita das strings.
+3. Calcula-se o digest `SHA-256` hexadecimal minúsculo (64 caracteres).
 
-## Classificação por conteúdo
+Qualquer edição no enunciado, nas alternativas, no gabarito ou na rubrica altera `content_revision`, invalidando decisões anteriores de validade definitiva e exigindo reconfirmação explícita. Alterar `explanation`, `level`, `exam_year` ou caches de tutores IA incrementa `revision` (CAS) sem alterar `content_revision`.
 
-`classification.state` aceita `UNCLASSIFIED`, `PARTIAL` e `CONFIRMED`. A primeira tem lista vazia; as demais têm vínculos confirmados individualmente. `CONFIRMED` exige exatamente um vínculo `PRIMARY`; `PARTIAL` permite no máximo um. O primário sempre tem cobertura `DIRECT`. Vínculos `SECONDARY` representam conteúdo complementar e podem ser diretos ou contextuais.
+---
 
-Cada vínculo contém identidade própria, disciplina, tópico, papel, cobertura e proveniência. Referências precisam existir na versão do catálogo e ter a disciplina correspondente. Um tópico não pode aparecer repetido com papéis contraditórios. Vínculos secundários não transferem domínio integral nem bastam para estabelecer compatibilidade direta com outro edital.
+## 4. Classificação, Validade e Edição V2
 
-Com a [ativação versionada pelo painel](ADMIN-WEB.md), o servidor aceita versões históricas confirmadas do catálogo e verifica os vínculos no snapshot correspondente. Renomeações não reescrevem classificações. A seleção atual exige que o vínculo principal continue ativo; novas associações a entidades desativadas são recusadas, enquanto registros anteriores e seu histórico permanecem armazenados.
+- **Classificação (`classification`):**
+  - Estados: `UNCLASSIFIED` (sem vínculos), `PARTIAL` ou `CONFIRMED` (exatamente um vínculo `PRIMARY` com `coverage = "DIRECT"` e vínculos `SECONDARY` opcionais).
+  - Todo `subject_id` e `topic_id` é validado contra o snapshot correspondente do catálogo canônico.
+- **Validade (`validity`):**
+  - Status explícito editável no `/admin/`: `CURRENT` (vigente e revisada), `UNDER_REVIEW` (em revisão — suspensa das filas correntes), `OBSOLETE` (superada — preservada apenas no acervo histórico) e `UNKNOWN` (sem revisão conclusiva).
+  - Se houver mudança no conteúdo (`content_revision`) sem nova decisão explícita do revisor, o status retorna automaticamente para `UNDER_REVIEW`.
+- **Campos Pedagógicos e Documentais:**
+  - Edições V2 persistem integralmente `explanation` (comentário do gabarito), `level` (dificuldade) e `exam_year` (ano da prova sincronizado com `origins[0].exam_year`).
 
-Os campos canônicos singulares atuais, quando presentes, devem refletir o vínculo principal. Eles são projeções de compatibilidade temporária, não uma segunda fonte editável de classificação. Aliases e semelhança textual não confirmam vínculos.
+---
 
-## Sugestões, confirmação e proveniência
+## 5. Verificação Local
 
-Sugestões têm `PENDING`, `ACCEPTED`, `REJECTED`, `STALE` ou `SUPERSEDED`. Registram a revisão do conteúdo, a revisão esperada da classificação, a versão do catálogo, o conjunto proposto, confiança declarada e justificativas. Confiança do modelo não equivale a confirmação.
-
-Uma proposta pendente não pode ter uma resolução aplicada. Aceitar exige revisor humano, conteúdo ainda correspondente, revisão de classificação incrementada em um e vínculos efetivamente gravados. Esses vínculos apontam para `source_suggestion_id`. Rejeitar não incrementa a classificação. Mudança de conteúdo ou de revisão exige marcar a proposta antiga como `STALE` antes de nova decisão.
-
-Proveniência registra ator, método, justificativa, instante UTC, evidências e, quando aplicável, modelo e versão do prompt. O servidor deve preencher a identidade autenticada; aceitar um objeto enviado pelo cliente dizendo `HUMAN` não comprova autorização. Os revisores `HUMAN` dos exemplos são fixtures sintéticas.
-
-## Questão atual, obsoleta ou em revisão
-
-O campo obrigatório é `validity.status`:
-
-| Valor | Significado / regra de uso |
-| --- | --- |
-| `CURRENT` | Revisada para o conteúdo e contexto indicados |
-| `OBSOLETE` | Conteúdo ou gabarito superado; permanece preservado, fora do treino corrente |
-| `UNDER_REVIEW` | Existe dúvida a resolver; fora da seleção corrente |
-| `UNKNOWN` | Não há revisão suficiente; não deve receber rótulo de “atual” por omissão |
-
-`basis` distingue fundamento jurídico, técnico, factual e atemporal. Há data de revisão, prazo para nova conferência, motivos, evidências, revisão do conteúdo avaliado e a decisão responsável. Revogação e alteração normativa são motivos explícitos, não decisões automáticas derivadas de uma menção textual à lei.
-
-Uma decisão `CURRENT` ou `OBSOLETE` precisa de revisão humana correspondente ao hash do conteúdo. Decisões sensíveis ao tempo exigem evidência; `CURRENT` jurídico exige prazo de revisão. Depois desse prazo, a elegibilidade corrente fica bloqueada até nova conferência, sem apagar ou reescrever resultados históricos. Uma alteração normativa pode primeiro gerar revisão pendente; IA não publica sozinha uma decisão definitiva de vigência.
-
-`scope=CURRENT_KNOWLEDGE` é diferente de `EXPLICIT_HISTORICAL_DATE`, que exige `context_date`. Uma questão válida para uma data histórica não entra automaticamente no treino de legislação atual. A interface futura precisa exibir status e contexto temporal juntos.
-
-Na regra definida, o modo geral pode aceitar `UNKNOWN` com identificação explícita; o modo somente atuais aceita apenas `CURRENT` não vencido e sem contexto histórico. Consulta histórica permanece possível; exercício histórico tem escopo explícito. Estes filtros são definições testadas para a futura seleção, não alterações já implantadas.
-
-## Questões abertas e correção
-
-Todas as abertas exigem respostas de referência e uma rubrica versionada. Cada critério tem ID, descrição, pontuação máxima e indicação de essencialidade. Os pontos dos critérios devem somar `max_score`; `pass_score` não pode exceder esse máximo. O resultado deve avaliar todos os critérios, sem duplicação, respeitar seus limites e apresentar justificativas. Um critério essencial com zero impede acerto confirmado, mesmo se a soma superar o corte.
-
-`RUBRIC` é correção manual. `SEMANTIC` exige motor identificado, versão e referência de calibração; similaridade isolada ou presença de palavras-chave não constitui correção. `AI` exige provedor xAI, modelo e versão de prompt, além da mesma rubrica. O modelo de texto definido é Grok 4.7. O prompt de correção aberta e o motor semântico ainda precisam ser implementados/avaliados nas etapas seguintes; identificadores semânticos e calibrações dos exemplos são fictícios, não certificações de qualidade.
-
-Nesta primeira política, toda correção aberta precisa de confirmação humana. IA ou motor semântico podem gerar `PROVISIONAL`, com nota e feedback, mas `is_correct=null`: não credita automaticamente acerto, XP ou SRS. Automatização definitiva futura requer uma política específica validada; não é ativada por um campo de confiança do modelo.
-
-Uma avaliação aponta para tentativa, proprietário, hash da questão, revisão da rubrica, política e motor usados. Nota fora dos limites, critério ausente, resultado incompatível com a rubrica ou modelo/prompt divergentes são rejeitados. Falha ou pendência não recebe nota zero como se fosse resposta errada.
-
-Avaliações são eventos imutáveis. Nova correção, revisão humana ou resultado posterior usa novo `_id` e `supersedes_evaluation_id`, mantendo o mesmo `attempt_id`; isso não cria outra tentativa do estudante. A futura projeção considera o resultado confirmado aplicável, sem apagar o provisório nem reescrever respostas antigas. A avaliação deve corresponder ao proprietário, ao texto/alternativa realmente submetidos e ao snapshot da tentativa salvo no servidor; esses campos não são fornecidos como autoridade pelo modelo. A substituição só pode apontar para resultado da mesma tentativa e proprietário. Reavaliar usa o snapshot original; mudar a rubrica não migra tentativas passadas automaticamente.
-
-O texto do estudante é entrada não confiável para o corretor: não pode substituir o prompt ou a rubrica, e a saída deve passar pela validação estruturada. Rubricas/gabaritos privados e credenciais permanecem no backend. Nenhuma resposta real foi enviada a um provedor nesta etapa.
-
-## Revisões e gravação atômica
-
-`revision` é a revisão do documento para CAS. `content_revision` é SHA-256 do JSON canonizado pelo [JCS/RFC 8785](https://www.rfc-editor.org/info/rfc8785/) contendo exatamente `question_type`, `question`, `answers`, `correct_answer_indices` e `grading`. Strings são preservadas, sem normalização Unicode implícita. Mudanças em rubrica, respostas de referência, política ou motor de correção mudam essa revisão; mudar aliases ou caches de IA não a muda.
-
-Classificação e validade têm revisões próprias. Não se confunde `schema_version=2` da questão com o contrato de sincronização atualmente publicado, também numerado 2. Questões abertas exigirão negociação de capacidades/novo contrato de tentativa: clientes antigos não podem receber abertas como se fossem objetivas.
-
-Uma atualização deve conferir proprietário/permissão, revisão esperada, hash de conteúdo e revisão do bloco alterado. Confirmação de sugestão e criação do evento de auditoria precisam ser recuperáveis como uma operação: transação ou outbox no próprio documento, com `event_id`/`operation_id` idempotentes, antes de confirmar o recebimento. A etapa 3 implementará essa garantia; ainda não existe um endpoint v2 que a execute.
-
-Eventos de auditoria precisam guardar questão, ator, instante, tipo da alteração, revisões anterior/nova, motivo e referência ao estado anterior. Uma fila de outbox não pode descartar eventos ao atingir o limite; aplica-se retentativa/contrapressão. Históricos longos ficam em coleção própria, em vez de arrays ilimitados no documento de questão.
-
-## Compatibilidade e preservação
-
-Compatibilidade explícita contém proprietário, concurso, revisão do concurso, componente, questão, hash do conteúdo, versão do catálogo, revisão da decisão e proveniência. `DIRECT` exige interseção com um tópico principal confirmado e presente no componente. `ANALOGOUS` e `EXCLUDED` são decisões explícitas; origem, nome parecido e vínculo secundário não autorizam promoção automática a direto.
-
-Estados pendentes não selecionam questões como vínculos confirmados. Mudança de questão, componente, edital ou revisão do catálogo exige reavaliação da compatibilidade. Expansão de assuntos pais para subassuntos deve ser opção explícita no edital; não se presume equivalência de irmãos ou cobertura integral do pai.
-
-Os campos existentes de IA permanecem no documento, com seus nomes atuais. Metadados opcionais registram modelo, versão de prompt, hash de entrada e data de geração; dicas progressivas têm metadados por posição. Cache cuja revisão de entrada não corresponde ao conteúdo não deve ser reutilizado para o conteúdo novo. Ausência de metadados antigos não autoriza regeneração em massa nem descarte dos textos.
-
-Campos legados desconhecidos são preservados. O schema permite propriedades adicionais na raiz para isso e valida estritamente os novos blocos conhecidos. A migração deve usar atualizações seletivas e manter inventários/backups; não substituir todo o documento a partir de um DTO que ignora campos extras.
-
-`legal_validity` legado não é uma segunda autoridade no contrato novo: ausência de evidência não vira `CURRENT`. A etapa 3 preserva o original e mantém restrições legadas quando a validade nova é desconhecida; uma revisão explícita com evidência pode substituí-las. Também não se deduplicam questões apenas por texto parecido nem se reconstroem eventos de aprendizagem para adaptar a taxonomia.
-
-## Verificação
-
-```powershell
-python -m pip install -r scripts/requirements-contracts.txt
-python scripts/knowledge_catalog.py --check
-python scripts/question_contracts.py --examples
-python -m unittest discover -s scripts/tests -p 'test_*.py' -v
+```bash
+python3 scripts/knowledge_catalog.py --check
+python3 scripts/question_contracts.py --examples
+pytest scripts/tests -v
 ```
-
-Há sete documentos de questão de exemplo, uma sugestão, uma compatibilidade e quatro avaliações, todos sintéticos. Testes positivos e adversariais cobrem formato, ambiguidades, referência ao catálogo, confirmação indevida por IA, validade/obsolescência, contexto histórico, prazo vencido, rubrica, revisão, proveniência, limites de nota e isolamento de proprietário.
-
-
-Validação desta definição: **34 testes aprovados localmente e no [GitHub Actions](https://github.com/danielcdes-create/cogniva/actions/runs/41503303538)**, revisão `ccd40f8ca74f753e2f6b90c30856caa0840893d9`. Evidências sanitizadas em `schema-validation/2026-11-02/`.

@@ -94,7 +94,7 @@ Em `MainViewModel.kt:257`, a validação pós-download utilizava apenas `incomin
 3. **Teste automatizado de regressão no Rust:**
    - Adicionado teste em `main.rs` (`latest_apk_tests`) que envia requisição explicitamente com `Accept-Encoding: gzip` e valida que `Content-Encoding` **não** é gzip e que `Content-Length` e o SHA-256 coincidem integralmente.
 
-### 3.2. Configuração Nginx (`deploy/nginx-concursoprep.conf`)
+### 3.2. Configuração Nginx (`deploy/nginx-cogniva.conf`)
 Adicionado bloco dedicado às rotas de download de APK para desativar explicitamente a compressão e o buffering de proxy:
 ```nginx
 location = /api/v1/apk/download {

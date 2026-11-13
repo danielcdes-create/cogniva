@@ -1,57 +1,73 @@
-# 🦀 COGNIVA Backend (`api-rust-core`)
+# 🦀 Cogniva Backend (`cogniva-api` `2.0.0`)
 
-> **Registro histórico de 2026-10-31.** As seções abaixo descrevem a baseline anterior à recuperação. Contratos atuais, API autenticada, CAS/ACK, catálogo compartilhado e runtime estão no [README principal](../README.md), [REMEDIACAO](../docs/historico/auditoria-2026-11-01/REMEDIACAO.md), [operação](../docs/OPERACAO.md) e no [mapa da documentação](../docs/README.md). Tamanho/RAM citados abaixo não são medições da release nova. Nunca compilar na VPS nem substituir seu Compose compartilhado pelo exemplo do repositório.
+Serviço HTTP assíncrono em **Rust (`Axum 0.7` + `Tokio` + `MongoDB 3.1`)** responsável pela API REST `/api/v1/*`, pelo servidor estático incorporado do painel administrativo `/admin/`, pela distribuição OTA do APK Android e pelas rotinas agendadas de manutenção pedagógica sobre o banco **`cogniva`**.
 
-Microsserviço de alta performance em **Rust (`Axum 0.7` + `Tokio` + `MongoDB 3.1`)** que alimenta o ecossistema **COGNIVA**.
-
----
-
-## 1. Destaques Arquiteturais
-
-* **Retrocompatibilidade Total com o Banco `CNU`:** Lê e atualiza nativamente os documentos legados gerados pelo antigo `AFTBot.py` nas coleções `todasQuestoes`, `userActivityLog`, `usuarios`, `reportedQuestoes` e `utils`, utilizando `#[serde(default)]` para novos atributos de governança.
-* **Consumo Mínimo de Recursos:** Binário nativo estático compilado com `lto = true`, `codegen-units = 1` e `strip = true`, rodando em container `debian:bookworm-slim` com menos de 40 MB de imagem e ~15 MB de RAM.
-* **Agendador Assíncrono Integrado (`services/scheduler.rs`):** Substitui o antigo loop `schedule` em Python e o script `countdown.py` por uma *task* nativa do Tokio que aplica diariamente o decaimento de 1% (`points_with_decay`), recalcula vencimentos do SRS e atualiza a contagem regressiva oficial dos concursos.
+Para a visão integrada do sistema, consulte [`docs/ARQUITETURA.md`](../docs/ARQUITETURA.md) e [`docs/OPERACAO.md`](../docs/OPERACAO.md).
 
 ---
 
-## 2. Módulos Internos (`src/`)
+## 1. Principais Responsabilidades
 
-* `models/question.rs`: Estrutura completa da questão, gabarito, vigência legislativa (`VIGENTE`, `DESATUALIZADA`, `ANULADA`), vínculo com o edital verticalizado (`syllabus_topic_ids`) e campos cacheados do **Cogniva AI**.
-* `models/contest.rs`: Máquina de estados do concurso (`PREVISTO`, `SOLICITADO_AUTORIZADO`, `EDITAL_PUBLICADO`, `EM_ANDAMENTO`, `ENCERRADO`), blocos com pesos e metadados de estimativa transparente.
-* `models/activity.rs`: Histórico individual por questão (`pastSessions`), *streak*, pontuação com decaimento, intervalo SRS, flag de Caderno de Erros e flag de Ponto Cego (`high_confidence_error_flag`).
-* `services/srs_engine.rs`: Motor matemático de repetição espaçada (curva de 3 a 90 dias ou degraus de 1, 7 e 30 dias) e classificador da Matriz 2×2 Confiança × Acerto.
-* `services/difficulty.rs`: Classificador automático de dificuldade (`Fácil`, `Média`, `Difícil`, `Muito Difícil`) e estimador heurístico de plausibilidade de distratores em Rust puro.
-* `services/quiz_selector.rs`: Seletores para os 8 modos de estudo (`STANDARD`, `SHUFFLE`, `SIMULADO`, `MOST_BADASS`, `SRS_REVIEW`, `ERROR_NOTEBOOK`, `COMMON_TRUNK`, `SINGLE`).
-* `services/ai_tutor.rs`: Cliente HTTP assíncrono (`reqwest` + `rustls`) para Gemini 1.5 Flash e OpenAI `gpt-4o-mini` com persistência imediata na coleção `todasQuestoes`.
-* `routes/apk_ota.rs`: Servidor de atualização OTA (*Over-The-Air*) do aplicativo Android (`GET /api/v1/apk/info` e `GET /api/v1/apk/download`), lendo dinamicamente `output-metadata.json` e calculando o hash **SHA-256** do binário publicado em `/app/apk/app-debug.apk`.
+- **Autenticação Nativa (`routes/auth.rs`, `routes/web_admin.rs`, `security.rs`):**
+  - Modo convidado imediato (`POST /api/v1/auth/guest`), cadastro com promoção *in-place* do mesmo `user_id` (`POST /api/v1/auth/register`), login com `Argon2id` (`POST /api/v1/auth/login`), logout com revogação na coleção `sessions` (`POST /api/v1/auth/logout`) e perfil (`GET /api/v1/auth/me`).
+  - Sessões administrativas web com cookie `HttpOnly` + `SameSite=Strict` + `Secure` e proteção `Origin` + `X-Cogniva-CSRF: 1`.
+  - Limite global de payload (`DefaultBodyLimit::max(2 * 1024 * 1024)`) sem duplo buffering em memória.
+- **Catálogo em Execução e Templates Globais (`services/catalog_runtime.rs`, `routes/exams.rs`, `services/exam_storage.rs`):**
+  - Snapshot do catálogo canônico (`shared/knowledge-catalog.json` v2) mantido em cache `RwLock` com TTL de 10 segundos e invalidação instantânea após `POST /api/v1/admin/catalog/activate`.
+  - Separação estrita entre `exam_templates` (globais, geridos no `/admin/`) e `user_exams` (grades individuais dos alunos), com detecção automática de `upstream_update_available` e adoção explícita via `POST /api/v1/exams/:id/adopt-template`.
+  - Sincronização atômica entre `is_active_in_ladder` e `usuarios.active_contest_ids`.
+- **Acervo 100% V2, Seleção e Sincronização (`services/question_storage.rs`, `services/selection_v2.rs`, `routes/quiz.rs`):**
+  - Persistência validada contra o contrato V2, hash canônico JCS SHA-256 (RFC 8785), outbox de auditoria e suporte a edição completa (`explanation`, `level`, `exam_year` e `validity.status`).
+  - Seleção para os 8 modos de estudo filtrando por disciplina, componente e `syllabus_topic_id`, excluindo questões `OPEN_ENDED` das filas objetivas e isolando reportes abertos (`question_reports`) apenas para o usuário denunciante.
+  - Ingestão idempotente de lotes de respostas (`POST /api/v1/quiz/submit-batch`) com ordenação cronológica garantida e janela limitada em `pastSessions`.
+- **Governança xAI e Curadoria (`services/ai_tutor.rs`, `services/classification.rs`, `services/question_import.rs`, `services/rate_limit.rs`):**
+  - Cliente `reqwest::Client` compartilhado em `AppState`, modelo lido obrigatoriamente de `XAI_MODEL`, dupla reserva de cota (`XAI_DAILY_USER_LIMIT` + `XAI_DAILY_GLOBAL_LIMIT`), estorno em falhas de rede/parse e metadados `ai_resource_meta`.
+  - Rotas administrativas para curadoria de reportes (`/api/v1/admin/reports`) e propostas de classificação IA V2 (`/api/v1/admin/classification/*`), além de compatibilidade por proprietário em `/api/v1/exams/:id/compatibility`.
+- **Distribuição OTA Segura (`routes/apk_ota.rs`):**
+  - Entrega streaming sem compressão dinâmica em `/api/v1/apk/download`, `/apk` e `/cogniva.apk`.
 
 ---
 
-## 3. Execução Local e Testes
+## 2. Variáveis de Ambiente Essenciais
 
-```powershell
-# Rodar a suíte de testes unitários do motor SRS e Matriz de Confiança
-cargo test
+Consulte o modelo completo em [`.env.example`](../.env.example):
 
-# Verificar compilação sem gerar binário
-cargo check
+| Variável | Descrição |
+| :--- | :--- |
+| `MONGODB_URI` | String de conexão do MongoDB (obrigatória). |
+| `MONGODB_DB_NAME` | Nome do banco de dados ativo (padrão: `cogniva`). |
+| `COGNIVA_JWT_SECRET` | Segredo HS256 com no mínimo 32 caracteres aleatórios (obrigatório). |
+| `COGNIVA_PUBLIC_ORIGIN` | Origem pública HTTPS autorizada para CORS e validação CSRF do `/admin/`. |
+| `ADMIN_EMAILS` | Lista separada por vírgulas de e-mails com papel `admin` automático. |
+| `XAI_API_KEY` / `XAI_MODEL` | Chave privada da xAI e identificador explícito do modelo (ex.: `grok-4.20-non-reasoning`). |
+| `XAI_DAILY_USER_LIMIT` / `XAI_DAILY_GLOBAL_LIMIT` | Limites diários de chamadas pagas por conta (padrão `120`) e global (padrão `500`). |
 
-# Executar servidor localmente (requer arquivo .env)
-cargo run
+---
+
+## 3. Comandos CLI de Manutenção
+
+```bash
+# Instalar/verificar validadores BSON, índices, templates globais e snapshot do catálogo no banco cogniva
+cogniva-api --prepare-question-storage
+
+# Conceder papel administrativo a uma conta já registrada por e-mail
+cogniva-api --grant-admin admin@exemplo.com
 ```
-# Inserção revisada de questões
 
-As rotas administrativas `/api/v1/admin/questions/import/{capabilities,preview,commit,assist}` usam o schema v2 e a outbox de auditoria existentes, com criação sem sobrescrita e recibos por item. A assistência opcional usa xAI/Grok 4.7 com revisão humana. Formatos, limites, acesso e teste Mongo isolado estão em [INSERCAO-QUESTOES.md](../docs/INSERCAO-QUESTOES.md).
-## Administração web
+---
 
-O backend também serve `/admin/`, com assets de `web-admin/` incorporados à compilação, login por código temporário e cookie HttpOnly. O painel reutiliza os contratos Android; revisões do catálogo têm ativação explícita em execução e snapshots históricos imutáveis no Mongo. Consulte [ADMIN-WEB.md](../docs/ADMIN-WEB.md). O build deve usar o contexto raiz do repositório, incluindo `web-admin/` e `shared/`.
+## 4. Execução e Testes Locais
 
-Painel, importação e catálogo em execução estão disponíveis desde a **1.4.13/build 20**, com [publicação e aceite registrados](../docs/RELEASE-1.4.13.md).
+> **Importante:** O `Dockerfile` e a incorporação estática de `web-admin/` e `shared/` assumem os diretórios irmãos na raiz do repositório.
 
+```bash
+# Rodar suíte de testes unitários e de contrato
+cargo test --manifest-path backend-rust/Cargo.toml --locked
 
-## Ampliação 1.4.15/build 22
+# Rodar suíte completa incluindo testes de integração em MongoDB local isolado (nunca usar URI de produção!)
+COGNIVA_TEST_MONGODB_URI="mongodb://127.0.0.1:27048/" \
+  cargo test --manifest-path backend-rust/Cargo.toml --locked -- --include-ignored --test-threads=1
 
-A [release 1.4.15](../docs/RELEASE-1.4.15.md) acrescenta o guia da [estrutura de estudos](../docs/ESTRUTURA-ESTUDOS.md), metadados documentais de origem e explicação no cadastro individual de questões, além de sessões web de 30 dias. A classificação por conteúdo continua independente da origem e da validade; comandos, rascunhos antigos e histórico são preservados. [Contrato de inserção](../docs/INSERCAO-QUESTOES.md) e [administração web](../docs/ADMIN-WEB.md).
-
-
-A [release 1.4.16](../docs/RELEASE-1.4.16.md) incorpora a central de Ajuda do painel, incluindo `help.js`. O [guia de administração](../docs/GUIA-ADMINISTRACAO.md) é gerado da mesma fonte da interface e conferido no CI.
+# Executar servidor localmente em modo desenvolvimento
+cargo run --manifest-path backend-rust/Cargo.toml
+```

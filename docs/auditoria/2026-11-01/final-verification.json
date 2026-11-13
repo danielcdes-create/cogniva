@@ -1,9 +1,0 @@
-{
-  "captured_at": "2026-11-01T10:34:10.144762-03:00",
-  "checked_source_files": 74,
-  "source_fingerprint_mismatches": [],
-  "tracked_application_source_diff": "",
-  "local_apk_sha256_after_jdk17_build": "7e0e8055bc62c960d9968b5e6d6b8d0f8226690f48429e742e29ddfff7fafded",
-  "local_apk_bytes": 18177809,
-  "notes": "Source files unchanged; audit artifacts only. Initial working tree note renames retained. No publication or remote data writes."
-}

@@ -1,9 +1,0 @@
-{
-  "before": "20261102T002531Z",
-  "after": "20261102T002727Z",
-  "question_documents": 618,
-  "question_bson_sha256_before": "5fdf9ef5772a1a50d7501b30dd5158e0f441d8efb69e41af6ae56c2af36f4d0a",
-  "question_bson_sha256_after": "5fdf9ef5772a1a50d7501b30dd5158e0f441d8efb69e41af6ae56c2af36f4d0a",
-  "question_bank_bytes_unchanged": true,
-  "protected_history_unchanged": true
-}
