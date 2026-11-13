@@ -1,13 +1,16 @@
 {
-  "contract_version": 2,
+  "contract_version": 3,
   "question": {
+    "question_type": "MULTIPLE_CHOICE",
     "question": "Qual opção contém ação? 🧠",
     "answers": [
       "Não",
-      "Ação"
+      "Ação",
+      "Sem",
+      "Outro"
     ],
     "correct_index": 1,
-    "revision": "bd5dc8fc2d9c484aa46668e5ae95af89f8c740644203362dd815954828c76919"
+    "revision": "19163f3dda43893f9e0702f684358c43a5b06db4b0451f1f7315adebfa388583"
   },
   "mastery": [
     {

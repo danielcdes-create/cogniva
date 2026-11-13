@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:cogniva:question-contracts:1",
-  "title": "Question and classification contracts — staged definition, not runtime deployment",
+  "title": "Cogniva question, classification, compatibility, and evaluation contracts v2",
   "oneOf": [
     {
       "$ref": "#/$defs/question"
@@ -1316,7 +1316,7 @@
           "then": {
             "properties": {
               "answers": {
-                "minItems": 5,
+                "minItems": 4,
                 "maxItems": 5
               },
               "correct_answer_indices": {

@@ -1,24 +1,24 @@
 {
   "$schema": "knowledge-catalog.schema.json",
-  "schema_version": 1,
+  "schema_version": 2,
   "catalog_id": "cogniva-knowledge",
-  "catalog_version": 1,
-  "updated_at": "2026-11-02",
-  "status": "EDITORIAL_BASELINE",
-  "review_status": "EDITORIAL_PROPOSAL",
+  "catalog_version": 2,
+  "updated_at": "2026-11-12",
+  "status": "ACTIVE",
+  "review_status": "APPROVED",
   "language": "pt-BR",
   "sources": [
     {
       "source_id": "LEGACY_V2",
       "kind": "LEGACY_INTERNAL",
-      "reference": "shared/canonical-catalog.json",
-      "note": "Identidades e vínculos existentes; templates configuráveis, não editais oficiais."
+      "reference": "shared/exam-templates.json",
+      "note": "Identidades e pesos calibrados preservados na convergência Cogniva 2.0."
     },
     {
       "source_id": "EDITORIAL_V1",
       "kind": "EDITORIAL_PROPOSAL",
       "reference": "docs/CATALOGO-CONHECIMENTOS.md",
-      "note": "Decomposição e relações propostas para revisão; sem atribuição automática de questões ou cobertura de edital."
+      "note": "Taxonomia unificada de conhecimentos do Cogniva 2.0."
     },
     {
       "source_id": "CPNU_B4",
@@ -49,6 +49,7 @@
     {
       "trunk_id": "fiscal",
       "label": "Área Fiscal",
+      "icon_key": "account_balance",
       "aliases": [],
       "source_ids": [
         "LEGACY_V2"
@@ -58,6 +59,7 @@
     {
       "trunk_id": "policial",
       "label": "Carreiras Policiais",
+      "icon_key": "local_police",
       "aliases": [],
       "source_ids": [
         "LEGACY_V2"
@@ -67,6 +69,7 @@
     {
       "trunk_id": "controle",
       "label": "Controle",
+      "icon_key": "fact_check",
       "aliases": [],
       "source_ids": [
         "LEGACY_V2"
@@ -76,6 +79,7 @@
     {
       "trunk_id": "engenharia",
       "label": "Engenharia",
+      "icon_key": "engineering",
       "aliases": [],
       "source_ids": [
         "LEGACY_V2"
@@ -85,6 +89,7 @@
     {
       "trunk_id": "tribunais",
       "label": "Tribunais",
+      "icon_key": "gavel",
       "aliases": [],
       "source_ids": [
         "LEGACY_V2"
@@ -94,6 +99,7 @@
     {
       "trunk_id": "bancaria",
       "label": "Bancária",
+      "icon_key": "savings",
       "aliases": [],
       "source_ids": [
         "LEGACY_V2"
@@ -103,6 +109,7 @@
     {
       "trunk_id": "fiscalizacao_trabalho",
       "label": "Fiscalização do Trabalho",
+      "icon_key": "work",
       "aliases": [
         "Inspeção do Trabalho"
       ],
@@ -132,6 +139,7 @@
         {
           "trunk_id": "controle",
           "role": "FOUNDATIONAL",
+          "default_weight": 2.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         }
@@ -154,6 +162,7 @@
         {
           "trunk_id": "controle",
           "role": "FOUNDATIONAL",
+          "default_weight": 2.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         }
@@ -176,6 +185,7 @@
         {
           "trunk_id": "fiscal",
           "role": "FOUNDATIONAL",
+          "default_weight": 2.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         }
@@ -198,18 +208,21 @@
         {
           "trunk_id": "fiscal",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         },
         {
           "trunk_id": "controle",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         },
         {
           "trunk_id": "tribunais",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         }
@@ -232,24 +245,28 @@
         {
           "trunk_id": "fiscal",
           "role": "RELATED",
+          "default_weight": 1.5,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         },
         {
           "trunk_id": "policial",
           "role": "RELATED",
+          "default_weight": 1.5,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         },
         {
           "trunk_id": "controle",
           "role": "RELATED",
+          "default_weight": 1.5,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         },
         {
           "trunk_id": "tribunais",
           "role": "FOUNDATIONAL",
+          "default_weight": 1.5,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         }
@@ -272,6 +289,7 @@
         {
           "trunk_id": "policial",
           "role": "FOUNDATIONAL",
+          "default_weight": 3.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         }
@@ -294,6 +312,7 @@
         {
           "trunk_id": "tribunais",
           "role": "FOUNDATIONAL",
+          "default_weight": 2.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         }
@@ -316,6 +335,7 @@
         {
           "trunk_id": "policial",
           "role": "FOUNDATIONAL",
+          "default_weight": 2.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         }
@@ -338,6 +358,7 @@
         {
           "trunk_id": "fiscal",
           "role": "FOUNDATIONAL",
+          "default_weight": 3.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         }
@@ -360,6 +381,7 @@
         {
           "trunk_id": "bancaria",
           "role": "FOUNDATIONAL",
+          "default_weight": 2.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         }
@@ -382,6 +404,7 @@
         {
           "trunk_id": "engenharia",
           "role": "FOUNDATIONAL",
+          "default_weight": 3.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         }
@@ -404,6 +427,7 @@
         {
           "trunk_id": "engenharia",
           "role": "FOUNDATIONAL",
+          "default_weight": 2.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         }
@@ -426,18 +450,21 @@
         {
           "trunk_id": "fiscal",
           "role": "FOUNDATIONAL",
+          "default_weight": 2.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         },
         {
           "trunk_id": "controle",
           "role": "FOUNDATIONAL",
+          "default_weight": 2.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         },
         {
           "trunk_id": "bancaria",
           "role": "FOUNDATIONAL",
+          "default_weight": 2.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         }
@@ -460,6 +487,7 @@
         {
           "trunk_id": "bancaria",
           "role": "FOUNDATIONAL",
+          "default_weight": 2.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         }
@@ -482,42 +510,49 @@
         {
           "trunk_id": "fiscal",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         },
         {
           "trunk_id": "policial",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         },
         {
           "trunk_id": "controle",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         },
         {
           "trunk_id": "engenharia",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         },
         {
           "trunk_id": "tribunais",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         },
         {
           "trunk_id": "bancaria",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         },
         {
           "trunk_id": "fiscalizacao_trabalho",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Perfil proposto para fiscalização do trabalho; confirmar conteúdo por edital."
         }
@@ -541,12 +576,14 @@
         {
           "trunk_id": "controle",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         },
         {
           "trunk_id": "fiscalizacao_trabalho",
           "role": "FOUNDATIONAL",
+          "default_weight": 3.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Perfil proposto para fiscalização do trabalho; confirmar conteúdo por edital."
         }
@@ -569,12 +606,14 @@
         {
           "trunk_id": "controle",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         },
         {
           "trunk_id": "fiscalizacao_trabalho",
           "role": "FOUNDATIONAL",
+          "default_weight": 3.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Perfil proposto para fiscalização do trabalho; confirmar conteúdo por edital."
         }
@@ -598,12 +637,14 @@
         {
           "trunk_id": "controle",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         },
         {
           "trunk_id": "fiscalizacao_trabalho",
           "role": "FOUNDATIONAL",
+          "default_weight": 2.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Perfil proposto para fiscalização do trabalho; confirmar conteúdo por edital."
         }
@@ -626,12 +667,14 @@
         {
           "trunk_id": "controle",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         },
         {
           "trunk_id": "fiscalizacao_trabalho",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Perfil proposto para fiscalização do trabalho; confirmar conteúdo por edital."
         }
@@ -654,12 +697,14 @@
         {
           "trunk_id": "controle",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         },
         {
           "trunk_id": "fiscalizacao_trabalho",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Perfil proposto para fiscalização do trabalho; confirmar conteúdo por edital."
         }
@@ -682,12 +727,14 @@
         {
           "trunk_id": "controle",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         },
         {
           "trunk_id": "fiscalizacao_trabalho",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Perfil proposto para fiscalização do trabalho; confirmar conteúdo por edital."
         }
@@ -710,12 +757,14 @@
         {
           "trunk_id": "controle",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         },
         {
           "trunk_id": "fiscalizacao_trabalho",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Perfil proposto para fiscalização do trabalho; confirmar conteúdo por edital."
         }
@@ -738,12 +787,14 @@
         {
           "trunk_id": "controle",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         },
         {
           "trunk_id": "fiscalizacao_trabalho",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Perfil proposto para fiscalização do trabalho; confirmar conteúdo por edital."
         }
@@ -766,12 +817,14 @@
         {
           "trunk_id": "controle",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "LEGACY_TEMPLATE",
           "note": "Relação herdada de template, sem afirmar exigência de todo edital desta carreira."
         },
         {
           "trunk_id": "fiscalizacao_trabalho",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Perfil proposto para fiscalização do trabalho; confirmar conteúdo por edital."
         }
@@ -793,24 +846,28 @@
         {
           "trunk_id": "fiscal",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         },
         {
           "trunk_id": "policial",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         },
         {
           "trunk_id": "engenharia",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         },
         {
           "trunk_id": "bancaria",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         }
@@ -832,36 +889,42 @@
         {
           "trunk_id": "fiscal",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         },
         {
           "trunk_id": "policial",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         },
         {
           "trunk_id": "controle",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         },
         {
           "trunk_id": "tribunais",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         },
         {
           "trunk_id": "bancaria",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         },
         {
           "trunk_id": "fiscalizacao_trabalho",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         }
@@ -883,18 +946,21 @@
         {
           "trunk_id": "fiscal",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         },
         {
           "trunk_id": "controle",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         },
         {
           "trunk_id": "bancaria",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         }
@@ -916,24 +982,28 @@
         {
           "trunk_id": "fiscal",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         },
         {
           "trunk_id": "controle",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         },
         {
           "trunk_id": "bancaria",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         },
         {
           "trunk_id": "fiscalizacao_trabalho",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         }
@@ -955,42 +1025,49 @@
         {
           "trunk_id": "fiscal",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         },
         {
           "trunk_id": "policial",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         },
         {
           "trunk_id": "controle",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         },
         {
           "trunk_id": "engenharia",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         },
         {
           "trunk_id": "tribunais",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         },
         {
           "trunk_id": "bancaria",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         },
         {
           "trunk_id": "fiscalizacao_trabalho",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         }
@@ -1012,24 +1089,28 @@
         {
           "trunk_id": "controle",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         },
         {
           "trunk_id": "tribunais",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         },
         {
           "trunk_id": "bancaria",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         },
         {
           "trunk_id": "fiscalizacao_trabalho",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         }
@@ -1052,12 +1133,14 @@
         {
           "trunk_id": "fiscal",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         },
         {
           "trunk_id": "controle",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         }
@@ -1080,24 +1163,28 @@
         {
           "trunk_id": "controle",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         },
         {
           "trunk_id": "tribunais",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         },
         {
           "trunk_id": "bancaria",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         },
         {
           "trunk_id": "fiscalizacao_trabalho",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         }
@@ -1119,12 +1206,14 @@
         {
           "trunk_id": "fiscal",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         },
         {
           "trunk_id": "tribunais",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         }
@@ -1147,12 +1236,14 @@
         {
           "trunk_id": "engenharia",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         },
         {
           "trunk_id": "controle",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         }
@@ -1174,6 +1265,7 @@
         {
           "trunk_id": "tribunais",
           "role": "RELATED",
+          "default_weight": 1.0,
           "basis": "EDITORIAL_SUGGESTION",
           "note": "Possível aproveitamento entre editais; não equivale a conteúdo obrigatório."
         }
@@ -4164,8 +4256,6 @@
     }
   ],
   "compatibility": {
-    "runtime_catalog_path": "shared/canonical-catalog.json",
-    "runtime_catalog_sha256": "d9258c4921b0233dbd2abadf1b2f23605a0dfef9a5d069664e7336ee4648343e",
     "legacy_subject_ids": [
       "AFO",
       "AUDITORIA",
@@ -4219,7 +4309,6 @@
       "ETICA_01",
       "APF_01",
       "DIVERSIDADE_01"
-    ],
-    "runtime_transition": "NOT_APPLIED"
+    ]
   }
 }

@@ -1,18 +1,18 @@
-# Catálogo de conhecimentos — consulta
+# Catálogo unificado de conhecimentos — Cogniva 2.0
 
-Gerado de `shared/knowledge-catalog.json`. Base editorial para revisão; relações de carreira não são exigências de edital. Ainda não substitui o catálogo usado pelo aplicativo.
+Gerado automaticamente a partir de `shared/knowledge-catalog.json` (`python3 scripts/knowledge_catalog.py --export`). Este é o catálogo único ativo utilizado pelo backend Rust (`cogniva-api`), pelo painel `/admin/` e pelo aplicativo Android.
 
 ## Troncos de carreira
 
-| ID | Nome |
-| --- | --- |
-| `fiscal` | Área Fiscal |
-| `policial` | Carreiras Policiais |
-| `controle` | Controle |
-| `engenharia` | Engenharia |
-| `tribunais` | Tribunais |
-| `bancaria` | Bancária |
-| `fiscalizacao_trabalho` | Fiscalização do Trabalho |
+| ID | Nome | Ícone | Status |
+| --- | --- | --- | --- |
+| `fiscal` | Área Fiscal | `account_balance` | `ACTIVE` |
+| `policial` | Carreiras Policiais | `local_police` | `ACTIVE` |
+| `controle` | Controle | `fact_check` | `ACTIVE` |
+| `engenharia` | Engenharia | `engineering` | `ACTIVE` |
+| `tribunais` | Tribunais | `gavel` | `ACTIVE` |
+| `bancaria` | Bancária | `savings` | `ACTIVE` |
+| `fiscalizacao_trabalho` | Fiscalização do Trabalho | `work` | `ACTIVE` |
 
 ## AFO — Administração Financeira e Orçamentária
 
@@ -20,7 +20,7 @@ Gestão do orçamento e de sua execução; não é sinônimo integral de Finanç
 
 Nomes alternativos: AFO; Orçamento Público e Administração Financeira.
 
-Carreiras: `controle` (FOUNDATIONAL; LEGACY_TEMPLATE).
+Carreiras vinculadas: `controle` (FOUNDATIONAL, peso padrão `2.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -36,7 +36,7 @@ Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial,
 
 Nomes alternativos: Auditoria no Setor Público.
 
-Carreiras: `controle` (FOUNDATIONAL; LEGACY_TEMPLATE).
+Carreiras vinculadas: `controle` (FOUNDATIONAL, peso padrão `2.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -52,7 +52,7 @@ Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial,
 
 Nomes alternativos: Contabilidade Financeira.
 
-Carreiras: `fiscal` (FOUNDATIONAL; LEGACY_TEMPLATE).
+Carreiras vinculadas: `fiscal` (FOUNDATIONAL, peso padrão `2.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -68,7 +68,7 @@ Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial,
 
 Nomes alternativos: Direito da Administração Pública.
 
-Carreiras: `fiscal` (RELATED; LEGACY_TEMPLATE); `controle` (RELATED; LEGACY_TEMPLATE); `tribunais` (RELATED; LEGACY_TEMPLATE).
+Carreiras vinculadas: `fiscal` (RELATED, peso padrão `1.0`); `controle` (RELATED, peso padrão `1.0`); `tribunais` (RELATED, peso padrão `1.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -84,7 +84,7 @@ Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial,
 
 Nomes alternativos: Direito da Constituição.
 
-Carreiras: `fiscal` (RELATED; LEGACY_TEMPLATE); `policial` (RELATED; LEGACY_TEMPLATE); `controle` (RELATED; LEGACY_TEMPLATE); `tribunais` (FOUNDATIONAL; LEGACY_TEMPLATE).
+Carreiras vinculadas: `fiscal` (RELATED, peso padrão `1.5`); `policial` (RELATED, peso padrão `1.5`); `controle` (RELATED, peso padrão `1.5`); `tribunais` (FOUNDATIONAL, peso padrão `1.5`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -100,7 +100,7 @@ Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial,
 
 Nomes alternativos: Direito Criminal.
 
-Carreiras: `policial` (FOUNDATIONAL; LEGACY_TEMPLATE).
+Carreiras vinculadas: `policial` (FOUNDATIONAL, peso padrão `3.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -116,7 +116,7 @@ Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial,
 
 Nomes alternativos: Processo Civil.
 
-Carreiras: `tribunais` (FOUNDATIONAL; LEGACY_TEMPLATE).
+Carreiras vinculadas: `tribunais` (FOUNDATIONAL, peso padrão `2.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -132,7 +132,7 @@ Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial,
 
 Nomes alternativos: Processo Penal.
 
-Carreiras: `policial` (FOUNDATIONAL; LEGACY_TEMPLATE).
+Carreiras vinculadas: `policial` (FOUNDATIONAL, peso padrão `2.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -148,7 +148,7 @@ Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial,
 
 Nomes alternativos: Direito Tributário Brasileiro.
 
-Carreiras: `fiscal` (FOUNDATIONAL; LEGACY_TEMPLATE).
+Carreiras vinculadas: `fiscal` (FOUNDATIONAL, peso padrão `3.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -164,7 +164,7 @@ Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial,
 
 Nomes alternativos: Ciências Econômicas.
 
-Carreiras: `bancaria` (FOUNDATIONAL; LEGACY_TEMPLATE).
+Carreiras vinculadas: `bancaria` (FOUNDATIONAL, peso padrão `2.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -180,7 +180,7 @@ Identidade legada restrita a Estruturas. O código não representa toda a Engenh
 
 Nomes alternativos: Estruturas de Engenharia Civil.
 
-Carreiras: `engenharia` (FOUNDATIONAL; LEGACY_TEMPLATE).
+Carreiras vinculadas: `engenharia` (FOUNDATIONAL, peso padrão `3.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -196,7 +196,7 @@ Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial,
 
 Nomes alternativos: Mecânica dos Materiais.
 
-Carreiras: `engenharia` (FOUNDATIONAL; LEGACY_TEMPLATE).
+Carreiras vinculadas: `engenharia` (FOUNDATIONAL, peso padrão `2.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -212,7 +212,7 @@ Finanças estatais e seus instrumentos, receitas, despesas e resultados; sobrep�
 
 Nomes alternativos: Finanças do Setor Público.
 
-Carreiras: `fiscal` (FOUNDATIONAL; LEGACY_TEMPLATE); `controle` (FOUNDATIONAL; LEGACY_TEMPLATE); `bancaria` (FOUNDATIONAL; LEGACY_TEMPLATE).
+Carreiras vinculadas: `fiscal` (FOUNDATIONAL, peso padrão `2.0`); `controle` (FOUNDATIONAL, peso padrão `2.0`); `bancaria` (FOUNDATIONAL, peso padrão `2.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -233,7 +233,7 @@ Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial,
 
 Nomes alternativos: Conhecimentos do Mercado Financeiro.
 
-Carreiras: `bancaria` (FOUNDATIONAL; LEGACY_TEMPLATE).
+Carreiras vinculadas: `bancaria` (FOUNDATIONAL, peso padrão `2.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -249,7 +249,7 @@ Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial,
 
 Nomes alternativos: Português.
 
-Carreiras: `fiscal` (RELATED; LEGACY_TEMPLATE); `policial` (RELATED; LEGACY_TEMPLATE); `controle` (RELATED; LEGACY_TEMPLATE); `engenharia` (RELATED; LEGACY_TEMPLATE); `tribunais` (RELATED; LEGACY_TEMPLATE); `bancaria` (RELATED; LEGACY_TEMPLATE); `fiscalizacao_trabalho` (RELATED; EDITORIAL_SUGGESTION).
+Carreiras vinculadas: `fiscal` (RELATED, peso padrão `1.0`); `policial` (RELATED, peso padrão `1.0`); `controle` (RELATED, peso padrão `1.0`); `engenharia` (RELATED, peso padrão `1.0`); `tribunais` (RELATED, peso padrão `1.0`); `bancaria` (RELATED, peso padrão `1.0`); `fiscalizacao_trabalho` (RELATED, peso padrão `1.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -266,7 +266,7 @@ Conteúdos de segurança e saúde no trabalho; títulos normativos exigem consul
 
 Nomes alternativos: Segurança e Saúde no Trabalho; Saúde e Segurança do Trabalho.
 
-Carreiras: `controle` (RELATED; LEGACY_TEMPLATE); `fiscalizacao_trabalho` (FOUNDATIONAL; EDITORIAL_SUGGESTION).
+Carreiras vinculadas: `controle` (RELATED, peso padrão `1.0`); `fiscalizacao_trabalho` (FOUNDATIONAL, peso padrão `3.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -287,7 +287,7 @@ Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial,
 
 Nomes alternativos: Direito Laboral.
 
-Carreiras: `controle` (RELATED; LEGACY_TEMPLATE); `fiscalizacao_trabalho` (FOUNDATIONAL; EDITORIAL_SUGGESTION).
+Carreiras vinculadas: `controle` (RELATED, peso padrão `1.0`); `fiscalizacao_trabalho` (FOUNDATIONAL, peso padrão `3.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -303,7 +303,7 @@ Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial,
 
 Nomes alternativos: Sociologia e Psicologia Aplicadas; Sociologia e Psicologia do Trabalho.
 
-Carreiras: `controle` (RELATED; LEGACY_TEMPLATE); `fiscalizacao_trabalho` (FOUNDATIONAL; EDITORIAL_SUGGESTION).
+Carreiras vinculadas: `controle` (RELATED, peso padrão `1.0`); `fiscalizacao_trabalho` (FOUNDATIONAL, peso padrão `2.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -319,7 +319,7 @@ Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial,
 
 Nomes alternativos: Políticas Governamentais.
 
-Carreiras: `controle` (RELATED; LEGACY_TEMPLATE); `fiscalizacao_trabalho` (RELATED; EDITORIAL_SUGGESTION).
+Carreiras vinculadas: `controle` (RELATED, peso padrão `1.0`); `fiscalizacao_trabalho` (RELATED, peso padrão `1.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -335,7 +335,7 @@ Governança e mecanismos de direção, estratégia e gestão no setor público; 
 
 Nomes alternativos: Governança e Gestão no Setor Público.
 
-Carreiras: `controle` (RELATED; LEGACY_TEMPLATE); `fiscalizacao_trabalho` (RELATED; EDITORIAL_SUGGESTION).
+Carreiras vinculadas: `controle` (RELATED, peso padrão `1.0`); `fiscalizacao_trabalho` (RELATED, peso padrão `1.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -351,7 +351,7 @@ Instituições, democracia e desafios do Estado de Direito; não equivale a todo
 
 Nomes alternativos: Estado de Direito e Democracia.
 
-Carreiras: `controle` (RELATED; LEGACY_TEMPLATE); `fiscalizacao_trabalho` (RELATED; EDITORIAL_SUGGESTION).
+Carreiras vinculadas: `controle` (RELATED, peso padrão `1.0`); `fiscalizacao_trabalho` (RELATED, peso padrão `1.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -367,7 +367,7 @@ Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial,
 
 Nomes alternativos: Ética no Serviço Público.
 
-Carreiras: `controle` (RELATED; LEGACY_TEMPLATE); `fiscalizacao_trabalho` (RELATED; EDITORIAL_SUGGESTION).
+Carreiras vinculadas: `controle` (RELATED, peso padrão `1.0`); `fiscalizacao_trabalho` (RELATED, peso padrão `1.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -383,7 +383,7 @@ Organização e funcionamento da Administração Pública Federal.
 
 Nomes alternativos: Organização da Administração Pública Federal.
 
-Carreiras: `controle` (RELATED; LEGACY_TEMPLATE); `fiscalizacao_trabalho` (RELATED; EDITORIAL_SUGGESTION).
+Carreiras vinculadas: `controle` (RELATED, peso padrão `1.0`); `fiscalizacao_trabalho` (RELATED, peso padrão `1.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -399,7 +399,7 @@ Disciplina de referência; assuntos e subassuntos delimitam a cobertura inicial,
 
 Nomes alternativos: Diversidade e Inclusão Social.
 
-Carreiras: `controle` (RELATED; LEGACY_TEMPLATE); `fiscalizacao_trabalho` (RELATED; EDITORIAL_SUGGESTION).
+Carreiras vinculadas: `controle` (RELATED, peso padrão `1.0`); `fiscalizacao_trabalho` (RELATED, peso padrão `1.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -415,7 +415,7 @@ Expansão editorial inicial; requer confirmação dos tópicos aplicáveis em ca
 
 Nomes alternativos: Matemática Básica.
 
-Carreiras: `fiscal` (RELATED; EDITORIAL_SUGGESTION); `policial` (RELATED; EDITORIAL_SUGGESTION); `engenharia` (RELATED; EDITORIAL_SUGGESTION); `bancaria` (RELATED; EDITORIAL_SUGGESTION).
+Carreiras vinculadas: `fiscal` (RELATED, peso padrão `1.0`); `policial` (RELATED, peso padrão `1.0`); `engenharia` (RELATED, peso padrão `1.0`); `bancaria` (RELATED, peso padrão `1.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -434,7 +434,7 @@ Expansão editorial inicial; requer confirmação dos tópicos aplicáveis em ca
 
 Nomes alternativos: Raciocínio Lógico-Matemático.
 
-Carreiras: `fiscal` (RELATED; EDITORIAL_SUGGESTION); `policial` (RELATED; EDITORIAL_SUGGESTION); `controle` (RELATED; EDITORIAL_SUGGESTION); `tribunais` (RELATED; EDITORIAL_SUGGESTION); `bancaria` (RELATED; EDITORIAL_SUGGESTION); `fiscalizacao_trabalho` (RELATED; EDITORIAL_SUGGESTION).
+Carreiras vinculadas: `fiscal` (RELATED, peso padrão `1.0`); `policial` (RELATED, peso padrão `1.0`); `controle` (RELATED, peso padrão `1.0`); `tribunais` (RELATED, peso padrão `1.0`); `bancaria` (RELATED, peso padrão `1.0`); `fiscalizacao_trabalho` (RELATED, peso padrão `1.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -453,7 +453,7 @@ Expansão editorial inicial; requer confirmação dos tópicos aplicáveis em ca
 
 Nomes alternativos: Cálculo Financeiro.
 
-Carreiras: `fiscal` (RELATED; EDITORIAL_SUGGESTION); `controle` (RELATED; EDITORIAL_SUGGESTION); `bancaria` (RELATED; EDITORIAL_SUGGESTION).
+Carreiras vinculadas: `fiscal` (RELATED, peso padrão `1.0`); `controle` (RELATED, peso padrão `1.0`); `bancaria` (RELATED, peso padrão `1.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -472,7 +472,7 @@ Expansão editorial inicial; requer confirmação dos tópicos aplicáveis em ca
 
 Nomes alternativos: Estatística Aplicada.
 
-Carreiras: `fiscal` (RELATED; EDITORIAL_SUGGESTION); `controle` (RELATED; EDITORIAL_SUGGESTION); `bancaria` (RELATED; EDITORIAL_SUGGESTION); `fiscalizacao_trabalho` (RELATED; EDITORIAL_SUGGESTION).
+Carreiras vinculadas: `fiscal` (RELATED, peso padrão `1.0`); `controle` (RELATED, peso padrão `1.0`); `bancaria` (RELATED, peso padrão `1.0`); `fiscalizacao_trabalho` (RELATED, peso padrão `1.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -495,7 +495,7 @@ Expansão editorial inicial; requer confirmação dos tópicos aplicáveis em ca
 
 Nomes alternativos: Noções de Informática.
 
-Carreiras: `fiscal` (RELATED; EDITORIAL_SUGGESTION); `policial` (RELATED; EDITORIAL_SUGGESTION); `controle` (RELATED; EDITORIAL_SUGGESTION); `engenharia` (RELATED; EDITORIAL_SUGGESTION); `tribunais` (RELATED; EDITORIAL_SUGGESTION); `bancaria` (RELATED; EDITORIAL_SUGGESTION); `fiscalizacao_trabalho` (RELATED; EDITORIAL_SUGGESTION).
+Carreiras vinculadas: `fiscal` (RELATED, peso padrão `1.0`); `policial` (RELATED, peso padrão `1.0`); `controle` (RELATED, peso padrão `1.0`); `engenharia` (RELATED, peso padrão `1.0`); `tribunais` (RELATED, peso padrão `1.0`); `bancaria` (RELATED, peso padrão `1.0`); `fiscalizacao_trabalho` (RELATED, peso padrão `1.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -514,7 +514,7 @@ Expansão editorial inicial; requer confirmação dos tópicos aplicáveis em ca
 
 Nomes alternativos: Teoria Geral da Administração.
 
-Carreiras: `controle` (RELATED; EDITORIAL_SUGGESTION); `tribunais` (RELATED; EDITORIAL_SUGGESTION); `bancaria` (RELATED; EDITORIAL_SUGGESTION); `fiscalizacao_trabalho` (RELATED; EDITORIAL_SUGGESTION).
+Carreiras vinculadas: `controle` (RELATED, peso padrão `1.0`); `tribunais` (RELATED, peso padrão `1.0`); `bancaria` (RELATED, peso padrão `1.0`); `fiscalizacao_trabalho` (RELATED, peso padrão `1.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -533,7 +533,7 @@ Expansão editorial inicial; requer confirmação dos tópicos aplicáveis em ca
 
 Nomes alternativos: Contabilidade Aplicada ao Setor Público; CASP.
 
-Carreiras: `fiscal` (RELATED; EDITORIAL_SUGGESTION); `controle` (RELATED; EDITORIAL_SUGGESTION).
+Carreiras vinculadas: `fiscal` (RELATED, peso padrão `1.0`); `controle` (RELATED, peso padrão `1.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -552,7 +552,7 @@ Expansão editorial inicial; requer confirmação dos tópicos aplicáveis em ca
 
 Nomes alternativos: Administração de Recursos Humanos; Recursos Humanos.
 
-Carreiras: `controle` (RELATED; EDITORIAL_SUGGESTION); `tribunais` (RELATED; EDITORIAL_SUGGESTION); `bancaria` (RELATED; EDITORIAL_SUGGESTION); `fiscalizacao_trabalho` (RELATED; EDITORIAL_SUGGESTION).
+Carreiras vinculadas: `controle` (RELATED, peso padrão `1.0`); `tribunais` (RELATED, peso padrão `1.0`); `bancaria` (RELATED, peso padrão `1.0`); `fiscalizacao_trabalho` (RELATED, peso padrão `1.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -571,7 +571,7 @@ Expansão editorial inicial; requer confirmação dos tópicos aplicáveis em ca
 
 Nomes alternativos: Direito Civil Brasileiro.
 
-Carreiras: `fiscal` (RELATED; EDITORIAL_SUGGESTION); `tribunais` (RELATED; EDITORIAL_SUGGESTION).
+Carreiras vinculadas: `fiscal` (RELATED, peso padrão `1.0`); `tribunais` (RELATED, peso padrão `1.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -590,7 +590,7 @@ Expansão editorial inicial; requer confirmação dos tópicos aplicáveis em ca
 
 Nomes alternativos: Gestão de Obras; Planejamento de Obras.
 
-Carreiras: `engenharia` (RELATED; EDITORIAL_SUGGESTION); `controle` (RELATED; EDITORIAL_SUGGESTION).
+Carreiras vinculadas: `engenharia` (RELATED, peso padrão `1.0`); `controle` (RELATED, peso padrão `1.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -609,7 +609,7 @@ Expansão editorial inicial; requer confirmação dos tópicos aplicáveis em ca
 
 Nomes alternativos: Legislação Eleitoral.
 
-Carreiras: `tribunais` (RELATED; EDITORIAL_SUGGESTION).
+Carreiras vinculadas: `tribunais` (RELATED, peso padrão `1.0`).
 
 | ID | Nível | Nome | Assunto pai |
 | --- | --- | --- | --- |
@@ -624,7 +624,7 @@ Carreiras: `tribunais` (RELATED; EDITORIAL_SUGGESTION).
 
 ## Relações entre conteúdos
 
-Estas relações não representam equivalência nem transferência automática de domínio.
+Estas relações apoiam navegação e diagnóstico editorial; não transferem domínio automaticamente sem confirmação.
 
 | Origem | Destino | Relação | Justificativa |
 | --- | --- | --- | --- |

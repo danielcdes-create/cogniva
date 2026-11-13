@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cogniva.local/schemas/exam-templates-v1.json",
+  "title": "Cogniva global exam templates v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "updated_at",
+    "templates"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "schemas/exam-templates.schema.json"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date"
+    },
+    "templates": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/exam_template"
+      }
+    }
+  },
+  "$defs": {
+    "target_date": {
+      "type": "object",
+      "required": ["type"],
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {
+            "type": {"const": "UNDEFINED"}
+          }
+        },
+        {
+          "additionalProperties": false,
+          "required": ["type", "iso_date"],
+          "properties": {
+            "type": {"const": "EXACT_DATE"},
+            "iso_date": {"type": "string", "format": "date"}
+          }
+        },
+        {
+          "additionalProperties": false,
+          "required": ["type", "label", "estimated_sort_date"],
+          "properties": {
+            "type": {"const": "ESTIMATED_WINDOW"},
+            "label": {"type": "string", "minLength": 1, "maxLength": 120},
+            "estimated_sort_date": {"type": "string", "format": "date"}
+          }
+        }
+      ]
+    },
+    "exam_template": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "_id",
+        "revision",
+        "owner_user_id",
+        "title",
+        "short_name",
+        "institution",
+        "role",
+        "trunk_slug",
+        "status",
+        "exam_boards",
+        "target_date",
+        "historical_cutoff_score",
+        "is_active_in_ladder",
+        "ladder_priority",
+        "subjects",
+        "edital_diff_summary",
+        "sync_status",
+        "wrong_answer_penalty"
+      ],
+      "properties": {
+        "_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,100}$"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "owner_user_id": {
+          "type": "null"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "short_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "institution": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "role": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "trunk_slug": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "status": {
+          "enum": [
+            "RUMOR_PREVISTO",
+            "AUTORIZADO",
+            "BANCA_DEFINIDA",
+            "EDITAL_PUBLICADO",
+            "POS_PROVA",
+            "ARQUIVADO",
+            "EXCLUIDO"
+          ]
+        },
+        "exam_boards": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          }
+        },
+        "target_date": {
+          "$ref": "#/$defs/target_date"
+        },
+        "historical_cutoff_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "is_active_in_ladder": {
+          "type": "boolean"
+        },
+        "ladder_priority": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "subjects": {
+          "type": "array",
+          "maxItems": 100
+        },
+        "edital_diff_summary": {
+          "anyOf": [
+            {"type": "object"},
+            {"type": "null"}
+          ]
+        },
+        "sync_status": {
+          "const": "SYNCED"
+        },
+        "wrong_answer_penalty": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    }
+  }
+}

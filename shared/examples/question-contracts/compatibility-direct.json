@@ -8,7 +8,7 @@
   "component_id": "synthetic-component",
   "question_id": "000000000000000000000001",
   "question_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
-  "catalog_version": 1,
+  "catalog_version": 2,
   "relation": "DIRECT",
   "status": "CONFIRMED",
   "matched_topic_ids": [
