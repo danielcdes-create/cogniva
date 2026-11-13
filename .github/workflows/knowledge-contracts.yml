@@ -1,17 +1,17 @@
-name: Knowledge catalog and question contracts
+name: Knowledge catalog, question contracts and migration tests
 on:
   workflow_dispatch:
   workflow_call:
+  pull_request:
+    paths:
+      - 'shared/**'
+      - 'scripts/**'
+      - 'docs/catalogo/**'
+      - '.github/workflows/knowledge-contracts.yml'
   push:
     paths:
-      - 'shared/knowledge-*'
-      - 'shared/canonical-catalog.json'
-      - 'shared/schemas/**'
-      - 'shared/examples/question-contracts/**'
-      - 'scripts/knowledge_catalog.py'
-      - 'scripts/question_contracts.py'
-      - 'scripts/tests/**'
-      - 'scripts/requirements-contracts.txt'
+      - 'shared/**'
+      - 'scripts/**'
       - 'docs/catalogo/**'
       - '.github/workflows/knowledge-contracts.yml'
 permissions:
@@ -33,5 +33,5 @@ jobs:
         run: python scripts/knowledge_catalog.py --check
       - name: Question, suggestion, compatibility and grading examples
         run: python scripts/question_contracts.py --examples
-      - name: Positive and adversarial contract tests
-        run: python -m unittest discover -s scripts/tests -p 'test_*.py' -v
+      - name: Contract, preservation and migration tests
+        run: pytest scripts/tests -v

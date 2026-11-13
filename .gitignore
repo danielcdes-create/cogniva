@@ -18,21 +18,33 @@ build/
 *.iml
 .DS_Store
 
-# Secrets & Environment variables
+# Web Admin
+web-admin/node_modules/
+**/node_modules/
+
+# Secrets, Keys & Environment variables
 .env
-.env.rust
-.env.local
+.env.*
+!.env.example
 *.pem
 *.key
 *.pfx
 *.p12
 *.jks
+*.keystore
+
+# Python & Runtime artifacts
 __pycache__/
 *.pyc
+.pytest_cache/
+.venv/
+*.pid
 
-# Logs
+# Logs & Ephemeral evidence
 *.log
 nohup.out
+release-bundle/
+current-release.json
 
 # VS Code & IDEs
 .vscode/

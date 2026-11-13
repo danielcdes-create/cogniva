@@ -1,4 +1,4 @@
-name: Gated build and atomic DigitalOcean promotion
+name: Gated build, isolated rollback drill and atomic DigitalOcean promotion
 on:
   workflow_dispatch:
     inputs:
@@ -14,11 +14,23 @@ concurrency:
   group: cogniva-production
   cancel-in-progress: false
 jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Forbid [skip ci] on release workflows
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          if printf '%s' "$COMMIT_MSG" | grep -Fq '[skip ci]'; then
+            echo "::error::Release tags and deploy runs must never carry [skip ci]."
+            exit 1
+          fi
   verify:
-    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    needs: guard
     uses: ./.github/workflows/validate.yml
   emulator:
-    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    needs: guard
     uses: ./.github/workflows/emulator-insets.yml
   build:
     needs: [verify, emulator]
@@ -38,7 +50,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: false
-      - name: Build release client (no debug signing)
+      - name: Build release client (R8 enabled, no debug signing)
         working-directory: android-app
         run: |
           chmod +x gradlew
@@ -72,7 +84,7 @@ jobs:
           context: .
           file: backend-rust/Dockerfile
           load: true
-          tags: ghcr.io/danielcdes-create/api-rust-core:sha-${{ github.sha }}
+          tags: ghcr.io/danielcdes-create/cogniva-api:sha-${{ github.sha }}
           build-args: BUILD_REVISION=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -82,7 +94,7 @@ jobs:
           REVISION: ${{ github.sha }}
         run: |
           set -euo pipefail
-          tag="ghcr.io/danielcdes-create/api-rust-core:sha-$REVISION"
+          tag="ghcr.io/danielcdes-create/cogniva-api:sha-$REVISION"
           size=$(docker image inspect "$tag" --format '{{.Size}}')
           test "$size" -lt 50000000
           docker push "$tag"
@@ -97,15 +109,90 @@ jobs:
           name: cogniva-release-${{ github.sha }}
           path: release-bundle/
           retention-days: 5
-  promote:
+  rollback-drill:
     needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: cogniva-release-${{ github.sha }}
+          path: release-bundle
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Exercise promote.py rollback in isolated Docker Compose stack
+        env:
+          CANDIDATE_IMAGE: ${{ needs.build.outputs.image }}
+          REVISION: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          docker pull "$CANDIDATE_IMAGE"
+          drill_root="$RUNNER_TEMP/opt-apps"
+          mkdir -p "$drill_root/cogniva-incoming/run-1" "$drill_root/apk/releases"
+          cp release-bundle/* "$drill_root/cogniva-incoming/run-1/"
+          COGNIVA_APP_ROOT="$drill_root" python3 "$drill_root/cogniva-incoming/run-1/stage_bundle.py"
+
+          docker network create cogniva-drill-net
+          docker run -d --name cogniva-drill-mongo --network cogniva-drill-net mongo:7.0.41
+          docker run -d --name sibling-tenant --network cogniva-drill-net alpine:3.20 sleep 3600
+
+          cat > "$drill_root/.env.rust" <<EOF
+          MONGODB_URI=mongodb://cogniva-drill-mongo:27017/
+          DATABASE_NAME=cogniva_drill
+          JWT_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+          BIND_ADDRESS=0.0.0.0:8000
+          EOF
+
+          cat > "$drill_root/docker-compose.yml" <<EOF
+          services:
+            api-rust-core:
+              image: $CANDIDATE_IMAGE
+              container_name: api-rust-core
+              env_file: .env.rust
+              ports: ['127.0.0.1:18001:8000']
+              volumes: ['./apk:/app/apk:ro']
+              networks: [default]
+          networks:
+            default:
+              name: cogniva-drill-net
+              external: true
+          EOF
+
+          docker compose -p apps -f "$drill_root/docker-compose.yml" up -d api-rust-core
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18001/api/v1/ready > /dev/null 2>&1; then break; fi
+            sleep 1
+          done
+
+          output=$(
+            COGNIVA_APP_ROOT="$drill_root" \
+            COGNIVA_LOCAL_API="http://127.0.0.1:18001" \
+            COGNIVA_SKIP_NGINX_GATE=1 \
+            COGNIVA_SKIP_PULL=1 \
+            python3 "$drill_root/cogniva-releases/$REVISION/promote.py" \
+              "$drill_root/cogniva-releases/$REVISION" --exercise-rollback
+          )
+          printf '%s\n' "$output"
+          printf '%s\n' "$output" | grep -Fq 'CONTROLLED_ROLLBACK_VERIFIED'
+      - name: Cleanup drill containers
+        if: always()
+        run: docker rm -f api-rust-core sibling-tenant cogniva-drill-mongo 2>/dev/null || true
+  promote:
+    needs: [build, rollback-drill]
     if: github.event_name == 'push' || inputs.promote
+    environment: production
     runs-on: ubuntu-latest
     timeout-minutes: 12
     permissions:
       contents: read
       packages: write
-      # Version deletion is limited to this repository's associated package.
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -122,7 +209,7 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
-      - name: Stage versioned bundle and promote only Cogniva
+      - name: Stage versioned bundle and promote atomically (single restart)
         env:
           DO_HOST: ${{ secrets.DO_HOST }}
           DO_USER: ${{ secrets.DO_USER }}
@@ -132,13 +219,15 @@ jobs:
         run: |
           set -euo pipefail
           target="$DO_USER@$DO_HOST"
-          incoming="/opt/apps/cogniva-incoming/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" "mkdir -p $incoming"
+          run_slug="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          incoming="/opt/apps/cogniva-incoming/$run_slug"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" "mkdir -p '$incoming'"
           scp -o BatchMode=yes -o StrictHostKeyChecking=yes release-bundle/* "$target:$incoming/"
-          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" "python3 $incoming/stage_bundle.py"
-          printf '%s' "$REGISTRY_TOKEN" | ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" "install -d -m 700 /run/cogniva-registry-$REVISION; docker --config /run/cogniva-registry-$REVISION login ghcr.io -u $REGISTRY_USER --password-stdin"
-          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" "set -euo pipefail; trap 'rm -f /run/cogniva-registry-$REVISION/config.json; rmdir /run/cogniva-registry-$REVISION 2>/dev/null || true' EXIT; DOCKER_CONFIG=/run/cogniva-registry-$REVISION python3 /opt/apps/cogniva-releases/$REVISION/promote.py /opt/apps/cogniva-releases/$REVISION --exercise-rollback || true; DOCKER_CONFIG=/run/cogniva-registry-$REVISION python3 /opt/apps/cogniva-releases/$REVISION/promote.py /opt/apps/cogniva-releases/$REVISION"
-
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" "python3 '$incoming/stage_bundle.py'"
+          printf '%s' "$REGISTRY_TOKEN" | ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" \
+            "install -d -m 700 '/run/cogniva-registry-$REVISION' && docker --config '/run/cogniva-registry-$REVISION' login ghcr.io -u '$REGISTRY_USER' --password-stdin"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" \
+            "set -euo pipefail; trap 'rm -f /run/cogniva-registry-$REVISION/config.json; rmdir /run/cogniva-registry-$REVISION 2>/dev/null || true' EXIT; DOCKER_CONFIG='/run/cogniva-registry-$REVISION' python3 '/opt/apps/cogniva-releases/$REVISION/promote.py' '/opt/apps/cogniva-releases/$REVISION'"
       - name: Keep registry within the free storage budget
         env:
           DO_HOST: ${{ secrets.DO_HOST }}

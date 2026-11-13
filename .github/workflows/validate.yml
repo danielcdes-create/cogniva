@@ -1,5 +1,9 @@
-name: Validate contracts and golden images
+name: Validate contracts, backend, web-admin and Android
 on:
+  push:
+    branches: ['main']
+  pull_request:
+    branches: ['main']
   workflow_dispatch:
   workflow_call:
 permissions:
@@ -14,14 +18,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Web syntax, contracts and recovery
+      - name: Web syntax, help sync, state tests and Markdown link integrity
         run: |
           node --check web-admin/app.js
           node --check web-admin/domain.js
           node --check web-admin/help.js
           node scripts/export-admin-help.mjs --check
           node --test web-admin/tests/*.test.js
+          python3 scripts/check_markdown_links.py
   knowledge-contracts:
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
     uses: ./.github/workflows/knowledge-contracts.yml
   backend:
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
@@ -37,9 +43,6 @@ jobs:
           workspaces: backend-rust
       - name: Dedicated synthetic Mongo (never Atlas)
         run: |
-          # Mongo 8.0.34 rejects the hosted Ubuntu kernel release string:
-          # https://jira.mongodb.org/browse/SERVER-136848
-          # Native Windows validation uses 8.0.34; CI additionally proves 7.0 compatibility.
           docker run -d --name cogniva-test-mongo --memory=512m -p 127.0.0.1:27048:27017 mongo:7.0.41 --bind_ip_all --wiredTigerCacheSizeGB 0.25 --setParameter enableTestCommands=1
           for attempt in $(seq 1 30); do
             if docker exec cogniva-test-mongo mongosh --quiet --eval 'db.adminCommand({ping:1})' > /dev/null 2>&1; then exit 0; fi
@@ -47,18 +50,16 @@ jobs:
           done
           docker logs cogniva-test-mongo
           exit 1
-      - name: Router, durability, concurrency, domain and measured APK metadata
+      - name: Unit, router, durability, concurrency, auth and migration tests
         working-directory: backend-rust
         env:
           COGNIVA_TEST_MONGODB_URI: mongodb://127.0.0.1:27048/
-        # failCommand is server-wide; serialize tests so a durability fault
-        # cannot be consumed by another test's database/client.
         run: cargo test --locked -- --include-ignored --test-threads=1
       - name: Remove disposable Mongo
         if: always()
         run: |
-          docker logs --tail 30 cogniva-test-mongo
-          docker rm -f cogniva-test-mongo
+          docker logs --tail 30 cogniva-test-mongo || true
+          docker rm -f cogniva-test-mongo || true
   android:
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
     runs-on: ubuntu-latest
@@ -72,18 +73,20 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: false
-      - name: JVM contracts and real question preview matrix
+      - name: JVM contracts, lint and Paparazzi golden verification
         working-directory: android-app
         run: |
           chmod +x gradlew
           ./gradlew :app:testDebugUnitTest :app:lintDebug --no-daemon --console=plain
-          ./gradlew :app:verifyPaparazziDebug --tests br.com.concursoprep.app.QuestionPreviewMatrixScreenshotTest --tests br.com.concursoprep.app.AccountLinkScreenshotTest --tests br.com.concursoprep.app.ExamEditorScreenshotTest --no-daemon --console=plain
+          cp -r app/build/test-results/testDebugUnitTest app/build/unit-test-results
+          ./gradlew :app:verifyPaparazziDebug --no-daemon --console=plain
           git diff --exit-code -- app/src/test/snapshots
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: android-validation
           path: |
+            android-app/app/build/unit-test-results/
             android-app/app/build/test-results/
             android-app/app/build/paparazzi/failures/
           retention-days: 5
