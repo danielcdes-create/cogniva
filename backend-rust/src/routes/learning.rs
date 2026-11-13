@@ -16,7 +16,7 @@ pub struct LearningQuery {
 }
 #[derive(Serialize)]
 pub struct LearningEvent {
-    pub question_revision:Option<String>,
+    pub question_revision: Option<String>,
     pub attempt_id: String,
     pub occurred_at: String,
     pub is_correct: bool,
@@ -25,8 +25,8 @@ pub struct LearningEvent {
 }
 #[derive(Serialize)]
 pub struct LearningRecord {
-    pub knowledge_projection_version:i32,
-    pub knowledge_evidence:Option<crate::services::knowledge::Evidence>,
+    pub knowledge_projection_version: i32,
+    pub knowledge_evidence: Option<crate::services::knowledge::Evidence>,
     pub question_id: String,
     pub disciplina: String,
     pub canonical_subject_id: Option<String>,
@@ -55,19 +55,19 @@ pub async fn get_state(
     Extension(user): Extension<SessionUser>,
     Query(query): Query<LearningQuery>,
 ) -> Result<Json<LearningPage>, AppError> {
-    let mut filter = doc! {"user_id":user.0};
+    let mut filter = doc! { "user_id": user.user_id };
     if let Some(after) = query.after {
-        filter.insert("_id", doc! {"$gt":ObjectId::parse_str(after)?});
+        filter.insert("_id", doc! { "$gt": ObjectId::parse_str(after)? });
     }
     let mut cursor = state
         .db
         .collection::<Document>("userActivityLog")
         .find(filter)
-        .sort(doc! {"_id":1})
+        .sort(doc! { "_id": 1 })
         .limit(200)
         .await?;
     let mut records = Vec::new();
-    let mut raw_records=Vec::new();
+    let mut raw_records = Vec::new();
     let mut last = None;
     while let Some(raw) = cursor.try_next().await? {
         let id = raw
@@ -85,7 +85,11 @@ pub async fn get_state(
             .iter()
             .enumerate()
             .map(|(index, e)| LearningEvent {
-                question_revision:raw_events.and_then(|all|all.get(index)).and_then(|v|v.as_document()).and_then(|d|d.get_str("question_revision").ok()).map(str::to_string),
+                question_revision: raw_events
+                    .and_then(|all| all.get(index))
+                    .and_then(|v| v.as_document())
+                    .and_then(|d| d.get_str("question_revision").ok())
+                    .map(str::to_string),
                 attempt_id: raw_events
                     .and_then(|all| all.get(index))
                     .and_then(|v| v.as_document())
@@ -99,12 +103,15 @@ pub async fn get_state(
             })
             .collect();
         records.push(LearningRecord {
-            knowledge_projection_version:1,knowledge_evidence:None,
+            knowledge_projection_version: 1,
+            knowledge_evidence: None,
             question_id: activity.question_id.to_hex(),
             disciplina: activity.disciplina,
             canonical_subject_id: activity.canonical_subject_id,
             canonical_topic_id: activity.canonical_topic_id,
-            attempts: activity.quantidade_praticas.max(activity.past_sessions.len() as i32),
+            attempts: activity
+                .quantidade_praticas
+                .max(activity.past_sessions.len() as i32),
             correct: activity.quantidade_acertos,
             accuracy_pct: activity.percentual_acertos,
             is_mastered: activity.dominada,
@@ -123,15 +130,28 @@ pub async fn get_state(
         raw_records.push(raw);
         last = Some(id.to_hex());
     }
-    // Preserve every learning record, including references to unavailable or
-    // invalid questions. Only the actionable queues exclude those references.
-    let ids: Vec<_> = records.iter().filter_map(|r| ObjectId::parse_str(&r.question_id).ok()).collect();
-    let questions=crate::services::knowledge::questions(&state.db,ids.clone()).await?;
-    let available = crate::services::selection_v2::pool(&state, doc!{"_id":{"$in":ids}}, 10000).await?;
-    let available: std::collections::HashSet<_> = available.into_iter().map(|q| q.id.to_hex()).collect();
-    for (record,raw) in records.iter_mut().zip(&raw_records) {
+    let ids: Vec<_> = records
+        .iter()
+        .filter_map(|r| ObjectId::parse_str(&r.question_id).ok())
+        .collect();
+    let questions =
+        crate::services::knowledge::questions(&state.db, user.user_id, ids.clone()).await?;
+    let available = crate::services::selection_v2::pool(
+        &state,
+        user.user_id,
+        doc! { "_id": { "$in": ids } },
+        10000,
+    )
+    .await?;
+    let available: std::collections::HashSet<_> =
+        available.into_iter().map(|q| q.id.to_hex()).collect();
+    for (record, raw) in records.iter_mut().zip(&raw_records) {
         record.practice_available = available.contains(&record.question_id);
-        if let Ok(id)=ObjectId::parse_str(&record.question_id){record.knowledge_evidence=questions.get(&id).and_then(|q|crate::services::knowledge::project(raw,q));}
+        if let Ok(id) = ObjectId::parse_str(&record.question_id) {
+            record.knowledge_evidence = questions
+                .get(&id)
+                .and_then(|q| crate::services::knowledge::project(raw, q));
+        }
     }
     Ok(Json(LearningPage {
         next_cursor: if records.len() == 200 { last } else { None },

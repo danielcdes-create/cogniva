@@ -11,13 +11,96 @@
 <body>
   <a class="skip-link" href="#content">Ir para o conteúdo</a>
   <section id="login" class="login-layout" aria-labelledby="login-title">
-    <div class="login-story"><div class="brand"><span class="brand-mark">c.</span> cogniva</div><span class="eyebrow">SEU ACERVO, BEM ORGANIZADO</span><h1>Mais espaço<br>para organizar<br>o conhecimento.</h1><p>Concursos, editais, disciplinas e questões.<br>Uma administração, no computador e no celular.</p><div class="login-map"><span>Troncos</span><span>Disciplinas</span><span>Concursos</span><span>Questões</span></div></div>
-    <div class="login-card"><span class="eyebrow">PAINEL ADMINISTRATIVO</span><h2 id="login-title">Bem-vindo de volta.</h2><p>Entre com um código temporário da sua conta administrativa.</p><form id="login-form"><label for="login-code">Código de acesso</label><textarea id="login-code" rows="4" required autocomplete="off" spellcheck="false" placeholder="Cole aqui o código de acesso"></textarea><button type="submit" class="primary full">Entrar no painel <span aria-hidden="true">↗</span></button></form><p id="login-message" role="status" aria-live="polite"></p><details><summary>Como obter meu código?</summary><p>O responsável pelo Cogniva emite um código de uso único, válido por 10 minutos, para uma conta autorizada. No ambiente do backend:</p><code>app --issue-web-code ID_DA_CONTA</code><p>Use a mesma conta do Android para administrar seus concursos. O código não é seu ID ou nome de usuário.</p></details><small>As alterações seguem os mesmos contratos e revisões do aplicativo.</small></div>
+    <div class="login-story">
+      <div class="brand"><span class="brand-mark">c.</span> cogniva</div>
+      <span class="eyebrow">SEU ACERVO, BEM ORGANIZADO</span>
+      <h1>Mais espaço<br>para organizar<br>o conhecimento.</h1>
+      <p>Templates globais de concursos, catálogo unificado, questões v2, classificação assistida e moderação.<br>Uma única plataforma nativa, no computador e no Android.</p>
+      <div class="login-map"><span>Catálogo v2</span><span>Templates globais</span><span>Questões JCS</span><span>Classificação IA</span><span>Reportes</span></div>
+    </div>
+    <div class="login-card">
+      <span class="eyebrow">PAINEL ADMINISTRATIVO</span>
+      <h2 id="login-title">Acesso administrativo</h2>
+      <p id="login-subtitle">Entre com o e-mail e a senha da sua conta administrativa Cogniva.</p>
+      <div class="tabs login-tabs" role="tablist" aria-label="Modo de autenticação">
+        <button type="button" id="auth-tab-login" class="active" role="tab" aria-selected="true">Entrar</button>
+        <button type="button" id="auth-tab-register" role="tab" aria-selected="false">Primeiro acesso</button>
+      </div>
+      <form id="login-form">
+        <div class="field" id="login-name-field" hidden>
+          <label for="login-display-name">Nome de exibição</label>
+          <input id="login-display-name" type="text" autocomplete="name" maxlength="80" placeholder="Ex.: Coordenação Editorial">
+        </div>
+        <div class="field">
+          <label for="login-email">E-mail administrativo</label>
+          <input id="login-email" type="email" required autocomplete="username" maxlength="254" placeholder="voce@dominio.com">
+        </div>
+        <div class="field">
+          <label for="login-password">Senha</label>
+          <input id="login-password" type="password" required autocomplete="current-password" minlength="8" maxlength="128" placeholder="Mínimo de 8 caracteres">
+        </div>
+        <button type="submit" id="login-submit" class="primary full">Entrar no painel <span aria-hidden="true">↗</span></button>
+      </form>
+      <p id="login-message" role="status" aria-live="polite"></p>
+      <details>
+        <summary>Como autorizar uma conta administrativa?</summary>
+        <p>Apenas contas com papel administrativo acessam o portal. Para o primeiro cadastro direto pela web, inclua o e-mail em <code>ADMIN_EMAILS</code> no ambiente do servidor antes de usar a aba <strong>Primeiro acesso</strong>.</p>
+        <p>Para promover uma conta já registrada no aplicativo Android ou na API, execute no servidor:</p>
+        <code>cogniva-api --grant-admin email@dominio.com</code>
+      </details>
+      <small>Sessão web protegida por cookie HttpOnly revogável e verificação CSRF.</small>
+    </div>
   </section>
   <div id="app" class="app-shell" hidden>
-    <aside class="sidebar"><a class="brand" href="/admin/"><span class="brand-mark">c.</span> cogniva<span class="brand-sub">ADMIN</span></a><span class="nav-label">ESPAÇO DE TRABALHO</span><nav aria-label="Navegação principal"><button data-page="overview">◉ <span>Visão geral</span></button><button data-page="exams">▣ <span>Concursos</span></button><button data-page="edital">▤ <span>Editais e grades</span></button><button data-page="trunks">⌘ <span>Troncos de carreira</span></button><button data-page="subjects">▥ <span>Disciplinas e assuntos</span></button><button data-page="questions">▦ <span>Banco de questões</span></button><button data-page="import">＋ <span>Inserir questões</span></button><button data-page="catalog">↗ <span>Revisões do catálogo</span></button><button data-page="drafts">◷ <span>Rascunhos e pendências</span></button><button data-page="help">? <span>Ajuda</span></button></nav><div class="sidebar-bottom"><span class="connection-dot"></span><span id="connection">Conectado à mesma base</span><small>O conhecimento se conecta.<br>O histórico permanece.</small></div></aside>
-    <div class="main-shell"><header class="topbar"><button id="menu-toggle" class="icon-button" aria-label="Abrir menu" aria-expanded="false">☰</button><span id="breadcrumb">Administração / Visão geral</span><div class="account"><span class="avatar" aria-hidden="true">C</span><span id="account-name"></span><button id="logout" class="text-button">Sair</button></div></header><main id="content" tabindex="-1"><div id="notice" class="notice" hidden role="status" aria-live="polite"></div><div id="progress" class="progress" hidden role="status"></div><div id="view"></div></main><footer>COGNIVA ADMIN <span>Uma base compartilhada. Decisões revisadas.</span></footer></div>
+    <aside class="sidebar">
+      <a class="brand" href="/admin/"><span class="brand-mark">c.</span> cogniva<span class="brand-sub">ADMIN</span></a>
+      <span class="nav-label">ESPAÇO DE TRABALHO</span>
+      <nav aria-label="Navegação principal">
+        <button data-page="overview">◉ <span>Visão geral</span></button>
+        <button data-page="exams">▣ <span>Concursos</span></button>
+        <button data-page="edital">▤ <span>Editais e grades</span></button>
+        <button data-page="trunks">⌘ <span>Troncos de carreira</span></button>
+        <button data-page="subjects">▥ <span>Disciplinas e assuntos</span></button>
+        <button data-page="questions">▦ <span>Banco de questões</span></button>
+        <button data-page="import">＋ <span>Inserir questões</span></button>
+        <button data-page="classification">✦ <span>Classificação IA</span></button>
+        <button data-page="reports">⚑ <span>Reportes</span></button>
+        <button data-page="catalog">↗ <span>Revisões do catálogo</span></button>
+        <button data-page="drafts">◷ <span>Rascunhos e pendências</span></button>
+        <button data-page="help">? <span>Ajuda</span></button>
+      </nav>
+      <div class="sidebar-bottom">
+        <span class="connection-dot"></span><span id="connection">Conectado à base Cogniva</span>
+        <small>O conhecimento se conecta.<br>O histórico permanece.</small>
+      </div>
+    </aside>
+    <div class="main-shell">
+      <header class="topbar">
+        <button id="menu-toggle" class="icon-button" aria-label="Abrir menu" aria-expanded="false">☰</button>
+        <span id="breadcrumb">Administração / Visão geral</span>
+        <div class="account">
+          <span class="avatar" aria-hidden="true">C</span>
+          <span id="account-name"></span>
+          <button id="logout" class="text-button">Sair</button>
+        </div>
+      </header>
+      <main id="content" tabindex="-1">
+        <div id="notice" class="notice" hidden role="status" aria-live="polite"></div>
+        <div id="progress" class="progress" hidden role="status"></div>
+        <div id="view"></div>
+      </main>
+      <footer>COGNIVA ADMIN 2.0 <span>Base canônica unificada · Decisões auditáveis.</span></footer>
+    </div>
   </div>
-  <dialog id="confirm-dialog"><form method="dialog"><h2 id="confirm-title"></h2><p id="confirm-text"></p><div class="actions"><button value="cancel">Cancelar</button><button value="confirm" class="primary">Confirmar</button></div></form></dialog>
+  <dialog id="confirm-dialog">
+    <form method="dialog">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-text"></p>
+      <div class="actions">
+        <button value="cancel">Cancelar</button>
+        <button value="confirm" class="primary">Confirmar</button>
+      </div>
+    </form>
+  </dialog>
 </body>
 </html>

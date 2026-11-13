@@ -1,27 +1,18 @@
 pub mod ai_tutor;
-pub mod difficulty;
-pub mod exam_engine;
-pub mod quiz_selector;
-pub mod scheduler;
-pub mod seed;
-pub mod srs_engine;
-
 pub mod attempts;
-
-pub mod exam_store;
-
-pub mod legacy_validation;
-pub mod rate_limit;
-pub mod selection_v2;
-
-pub mod question_compatibility;
-
-pub mod question_contracts;
-pub mod question_storage;
-pub mod classification;
-pub mod knowledge;
-pub mod practice_context;
-pub mod legacy_classification;
-pub mod question_import;
 pub mod catalog_editor;
 pub mod catalog_runtime;
+pub mod classification;
+pub mod exam_engine;
+pub mod exam_store;
+pub mod knowledge;
+pub mod practice_context;
+pub mod question_compatibility;
+pub mod question_contracts;
+pub mod question_import;
+pub mod question_storage;
+pub mod quiz_selector;
+pub mod rate_limit;
+pub mod scheduler;
+pub mod selection_v2;
+pub mod srs_engine;

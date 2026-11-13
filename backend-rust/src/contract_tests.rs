@@ -1,16 +1,32 @@
-use crate::services::{exam_engine::*, srs_engine::*};
+use crate::services::{exam_engine::*, exam_store, question_contracts, srs_engine::*};
 use serde_json::Value;
 
 #[test]
 fn both_runtimes_share_utf8_mastery_weighted_score_srs_and_calendar_fixtures() {
     let f: Value =
         serde_json::from_str(include_str!("../../shared/domain-contracts.json")).unwrap();
+    assert_eq!(f["contract_version"].as_i64(), Some(3));
+
+    let catalog = question_contracts::catalog();
+    assert_eq!(catalog["schema_version"].as_i64(), Some(2));
+    assert_eq!(catalog["catalog_version"].as_i64(), Some(2));
+    assert_eq!(catalog["status"].as_str(), Some("ACTIVE"));
+
+    let templates = system_exam_blueprints();
+    assert!(templates.len() >= 4);
+    for tpl in &templates {
+        exam_store::validate(tpl).expect("bundled exam template must satisfy exam_store::validate");
+    }
+
     let q = &f["question"];
-    let question:crate::models::question::QuestionDocument=bson::from_document(bson::doc!{
-        "_id":bson::oid::ObjectId::new(),"question":q["question"].as_str().unwrap(),
-        "answers":q["answers"].as_array().unwrap().iter().map(|a|a.as_str().unwrap()).collect::<Vec<_>>(),
-        "correct_answers":[q["answers"][q["correct_index"].as_u64().unwrap() as usize].as_str().unwrap()],"disciplina":"Fixture"
-    }).unwrap();
+    let question: crate::models::question::QuestionDocument = bson::from_document(bson::doc! {
+        "_id": bson::oid::ObjectId::new(),
+        "question": q["question"].as_str().unwrap(),
+        "answers": q["answers"].as_array().unwrap().iter().map(|a| a.as_str().unwrap()).collect::<Vec<_>>(),
+        "correct_answers": [q["answers"][q["correct_index"].as_u64().unwrap() as usize].as_str().unwrap()],
+        "disciplina": "Fixture"
+    })
+    .unwrap();
     assert_eq!(
         question.revision().unwrap(),
         q["revision"].as_str().unwrap()

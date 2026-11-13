@@ -46,6 +46,7 @@ pub async fn load(
     }
     let raw = super::knowledge::questions(
         &state.db,
+        user,
         questions
             .iter()
             .filter_map(|q| bson::oid::ObjectId::parse_str(&q.id).ok())

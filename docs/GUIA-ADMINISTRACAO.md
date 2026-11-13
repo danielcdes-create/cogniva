@@ -2,199 +2,210 @@
 
 Conteúdo compartilhado com a seção Ajuda do portal, disponível no menu lateral e em Ajuda desta tela. Fonte: `web-admin/help.js`. Para atualizar este arquivo, execute `node scripts/export-admin-help.mjs --write`.
 
-## Por onde começar
+## Por onde começar no Cogniva 2.0
 
-O portal organiza sua preparação e o acervo compartilhado. Você pode preparar uma grade antes de existir edital novo.
+O portal gerencia os templates globais de concursos, o catálogo canônico unificado (v2), o acervo de questões, a classificação assistida por IA e a moderação de reportes.
 
-1. Confira os concursos já cadastrados em Concursos antes de criar outro.
-2. Abra a grade do concurso e selecione disciplinas, assuntos e subassuntos.
-3. Insira ou revise questões, classificando o conteúdo cobrado.
-4. Use Rascunhos e pendências para continuar edições e conferir envios sem resposta.
+1. Confira os templates globais já publicados em Concursos (CPNU, RFB, BNDES, AFT e novos cadastros) antes de criar outro.
+2. Abra a grade do template e organize disciplinas, pesos, quantidades e assuntos do catálogo.
+3. Insira ou revise questões, definindo classificação canônica e validade explícita (Atual, Em revisão ou Obsoleta).
+4. Acompanhe Classificação IA e Reportes para manter a curadoria do acervo em dia.
 
-Concursos e grades pertencem à sua conta. Questões e catálogo são compartilhados com o Android e outras contas autorizadas.
+No Cogniva 2.0, o painel edita templates globais compartilhados com os alunos. Alunos sem customização recebem atualizações automaticamente; alunos que personalizaram sua grade recebem aviso opcional para adotar a nova versão.
 
 No portal: **Ir à visão geral**.
 
-## Tronco, concurso, edital, grade e conteúdo: qual a diferença?
+## Tronco, template global, grade pessoal e catálogo unificado
 
-Existem duas estruturas conectadas: a organização dos estudos por concurso e o catálogo de conteúdo compartilhado.
+A preparação conecta o catálogo canônico unificado (v2) aos templates globais de concursos e às grades dos estudantes.
 
-1. Tronco de carreira agrupa uma área e relaciona disciplinas. Um concurso declara seu tronco; uma disciplina pode se relacionar a vários troncos.
-2. Concurso identifica a oportunidade e o cargo. Sua grade organiza componentes: uma disciplina em uma etapa, com peso, quantidade e conteúdo próprios.
-3. Edital é a referência oficial. A grade também pode conter uma base de preparação pré-edital, ainda estimada.
-4. No catálogo, Disciplina → Assunto → Subassunto. Um subassunto detalha um assunto da mesma disciplina.
-5. Questões são classificadas pelo conteúdo. Prova, banca e ano registram sua origem; o uso em outras grades depende da correspondência e das regras de compatibilidade.
+1. Tronco de carreira agrupa uma área (Fiscal, Controle, Jurídica, Policial, Administrativa, Bancária, TI) com ícone e pesos padrão nas relações editoriais.
+2. Template global de concurso define cargo, instituição, situação e grade de referência para todos os usuários do aplicativo.
+3. No aplicativo Android, o estudante pode seguir o template global ou personalizar sua própria cópia em user_exams sem perder seu histórico.
+4. No catálogo unificado, Disciplina → Assunto → Subassunto mantém identidades estáveis em todas as versões.
+5. Questões usam hash canônico único JCS SHA-256 (content_revision) e elegibilidade explícita por validade e classificação.
 
-O tronco sugere relações editoriais; ele não determina sozinho o conteúdo do edital. Incluir um assunto pai não inclui seus subassuntos automaticamente.
+O tronco sugere disciplinas e pesos iniciais, mas cada componente da grade define exatamente os assuntos cobrados na etapa.
 
 No portal: **Explorar disciplinas e assuntos**.
 
-## Visão geral e indicadores
+## Visão geral e indicadores operacionais
 
-Reúne indicadores do acervo e atalhos para organizar concursos, consultar questões e revisar o catálogo.
+Reúne os indicadores em tempo real do banco cogniva: templates globais, saúde de validade das questões, itens sem classificação, propostas de IA e reportes abertos.
 
-1. Use os cartões para distinguir concursos da sua conta de troncos, disciplinas e questões compartilhados.
-2. Abra os atalhos para a área em que deseja trabalhar.
-3. Use Atualizar indicadores para consultar novamente os totais do servidor.
+1. Acompanhe a distribuição de questões atuais, em revisão, obsoletas, sem classificação e discursivas preparatórias.
+2. Use os atalhos rápidos para ir direto à fila de Classificação IA ou à moderação de Reportes.
+3. Clique em Atualizar indicadores para recarregar as contagens do servidor.
 
-Uma contagem de questões não significa que todas estão classificadas, revisadas ou disponíveis em todos os modos de treino.
+Questões obsoletas e questões discursivas preparatórias permanecem preservadas no acervo, mas não entram nas filas de prática objetiva.
 
 No portal: **Abrir visão geral**.
 
-## Criar e gerenciar concursos
+## Criar e gerenciar templates globais de concursos
 
-Em Concursos, busque uma oportunidade existente ou use Criar concurso. Cada cadastro mantém sua própria grade.
+Em Concursos, gerencie os templates oficiais e pré-editais servidos para toda a base de alunos.
 
-1. Informe nome completo, nome curto, instituição, cargo e tronco de carreira. Confira o tronco: escolher uma carreira não preenche a grade automaticamente no painel.
-2. Selecione a situação correspondente ao que está confirmado. Deixe banca e data sem definição quando ainda não forem conhecidas.
-3. Configure a previsão da prova, prioridade e participação na sua escada. Corte histórico e penalidade por erro devem refletir a referência que você está usando.
-4. Monte a grade e clique em Salvar concurso e grade. Abrir grade permite continuar a edição do mesmo cadastro.
-5. Arquivar concurso retira-o da escada ativa e conserva a grade e o histórico.
+1. Informe identificador ou crie um novo template com nome completo, nome curto, instituição, cargo e tronco de carreira.
+2. Selecione a situação (Previsto, Autorizado, Banca definida, Edital publicado, Prova realizada ou Arquivado).
+3. Configure previsão da prova (Sem previsão, Data exata ou Janela estimada), corte histórico e penalidade por erro.
+4. Monte os componentes da grade respeitando o limite total de até 500 questões somadas e clique em Salvar concurso e grade.
+5. Arquivar template retira-o das recomendações iniciais sem apagar o histórico nem as grades pessoais já criadas.
 
-Uma edição é um rascunho até a confirmação do salvamento no servidor.
+Alterações confirmadas em um template global atualizam automaticamente estudantes que não customizaram a grade e sinalizam atualização disponível para quem customizou.
 
 No portal: **Abrir concursos**.
 
 ## Exemplo: Banco Central sem edital novo
 
-Você pode estudar com uma grade estimada baseada no último edital do mesmo cargo e área, identificando essa referência no nome do cadastro.
+Você pode publicar um template pré-edital baseado na última prova conhecida do cargo, identificando claramente essa referência.
 
-1. Em Concursos, procure o Banco Central. Se já houver um cadastro adequado, abra sua grade; caso contrário, crie o concurso.
-2. Use um nome como “Banco Central — cargo/área — Pré-edital — base [ano]”. Informe instituição, cargo e tronco Bancária conforme seu perfil de preparação.
-3. Use Previsto se essa for a situação conhecida. Deixe a banca e a data do novo concurso sem definição enquanto não estiverem confirmadas.
-4. Adicione as disciplinas do edital anterior do mesmo cargo/área. Organize etapas, grupos, pesos e quantidades como referência de preparação.
-5. Selecione os assuntos e subassuntos que constavam da referência. Mantenha a situação dos tópicos como Pré-edital e salve o concurso e a grade.
-6. Cadastre as questões com os dados da prova de origem real e classifique-as pelos mesmos conteúdos da grade.
-7. Quando sair o edital novo, revise o que mudou. Só então confirme o conteúdo oficial com Publicar esta grade como edital.
+1. Em Concursos, procure o Banco Central. Se já houver um template adequado, abra sua grade; caso contrário, crie o template.
+2. Use um nome claro como “Banco Central — Analista — Pré-edital”. Informe instituição, cargo e tronco Bancária.
+3. Use Previsto enquanto não houver confirmação oficial e mantenha banca ou data indefinidas se ainda não anunciadas.
+4. Adicione os componentes do edital anterior, ajustando etapas, pesos, quantidades e tópicos como Pré-edital.
+5. Quando o edital oficial for publicado, revise os componentes e confirme com Publicar esta grade como edital.
 
-O painel não importa automaticamente uma grade a partir de PDF. A montagem atual é manual. O exemplo não afirma qual é o último edital nem confirma banca, cargo ou datas de um novo concurso.
+O painel não importa PDFs automaticamente; a curadoria dos componentes e assuntos é revisada manualmente antes da publicação.
 
 No portal: **Organizar concurso pré-edital**.
 
-## Montar a grade e confirmar o edital
+## Montar a grade e publicar edital oficial
 
-Editais e grades mostra as grades dos seus concursos. Abra a grade para organizar o conteúdo de cada etapa.
+Editais e grades permite detalhar os componentes por etapa de cada template global.
 
-1. Escolha uma Disciplina do catálogo e use Adicionar componente. A mesma disciplina pode aparecer em mais de uma etapa, com identidades locais distintas.
-2. Em cada componente, informe nome no edital, etapa, grupo de conhecimentos, relevância, peso e quantidade de questões. Deixe a quantidade vazia quando não estiver definida.
-3. Use Adicionar assunto / subassunto e Adicionar assunto para selecionar o conteúdo. Adicionar todos da disciplina inclui todos os assuntos e subassuntos ativos após confirmação; confira se fazem parte da referência.
-4. Disciplinas e assuntos personalizados permitem preparar itens ainda sem associação ao catálogo. Eles não criam uma classificação canônica confirmada para questões.
-5. Durante a preparação, mantenha Pré-edital. Salvar concurso e grade grava a organização sem declarar que existe edital oficial.
-6. Publicar esta grade como edital registra o conteúdo como oficial, com comparação ao histórico. Salve o concurso antes e confira todos os componentes.
+1. Escolha uma Disciplina ativa do catálogo e clique em Adicionar componente. A mesma disciplina pode aparecer em mais de uma etapa com identidades locais independentes.
+2. Informe nome no edital, etapa, grupo de conhecimentos, relevância, peso e quantidade de questões (ou deixe a quantidade em branco quando indefinida).
+3. Adicione assuntos e subassuntos individualmente ou use Adicionar todos da disciplina após conferência.
+4. Use Salvar concurso e grade durante a preparação pré-edital.
+5. Use Publicar esta grade como edital para registrar oficialmente os tópicos confirmados, novos e arquivados em relação à base anterior.
 
-Alterar o nome de uma disciplina na grade não renomeia a disciplina global do catálogo. Remover um componente não apaga o histórico já salvo do concurso.
+A soma das quantidades de questões de todos os componentes de uma grade não pode ultrapassar 500 questões.
 
 No portal: **Abrir editais e grades**.
 
-## Troncos de carreira
+## Troncos de carreira e pesos editoriais
 
-Mostra perfis de carreira, disciplinas relacionadas e concursos da sua conta vinculados ao tronco.
+Mostra os troncos do catálogo unificado v2, suas disciplinas relacionadas e os templates globais vinculados.
 
-1. Busque o tronco desejado e confira as disciplinas relacionadas.
-2. Abra a grade de um concurso listado ou use Criar concurso para iniciar um cadastro com esse tronco.
-3. Use Editar proposta para preparar uma alteração global do tronco no catálogo versionado.
+1. Busque o tronco desejado e confira o ícone editorial, as disciplinas vinculadas e os templates associados.
+2. Use Criar concurso para iniciar um novo template global naquele tronco ou Editar proposta para revisar o catálogo.
+3. Nas disciplinas do catálogo, ajuste o papel (Conteúdo central ou Conteúdo relacionado) e o peso editorial padrão (default_weight) em cada tronco.
 
-Uma relação com o tronco não torna a disciplina obrigatória em todos os concursos da carreira. Alterações globais só entram em vigor após ativação explícita.
+Alterações no catálogo global seguem fluxo próprio de validação e ativação versionada em Revisões do catálogo.
 
 No portal: **Abrir troncos de carreira**.
 
 ## Disciplinas, assuntos e subassuntos
 
-Consulte os conteúdos reutilizados por grades e questões. A busca considera nomes, aliases e assuntos.
+Consulte as identidades compartilhadas entre templates e questões no catálogo unificado v2.
 
-1. Busque e expanda uma disciplina para ver escopo, nomes alternativos, troncos relacionados e componentes das suas grades que a utilizam.
-2. Confira o caminho do conteúdo: um subassunto mostra também o nome de seu assunto pai.
-3. Propor nova disciplina, Adicionar assunto na proposta e Propor edição abrem a revisão editorial do catálogo.
-4. Ao renomear, preserve a identidade e o nome anterior como alias. Para mudar o significado ou a filiação de uma entidade, crie uma nova identidade e revise a desativação da anterior.
+1. Busque e expanda uma disciplina para inspecionar escopo, aliases, vínculos com troncos e uso nos templates globais.
+2. Verifique a hierarquia completa: subassuntos exibem o caminho Assunto Pai → Subassunto.
+3. Ao renomear uma entidade, o nome anterior é preservado como alias sem colisão acentual ou de caixa.
 
-Aliases ajudam a localizar conteúdo; nomes parecidos não confirmam equivalência ou classificação de questões.
+Nunca reutilize um ID estável para representar outro conceito; crie uma nova entidade e desative a anterior se necessário.
 
 No portal: **Abrir disciplinas e assuntos**.
 
-## Consultar, editar e converter questões existentes
+## Consultar, filtrar e revisar questões e validade
 
-Use Banco de questões para alterar uma questão já salva no Cogniva, preservando seu ID e seu histórico.
+Use Banco de questões para localizar itens por texto, tipo, validade ou estado de classificação e editar seu contrato v2.
 
-1. Carregue as questões ou busque pelo enunciado. O filtro de tipo e Próxima página ajudam a navegar pelo acervo.
-2. Clique em Abrir para revisar enunciado, alternativas, gabarito ou rubrica e classificação principal.
-3. Em registro legado, use Preparar conversão e editar. A conversão prepara um rascunho com o mesmo ID; gabarito ambíguo e classificação precisam de conferência.
-4. Após escolher disciplina e assunto, aplique e confirme a classificação selecionada. Metadados adicionais podem ser inspecionados no contrato completo.
-5. Use Validar edição, confira o contrato final, marque a revisão e confirme a edição.
-6. Se houver conflito, compare com a versão atual do servidor antes de continuar. A edição anterior pode ser preservada em Rascunhos e pendências.
+1. Combine busca textual com os filtros de Tipo, Validade (Atual, Em revisão, Obsoleta, Desconhecida) e Classificação (Confirmada, Sem classificação).
+2. Abra a questão para revisar enunciado, alternativas, gabarito ou rubrica, comentário da resolução (explanation), nível e ano da prova.
+3. Na seção Validade do conteúdo, escolha explicitamente entre Atual, Em revisão, Obsoleta ou Desconhecida, informando motivos normativos ou factuais quando aplicável.
+4. Se você alterou o enunciado ou as alternativas e já conferiu que a questão segue válida, marque Reconfirmar validade para o conteúdo editado antes de validar.
+5. Clique em Validar edição, confira o contrato JCS calculado na prévia e confirme a gravação.
 
-Mudanças no conteúdo colocam a validade em revisão. Preparar uma conversão ou validar uma edição ainda não grava a alteração definitiva.
+Explicação da resolução, nível e ano da prova são preservados nas edições v2. Se o conteúdo mudar sem reconfirmação explícita de validade, a questão entra automaticamente em revisão (UNDER_REVIEW).
 
 No portal: **Abrir banco de questões**.
 
-## Inserir uma questão de prova ou de autoria própria
+## Inserir questões objetivas e discursivas preparatórias
 
-Inserir questões cria novos registros. Para uma questão que já está no acervo, prefira sua edição pelo Banco de questões.
+Inserir questões cadastra novos itens v2 individuais ou em lote com rastreabilidade completa de origem.
 
-1. Escolha Individual, o tipo e a origem. Preencha o enunciado e o gabarito: múltipla escolha exige cinco alternativas distintas; certo/errado usa Certo e Errado.
-2. Para discursiva, informe resposta de referência e critérios da rubrica. No formulário, os critérios somam 100 pontos, o corte é 60 e a confirmação da correção é humana.
-3. Preencha prova/cargo/caderno, instituição, banca, ano, número, nível e fonte. Prova oficial exige identificação, instituição, banca, ano e referência documental.
-4. Na referência, informe URL, título, data de consulta e, se útil, página/localização. Marque a conferência de origem somente após consultar a fonte. Alterar a origem desmarca essa conferência.
-5. Selecione disciplina e assunto ou subassunto e confirme explicitamente a classificação principal. Acrescente a explicação da resolução, se disponível.
-6. Use Validar e revisar questões. Confira conteúdo, gabarito, origem, classificação e validade; marque a revisão e confirme a inserção.
-7. Confira o resultado de cada item. Em envio incerto, use Conferir / reenviar os mesmos comandos.
+1. Escolha Individual, selecione o tipo (Múltipla escolha, Certo / Errado ou Discursiva) e a origem.
+2. Para questões discursivas (OPEN_ENDED), informe a resposta de referência e os critérios da rubrica somando exatamente 100 pontos.
+3. Registre prova, instituição, banca, ano, nível e fonte documental; marque a conferência de origem apenas quando tiver verificado a fonte.
+4. Classifique disciplina e assunto/subassunto e adicione a explicação da resolução se disponível.
+5. Valide o contrato, revise cada item na prévia e confirme a inserção.
 
-Origem é de onde a questão veio; classificação é o conteúdo cobrado. Conferir origem não confirma validade atual. Novas questões começam com validade desconhecida; inserir não garante elegibilidade em todos os modos de treino.
+Aviso preparatório: questões discursivas são validadas, versionadas com hash JCS e preservadas no acervo preparatório, mas permanecem fora das filas de prática objetiva até a abertura do módulo discursivo.
 
 No portal: **Abrir inserção de questões**.
 
-## Inserir em lote e usar assistência de IA
+## Inserir em lote e usar assistência de IA (xAI)
 
-Em Inserir questões → Lote / IA, cole material ou abra um arquivo JSON, JSONL ou TXT. O painel não oferece importação direta de PDF para montar grades.
+Em Inserir questões → Lote / IA, estruture material bruto ou gere rascunhos autorais respeitando os tetos diários de IA.
 
-1. Prepare de 1 a 50 objetos de questão, até 512 KiB por lote. JSONL contém um objeto por linha; índices de gabarito começam em zero.
-2. Opcionalmente, escolha Estruturar questões de um texto ou Gerar questões autorais a partir do pedido e clique em Preparar com IA.
-3. O botão envia o material à xAI e usa a cota de IA da conta. A resposta é um rascunho editável; não publica questões automaticamente.
-4. Revise o JSON preparado, especialmente alternativas, gabaritos e rubricas. Conteúdo assistido mantém sua proveniência de IA.
-5. Valide, corrija os erros indicados, confira todos os itens e confirme a inserção. Acompanhe o recibo de cada questão.
+1. Envie de 1 a 50 questões em JSON/JSONL (até 512 KiB) ou forneça texto-base para o assistente xAI configurado no servidor.
+2. Clique em Preparar com IA para gerar rascunhos editáveis sem publicação automática.
+3. Edite e confira gabaritos, alternativas, rubricas e metadados antes de validar e confirmar o lote.
 
-A IA não confirma classificação, origem oficial ou validade por conta própria. O lote não deduplica automaticamente por texto parecido.
+Falhas de rede ou respostas inválidas do provedor xAI estornam automaticamente a cota reservada. A IA nunca confirma validade nem classificação sozinha.
 
 No portal: **Abrir inserção individual e em lote**.
 
-## Revisar e ativar o catálogo global
+## Classificação assistida por IA e curadoria humana
 
-Revisões do catálogo prepara uma nova versão dos troncos, disciplinas e assuntos compartilhados. É diferente de editar a grade de um concurso.
+Classificação IA permite gerar propostas de vínculo canônico para questões sem classificação e decidir cada sugestão com auditoria.
 
-1. Inicie uma proposta a partir do catálogo ativo e edite as entidades necessárias.
-2. Valide a proposta. Um rascunho incompleto pode ser salvo como rascunho; para ativar, use Salvar como pronta para revisão após corrigir os problemas.
-3. Informe o motivo da ativação, confira nomes, assuntos, vínculos e situações e marque a confirmação de ativação global.
-4. Use Ativar catálogo global e aguarde a confirmação. Uma proposta apenas salva não muda o catálogo ativo.
-5. Em resposta incerta, confira ou reenvie a mesma ativação. Para novas mudanças após a ativação, inicie outra revisão a partir da base atual.
+1. Abra Classificação IA para ver quantas questões ativas estão sem classificação e listar as propostas pendentes.
+2. Use Gerar propostas com IA para solicitar sugestões do modelo xAI para um lote controlado de questões ainda não classificadas.
+3. Confira o enunciado, a disciplina de origem, o tópico sugerido, a justificativa e a confiança informada.
+4. Informe o motivo de revisão (mínimo de 10 caracteres) e escolha Aceitar, Editar e aceitar (ajustando disciplina e tópico), Adiar ou Rejeitar.
 
-A ativação afeta o catálogo compartilhado. IDs e versões históricas são preservados; desativar conteúdo pode retirar suas questões da seleção atual. Não altera automaticamente as classificações históricas.
+Propostas pendentes jamais alteram a seleção de estudo dos alunos antes da confirmação humana explícita.
+
+No portal: **Abrir classificação IA**.
+
+## Moderação de reportes de questões
+
+Reportes centraliza as sinalizações enviadas pelos estudantes sem bloquear globalmente a questão para os demais alunos.
+
+1. Filtre os reportes por Abertos, Resolvidos ou Todos para priorizar a fila de moderação.
+2. Confira as categorias apontadas pelo estudante, o trecho da questão e o estado atual de validade.
+3. Clique em Abrir questão no editor para corrigir gabarito, atualizar explicação ou marcar a questão como Obsoleta / Em revisão.
+4. Registre a nota de resolução e conclua o atendimento individual ou de todos os reportes abertos daquela questão.
+
+Enquanto um reporte está aberto, a questão fica oculta apenas para o autor daquele reporte, evitando negação de serviço no acervo global.
+
+No portal: **Abrir reportes**.
+
+## Revisar e ativar o catálogo global unificado
+
+Revisões do catálogo prepara e ativa novas versões do catálogo compartilhado sem reiniciar o backend.
+
+1. Inicie uma proposta a partir do catálogo ativo (v2+) e edite troncos, disciplinas ou assuntos.
+2. Valide a proposta e use Salvar como pronta para revisão quando não houver pendências de schema ou identidade.
+3. Descreva o motivo da ativação, marque a confirmação editorial e clique em Ativar catálogo global.
+
+A ativação invalida imediatamente o cache em memória do servidor para que API, painel e sincronização Android passem a usar a nova versão.
 
 No portal: **Abrir revisões do catálogo**.
 
-## Rascunhos, exportação, restauração e envios pendentes
+## Rascunhos locais, exportação e recuperação
 
-O portal conserva edições neste navegador, separadas por conta. Rascunho local não é o mesmo que conteúdo confirmado no servidor.
+O portal conserva edições no armazenamento local do navegador separadas por conta administrativa.
 
-1. Abra Rascunhos e pendências para continuar concursos, inserções, edições de questões e propostas do catálogo.
-2. Use Exportar todos ou os botões de exportação da tela antes de limpar dados do navegador ou trocar de computador.
-3. Para recuperar, use Restaurar arquivo exportado com um arquivo da mesma conta. A cópia atual é preservada no arquivo local; a restauração não dispara envios.
-4. Em timeout ou conexão perdida após o envio, confira o resultado e reenvie os mesmos comandos. Não inicie outro cadastro para repetir uma operação ainda sem confirmação.
-5. Em conflito de revisão, compare com o servidor. Escolher a versão do servidor preserva a edição substituída no arquivo local.
-6. Se o armazenamento local estiver ilegível ou não puder salvar, siga a orientação de exportação e recuperação exibida antes de continuar.
+1. Use Rascunhos e pendências para retomar templates, inserções, edições de questões e propostas do catálogo.
+2. Exporte cópias JSON regularmente antes de limpar dados do navegador ou trocar de estação de trabalho.
+3. Em caso de conflito de revisão com o servidor, compare os documentos e escolha qual base manter preservando o histórico local.
 
-As grades e rascunhos são separados por conta. O portal não garante reabertura offline; login, novas consultas e gravações exigem conexão. Limpar dados do navegador pode apagar rascunhos locais.
+Erros de validação (HTTP 4xx) desbloqueiam imediatamente o rascunho para correção; apenas falhas incertas de rede mantêm o mesmo comando pronto para conferência idempotente.
 
 No portal: **Abrir rascunhos e pendências**.
 
-## Acesso, sessão de 30 dias e conexão com o Android
+## Acesso com e-mail e senha, sessão de 30 dias e promoção de admin
 
-Entre com um código temporário emitido para sua conta administrativa já autorizada. O código vale 10 minutos e tem uso único.
+No Cogniva 2.0, a autenticação administrativa é 100% nativa por e-mail e senha (Argon2id), sem códigos temporários nem vínculo com Telegram.
 
-1. Após um novo login, a sessão web dura até 30 dias a partir da entrada. Uma sessão criada antes dessa configuração mantém sua expiração original até novo login.
-2. A sessão fica no navegador e perfil usados para entrar. Outro navegador, perfil ou janela anônima não compartilha automaticamente esse login.
-3. Sair encerra a sessão. Limpar cookies ou usar um ambiente que não os preserve exige nova entrada; seus rascunhos locais dependem dos dados mantidos nesse navegador.
-4. Use a mesma conta do Android para administrar seus concursos. Alterações confirmadas usam a mesma base; o aplicativo recebe os dados na sincronização.
-5. Se a sessão expirar, obtenha um novo código com o responsável pelo Cogniva. Seu ID ou nome de usuário sozinho não substitui o código.
+1. Entre com seu e-mail administrativo e senha na aba Entrar. A sessão web dura até 30 dias em cookie HttpOnly.
+2. Para criar a primeira conta administrativa pela web, configure o e-mail em ADMIN_EMAILS no servidor e utilize a aba Primeiro acesso.
+3. Para promover uma conta já existente ao papel administrativo, execute cogniva-api --grant-admin email@dominio.com no servidor.
+4. Ao clicar em Sair, a sessão é revogada imediatamente na coleção sessions do banco de dados.
 
-Um código de acesso não deve ser colocado no nome ou endereço de um atalho. O atalho apenas abre o portal; quem mantém o login é o navegador.
+A mesma conta de e-mail pode ser usada no aplicativo Android e no painel administrativo, mantendo rascunhos locais isolados no navegador.
 
 No portal: **Ver rascunhos preservados**.

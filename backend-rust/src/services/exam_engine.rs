@@ -204,6 +204,49 @@ pub fn mastery_by_canonical_topic(rows: &[CanonicalActivitySlice]) -> HashMap<St
         .collect()
 }
 
+pub fn mastery_by_subject_for_blueprints(
+    exams: &[ExamBlueprint],
+    rows: &[CanonicalActivitySlice],
+) -> HashMap<String, f64> {
+    let by_topic = mastery_by_canonical_topic(rows);
+    let mut active_topics: HashMap<String, HashSet<String>> = HashMap::new();
+    for exam in exams {
+        if !exam.is_active_in_ladder
+            || matches!(
+                exam.status,
+                ExamLifecycleStatus::Arquivado | ExamLifecycleStatus::Excluido
+            )
+        {
+            continue;
+        }
+        for subject in &exam.subjects {
+            for topic in &subject.topics {
+                if topic.diff_status != CanonicalTopicStatus::Arquivado
+                    && !topic.canonical_topic_id.is_empty()
+                {
+                    active_topics
+                        .entry(subject.canonical_subject_id.clone())
+                        .or_default()
+                        .insert(topic.canonical_topic_id.clone());
+                }
+            }
+        }
+    }
+    let fallback = mastery_by_canonical_subject(rows);
+    let mut out = fallback.clone();
+    for (subject_id, topics) in active_topics {
+        if topics.is_empty() {
+            continue;
+        }
+        let sum: f64 = topics
+            .iter()
+            .map(|tid| by_topic.get(tid).copied().unwrap_or(0.0))
+            .sum();
+        out.insert(subject_id, sum / topics.len() as f64);
+    }
+    out
+}
+
 pub fn card_from_canonical_activity(
     exams: &[LeverageExam],
     rows: &[CanonicalActivitySlice],
@@ -390,40 +433,49 @@ pub fn publish_edital_diff(
     published: &[TopicRef],
     practiced_canonical_topic_ids: &HashSet<String>,
 ) -> EditalPublishResult {
-    let previous_ids: HashSet<&str> = previous
-        .iter()
-        .map(|topic| topic.canonical_topic_id.as_str())
-        .collect();
-    let published_ids: HashSet<&str> = published
-        .iter()
-        .map(|topic| topic.canonical_topic_id.as_str())
-        .collect();
+    let uses_stage_scope = published.iter().any(|t| t.local_subject_id.is_some());
+    let key_of = |t: &TopicRef| -> (Option<String>, String) {
+        if uses_stage_scope {
+            (t.local_subject_id.clone(), t.canonical_topic_id.clone())
+        } else {
+            (None, t.canonical_topic_id.clone())
+        }
+    };
+    let previous_keys: HashSet<(Option<String>, String)> = previous.iter().map(key_of).collect();
+    let published_keys: HashSet<(Option<String>, String)> = published.iter().map(key_of).collect();
 
     let mut topics = Vec::new();
+    let mut seen_pub = HashSet::new();
     for topic in published {
-        if previous_ids.contains(topic.canonical_topic_id.as_str()) {
-            topics.push(ClassifiedTopic {
-                canonical_topic_id: topic.canonical_topic_id.clone(),
-                canonical_subject_id: topic.canonical_subject_id.clone(),
-                display_title: topic.display_title.clone(),
-                diff_status: CanonicalTopicStatus::OficialConfirmado,
-                coverage_already_filled: practiced_canonical_topic_ids
-                    .contains(&topic.canonical_topic_id),
-            });
-        } else {
-            topics.push(ClassifiedTopic {
-                canonical_topic_id: topic.canonical_topic_id.clone(),
-                canonical_subject_id: topic.canonical_subject_id.clone(),
-                display_title: topic.display_title.clone(),
-                diff_status: CanonicalTopicStatus::OficialNovo,
-                coverage_already_filled: practiced_canonical_topic_ids
-                    .contains(&topic.canonical_topic_id),
-            });
+        let k = key_of(topic);
+        if !seen_pub.insert(k.clone()) {
+            continue;
         }
+        let diff_status = if previous_keys.contains(&k) {
+            CanonicalTopicStatus::OficialConfirmado
+        } else {
+            CanonicalTopicStatus::OficialNovo
+        };
+        topics.push(ClassifiedTopic {
+            local_subject_id: topic.local_subject_id.clone(),
+            canonical_topic_id: topic.canonical_topic_id.clone(),
+            canonical_subject_id: topic.canonical_subject_id.clone(),
+            display_title: topic.display_title.clone(),
+            diff_status,
+            coverage_already_filled: practiced_canonical_topic_ids
+                .contains(&topic.canonical_topic_id),
+        });
     }
+    let mut seen_prev = HashSet::new();
     for topic in previous {
-        if !published_ids.contains(topic.canonical_topic_id.as_str()) {
+        let k = key_of(topic);
+        if !published_keys.contains(&k) && seen_prev.insert(k) {
             topics.push(ClassifiedTopic {
+                local_subject_id: if uses_stage_scope {
+                    topic.local_subject_id.clone()
+                } else {
+                    None
+                },
                 canonical_topic_id: topic.canonical_topic_id.clone(),
                 canonical_subject_id: topic.canonical_subject_id.clone(),
                 display_title: topic.display_title.clone(),
@@ -625,7 +677,15 @@ pub fn system_trunks() -> Vec<CareerTrunk> {
 }
 
 pub fn system_exam_blueprints() -> Vec<ExamBlueprint> {
-    system_catalog().exams
+    static TEMPLATES: std::sync::OnceLock<Vec<ExamBlueprint>> = std::sync::OnceLock::new();
+    TEMPLATES
+        .get_or_init(|| {
+            let raw: serde_json::Value =
+                serde_json::from_str(include_str!("../../../shared/exam-templates.json"))
+                    .expect("validated exam-templates.json");
+            serde_json::from_value(raw["templates"].clone()).expect("typed exam templates")
+        })
+        .clone()
 }
 
 pub fn canonical_subjects() -> Vec<CanonicalSubject> {
@@ -633,41 +693,109 @@ pub fn canonical_subjects() -> Vec<CanonicalSubject> {
 }
 
 pub fn system_catalog() -> TrunkCatalog {
-    let mut catalog: TrunkCatalog = serde_json::from_str(include_str!("../../../shared/canonical-catalog.json"))
-        .expect("validated catalog");
     let knowledge = crate::services::question_contracts::catalog_ref();
-    catalog.subjects = knowledge["subjects"].as_array().unwrap().iter().filter(|s| s["status"] == "ACTIVE").map(|s| {
-        let id = s["subject_id"].as_str().unwrap();
-        CanonicalSubject {
-            canonical_subject_id: id.into(), code: id.into(), name: s["label"].as_str().unwrap().into(),
-            aliases: s["aliases"].as_array().unwrap().iter().map(|v|v.as_str().unwrap().into()).collect(),
-            trunk_slugs: s["trunk_links"].as_array().unwrap().iter().map(|v|v["trunk_id"].as_str().unwrap().into()).collect(),
-            topics: knowledge["topics"].as_array().unwrap().iter().filter(|t|t["subject_id"]==id && t["status"]=="ACTIVE").map(|t|CanonicalTopic {topic_id:t["topic_id"].as_str().unwrap().into(),title:t["label"].as_str().unwrap().into(),tags:vec![]}).collect(),
-        }
-    }).collect();
-    if knowledge["catalog_version"]!=crate::services::catalog_runtime::bundled().current["catalog_version"] {
-        let old=catalog.trunks.clone();
-        catalog.trunks=knowledge["trunks"].as_array().unwrap().iter().filter(|t|t["status"]=="ACTIVE").map(|t|{
-            let slug=t["trunk_id"].as_str().unwrap();let mut core=Vec::new();let mut complementary=Vec::new();
-            for subject in &catalog.subjects {
-                if subject.topics.is_empty(){continue;}
-                let source=knowledge["subjects"].as_array().unwrap().iter().find(|s|s["subject_id"]==subject.canonical_subject_id).unwrap();
-                if let Some(link)=source["trunk_links"].as_array().unwrap().iter().find(|l|l["trunk_id"]==slug){
-                    let prior=old.iter().find(|t|t.slug==slug).and_then(|t|t.core_subjects.iter().chain(t.complementary_subjects.iter()).find(|s|s.canonical_subject_id==subject.canonical_subject_id));
-                    let foundational=link["role"]=="FOUNDATIONAL";
-                    let item=TrunkSubjectDefault{canonical_subject_id:subject.canonical_subject_id.clone(),name:subject.name.clone(),default_weight:prior.map(|s|s.default_weight).unwrap_or(1.0),relevance_tier:if foundational{RelevanceTier::Core}else{RelevanceTier::Complementary},topics:subject.topics.clone()};
-                    if foundational{core.push(item)}else{complementary.push(item)}
+    let subjects: Vec<CanonicalSubject> = knowledge["subjects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|s| s["status"] == "ACTIVE")
+        .map(|s| {
+            let id = s["subject_id"].as_str().unwrap();
+            CanonicalSubject {
+                canonical_subject_id: id.into(),
+                code: id.into(),
+                name: s["label"].as_str().unwrap().into(),
+                aliases: s["aliases"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|v| v.as_str().unwrap().into())
+                    .collect(),
+                trunk_slugs: s["trunk_links"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|v| v["trunk_id"].as_str().unwrap().into())
+                    .collect(),
+                topics: knowledge["topics"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter(|t| t["subject_id"] == id && t["status"] == "ACTIVE")
+                    .map(|t| CanonicalTopic {
+                        topic_id: t["topic_id"].as_str().unwrap().into(),
+                        title: t["label"].as_str().unwrap().into(),
+                        tags: vec![],
+                    })
+                    .collect(),
+            }
+        })
+        .collect();
+
+    let trunks: Vec<CareerTrunk> = knowledge["trunks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|t| t["status"] == "ACTIVE")
+        .map(|t| {
+            let slug = t["trunk_id"].as_str().unwrap();
+            let mut core = Vec::new();
+            let mut complementary = Vec::new();
+            for subject in &subjects {
+                if subject.topics.is_empty() {
+                    continue;
+                }
+                let source = knowledge["subjects"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|s| s["subject_id"] == subject.canonical_subject_id)
+                    .unwrap();
+                if let Some(link) = source["trunk_links"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|l| l["trunk_id"] == slug)
+                {
+                    let foundational = link["role"] == "FOUNDATIONAL";
+                    let default_weight = link["default_weight"].as_f64().unwrap_or(1.0);
+                    let item = TrunkSubjectDefault {
+                        canonical_subject_id: subject.canonical_subject_id.clone(),
+                        name: subject.name.clone(),
+                        default_weight,
+                        relevance_tier: if foundational {
+                            RelevanceTier::Core
+                        } else {
+                            RelevanceTier::Complementary
+                        },
+                        topics: subject.topics.clone(),
+                    };
+                    if foundational {
+                        core.push(item);
+                    } else {
+                        complementary.push(item);
+                    }
                 }
             }
-            CareerTrunk{slug:slug.into(),name:t["label"].as_str().unwrap().into(),icon_key:old.iter().find(|t|t.slug==slug).map(|t|t.icon_key.clone()).unwrap_or_else(||"work".into()),core_subjects:core,complementary_subjects:complementary,is_system_default:true}
-        }).collect();
-    } else {for t in knowledge["trunks"].as_array().unwrap().iter().filter(|t|t["status"]=="ACTIVE") {
-        let slug=t["trunk_id"].as_str().unwrap();
-        if !catalog.trunks.iter().any(|old|old.slug==slug) {
-            catalog.trunks.push(CareerTrunk {slug:slug.into(),name:t["label"].as_str().unwrap().into(),icon_key:"work".into(),core_subjects:vec![],complementary_subjects:vec![],is_system_default:true});
-        }
-    }}
-    catalog
+            CareerTrunk {
+                slug: slug.into(),
+                name: t["label"].as_str().unwrap().into(),
+                icon_key: t["icon_key"]
+                    .as_str()
+                    .unwrap_or("Work")
+                    .to_string(),
+                core_subjects: core,
+                complementary_subjects: complementary,
+                is_system_default: true,
+            }
+        })
+        .collect();
+
+    TrunkCatalog {
+        trunks,
+        subjects,
+        exams: system_exam_blueprints(),
+    }
 }
 
 pub fn core_subject_ids(trunk_slug: &str) -> Vec<String> {
@@ -713,13 +841,27 @@ pub fn apply_publish(
         .subjects
         .iter()
         .flat_map(|subject| {
-            subject.topics.iter().map(|topic| TopicRef {
+            let local_sid = subject.local_subject_id.clone();
+            subject.topics.iter().map(move |topic| TopicRef {
+                local_subject_id: Some(local_sid.clone()),
                 canonical_topic_id: topic.canonical_topic_id.clone(),
                 canonical_subject_id: topic.canonical_subject_id.clone(),
                 display_title: topic.display_title.clone(),
             })
         })
         .collect();
+
+    let existing_local_ids: HashMap<(String, String), String> = exam
+        .subjects
+        .iter()
+        .flat_map(|s| {
+            let lsid = s.local_subject_id.clone();
+            s.topics
+                .iter()
+                .map(move |t| ((lsid.clone(), t.canonical_topic_id.clone()), t.local_topic_id.clone()))
+        })
+        .collect();
+
     let practiced: HashSet<String> = request
         .practiced_canonical_topic_ids
         .iter()
@@ -727,25 +869,73 @@ pub fn apply_publish(
         .collect();
     let result = publish_edital_diff(&previous, &request.published_topics, &practiced);
 
-    let mut by_subject: HashMap<String, Vec<ExamTopicItem>> = HashMap::new();
-    for topic in &result.topics {
-        by_subject
-            .entry(topic.canonical_subject_id.clone())
-            .or_default()
-            .push(ExamTopicItem {
-                local_topic_id: topic.canonical_topic_id.clone(),
-                canonical_topic_id: topic.canonical_topic_id.clone(),
-                canonical_subject_id: topic.canonical_subject_id.clone(),
-                display_title: topic.display_title.clone(),
-                diff_status: topic.diff_status.clone(),
-            });
-    }
+    let mut used_local_topic_ids: HashSet<String> = HashSet::new();
+    let mut matched_subject_ids: HashSet<String> = HashSet::new();
+
     for subject in &mut exam.subjects {
-        if let Some(topics) = by_subject.remove(&subject.canonical_subject_id) {
-            subject.topics = topics;
+        let matching: Vec<&ClassifiedTopic> = result
+            .topics
+            .iter()
+            .filter(|t| match &t.local_subject_id {
+                Some(lsid) => lsid == &subject.local_subject_id,
+                None => t.canonical_subject_id == subject.canonical_subject_id,
+            })
+            .collect();
+        if !matching.is_empty() {
+            matched_subject_ids.insert(subject.canonical_subject_id.clone());
+            let mut next_topics = Vec::with_capacity(matching.len());
+            for topic in matching {
+                let preferred = existing_local_ids
+                    .get(&(subject.local_subject_id.clone(), topic.canonical_topic_id.clone()))
+                    .cloned()
+                    .unwrap_or_else(|| topic.canonical_topic_id.clone());
+                let local_tid = if used_local_topic_ids.insert(preferred.clone()) {
+                    preferred
+                } else {
+                    let scoped = format!("{}--{}", subject.local_subject_id, topic.canonical_topic_id);
+                    used_local_topic_ids.insert(scoped.clone());
+                    scoped
+                };
+                next_topics.push(ExamTopicItem {
+                    local_topic_id: local_tid,
+                    canonical_topic_id: topic.canonical_topic_id.clone(),
+                    canonical_subject_id: topic.canonical_subject_id.clone(),
+                    display_title: topic.display_title.clone(),
+                    diff_status: topic.diff_status.clone(),
+                });
+            }
+            subject.topics = next_topics;
         }
     }
-    for (subject_id, topics) in by_subject {
+
+    let mut new_subjects: HashMap<String, Vec<ExamTopicItem>> = HashMap::new();
+    for topic in &result.topics {
+        let already_handled = if let Some(lsid) = &topic.local_subject_id {
+            exam.subjects.iter().any(|s| &s.local_subject_id == lsid)
+        } else {
+            matched_subject_ids.contains(&topic.canonical_subject_id)
+        };
+        if !already_handled {
+            let local_tid = if used_local_topic_ids.insert(topic.canonical_topic_id.clone()) {
+                topic.canonical_topic_id.clone()
+            } else {
+                let scoped = format!("{}--{}", topic.canonical_subject_id, topic.canonical_topic_id);
+                used_local_topic_ids.insert(scoped.clone());
+                scoped
+            };
+            new_subjects
+                .entry(topic.canonical_subject_id.clone())
+                .or_default()
+                .push(ExamTopicItem {
+                    local_topic_id: local_tid,
+                    canonical_topic_id: topic.canonical_topic_id.clone(),
+                    canonical_subject_id: topic.canonical_subject_id.clone(),
+                    display_title: topic.display_title.clone(),
+                    diff_status: topic.diff_status.clone(),
+                });
+        }
+    }
+    for (subject_id, topics) in new_subjects {
         let display_name = canonical_subjects()
             .into_iter()
             .find(|s| s.canonical_subject_id == subject_id)
@@ -763,6 +953,7 @@ pub fn apply_publish(
             topics,
         });
     }
+
     exam.status = ExamLifecycleStatus::EditalPublicado;
     exam.edital_diff_summary = Some(EditalDiffSummary {
         confirmed_count: result.confirmed_count,
@@ -779,8 +970,11 @@ pub fn apply_publish(
     result
 }
 
-pub async fn load_canonical_slices(db: &Database, user_id: i64) -> Result<Vec<CanonicalActivitySlice>, crate::error::AppError> {
-    crate::services::knowledge::slices(db,user_id).await
+pub async fn load_canonical_slices(
+    db: &Database,
+    user_id: i64,
+) -> Result<Vec<CanonicalActivitySlice>, crate::error::AppError> {
+    crate::services::knowledge::slices(db, user_id).await
 }
 
 #[cfg(test)]
@@ -789,6 +983,7 @@ mod tests {
 
     fn topic_ref(id: &str, subject: &str, title: &str) -> TopicRef {
         TopicRef {
+            local_subject_id: None,
             canonical_topic_id: id.to_string(),
             canonical_subject_id: subject.to_string(),
             display_title: title.to_string(),
