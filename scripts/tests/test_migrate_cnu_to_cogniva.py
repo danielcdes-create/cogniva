@@ -207,6 +207,153 @@ class MigrateCnuToCognivaTest(unittest.TestCase):
             qc.validate_question(doc, self.catalog)
         self.assertEqual(v2_docs[1]["concursos"], "BCB_2027_EF")
 
+    def test_merge_source_catalog_extensions_preserves_confirmed_v2_links_and_is_idempotent(self):
+        registry = kc.read(kc.ROOT / "shared/knowledge-id-registry.json")
+        schema = kc.read(kc.ROOT / "shared/knowledge-catalog.schema.json")
+
+        legacy_cnu_activation = {
+            "catalog_version": 2,
+            "sources": [
+                {
+                    "source_id": "BCB_EDITAL_2024",
+                    "kind": "EDITORIAL_PROPOSAL",
+                    "reference": "Edital BCB 2024",
+                    "note": "Extensão editorial do Banco Central no acervo legado.",
+                }
+            ],
+            "subjects": [
+                {
+                    "subject_id": "COSIF_BCB",
+                    "label": "Contabilidade de Instituições Financeiras (COSIF)",
+                    "aliases": ["COSIF"],
+                    "scope_note": "Padrão contábil COSIF aplicável ao SFN.",
+                    "status": "ACTIVE",
+                    "revision": 1,
+                    "source_ids": ["BCB_EDITAL_2024"],
+                    # Legacy v1 trunk_links without default_weight
+                    "trunk_links": [
+                        {
+                            "trunk_id": "bancaria",
+                            "role": "FOUNDATIONAL",
+                            "basis": "EDITORIAL_SUGGESTION",
+                            "note": "Disciplina específica do BCB.",
+                        }
+                    ],
+                },
+                {
+                    # Collides by label with existing MFIN ("Mercado Financeiro")
+                    "subject_id": "FIN_BCB_DUP",
+                    "label": "Mercado Financeiro",
+                    "aliases": ["Finanças BCB"],
+                    "scope_note": "Colisão intencional para testar remapeamento.",
+                    "status": "ACTIVE",
+                    "revision": 1,
+                    "source_ids": ["BCB_EDITAL_2024"],
+                    "trunk_links": [],
+                },
+            ],
+            "topics": [
+                {
+                    "topic_id": "COSIF_TOP_01",
+                    "subject_id": "COSIF_BCB",
+                    "parent_topic_id": None,
+                    "kind": "TOPIC",
+                    "label": "Plano Contábil das Instituições do SFN",
+                    "aliases": [],
+                    "status": "ACTIVE",
+                    "revision": 1,
+                    "source_ids": ["BCB_EDITAL_2024"],
+                },
+                {
+                    "topic_id": "BCB_PIX_ARRANJOS",
+                    "subject_id": "FIN_BCB_DUP",
+                    "parent_topic_id": None,
+                    "kind": "TOPIC",
+                    "label": "Arranjos de pagamento instantâneo e ecossistema Pix",
+                    "aliases": [],
+                    "status": "ACTIVE",
+                    "revision": 1,
+                    "source_ids": ["BCB_EDITAL_2024"],
+                },
+            ],
+        }
+
+        v3_cat, v2_reg, sid_map, tpair_map, tflat_map, extended = (
+            migrator.merge_source_catalog_extensions(
+                self.catalog,
+                registry,
+                [legacy_cnu_activation],
+            )
+        )
+        self.assertTrue(extended)
+        self.assertEqual(v3_cat["catalog_version"], self.catalog["catalog_version"] + 1)
+        self.assertEqual(v2_reg["registry_version"], registry["registry_version"] + 1)
+        kc.validate(v3_cat, v2_reg, schema)
+
+        self.assertEqual(sid_map["COSIF_BCB"], "COSIF_BCB")
+        self.assertEqual(sid_map["FIN_BCB_DUP"], "MFIN")
+        self.assertEqual(tpair_map[("FIN_BCB_DUP", "BCB_PIX_ARRANJOS")], ("MFIN", "BCB_PIX_ARRANJOS"))
+
+        # Re-merging onto v3 must be a strict no-op (idempotent)
+        v3_again, reg_again, _, _, _, extended_again = migrator.merge_source_catalog_extensions(
+            v3_cat,
+            v2_reg,
+            [legacy_cnu_activation],
+        )
+        self.assertFalse(extended_again)
+        self.assertEqual(v3_again, v3_cat)
+        self.assertEqual(reg_again, v2_reg)
+
+        # Confirmed V2 question referencing FIN_BCB_DUP / BCB_PIX_ARRANJOS keeps CONFIRMED link under MFIN
+        confirmed_q = copy.deepcopy(
+            kc.read(kc.ROOT / "shared/examples/question-contracts/question-multiple-choice.json")
+        )
+        confirmed_q["disciplina"] = "Finanças BCB"
+        confirmed_q["classification"] = {
+            "revision": 2,
+            "catalog_version": 2,
+            "state": "CONFIRMED",
+            "links": [
+                {
+                    "link_id": "11111111-2222-4333-8444-555555555555",
+                    "subject_id": "FIN_BCB_DUP",
+                    "topic_id": "BCB_PIX_ARRANJOS",
+                    "role": "PRIMARY",
+                    "coverage": "DIRECT",
+                    "provenance": {
+                        "actor": {"type": "HUMAN", "id": "3762914356612732"},
+                        "method": "MANUAL_REVIEW",
+                        "rationale": "Classificação editorial confirmada para o BCB.",
+                        "recorded_at": "2026-11-12T10:00:00Z",
+                        "evidence": [],
+                        "model": None,
+                        "prompt_id": None,
+                        "prompt_version": None,
+                        "source_suggestion_id": None,
+                    },
+                }
+            ],
+        }
+
+        v2_docs, stats = migrator.migrate_batch(
+            [confirmed_q],
+            v3_cat,
+            default_contest_tag="BCB_2027_EF",
+            subject_id_map=sid_map,
+            topic_pair_map=tpair_map,
+            topic_flat_map=tflat_map,
+        )
+        self.assertEqual(stats["skipped_invalid_count"], 0)
+        self.assertEqual(stats["confirmed_classified_count"], 1)
+        self.assertEqual(stats["mapped_discipline_count"], 1)
+        out = v2_docs[0]
+        self.assertEqual(out["classification"]["state"], "CONFIRMED")
+        self.assertEqual(out["classification"]["catalog_version"], v3_cat["catalog_version"])
+        self.assertEqual(out["canonical_subject_id"], "MFIN")
+        self.assertEqual(out["canonical_topic_id"], "BCB_PIX_ARRANJOS")
+        self.assertEqual(out["disciplina"], "Mercado Financeiro")
+
 
 if __name__ == "__main__":
     unittest.main()
+

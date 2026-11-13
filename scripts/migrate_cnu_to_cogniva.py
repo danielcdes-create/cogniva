@@ -25,12 +25,22 @@ import re
 import sys
 import uuid
 
+import rfc8785
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import knowledge_catalog as kc
 import question_contracts as qc
 
 ROOT = kc.ROOT
 MIGRATION_TIMESTAMP = "2026-11-12T00:00:00Z"
+CATALOG_MIGRATION_UPDATED_AT = "2026-11-13"
+UPPER_ID_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
+CNU_MIGRATION_SOURCE = {
+    "source_id": "CNU_CATALOG_MIGRATION",
+    "kind": "LEGACY_INTERNAL",
+    "reference": "CNU.knowledge_catalog_activations",
+    "note": "Extensões editoriais preservadas em leitura-única da base legada CNU para Cogniva 2.0.",
+}
 
 VALID_EXAM_STATUSES = {
     "RUMOR_PREVISTO",
@@ -56,9 +66,26 @@ VALID_TOPIC_STATUSES = {
 }
 
 
+def rfc8785_sha256(value: dict) -> str:
+    return hashlib.sha256(rfc8785.dumps(value)).hexdigest()
+
+
 def deterministic_uuid(seed: str) -> str:
     digest = hashlib.sha256(seed.encode("utf-8")).digest()
     return str(uuid.UUID(bytes=digest[:16], version=4))
+
+
+def _unique_upper_id(candidate: str, used_ids: set[str]) -> str:
+    cleaned = re.sub(r"[^A-Z0-9_]+", "_", candidate.upper()).strip("_")
+    if not cleaned or not cleaned[0].isalpha():
+        cleaned = f"ID_{cleaned}" if cleaned else "ID_CUSTOM"
+    cleaned = cleaned[:80]
+    if cleaned not in used_ids:
+        return cleaned
+    idx = 2
+    while f"{cleaned}_{idx}" in used_ids:
+        idx += 1
+    return f"{cleaned}_{idx}"
 
 
 def _is_valid_custom_id(val: str) -> bool:
@@ -69,6 +96,415 @@ def _is_valid_custom_id(val: str) -> bool:
         return True
     except Exception:
         return False
+
+
+def merge_source_catalog_extensions(
+    base_catalog: dict,
+    base_registry: dict,
+    source_catalogs: list[dict],
+    updated_at: str = CATALOG_MIGRATION_UPDATED_AT,
+) -> tuple[
+    dict,
+    dict,
+    dict[str, str],
+    dict[tuple[str, str], tuple[str, str]],
+    dict[str, tuple[str, str]],
+    bool,
+]:
+    """Merge valid subjects/topics/aliases from legacy CNU catalogs into `base_catalog` + 1 version.
+
+    Guarantees full compliance with `shared/knowledge-catalog.schema.json` and
+    `backend-rust/src/services/catalog_editor.rs::validate_against`.
+    Returns `(effective_catalog, effective_registry, subject_id_map, topic_pair_map, topic_flat_map, extended)`.
+    """
+    merged = copy.deepcopy(base_catalog)
+    sources_by_id: dict[str, dict] = {s["source_id"]: s for s in merged["sources"]}
+    trunks_by_id: dict[str, dict] = {t["trunk_id"]: t for t in merged["trunks"]}
+    subjects_by_id: dict[str, dict] = {s["subject_id"]: s for s in merged["subjects"]}
+    topics_by_id: dict[str, dict] = {t["topic_id"]: t for t in merged["topics"]}
+    all_entity_ids: set[str] = set(trunks_by_id) | set(subjects_by_id) | set(topics_by_id)
+
+    alias_owners: dict[tuple, str] = {}
+    for tid, row in trunks_by_id.items():
+        for nm in [row["label"], *row["aliases"]]:
+            alias_owners[(("TRUNK",), kc.normalized(nm))] = tid
+    for sid, row in subjects_by_id.items():
+        for nm in [row["label"], *row["aliases"]]:
+            alias_owners[(("SUBJECT",), kc.normalized(nm))] = sid
+    for tid, row in topics_by_id.items():
+        scope = ("TOPIC", row["subject_id"], row["parent_topic_id"])
+        for nm in [row["label"], *row["aliases"]]:
+            alias_owners[(scope, kc.normalized(nm))] = tid
+
+    candidate_sources: dict[str, dict] = {
+        CNU_MIGRATION_SOURCE["source_id"]: copy.deepcopy(CNU_MIGRATION_SOURCE)
+    }
+    for sc in source_catalogs:
+        if not isinstance(sc, dict):
+            continue
+        for src in sc.get("sources") or []:
+            if not isinstance(src, dict):
+                continue
+            src_id = str(src.get("source_id") or "").strip()
+            kind = str(src.get("kind") or "").strip()
+            ref = str(src.get("reference") or "").strip()[:1000]
+            note = str(src.get("note") or "").strip()[:1000]
+            if (
+                UPPER_ID_RE.fullmatch(src_id)
+                and src_id not in sources_by_id
+                and kind in ("LEGACY_INTERNAL", "EDITORIAL_PROPOSAL", "REFERENCE_PORTAL")
+                and ref
+                and note
+            ):
+                candidate_sources.setdefault(
+                    src_id,
+                    {"source_id": src_id, "kind": kind, "reference": ref, "note": note},
+                )
+
+    referenced_extra_sources: set[str] = set()
+
+    def _resolve_source_ids(raw_sids) -> list[str]:
+        valid: list[str] = []
+        if isinstance(raw_sids, list):
+            for x in raw_sids:
+                sx = str(x or "").strip()
+                if sx in sources_by_id and sx not in valid:
+                    valid.append(sx)
+                elif sx in candidate_sources and sx not in valid:
+                    valid.append(sx)
+                    referenced_extra_sources.add(sx)
+        if not valid:
+            valid.append(CNU_MIGRATION_SOURCE["source_id"])
+            referenced_extra_sources.add(CNU_MIGRATION_SOURCE["source_id"])
+        return valid
+
+    mutated_existing_ids: set[str] = set()
+    changed = False
+    subject_id_map: dict[str, str] = {}
+    topic_pair_map: dict[tuple[str, str], tuple[str, str]] = {}
+    topic_flat_map: dict[str, tuple[str, str]] = {}
+
+    def _merge_extra_aliases(target_row: dict, target_id: str, scope: tuple, extra_names: list[str]):
+        nonlocal changed
+        for raw_nm in extra_names:
+            if not isinstance(raw_nm, str):
+                continue
+            nm = raw_nm.strip()[:1000]
+            norm = kc.normalized(nm)
+            if not nm or not norm or (scope, norm) in alias_owners:
+                continue
+            target_row["aliases"].append(nm)
+            alias_owners[(scope, norm)] = target_id
+            if target_id not in mutated_existing_ids:
+                target_row["revision"] = int(target_row.get("revision") or 1) + 1
+                mutated_existing_ids.add(target_id)
+            changed = True
+
+    default_trunk_id = "bancaria" if "bancaria" in trunks_by_id else next(iter(trunks_by_id))
+
+    # 1. Merge subjects
+    for sc in source_catalogs:
+        if not isinstance(sc, dict):
+            continue
+        for raw_s in sc.get("subjects") or []:
+            if not isinstance(raw_s, dict):
+                continue
+            raw_sid = str(raw_s.get("subject_id") or "").strip()
+            label = str(raw_s.get("label") or "").strip()[:1000]
+            norm_label = kc.normalized(label)
+            if not UPPER_ID_RE.fullmatch(raw_sid) or not label or not norm_label:
+                continue
+            raw_aliases = [a for a in (raw_s.get("aliases") or []) if isinstance(a, str)]
+            subj_scope = ("SUBJECT",)
+
+            if raw_sid in subjects_by_id:
+                subject_id_map[raw_sid] = raw_sid
+                _merge_extra_aliases(subjects_by_id[raw_sid], raw_sid, subj_scope, [label, *raw_aliases])
+                continue
+
+            if (subj_scope, norm_label) in alias_owners:
+                target_sid = alias_owners[(subj_scope, norm_label)]
+                subject_id_map[raw_sid] = target_sid
+                _merge_extra_aliases(subjects_by_id[target_sid], target_sid, subj_scope, [label, *raw_aliases])
+                continue
+
+            new_sid = raw_sid if raw_sid not in all_entity_ids else _unique_upper_id(f"SUBJ_{raw_sid}", all_entity_ids)
+            clean_aliases: list[str] = []
+            seen_norms = {norm_label}
+            for a in raw_aliases:
+                ac = a.strip()[:1000]
+                an = kc.normalized(ac)
+                if ac and an and an not in seen_norms and (subj_scope, an) not in alias_owners:
+                    clean_aliases.append(ac)
+                    seen_norms.add(an)
+
+            seen_trunks: set[str] = set()
+            trunk_links: list[dict] = []
+            for lk in raw_s.get("trunk_links") or []:
+                if not isinstance(lk, dict):
+                    continue
+                tid = str(lk.get("trunk_id") or "").strip()
+                if tid not in trunks_by_id or tid in seen_trunks:
+                    continue
+                seen_trunks.add(tid)
+                role = lk.get("role") if lk.get("role") in ("FOUNDATIONAL", "RELATED") else "FOUNDATIONAL"
+                dw = lk.get("default_weight")
+                if isinstance(dw, (int, float)) and not isinstance(dw, bool) and math.isfinite(dw) and 0.1 <= float(dw) <= 10.0:
+                    weight = float(dw)
+                else:
+                    weight = 2.0 if role == "FOUNDATIONAL" else 1.0
+                basis = lk.get("basis") if lk.get("basis") in ("LEGACY_TEMPLATE", "EDITORIAL_SUGGESTION") else "EDITORIAL_SUGGESTION"
+                note = (str(lk.get("note") or "").strip()[:1000] or "Relação preservada da curadoria editorial legada.")
+                trunk_links.append(
+                    {
+                        "trunk_id": tid,
+                        "role": role,
+                        "default_weight": weight,
+                        "basis": basis,
+                        "note": note,
+                    }
+                )
+            if not trunk_links:
+                trunk_links.append(
+                    {
+                        "trunk_id": default_trunk_id,
+                        "role": "FOUNDATIONAL",
+                        "default_weight": 2.0,
+                        "basis": "EDITORIAL_SUGGESTION",
+                        "note": "Disciplina preservada da curadoria editorial legada.",
+                    }
+                )
+
+            scope_note = (
+                str(raw_s.get("scope_note") or "").strip()[:1000]
+                or "Disciplina preservada da curadoria editorial para concursos."
+            )
+            status = "DEPRECATED" if raw_s.get("status") == "DEPRECATED" else "ACTIVE"
+            rev_raw = raw_s.get("revision")
+            rev = rev_raw if type(rev_raw) is int and rev_raw >= 1 else 1
+            new_subj = {
+                "subject_id": new_sid,
+                "label": label,
+                "aliases": clean_aliases,
+                "scope_note": scope_note,
+                "status": status,
+                "revision": rev,
+                "source_ids": _resolve_source_ids(raw_s.get("source_ids")),
+                "trunk_links": trunk_links,
+            }
+            merged["subjects"].append(new_subj)
+            subjects_by_id[new_sid] = new_subj
+            all_entity_ids.add(new_sid)
+            mutated_existing_ids.add(new_sid)  # newly created row already has valid revision
+            alias_owners[(subj_scope, norm_label)] = new_sid
+            for ac in clean_aliases:
+                alias_owners[(subj_scope, kc.normalized(ac))] = new_sid
+            subject_id_map[raw_sid] = new_sid
+            changed = True
+
+    # 2. Merge topics in two passes: TOPIC first, then SUBTOPIC
+    for target_kind in ("TOPIC", "SUBTOPIC"):
+        for sc in source_catalogs:
+            if not isinstance(sc, dict):
+                continue
+            for raw_t in sc.get("topics") or []:
+                if not isinstance(raw_t, dict):
+                    continue
+                raw_parent = raw_t.get("parent_topic_id")
+                inferred_kind = raw_t.get("kind") if raw_t.get("kind") in ("TOPIC", "SUBTOPIC") else (
+                    "TOPIC" if raw_parent is None else "SUBTOPIC"
+                )
+                if inferred_kind != target_kind:
+                    continue
+                if target_kind == "TOPIC" and raw_parent is not None:
+                    continue
+                if target_kind == "SUBTOPIC" and not (isinstance(raw_parent, str) and raw_parent.strip()):
+                    continue
+
+                raw_tid = str(raw_t.get("topic_id") or "").strip()
+                raw_sid = str(raw_t.get("subject_id") or "").strip()
+                label = str(raw_t.get("label") or "").strip()[:1000]
+                norm_label = kc.normalized(label)
+                if not UPPER_ID_RE.fullmatch(raw_tid) or not label or not norm_label:
+                    continue
+
+                target_sid = subject_id_map.get(raw_sid) or (raw_sid if raw_sid in subjects_by_id else None)
+                if not target_sid:
+                    continue
+
+                if target_kind == "TOPIC":
+                    target_parent = None
+                else:
+                    raw_p = str(raw_parent).strip()
+                    p_pair = (
+                        topic_pair_map.get((raw_sid, raw_p))
+                        or topic_flat_map.get(raw_p)
+                        or ((target_sid, raw_p) if raw_p in topics_by_id else None)
+                    )
+                    if not p_pair:
+                        continue
+                    parent_sid, parent_tid = p_pair
+                    if (
+                        parent_tid not in topics_by_id
+                        or parent_sid != target_sid
+                        or topics_by_id[parent_tid]["subject_id"] != target_sid
+                        or topics_by_id[parent_tid]["kind"] != "TOPIC"
+                    ):
+                        continue
+                    target_parent = parent_tid
+
+                top_scope = ("TOPIC", target_sid, target_parent)
+                raw_aliases = [a for a in (raw_t.get("aliases") or []) if isinstance(a, str)]
+
+                if (
+                    raw_tid in topics_by_id
+                    and topics_by_id[raw_tid]["subject_id"] == target_sid
+                    and topics_by_id[raw_tid]["parent_topic_id"] == target_parent
+                    and topics_by_id[raw_tid]["kind"] == target_kind
+                ):
+                    topic_pair_map[(raw_sid, raw_tid)] = (target_sid, raw_tid)
+                    topic_flat_map.setdefault(raw_tid, (target_sid, raw_tid))
+                    _merge_extra_aliases(topics_by_id[raw_tid], raw_tid, top_scope, [label, *raw_aliases])
+                    continue
+
+                if (top_scope, norm_label) in alias_owners:
+                    existing_tid = alias_owners[(top_scope, norm_label)]
+                    topic_pair_map[(raw_sid, raw_tid)] = (target_sid, existing_tid)
+                    topic_flat_map.setdefault(raw_tid, (target_sid, existing_tid))
+                    _merge_extra_aliases(topics_by_id[existing_tid], existing_tid, top_scope, [label, *raw_aliases])
+                    continue
+
+                new_tid = raw_tid if raw_tid not in all_entity_ids else _unique_upper_id(f"{target_sid}_{raw_tid}", all_entity_ids)
+                clean_aliases = []
+                seen_norms = {norm_label}
+                for a in raw_aliases:
+                    ac = a.strip()[:1000]
+                    an = kc.normalized(ac)
+                    if ac and an and an not in seen_norms and (top_scope, an) not in alias_owners:
+                        clean_aliases.append(ac)
+                        seen_norms.add(an)
+
+                status = "DEPRECATED" if raw_t.get("status") == "DEPRECATED" else "ACTIVE"
+                rev_raw = raw_t.get("revision")
+                rev = rev_raw if type(rev_raw) is int and rev_raw >= 1 else 1
+                new_top = {
+                    "topic_id": new_tid,
+                    "subject_id": target_sid,
+                    "parent_topic_id": target_parent,
+                    "kind": target_kind,
+                    "label": label,
+                    "aliases": clean_aliases,
+                    "status": status,
+                    "revision": rev,
+                    "source_ids": _resolve_source_ids(raw_t.get("source_ids")),
+                }
+                merged["topics"].append(new_top)
+                topics_by_id[new_tid] = new_top
+                all_entity_ids.add(new_tid)
+                mutated_existing_ids.add(new_tid)
+                alias_owners[(top_scope, norm_label)] = new_tid
+                for ac in clean_aliases:
+                    alias_owners[(top_scope, kc.normalized(ac))] = new_tid
+                topic_pair_map[(raw_sid, raw_tid)] = (target_sid, new_tid)
+                topic_flat_map[raw_tid] = (target_sid, new_tid)
+                changed = True
+
+    if not changed:
+        return (
+            copy.deepcopy(base_catalog),
+            copy.deepcopy(base_registry),
+            subject_id_map,
+            topic_pair_map,
+            topic_flat_map,
+            False,
+        )
+
+    # 3. Ensure every SUBJECT has >= 1 TOPIC and every TOPIC has >= 1 SUBTOPIC
+    subjects_with_topics = {t["subject_id"] for t in merged["topics"] if t["kind"] == "TOPIC"}
+    for sid in list(subjects_by_id):
+        if sid not in subjects_with_topics:
+            gen_tid = _unique_upper_id(f"{sid}_TOPICOS_GERAIS", all_entity_ids)
+            gen_label = "Tópicos gerais da disciplina"
+            gen_top = {
+                "topic_id": gen_tid,
+                "subject_id": sid,
+                "parent_topic_id": None,
+                "kind": "TOPIC",
+                "label": gen_label,
+                "aliases": [],
+                "status": "ACTIVE",
+                "revision": 1,
+                "source_ids": _resolve_source_ids([]),
+            }
+            merged["topics"].append(gen_top)
+            topics_by_id[gen_tid] = gen_top
+            all_entity_ids.add(gen_tid)
+            alias_owners[(("TOPIC", sid, None), kc.normalized(gen_label))] = gen_tid
+
+    topics_with_subtopics = {
+        t["parent_topic_id"] for t in merged["topics"] if t["parent_topic_id"] is not None
+    }
+    for tid, top in list(topics_by_id.items()):
+        if top["kind"] == "TOPIC" and tid not in topics_with_subtopics:
+            sid = top["subject_id"]
+            gen_sub_id = _unique_upper_id(f"{tid}_GERAL", all_entity_ids)
+            gen_sub_label = "Conceitos e aplicações gerais"
+            gen_sub = {
+                "topic_id": gen_sub_id,
+                "subject_id": sid,
+                "parent_topic_id": tid,
+                "kind": "SUBTOPIC",
+                "label": gen_sub_label,
+                "aliases": [],
+                "status": top["status"],
+                "revision": 1,
+                "source_ids": _resolve_source_ids(top.get("source_ids")),
+            }
+            merged["topics"].append(gen_sub)
+            topics_by_id[gen_sub_id] = gen_sub
+            all_entity_ids.add(gen_sub_id)
+            alias_owners[(("TOPIC", sid, tid), kc.normalized(gen_sub_label))] = gen_sub_id
+
+    # Attach referenced extra sources preserving existing baseline sources first
+    for extra_sid in sorted(referenced_extra_sources):
+        if extra_sid not in sources_by_id and extra_sid in candidate_sources:
+            src_doc = candidate_sources[extra_sid]
+            merged["sources"].append(src_doc)
+            sources_by_id[extra_sid] = src_doc
+
+    merged["catalog_version"] = int(base_catalog["catalog_version"]) + 1
+    merged["updated_at"] = updated_at
+    merged["status"] = "ACTIVE"
+    merged["review_status"] = "APPROVED"
+
+    # Build registry identically to backend-rust/src/services/catalog_editor.rs (lines 251-268)
+    base_pins = {e["id"]: copy.deepcopy(e) for e in base_registry["entries"]}
+    entries: list[dict] = []
+    for entity, rows in (
+        ("TRUNK", trunks_by_id),
+        ("SUBJECT", subjects_by_id),
+        ("TOPIC", topics_by_id),
+    ):
+        for eid, row in rows.items():
+            if eid in base_pins:
+                entries.append(base_pins[eid])
+            else:
+                entries.append(
+                    {
+                        "id": eid,
+                        "entity": entity,
+                        "subject_id": row.get("subject_id"),
+                        "parent_topic_id": row.get("parent_topic_id"),
+                        "initial_label": row["label"],
+                    }
+                )
+    entries.sort(key=lambda e: e["id"])
+    merged_registry = copy.deepcopy(base_registry)
+    merged_registry["entries"] = entries
+    merged_registry["registry_version"] = int(base_registry["registry_version"]) + 1
+
+    kc.validate(merged, merged_registry, kc.read(ROOT / "shared/knowledge-catalog.schema.json"))
+    return merged, merged_registry, subject_id_map, topic_pair_map, topic_flat_map, True
 
 
 def subject_lookup_table(catalog: dict) -> dict[str, dict]:
@@ -194,12 +630,18 @@ def normalize_contest_to_v2_template(
     raw_exam: dict,
     catalog: dict,
     source_catalog_labels: dict[str, str] | None = None,
+    subject_id_map: dict[str, str] | None = None,
+    topic_pair_map: dict[tuple[str, str], tuple[str, str]] | None = None,
+    topic_flat_map: dict[str, tuple[str, str]] | None = None,
 ) -> dict:
     """Normalize a legacy CNU contest (`user_exams` / `exam_templates`) into a valid Cogniva 2.0 global template."""
     if not isinstance(raw_exam, dict):
         raise ValueError("exam document must be a dict")
 
     source_labels = source_catalog_labels or {}
+    sid_map = subject_id_map or {}
+    tpair_map = topic_pair_map or {}
+    tflat_map = topic_flat_map or {}
     subj_lookup = subject_lookup_table(catalog)
     active_subjects = {s["subject_id"]: s for s in catalog["subjects"] if s["status"] == "ACTIVE"}
     topics_by_subj = topic_lookup_by_subject(catalog)
@@ -282,11 +724,13 @@ def normalize_contest_to_v2_template(
     for s_idx, raw_s in enumerate(raw_subjects[:100]):
         if not isinstance(raw_s, dict):
             continue
-        raw_csid = str(raw_s.get("canonical_subject_id") or "").strip()
+        orig_csid = str(raw_s.get("canonical_subject_id") or "").strip()
+        raw_csid = sid_map.get(orig_csid, orig_csid)
         disp_name = (
             _clean_optional_str(raw_s.get("display_name"), 300)
+            or _clean_optional_str(source_labels.get(orig_csid), 300)
             or _clean_optional_str(source_labels.get(raw_csid), 300)
-            or _clean_optional_str(raw_csid, 300)
+            or _clean_optional_str(orig_csid, 300)
             or f"Disciplina {s_idx + 1}"
         )
 
@@ -337,11 +781,18 @@ def normalize_contest_to_v2_template(
         for t_idx, raw_t in enumerate(raw_topics[:1000]):
             if not isinstance(raw_t, dict):
                 continue
-            raw_ctid = str(raw_t.get("canonical_topic_id") or "").strip()
+            orig_ctid = str(raw_t.get("canonical_topic_id") or "").strip()
+            raw_ctid = orig_ctid
+            if (orig_csid, orig_ctid) in tpair_map and tpair_map[(orig_csid, orig_ctid)][0] == csid:
+                raw_ctid = tpair_map[(orig_csid, orig_ctid)][1]
+            elif orig_ctid in tflat_map and tflat_map[orig_ctid][0] == csid:
+                raw_ctid = tflat_map[orig_ctid][1]
+
             t_title = (
                 _clean_optional_str(raw_t.get("display_title"), 1000)
+                or _clean_optional_str(source_labels.get(orig_ctid), 1000)
                 or _clean_optional_str(source_labels.get(raw_ctid), 1000)
-                or _clean_optional_str(raw_ctid, 1000)
+                or _clean_optional_str(orig_ctid, 1000)
                 or f"Tópico {t_idx + 1}"
             )
 
@@ -359,7 +810,6 @@ def normalize_contest_to_v2_template(
                 )
 
             if ctid in seen_ctids_in_subject:
-                # Avoid duplicate canonical_topic_id inside same subject
                 ctid = "custom-" + deterministic_uuid(
                     f"cogniva-v2-topic-dedup:{exam_id}:{csid}:{ctid}:{t_idx}"
                 )
@@ -441,6 +891,9 @@ def normalize_question_to_v2(
     recorded_at: str = MIGRATION_TIMESTAMP,
     source_catalog_labels: dict[str, str] | None = None,
     default_contest_tag: str | None = None,
+    subject_id_map: dict[str, str] | None = None,
+    topic_pair_map: dict[tuple[str, str], tuple[str, str]] | None = None,
+    topic_flat_map: dict[str, tuple[str, str]] | None = None,
 ) -> dict:
     """Pure, deterministic transformation of a raw CNU V1 or V2 question into Cogniva 2.0 V2 format."""
     if not isinstance(raw_doc, dict):
@@ -452,6 +905,9 @@ def normalize_question_to_v2(
         raise ValueError("empty question text")
 
     source_labels = source_catalog_labels or {}
+    sid_map = subject_id_map or {}
+    tpair_map = topic_pair_map or {}
+    tflat_map = topic_flat_map or {}
     subj_lookup = subject_lookup_table(catalog)
     active_subjects = {s["subject_id"]: s for s in catalog["subjects"] if s["status"] == "ACTIVE"}
     active_topics = {
@@ -467,39 +923,41 @@ def normalize_question_to_v2(
         doc["_id"] = {"$oid": oid}
         doc["question"] = question_text
 
-        # Preserve or infer human-readable disciplina before adjusting classification links
-        raw_disc = _clean_optional_str(doc.get("disciplina"), 300)
-        if not raw_disc and isinstance(doc.get("classification"), dict):
-            for lk in doc["classification"].get("links") or []:
-                if isinstance(lk, dict) and lk.get("subject_id"):
-                    sid = str(lk["subject_id"])
-                    raw_disc = (
-                        (active_subjects[sid]["label"] if sid in active_subjects else None)
-                        or source_labels.get(sid)
-                        or sid
-                    )
-                    break
-        if raw_disc:
-            matched_subj = subj_lookup.get(kc.normalized(raw_disc))
-            doc["disciplina"] = matched_subj["label"] if matched_subj else raw_disc
-        elif "disciplina" not in doc or not isinstance(doc.get("disciplina"), str):
-            doc["disciplina"] = "Geral"
-
         if isinstance(doc.get("classification"), dict):
             cls = doc["classification"]
-            links = cls.get("links") if isinstance(cls.get("links"), list) else []
-            links_valid = bool(links) and all(
-                isinstance(lk, dict)
-                and (lk.get("subject_id"), lk.get("topic_id")) in active_topics
+            raw_links = cls.get("links") if isinstance(cls.get("links"), list) else []
+            remapped_links: list[dict] = []
+            seen_link_topics: set[str] = set()
+            for raw_lk in raw_links:
+                if not isinstance(raw_lk, dict):
+                    continue
+                lk = copy.deepcopy(raw_lk)
+                orig_sid = str(lk.get("subject_id") or "").strip()
+                orig_tid = str(lk.get("topic_id") or "").strip()
+                if (orig_sid, orig_tid) in tpair_map:
+                    lk["subject_id"], lk["topic_id"] = tpair_map[(orig_sid, orig_tid)]
+                elif orig_tid in tflat_map:
+                    lk["subject_id"], lk["topic_id"] = tflat_map[orig_tid]
+                elif orig_sid in sid_map:
+                    lk["subject_id"] = sid_map[orig_sid]
+                if lk.get("topic_id") in seen_link_topics:
+                    continue
+                if isinstance(lk.get("topic_id"), str):
+                    seen_link_topics.add(lk["topic_id"])
+                remapped_links.append(lk)
+
+            links_valid = bool(remapped_links) and all(
+                (lk.get("subject_id"), lk.get("topic_id")) in active_topics
                 and qc.human_review(lk.get("provenance"))
-                for lk in links
+                for lk in remapped_links
             )
             if cls.get("state") in ("CONFIRMED", "PARTIAL") and links_valid:
+                cls["links"] = remapped_links
                 cls["catalog_version"] = catalog_ver
                 cls["revision"] = max(1, int(cls.get("revision") or 1))
                 primaries = [
                     lk
-                    for lk in links
+                    for lk in remapped_links
                     if lk.get("role") == "PRIMARY" and lk.get("coverage") == "DIRECT"
                 ]
                 if len(primaries) == 1:
@@ -517,6 +975,24 @@ def normalize_question_to_v2(
                 }
                 doc["canonical_subject_id"] = None
                 doc["canonical_topic_id"] = None
+
+        raw_disc = _clean_optional_str(doc.get("disciplina"), 300)
+        if doc.get("canonical_subject_id") in active_subjects and (
+            not raw_disc or kc.normalized(raw_disc) not in subj_lookup
+        ):
+            doc["disciplina"] = active_subjects[doc["canonical_subject_id"]]["label"]
+        elif raw_disc:
+            matched_subj = subj_lookup.get(kc.normalized(raw_disc))
+            doc["disciplina"] = matched_subj["label"] if matched_subj else raw_disc
+        elif isinstance(doc.get("classification"), dict):
+            inferred = None
+            for lk in doc["classification"].get("links") or []:
+                if isinstance(lk, dict) and lk.get("subject_id") in active_subjects:
+                    inferred = active_subjects[lk["subject_id"]]["label"]
+                    break
+            doc["disciplina"] = inferred or "Geral"
+        else:
+            doc["disciplina"] = "Geral"
 
         if default_contest_tag and not doc.get("concursos"):
             doc["concursos"] = default_contest_tag
@@ -572,10 +1048,12 @@ def normalize_question_to_v2(
         "policy_version": "objective-exact/1",
     }
 
-    raw_csid = _clean_optional_str(raw_doc.get("canonical_subject_id"), 300)
+    orig_csid = _clean_optional_str(raw_doc.get("canonical_subject_id"), 300)
+    raw_csid = sid_map.get(orig_csid, orig_csid) if orig_csid else None
     raw_disc = (
         _clean_optional_str(raw_doc.get("disciplina"), 300)
-        or (source_labels.get(raw_csid) if raw_csid else None)
+        or (active_subjects[raw_csid]["label"] if raw_csid and raw_csid in active_subjects else None)
+        or (source_labels.get(orig_csid) if orig_csid else None)
         or raw_csid
         or "Geral"
     )
@@ -704,6 +1182,9 @@ def migrate_batch(
     catalog: dict,
     source_catalog_labels: dict[str, str] | None = None,
     default_contest_tag: str | None = None,
+    subject_id_map: dict[str, str] | None = None,
+    topic_pair_map: dict[tuple[str, str], tuple[str, str]] | None = None,
+    topic_flat_map: dict[str, tuple[str, str]] | None = None,
 ) -> tuple[list[dict], dict]:
     """Normalize a batch of raw documents and return `(valid_v2_docs, stats)` without PII/content."""
     subj_lookup = subject_lookup_table(catalog)
@@ -711,6 +1192,7 @@ def migrate_batch(
     skipped: list[dict] = []
     mapped_subjects = 0
     unmapped_subjects = 0
+    confirmed_classified = 0
 
     for raw in raw_docs:
         oid = _oid_hex(raw.get("_id", "")) if isinstance(raw, dict) else "unknown"
@@ -720,11 +1202,16 @@ def migrate_batch(
                 catalog,
                 source_catalog_labels=source_catalog_labels,
                 default_contest_tag=default_contest_tag,
+                subject_id_map=subject_id_map,
+                topic_pair_map=topic_pair_map,
+                topic_flat_map=topic_flat_map,
             )
             if kc.normalized(v2.get("disciplina", "")) in subj_lookup:
                 mapped_subjects += 1
             else:
                 unmapped_subjects += 1
+            if v2.get("classification", {}).get("state") in ("CONFIRMED", "PARTIAL"):
+                confirmed_classified += 1
             migrated.append(v2)
         except Exception as exc:
             skipped.append({"id": oid, "reason": str(exc)})
@@ -732,6 +1219,7 @@ def migrate_batch(
     stats = {
         "source_documents_read": len(raw_docs),
         "normalized_v2_valid": len(migrated),
+        "confirmed_classified_count": confirmed_classified,
         "mapped_discipline_count": mapped_subjects,
         "unmapped_discipline_count": unmapped_subjects,
         "skipped_invalid_count": len(skipped),
@@ -804,6 +1292,9 @@ def filter_contests_and_questions(
     contest_filter: str,
     include_contest_subjects: bool = False,
     source_catalog_labels: dict[str, str] | None = None,
+    subject_id_map: dict[str, str] | None = None,
+    topic_pair_map: dict[tuple[str, str], tuple[str, str]] | None = None,
+    topic_flat_map: dict[str, tuple[str, str]] | None = None,
 ) -> tuple[list[dict], list[dict], dict]:
     """Select and normalize contests matching `contest_filter` plus their associated questions."""
     pattern = re.compile(contest_filter, re.IGNORECASE)
@@ -852,10 +1343,16 @@ def filter_contests_and_questions(
             else:
                 unmatched_raw_contests.append(doc)
 
-    # Deduplicate matched contests by normalized _id, preferring non-EXCLUIDO, higher collection priority, higher revision
     best_by_id: dict[str, tuple[tuple[int, int, int], dict, dict]] = {}
     for c_prio, raw_c in matched_raw_contests:
-        norm_tpl = normalize_contest_to_v2_template(raw_c, catalog, source_labels)
+        norm_tpl = normalize_contest_to_v2_template(
+            raw_c,
+            catalog,
+            source_labels,
+            subject_id_map=subject_id_map,
+            topic_pair_map=topic_pair_map,
+            topic_flat_map=topic_flat_map,
+        )
         not_deleted = 0 if str(raw_c.get("status") or "").upper() == "EXCLUIDO" else 1
         rev = int(raw_c.get("revision") or 1) if isinstance(raw_c.get("revision"), int) else 1
         rank = (not_deleted, c_prio, rev)
@@ -960,6 +1457,15 @@ def filter_contests_and_questions(
                 "trunk_slug": t["trunk_slug"],
                 "status": t["status"],
                 "subject_count": len(t["subjects"]),
+                "custom_subject_count": sum(
+                    1 for s in t["subjects"] if str(s["canonical_subject_id"]).startswith("custom-")
+                ),
+                "custom_topic_count": sum(
+                    1
+                    for s in t["subjects"]
+                    for tp in s["topics"]
+                    if str(tp["canonical_topic_id"]).startswith("custom-")
+                ),
                 "subjects": [
                     {
                         "canonical_subject_id": s["canonical_subject_id"],
@@ -994,8 +1500,11 @@ def _to_mongo_doc(v2_extjson: dict) -> dict:
     return doc
 
 
-def _read_source_catalog_labels(src_db) -> dict[str, str]:
-    """Extract subject/topic ID -> label mappings from legacy CNU catalog collections if present."""
+def _read_source_catalogs_and_labels(src_db) -> tuple[list[dict], dict[str, str]]:
+    """Read committed catalog snapshots and ID -> label mappings from legacy CNU database."""
+    from bson import json_util
+
+    catalogs: list[dict] = []
     labels: dict[str, str] = {}
     existing_colls = set(src_db.list_collection_names())
     for coll_name, payload_key in (
@@ -1004,16 +1513,47 @@ def _read_source_catalog_labels(src_db) -> dict[str, str]:
     ):
         if coll_name not in existing_colls:
             continue
-        for doc in src_db.get_collection(coll_name).find({}):
+        rows = [json.loads(json_util.dumps(d)) for d in src_db.get_collection(coll_name).find({})]
+        rows.sort(key=lambda r: int(r.get("version") or 0))
+        for doc in rows:
             cat = doc.get(payload_key)
             if isinstance(cat, dict):
+                catalogs.append(cat)
                 for s in cat.get("subjects") or []:
                     if isinstance(s, dict) and s.get("subject_id") and s.get("label"):
                         labels[str(s["subject_id"])] = str(s["label"])
                 for t in cat.get("topics") or []:
                     if isinstance(t, dict) and t.get("topic_id") and t.get("label"):
                         labels[str(t["topic_id"])] = str(t["label"])
-    return labels
+    return catalogs, labels
+
+
+def _read_target_active_catalog(
+    tgt_db,
+    bundled_catalog: dict,
+    bundled_registry: dict,
+) -> tuple[dict, dict, str | None]:
+    """Return `(active_catalog, active_registry, head_activation_id)` currently active in `cogniva`."""
+    from bson import json_util
+
+    existing_colls = set(tgt_db.list_collection_names())
+    if "knowledge_catalog_head" not in existing_colls:
+        return copy.deepcopy(bundled_catalog), copy.deepcopy(bundled_registry), None
+    head = tgt_db.get_collection("knowledge_catalog_head").find_one({"_id": "cogniva-knowledge"})
+    if not head:
+        return copy.deepcopy(bundled_catalog), copy.deepcopy(bundled_registry), None
+    act_id = head.get("activation_id")
+    if not isinstance(act_id, str) or not act_id:
+        return copy.deepcopy(bundled_catalog), copy.deepcopy(bundled_registry), None
+    event_raw = tgt_db.get_collection("knowledge_catalog_activations").find_one({"_id": act_id})
+    if not event_raw:
+        return copy.deepcopy(bundled_catalog), copy.deepcopy(bundled_registry), None
+    event = json.loads(json_util.dumps(event_raw))
+    cat = event.get("catalog")
+    reg = event.get("registry")
+    if isinstance(cat, dict) and isinstance(reg, dict):
+        return cat, reg, act_id
+    return copy.deepcopy(bundled_catalog), copy.deepcopy(bundled_registry), None
 
 
 def run_mongo_migration(
@@ -1031,7 +1571,8 @@ def run_mongo_migration(
     if source_uri == target_uri and source_db_name == target_db_name:
         raise ValueError("source and target database cannot be identical; CNU must remain untouched")
 
-    catalog = kc.read(ROOT / "shared/knowledge-catalog.json")
+    bundled_catalog = kc.read(ROOT / "shared/knowledge-catalog.json")
+    bundled_registry = kc.read(ROOT / "shared/knowledge-id-registry.json")
     templates_bundle = kc.read(ROOT / "shared/exam-templates.json")
 
     src_client = MongoClient(source_uri, appname="cogniva-2.0-readonly-migrator")
@@ -1042,7 +1583,7 @@ def run_mongo_migration(
             name: src_db.get_collection(name).estimated_document_count()
             for name in coll_names
         }
-        source_labels = _read_source_catalog_labels(src_db)
+        source_catalogs, source_labels = _read_source_catalogs_and_labels(src_db)
         raw_cursor = src_db.get_collection("todasQuestoes").find({})
         all_raw_questions = [json.loads(json_util.dumps(d)) for d in raw_cursor]
 
@@ -1057,6 +1598,29 @@ def run_mongo_migration(
     finally:
         src_client.close()
 
+    tgt_reader = MongoClient(target_uri, appname="cogniva-2.0-target-inspector")
+    try:
+        current_target_catalog, current_target_registry, parent_activation_id = _read_target_active_catalog(
+            tgt_reader.get_database(target_db_name),
+            bundled_catalog,
+            bundled_registry,
+        )
+    finally:
+        tgt_reader.close()
+
+    (
+        effective_catalog,
+        effective_registry,
+        subject_id_map,
+        topic_pair_map,
+        topic_flat_map,
+        catalog_extended,
+    ) = merge_source_catalog_extensions(
+        current_target_catalog,
+        current_target_registry,
+        source_catalogs,
+    )
+
     matched_templates: list[dict] = []
     default_tag: str | None = None
     selective_diag: dict | None = None
@@ -1065,10 +1629,13 @@ def run_mongo_migration(
         matched_templates, raw_docs, selective_diag = filter_contests_and_questions(
             raw_contests_by_coll=raw_contests_by_coll,
             raw_questions=all_raw_questions,
-            catalog=catalog,
+            catalog=effective_catalog,
             contest_filter=contest_filter,
             include_contest_subjects=include_contest_subjects,
             source_catalog_labels=source_labels,
+            subject_id_map=subject_id_map,
+            topic_pair_map=topic_pair_map,
+            topic_flat_map=topic_flat_map,
         )
         if len(matched_templates) == 1:
             default_tag = matched_templates[0]["_id"]
@@ -1077,15 +1644,28 @@ def run_mongo_migration(
 
     migrated, stats = migrate_batch(
         raw_docs,
-        catalog,
+        effective_catalog,
         source_catalog_labels=source_labels,
         default_contest_tag=default_tag,
+        subject_id_map=subject_id_map,
+        topic_pair_map=topic_pair_map,
+        topic_flat_map=topic_flat_map,
     )
     stats["dry_run"] = dry_run
     stats["source_db"] = source_db_name
     stats["target_db"] = target_db_name
     stats["source_writes"] = 0
     stats["source_collections"] = source_collections
+    stats["catalog_extension"] = {
+        "extended": catalog_extended,
+        "target_prior_version": int(current_target_catalog["catalog_version"]),
+        "effective_version": int(effective_catalog["catalog_version"]),
+        "subjects_before": len(current_target_catalog["subjects"]),
+        "subjects_after": len(effective_catalog["subjects"]),
+        "topics_before": len(current_target_catalog["topics"]),
+        "topics_after": len(effective_catalog["topics"]),
+        "catalog_sha256": rfc8785_sha256(effective_catalog),
+    }
     if selective_diag is not None:
         stats["selective_migration"] = selective_diag
 
@@ -1095,34 +1675,84 @@ def run_mongo_migration(
     tgt_client = MongoClient(target_uri, appname="cogniva-2.0-target-writer")
     try:
         tgt_db = tgt_client.get_database(target_db_name)
-        if migrated:
-            ops = []
-            for v2 in migrated:
-                mdoc = _to_mongo_doc(v2)
-                ops.append(ReplaceOne({"_id": mdoc["_id"]}, mdoc, upsert=True))
-            res = tgt_db.get_collection("todasQuestoes").bulk_write(ops, ordered=False)
-            stats["questions_upserted"] = res.upserted_count + res.modified_count + res.matched_count
-        else:
-            stats["questions_upserted"] = 0
+        now_dt = datetime.now(timezone.utc)
 
-        # Seed unified catalog v2 idempotently
-        cat_key = f"{catalog['catalog_id']}:{catalog['catalog_version']}"
+        # 1. Seed bundled catalog v2 snapshot idempotently
+        base_key = f"{bundled_catalog['catalog_id']}:{bundled_catalog['catalog_version']}"
         tgt_db.get_collection("knowledge_catalog_versions").update_one(
-            {"_id": cat_key},
+            {"_id": base_key},
             {
                 "$setOnInsert": {
-                    "catalog_id": catalog["catalog_id"],
-                    "version": catalog["catalog_version"],
-                    "payload": catalog,
+                    "catalog_id": bundled_catalog["catalog_id"],
+                    "version": int(bundled_catalog["catalog_version"]),
+                    "payload": bundled_catalog,
                 }
             },
             upsert=True,
         )
 
-        tpl_coll = tgt_db.get_collection("exam_templates")
-        now_dt = datetime.now(timezone.utc)
+        # 2. Activate extended catalog version (e.g. v3) before writing classified questions/templates
+        if catalog_extended:
+            base_sha = rfc8785_sha256(current_target_catalog)
+            next_sha = rfc8785_sha256(effective_catalog)
+            next_ver = int(effective_catalog["catalog_version"])
+            op_uuid = deterministic_uuid(
+                f"cogniva-v2-catalog-activation:{next_ver}:{base_sha}:{next_sha}"
+            )
+            act_id = f"0:{op_uuid}"
+            req_sha = rfc8785_sha256(
+                {"actor": 0, "operation_id": op_uuid, "catalog_sha256": next_sha}
+            )
+            event_doc = {
+                "_id": act_id,
+                "operation_id": op_uuid,
+                "actor_user_id": 0,
+                "draft_id": op_uuid,
+                "draft_revision": 1,
+                "request_sha256": req_sha,
+                "reason": "Migração somente-leitura das extensões editoriais de catálogo CNU para Cogniva 2.0",
+                "recorded_at": now_dt,
+                "parent_activation_id": parent_activation_id,
+                "base_catalog_sha256": base_sha,
+                "catalog_sha256": next_sha,
+                "version": next_ver,
+                "catalog": effective_catalog,
+                "registry": effective_registry,
+            }
+            tgt_db.get_collection("knowledge_catalog_activations").update_one(
+                {"_id": act_id},
+                {"$setOnInsert": event_doc},
+                upsert=True,
+            )
+            ext_key = f"{effective_catalog['catalog_id']}:{next_ver}"
+            tgt_db.get_collection("knowledge_catalog_versions").update_one(
+                {"_id": ext_key},
+                {
+                    "$setOnInsert": {
+                        "catalog_id": effective_catalog["catalog_id"],
+                        "version": next_ver,
+                        "payload": effective_catalog,
+                    }
+                },
+                upsert=True,
+            )
+            head_doc = {
+                "_id": "cogniva-knowledge",
+                "activation_id": act_id,
+                "version": next_ver,
+                "catalog_sha256": next_sha,
+                "updated_at": now_dt,
+            }
+            tgt_db.get_collection("knowledge_catalog_head").replace_one(
+                {"_id": "cogniva-knowledge"},
+                head_doc,
+                upsert=True,
+            )
+            stats["activated_catalog_version"] = next_ver
+            stats["activated_catalog_id"] = act_id
 
-        # Upsert selectively migrated contests into global exam_templates
+        # 3. Upsert selectively migrated contests into global exam_templates & activate on admin accounts
+        tpl_coll = tgt_db.get_collection("exam_templates")
         migrated_tpl_ids: list[str] = []
         for mtpl in matched_templates:
             tpl_doc = copy.deepcopy(mtpl)
@@ -1132,7 +1762,14 @@ def run_mongo_migration(
             migrated_tpl_ids.append(tpl_doc["_id"])
         stats["migrated_exam_templates_upserted"] = migrated_tpl_ids
 
-        # Seed bundled global exam templates idempotently (insert only if absent)
+        if migrated_tpl_ids and "usuarios" in set(tgt_db.list_collection_names()):
+            adm_res = tgt_db.get_collection("usuarios").update_many(
+                {"role": "admin"},
+                {"$addToSet": {"active_contest_ids": {"$each": migrated_tpl_ids}}},
+            )
+            stats["admin_ladders_activated"] = adm_res.matched_count
+
+        # 4. Seed bundled global exam templates idempotently (insert only if absent)
         seeded_templates = 0
         for tpl in templates_bundle["templates"]:
             tpl_doc = copy.deepcopy(tpl)
@@ -1142,6 +1779,17 @@ def run_mongo_migration(
             if up.upserted_id is not None:
                 seeded_templates += 1
         stats["exam_templates_seeded"] = seeded_templates
+
+        # 5. Upsert validated Schema v2 questions
+        if migrated:
+            ops = []
+            for v2 in migrated:
+                mdoc = _to_mongo_doc(v2)
+                ops.append(ReplaceOne({"_id": mdoc["_id"]}, mdoc, upsert=True))
+            res = tgt_db.get_collection("todasQuestoes").bulk_write(ops, ordered=False)
+            stats["questions_upserted"] = res.upserted_count + res.modified_count + res.matched_count
+        else:
+            stats["questions_upserted"] = 0
     finally:
         tgt_client.close()
 
