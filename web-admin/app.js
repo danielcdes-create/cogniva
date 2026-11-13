@@ -66,10 +66,10 @@ const classificationStates = {
   UNCLASSIFIED:'Sem classificação'
 };
 const validityBases = {
-  FACTUAL:'Factual / conceitual',
-  NORMATIVE:'Normativa / legislativa',
-  JURISPRUDENTIAL:'Jurisprudencial',
-  TECHNOLOGICAL:'Tecnológica'
+  TIMELESS:'Atemporal / conceitual estável',
+  FACTUAL:'Factual / sujeita a atualização',
+  LEGAL:'Normativa / legislativa',
+  TECHNICAL:'Técnica / tecnológica'
 };
 const validityReasons = [
   ['LAW_REPEALED','Norma revogada'],
@@ -937,7 +937,7 @@ function questionView() {
         else if(v==='UNDER_REVIEW' && (!Array.isArray(q.validity.reason_codes) || !q.validity.reason_codes.length))q.validity.reason_codes=['REVIEW_REQUESTED'];
         else if(v==='OBSOLETE' && (!Array.isArray(q.validity.reason_codes) || !q.validity.reason_codes.length))q.validity.reason_codes=['FACT_CHANGED'];
       },true),{options:Object.entries(statuses)}),
-      field('Base da avaliação',val.basis || 'FACTUAL',v=>update(q=>{q.validity.basis=v;}),{options:Object.entries(validityBases)}),
+      field('Base da avaliação',val.basis || 'TIMELESS',v=>update(q=>{q.validity.basis=v;}),{options:Object.entries(validityBases)}),
       val.status==='CURRENT' || val.status==='OBSOLETE'
         ? field('Data de referência (YYYY-MM-DD)',val.reference_date || new Date().toLocaleDateString('en-CA',{timeZone:'America/Sao_Paulo'}),v=>update(q=>{q.validity.reference_date=v.trim() || null;}),{type:'date'})
         : null,

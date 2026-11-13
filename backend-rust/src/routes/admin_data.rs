@@ -207,10 +207,34 @@ pub async fn prepare_question(
         });
     } else {
         let today = Utc::now().format("%Y-%m-%d").to_string();
+        let now_iso = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        let fallback_evidence = body.document["origins"]
+            .as_array()
+            .and_then(|arr| {
+                arr.iter()
+                    .find_map(|o| o.get("source_reference").filter(|sr| sr.is_object()).cloned())
+            })
+            .unwrap_or_else(|| {
+                json!({
+                    "uri": format!("urn:cogniva:admin-review:{id}"),
+                    "title": "Revisão administrativa explícita no painel Cogniva",
+                    "locator": null,
+                    "retrieved_at": now_iso,
+                    "sha256": null
+                })
+            });
         match incoming_status.as_str() {
             "CURRENT" => {
                 if !body.document["validity"]["reference_date"].is_string() {
                     body.document["validity"]["reference_date"] = json!(today);
+                }
+                if body.document["validity"]["basis"] == "LEGAL"
+                    && !body.document["validity"]["review_due_on"].is_string()
+                {
+                    let due = (Utc::now() + chrono::Duration::days(365))
+                        .format("%Y-%m-%d")
+                        .to_string();
+                    body.document["validity"]["review_due_on"] = json!(due);
                 }
                 body.document["validity"]["reason_codes"] = json!([]);
                 if body.document["validity"]["evaluated_content_revision"].as_str()
@@ -219,10 +243,14 @@ pub async fn prepare_question(
                 {
                     body.document["validity"]["evaluated_content_revision"] =
                         json!(&new_content_revision);
-                    body.document["validity"]["decision"] = human_provenance(
+                    let mut decision = human_provenance(
                         user.user_id,
                         "Validade atual confirmada manualmente pelo administrador.",
                     );
+                    if body.document["validity"]["basis"] != "TIMELESS" {
+                        decision["evidence"] = json!([fallback_evidence]);
+                    }
+                    body.document["validity"]["decision"] = decision;
                 }
             }
             "OBSOLETE" => {
@@ -250,10 +278,14 @@ pub async fn prepare_question(
                 {
                     body.document["validity"]["evaluated_content_revision"] =
                         json!(&new_content_revision);
-                    body.document["validity"]["decision"] = human_provenance(
+                    let mut decision = human_provenance(
                         user.user_id,
                         "Questão marcada como obsoleta na revisão administrativa.",
                     );
+                    if body.document["validity"]["basis"] != "TIMELESS" {
+                        decision["evidence"] = json!([fallback_evidence]);
+                    }
+                    body.document["validity"]["decision"] = decision;
                 }
             }
             "UNDER_REVIEW" => {
