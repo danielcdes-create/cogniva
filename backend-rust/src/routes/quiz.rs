@@ -21,7 +21,10 @@ pub struct AnswerAttemptItem {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exam_component_id: Option<String>,
     pub attempt_id: String,
+    #[serde(default)]
     pub occurred_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_answered_at: Option<String>,
     pub question_revision: String,
     pub question_id: String,
     pub chosen_index: usize,
@@ -39,6 +42,16 @@ pub struct AnswerAttemptItem {
     pub canonical_subject_id: Option<String>,
     #[serde(default)]
     pub canonical_topic_id: Option<String>,
+}
+
+impl AnswerAttemptItem {
+    pub fn effective_answered_at(&self) -> &str {
+        self.client_answered_at
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| self.occurred_at.trim())
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]

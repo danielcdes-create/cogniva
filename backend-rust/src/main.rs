@@ -11,14 +11,14 @@ pub mod services;
 
 use axum::{
     extract::DefaultBodyLimit,
-    http::{header, HeaderValue, Method},
-    routing::{get, post, put},
+    http::{header, HeaderName, HeaderValue, Method},
+    routing::{delete, get, post, put},
     Json, Router,
 };
 use config::AppConfig;
 use mongodb::{Client, Database};
 use serde_json::json;
-use services::scheduler::spawn_background_daily_scheduler;
+use services::scheduler::spawn_background_daily_scheduler_with_shutdown;
 use std::future::IntoFuture;
 use std::{net::SocketAddr, sync::Arc};
 use tower_http::{
@@ -122,7 +122,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     })
     .await?;
 
-    spawn_background_daily_scheduler(db.clone());
+    let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+    spawn_background_daily_scheduler_with_shutdown(db.clone(), shutdown_rx);
 
     let app = build_router(state);
 
@@ -136,9 +137,45 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!("🚀 cogniva-api v{} escutando em http://{}", env!("CARGO_PKG_VERSION"), addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal(shutdown_tx))
+    .await?;
 
     Ok(())
+}
+
+async fn shutdown_signal(shutdown_tx: tokio::sync::watch::Sender<bool>) {
+    let ctrl_c = async {
+        if let Err(err) = tokio::signal::ctrl_c().await {
+            tracing::error!("Falha ao escutar sinal Ctrl+C: {}", err);
+        }
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut sigterm) => {
+                sigterm.recv().await;
+            }
+            Err(err) => {
+                tracing::error!("Falha ao registrar handler SIGTERM: {}", err);
+                std::future::pending::<()>().await;
+            }
+        }
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => tracing::info!("Sinal de interrupção recebido; iniciando encerramento gracioso..."),
+        _ = terminate => tracing::info!("SIGTERM recebido; iniciando encerramento gracioso..."),
+    }
+
+    let _ = shutdown_tx.send(true);
 }
 
 pub fn build_router(state: Arc<AppState>) -> Router {
@@ -152,11 +189,19 @@ pub fn build_router(state: Arc<AppState>) -> Router {
                 || text.starts_with("http://127.0.0.1:")
                 || text.starts_with("http://localhost:")
         }))
-        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::OPTIONS])
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
         .allow_headers([
             header::AUTHORIZATION,
             header::CONTENT_TYPE,
             header::ACCEPT,
+            header::IF_NONE_MATCH,
+            HeaderName::from_static("x-cogniva-csrf"),
         ]);
 
     let admin_routes = Router::new()
@@ -272,6 +317,10 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/api/v1/auth/me", get(routes::auth::get_profile))
         .route("/api/v1/auth/profile", get(routes::auth::get_profile))
         .route(
+            "/api/v1/auth/account",
+            delete(routes::auth::handle_delete_account),
+        )
+        .route(
             "/api/v1/auth/onboarding",
             put(routes::auth::handle_save_onboarding),
         )
@@ -364,6 +413,10 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             post(routes::auth::handle_register),
         )
         .route("/api/v1/auth/login", post(routes::auth::handle_login))
+        .route(
+            "/api/v1/auth/web-session",
+            post(routes::auth::handle_web_session),
+        )
         .route("/api/v1/auth/logout", post(routes::auth::handle_logout))
         .route("/api/v1/auth/web-logout", post(routes::web_admin::logout))
         .route("/api/v1/apk/info", get(routes::apk_ota::get_apk_info));
@@ -386,18 +439,29 @@ pub fn build_router(state: Arc<AppState>) -> Router {
 async fn readiness(
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
 ) -> Result<Json<serde_json::Value>, error::AppError> {
-    tokio::time::timeout(
+    let ping_res = tokio::time::timeout(
         std::time::Duration::from_secs(3),
         state.db.run_command(bson::doc! { "ping": 1 }).into_future(),
     )
-    .await
-    .map_err(|_| error::AppError::Internal("Banco não respondeu a tempo".into()))??;
-    Ok(Json(json!({
-        "status": "ready",
-        "service": "cogniva-api",
-        "contract_version": 3,
-        "revision": option_env!("BUILD_REVISION").unwrap_or("local")
-    })))
+    .await;
+
+    match ping_res {
+        Ok(Ok(_)) => Ok(Json(json!({
+            "status": "ready",
+            "service": "cogniva-api",
+            "contract_version": 3,
+            "revision": option_env!("BUILD_REVISION").unwrap_or("local")
+        }))),
+        Ok(Err(err)) => {
+            tracing::warn!("Falha no ping de prontidão do MongoDB: {:?}", err);
+            Err(error::AppError::TemporarilyUnavailable(
+                "Banco de dados indisponível no momento".into(),
+            ))
+        }
+        Err(_) => Err(error::AppError::TemporarilyUnavailable(
+            "Banco não respondeu a tempo".into(),
+        )),
+    }
 }
 
 #[cfg(test)]
@@ -510,16 +574,251 @@ mod latest_apk_tests {
                 .and_then(|v| v.to_str().ok()),
             Some("no")
         );
+        let expected_etag = format!("\"{}\"", sha256_hex(apk_bytes));
+        assert_eq!(
+            download
+                .headers()
+                .get(header::ETAG)
+                .and_then(|v| v.to_str().ok()),
+            Some(expected_etag.as_str())
+        );
         let downloaded = axum::body::to_bytes(download.into_body(), usize::MAX)
             .await
             .unwrap();
         assert_eq!(downloaded.as_ref(), apk_bytes);
+
+        let not_modified = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/apk/download")
+                    .header(header::IF_NONE_MATCH, &expected_etag)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            not_modified.status(),
+            axum::http::StatusCode::NOT_MODIFIED
+        );
+        assert_eq!(
+            not_modified
+                .headers()
+                .get(header::ETAG)
+                .and_then(|v| v.to_str().ok()),
+            Some(expected_etag.as_str())
+        );
+        let empty_body = axum::body::to_bytes(not_modified.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert!(empty_body.is_empty());
 
         if let Ok(path) = std::env::var("COGNIVA_LATEST_APK_CAPTURE") {
             std::fs::write(path, format!("{}\n{}\n", bodies[0], bodies[1])).unwrap();
         }
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod router_remediation_tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::http::{header, Method, Request, StatusCode};
+    use tower::ServiceExt;
+
+    async fn test_app(mongo_uri: &str) -> Router {
+        let config = AppConfig {
+            bind_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+            port: 0,
+            mongodb_uri: mongo_uri.to_string(),
+            mongodb_db: "cogniva".to_string(),
+            public_origin: "https://cogniva.local".to_string(),
+            admin_emails: std::collections::HashSet::new(),
+            xai_api_key: None,
+            xai_base_url: "https://api.x.ai/v1".into(),
+            xai_model: Some("grok-4".into()),
+            xai_daily_user_limit: 120,
+            xai_daily_global_limit: 500,
+            jwt_secret: "test-secret-with-at-least-32-characters".to_string(),
+            apk_storage_path: std::path::PathBuf::from("nonexistent.apk"),
+            apk_metadata_path: std::path::PathBuf::from("nonexistent.json"),
+        };
+        let client = mongodb::Client::with_uri_str(&config.mongodb_uri)
+            .await
+            .expect("mongodb uri parses");
+        let state = Arc::new(AppState::new(client.database(&config.mongodb_db), config));
+        build_router(state)
+    }
+
+    #[tokio::test]
+    async fn readiness_returns_503_when_mongodb_ping_fails() {
+        let app = test_app(
+            "mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=100&connectTimeoutMS=100",
+        )
+        .await;
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/ready")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    #[tokio::test]
+    async fn cors_rejects_untrusted_origin_and_allows_configured_origin_without_wildcard() {
+        let app = test_app("mongodb://127.0.0.1:27017").await;
+
+        let untrusted = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::OPTIONS)
+                    .uri("/api/v1/health")
+                    .header(header::ORIGIN, "https://evil.example")
+                    .header(header::ACCESS_CONTROL_REQUEST_METHOD, "DELETE")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(
+            untrusted
+                .headers()
+                .get(header::ACCESS_CONTROL_ALLOW_ORIGIN)
+                .is_none(),
+            "untrusted Origin must not receive Access-Control-Allow-Origin"
+        );
+
+        let trusted = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::OPTIONS)
+                    .uri("/api/v1/auth/account")
+                    .header(header::ORIGIN, "https://cogniva.local")
+                    .header(header::ACCESS_CONTROL_REQUEST_METHOD, "DELETE")
+                    .header(
+                        header::ACCESS_CONTROL_REQUEST_HEADERS,
+                        "content-type,x-cogniva-csrf",
+                    )
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            trusted
+                .headers()
+                .get(header::ACCESS_CONTROL_ALLOW_ORIGIN)
+                .and_then(|v| v.to_str().ok()),
+            Some("https://cogniva.local")
+        );
+    }
+
+    #[tokio::test]
+    async fn delete_account_route_enforces_auth_and_cookie_csrf_protection() {
+        let app = test_app("mongodb://127.0.0.1:27017").await;
+
+        let unauth = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::DELETE)
+                    .uri("/api/v1/auth/account")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(r#"{"confirm":"EXCLUIR"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(unauth.status(), StatusCode::UNAUTHORIZED);
+
+        let cross_site = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::DELETE)
+                    .uri("/api/v1/auth/account")
+                    .header(header::COOKIE, "cogniva_web_session=fake-token")
+                    .header("sec-fetch-site", "cross-site")
+                    .header("x-cogniva-csrf", "1")
+                    .header(header::ORIGIN, "https://cogniva.local")
+                    .body(Body::from(r#"{"confirm":"EXCLUIR"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(cross_site.status(), StatusCode::FORBIDDEN);
+
+        let missing_csrf = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::DELETE)
+                    .uri("/api/v1/auth/account")
+                    .header(header::COOKIE, "cogniva_web_session=fake-token")
+                    .header(header::ORIGIN, "https://cogniva.local")
+                    .body(Body::from(r#"{"confirm":"EXCLUIR"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(missing_csrf.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn auth_endpoints_enforce_ip_sliding_window_rate_limits() {
+        let app = test_app("mongodb://127.0.0.1:27017").await;
+
+        let cases = [
+            ("/api/v1/auth/guest", 20usize, "198.51.100.11", r#"{"installation_id":"partial"}"#),
+            ("/api/v1/auth/register", 10usize, "198.51.100.12", r#"{"email":"invalido","password":"x"}"#),
+            ("/api/v1/auth/login", 15usize, "198.51.100.13", r#"{"email":"invalido","password":"x"}"#),
+            ("/api/v1/auth/web-session", 10usize, "198.51.100.14", r#"{"email":"invalido","password":"x"}"#),
+        ];
+
+        for (uri, limit, ip, payload) in cases {
+            for _ in 0..limit {
+                let res = app
+                    .clone()
+                    .oneshot(
+                        Request::builder()
+                            .method(Method::POST)
+                            .uri(uri)
+                            .header(header::CONTENT_TYPE, "application/json")
+                            .header("x-real-ip", ip)
+                            .header("x-cogniva-csrf", "1")
+                            .header(header::ORIGIN, "https://cogniva.local")
+                            .body(Body::from(payload))
+                            .unwrap(),
+                    )
+                    .await
+                    .unwrap();
+                assert_eq!(res.status(), StatusCode::BAD_REQUEST, "uri={uri}");
+            }
+
+            let throttled = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method(Method::POST)
+                        .uri(uri)
+                        .header(header::CONTENT_TYPE, "application/json")
+                        .header("x-real-ip", ip)
+                        .header("x-cogniva-csrf", "1")
+                        .header(header::ORIGIN, "https://cogniva.local")
+                        .body(Body::from(payload))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(throttled.status(), StatusCode::TOO_MANY_REQUESTS, "uri={uri}");
+        }
     }
 }
 

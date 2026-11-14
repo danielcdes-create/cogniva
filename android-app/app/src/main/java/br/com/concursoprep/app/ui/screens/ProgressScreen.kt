@@ -1,6 +1,7 @@
 package br.com.concursoprep.app.ui.screens
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -29,6 +31,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import br.com.concursoprep.app.domain.model.DailyHeatmapCellDto
@@ -36,6 +43,9 @@ import br.com.concursoprep.app.domain.model.ProgressAnalyticsDto
 import br.com.concursoprep.app.domain.model.QuizMode
 import br.com.concursoprep.app.ui.theme.CognivaBrandHeader
 import br.com.concursoprep.app.ui.theme.LocalExtendedColors
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /**
  * Tela "Progresso & Analytics":
@@ -182,6 +192,9 @@ fun ProgressScreen(
 
             // 3. Heatmap de Consistência Diária
             item {
+                val ptBrLocale = remember { Locale.forLanguageTag("pt-BR") }
+                val dayFormatter = remember(ptBrLocale) { DateTimeFormatter.ofPattern("dd/MM (EEE)", ptBrLocale) }
+                val recentCells = remember(analytics.activityHeatmap) { analytics.activityHeatmap.takeLast(14) }
                 Card(
                     shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(
@@ -191,22 +204,31 @@ fun ProgressScreen(
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
-                            text = "Consistência de Estudo (Últimos dias ativos)",
+                            text = "Consistência de Estudo (Últimos 14 dias)",
                             style = MaterialTheme.typography.titleMedium
                         )
                         Spacer(modifier = Modifier.height(10.dp))
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
                         ) {
-                            analytics.activityHeatmap.take(14).forEach { cell ->
+                            recentCells.forEach { cell ->
                                 val alpha = (cell.questionsCount.toFloat() / 40f).coerceIn(0.2f, 1f)
                                 val isSelected = selectedHeatmapCell?.dateYmd == cell.dateYmd
+                                val formattedDate = runCatching { LocalDate.parse(cell.dateYmd).format(dayFormatter) }.getOrDefault(cell.dateYmd)
+                                val formattedAcc = String.format(ptBrLocale, "%.0f%%", cell.accuracyPct)
                                 Surface(
                                     shape = RoundedCornerShape(4.dp),
                                     color = if (isSelected) MaterialTheme.colorScheme.primary else ext.correct.copy(alpha = alpha),
                                     modifier = Modifier
-                                        .size(22.dp)
+                                        .size(24.dp)
+                                        .semantics {
+                                            role = Role.Button
+                                            selected = isSelected
+                                            contentDescription = "$formattedDate: ${cell.questionsCount} questões respondidas, $formattedAcc de acerto"
+                                        }
                                         .clickable { selectedHeatmapCell = cell }
                                 ) {
                                     Box(modifier = Modifier.fillMaxSize())
@@ -214,9 +236,11 @@ fun ProgressScreen(
                             }
                         }
                         selectedHeatmapCell?.let { cell ->
+                            val formattedDate = runCatching { LocalDate.parse(cell.dateYmd).format(dayFormatter) }.getOrDefault(cell.dateYmd)
+                            val formattedAcc = String.format(ptBrLocale, "%.1f%%", cell.accuracyPct)
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "${cell.dateYmd}: ${cell.questionsCount} questões respondidas (${cell.accuracyPct.toInt()}% de acerto)",
+                                text = "$formattedDate (${cell.dateYmd}): ${cell.questionsCount} questões respondidas ($formattedAcc de acerto)",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.primary

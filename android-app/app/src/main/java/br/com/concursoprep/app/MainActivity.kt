@@ -122,6 +122,7 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
     val apkUpdateState by viewModel.apkUpdateState.collectAsState()
     val userProfile by viewModel.userProfile.collectAsState()
     val accountAuthState by viewModel.accountAuthState.collectAsState()
+    val isDeletingAccount by viewModel.isDeletingAccount.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
     val cachedQuestionsCount by viewModel.cachedQuestionsCount.collectAsState()
     val pendingSyncCount by viewModel.pendingSyncCount.collectAsState()
@@ -140,7 +141,7 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
         }
     }
 
-    // Ouve eventos de instalação OTA de APK (FileProvider + Unknown Sources)
+    // Ouve eventos de instalação OTA de APK (PackageInstaller.Session + Unknown Sources)
     LaunchedEffect(Unit) {
         viewModel.apkInstallEvents.collectLatest { event ->
             when (event) {
@@ -153,6 +154,20 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         }
                         context.startActivity(intent)
+                    }
+                }
+                is ApkInstallEvent.ConfirmSessionInstall -> {
+                    try {
+                        val confirmIntent = Intent(event.confirmationIntent).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(confirmIntent)
+                    } catch (e: Exception) {
+                        Toast.makeText(
+                            context,
+                            "Erro ao abrir confirmação do instalador: ${e.message}",
+                            Toast.LENGTH_LONG
+                        ).show()
                     }
                 }
                 is ApkInstallEvent.ReadyToInstall -> {
@@ -184,6 +199,17 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
         viewModel.accountChanged.collectLatest { id ->
             ConcursoApp.instance.selectAccount(id)
             context.startActivity(Intent(context,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+            (context as? android.app.Activity)?.finish()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.accountDeletedSwitch.collectLatest { switch ->
+            ConcursoApp.instance.wipeLocalAccountDatabaseAndOpenGuest(switch.deletedUserId, switch.nextGuestUserId)
+            context.startActivity(
+                Intent(context, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            )
             (context as? android.app.Activity)?.finish()
         }
     }
@@ -220,13 +246,14 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
 
         QuestionSessionScreen(
             questions = activeQuestions!!,
-            initialIndex = 0,
+            initialIndex = activeSession?.currentIndex ?: 0,
             isSimuladoMode = isSimuladoSession,
             contestName = contestTitle,
             historicalCutoffPct = activeSession?.exam?.historicalCutoffScore ?: 0.0,
             snapshot = activeSession,
             onUpdateSession = { viewModel.updateSession(it) },
             onCompleteSession = { viewModel.exitSession(completed=true) },
+            onSubmitSimuladoBatch = { answers -> viewModel.submitSimuladoBatch(answers) },
             snackbarState = snackbarHostState,
             aiTutorMarkdown = activeAiSheetMarkdown,
             aiTutorTitle = activeAiSheetTitle,
@@ -387,6 +414,8 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                             viewModel.authenticateAccount(email, password, dispName, isRegister)
                         },
                         onLogoutAccount = { viewModel.logoutAccount() },
+                        isDeletingAccount = isDeletingAccount,
+                        onDeleteAccount = { confirm -> viewModel.deleteAccount(confirm) },
                         themeMode = themeMode,
                         apkUpdateState = apkUpdateState,
                         cachedQuestionsCount = cachedQuestionsCount,
@@ -429,7 +458,15 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
         }
     }
 
-    if(showPendingReview){br.com.concursoprep.app.ui.screens.PendingReviewSheet(pendingReview,{viewModel.dismissPendingReview()},{viewModel.exportPendingReview()})}
+    if (showPendingReview) {
+        br.com.concursoprep.app.ui.screens.PendingReviewSheet(
+            items = pendingReview,
+            onDismiss = { viewModel.dismissPendingReview() },
+            onExport = { viewModel.exportPendingReview() },
+            onDismissItem = { viewModel.dismissPendingReviewItem(it) },
+            onClearQuarantined = { viewModel.clearQuarantinedReviewItems() }
+        )
+    }
     if (showExamBuilder) {
         ExamFormBottomSheet(
             existingExams = storedExams,

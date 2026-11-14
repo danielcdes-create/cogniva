@@ -89,6 +89,7 @@ import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.findViewTreeSavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import br.com.concursoprep.app.R
 import br.com.concursoprep.app.domain.exam.ExamCatalog
 import br.com.concursoprep.app.domain.exam.ExamDraft
 import br.com.concursoprep.app.domain.exam.StoredExam
@@ -212,7 +213,7 @@ private class FullScreenDialogWrapper(
 ) : ComponentDialog(
     ContextThemeWrapper(
         composeView.context,
-        androidx.compose.material3.R.style.EdgeToEdgeFloatingDialogWindowTheme
+        R.style.Theme_Cogniva_EdgeToEdgeDialog
     )
 ), ViewRootForInspector {
     private val dialogLayout: FullScreenDialogLayout
@@ -613,7 +614,11 @@ internal fun ExamFormContent(
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { confirmDeleteExam = false },
             title = { Text("Excluir ${editingExam.shortName}?") },
-            text = { Text("O concurso e sua grade sairão da sua lista. Seu histórico de respostas será mantido.") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    Text("O concurso e sua grade sairão da sua lista. Seu histórico de respostas será mantido.")
+                }
+            },
             confirmButton = {
                 TextButton(onClick = { confirmDeleteExam = false; onDelete(editingExam) }) {
                     Text("Excluir concurso", color = MaterialTheme.colorScheme.error)

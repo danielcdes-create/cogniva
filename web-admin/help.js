@@ -95,11 +95,17 @@ export const helpTopics = [
     'Para criar a primeira conta administrativa pela web, configure o e-mail em ADMIN_EMAILS no servidor e utilize a aba Primeiro acesso.',
     'Para promover uma conta já existente ao papel administrativo, execute cogniva-api --grant-admin email@dominio.com no servidor.',
     'Ao clicar em Sair, a sessão é revogada imediatamente na coleção sessions do banco de dados.'
-  ],notes:['A mesma conta de e-mail pode ser usada no aplicativo Android e no painel administrativo, mantendo rascunhos locais isolados no navegador.'],page:'drafts',action:'Ver rascunhos preservados'}
+  ],notes:['A mesma conta de e-mail pode ser usada no aplicativo Android e no painel administrativo, mantendo rascunhos locais isolados no navegador.'],page:'drafts',action:'Ver rascunhos preservados'},
+  {id:'privacidade-lgpd-ia',title:'Privacidade (LGPD Art. 18) e Governança de IA',category:'Segurança e conformidade',keywords:'privacidade LGPD Art. 18 exclusão conta DELETE /api/v1/auth/account governança IA prompt injection cota diária Android',intro:'O Cogniva separa estritamente os dados pessoais de estudo do acervo editorial compartilhado e aplica controles rígidos nas chamadas assistidas por IA.',steps:[
+    'A exclusão de conta pelo titular (via DELETE /api/v1/auth/account ou pelo aplicativo Android) remove estritamente os registros pessoais do usuário, sessões ativas, progresso individual e grades privadas.',
+    'O acervo compartilhado e sua auditoria permanecem 100% preservados após exclusões de conta: todasQuestoes, question_revision_events, knowledge_catalog e exam_templates nunca são apagados.',
+    'Todo conteúdo enviado ao provedor de IA recebe isolamento contra prompt injection (delimitadores explícitos de entrada não confiável, instruções de sistema fixas e validação estrita de schema JSON na resposta).',
+    'O uso de IA obedece a cotas diárias por usuário e teto operacional global, estornando reservas em falhas de rede/provedor e exigindo revisão humana explícita antes de qualquer publicação.'
+  ],notes:['Nenhuma resposta de IA publica questões, altera gabaritos ou confirma classificação/validade automaticamente sem confirmação humana auditada.'],page:'overview',action:'Voltar à visão geral'}
 ];
 
 export function searchHelp(query) {
-  const normalize = value => value.normalize('NFD').replace(/\p{M}/gu,'').toLocaleLowerCase('pt-BR');
+  const normalize = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
   const words = normalize(query).trim().split(/\s+/).filter(Boolean);
   return helpTopics.filter(topic=>words.every(word=>normalize([topic.title,topic.category,topic.keywords,topic.intro,...topic.steps,...topic.notes].join(' ')).includes(word)));
 }

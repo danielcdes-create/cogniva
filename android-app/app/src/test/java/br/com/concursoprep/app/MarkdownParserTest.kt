@@ -1,10 +1,12 @@
 package br.com.concursoprep.app
 
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import br.com.concursoprep.app.ui.components.MarkdownParser
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -56,14 +58,73 @@ class MarkdownParserTest {
     }
 
     @Test
-    fun parsesBulletLists() {
-        val input = "- Item 1\n* Item 2\nItem normal"
+    fun parsesBulletAndNumberedLists() {
+        val input = "- Item 1\n* Item 2\n1) Passo um\n2. Passo dois\nItem normal"
         val annotated = MarkdownParser.parseSimpleMarkdownToAnnotatedString(input)
 
         val lines = annotated.text.lines()
-        assertEquals(3, lines.size)
+        assertEquals(5, lines.size)
         assertTrue(lines[0].startsWith("• Item 1"))
         assertTrue(lines[1].startsWith("• Item 2"))
-        assertEquals("Item normal", lines[2])
+        assertEquals("1. Passo um", lines[2])
+        assertEquals("2. Passo dois", lines[3])
+        assertEquals("Item normal", lines[4])
+    }
+
+    @Test
+    fun parsesHeadingsBlockquotesAndMultilineFencedCodeBlocks() {
+        val input = """
+            ## Título da Regra
+            > Súmula vinculante com **destaque**
+            ```sql
+            SELECT * FROM questoes
+            WHERE ativa = **1**;
+            ```
+            Fim.
+        """.trimIndent()
+
+        val annotated = MarkdownParser.parseSimpleMarkdownToAnnotatedString(input)
+        val lines = annotated.text.lines()
+        assertEquals(
+            listOf(
+                "Título da Regra",
+                "▎ Súmula vinculante com destaque",
+                "SELECT * FROM questoes",
+                "WHERE ativa = **1**;",
+                "Fim."
+            ),
+            lines
+        )
+
+        val codeSpans = annotated.spanStyles.filter { it.item.fontFamily == FontFamily.Monospace }
+        assertEquals(2, codeSpans.size)
+        assertTrue(annotated.text.contains("WHERE ativa = **1**;"))
+    }
+
+    @Test
+    fun allowsOnlyHttpsLinksAndStripsUnsafeSchemes() {
+        val input = "Confira [Planalto](https://www.planalto.gov.br/ccivil_03/constituicao/constituicao.htm), " +
+            "[HTTP inseguro](http://example.com), [XSS](javascript:alert(1)), " +
+            "[Arquivo](file:///data/data/secret) e [Intent](intent://scan/#Intent;end)."
+        val annotated = MarkdownParser.parseSimpleMarkdownToAnnotatedString(input)
+
+        assertEquals(
+            "Confira Planalto, HTTP inseguro, XSS, Arquivo e Intent.",
+            annotated.text
+        )
+
+        val links = annotated.getLinkAnnotations(0, annotated.text.length)
+        assertEquals(1, links.size)
+        val urlAnnotation = links.single().item as LinkAnnotation.Url
+        assertEquals(
+            "https://www.planalto.gov.br/ccivil_03/constituicao/constituicao.htm",
+            urlAnnotation.url
+        )
+
+        assertTrue(MarkdownParser.isSafeHttpsUrl("https://cogniva.com.br/edital"))
+        assertFalse(MarkdownParser.isSafeHttpsUrl("http://cogniva.com.br/edital"))
+        assertFalse(MarkdownParser.isSafeHttpsUrl("javascript:alert(1)"))
+        assertFalse(MarkdownParser.isSafeHttpsUrl("file:///etc/passwd"))
+        assertFalse(MarkdownParser.isSafeHttpsUrl("intent://evil"))
     }
 }

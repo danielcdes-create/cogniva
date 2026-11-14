@@ -2,7 +2,9 @@ package br.com.concursoprep.app
 
 import androidx.compose.ui.graphics.Color
 import br.com.concursoprep.app.ui.theme.DarkColorScheme
+import br.com.concursoprep.app.ui.theme.DarkExtendedColors
 import br.com.concursoprep.app.ui.theme.LightColorScheme
+import br.com.concursoprep.app.ui.theme.LightExtendedColors
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.max
@@ -77,6 +79,10 @@ class ThemeContrastTest {
                 "onPrimary/primary" to Triple(cs.onPrimary, cs.primary, cs.surface),
                 "onPrimaryContainer/primaryContainer" to Triple(cs.onPrimaryContainer, cs.primaryContainer, cs.surface),
                 "onSecondaryContainer/secondaryContainer" to Triple(cs.onSecondaryContainer, cs.secondaryContainer, cs.surface),
+                "error/surface" to Triple(cs.error, cs.surface, cs.surface),
+                "error/background" to Triple(cs.error, cs.background, cs.background),
+                "onError/error" to Triple(cs.onError, cs.error, cs.surface),
+                "onErrorContainer/errorContainer" to Triple(cs.onErrorContainer, cs.errorContainer, cs.surface),
             )
             textPairs.forEach { (label, colors) ->
                 val ratio = effectiveContrast(colors.first, colors.second, colors.third)
@@ -88,6 +94,36 @@ class ThemeContrastTest {
             val disabledFg = cs.onSurface.copy(alpha = 0.38f)
             val disabledRatio = effectiveContrast(disabledFg, disabledBg, cs.surfaceContainer)
             assertTrue("$name [disabledButton] contraste muito baixo: $disabledRatio (< 2.5)", disabledRatio >= 2.5)
+        }
+    }
+
+    @Test
+    fun extendedColors_meetWcagContrastRequirements() {
+        listOf(
+            Triple("Light", LightColorScheme, LightExtendedColors),
+            Triple("Dark", DarkColorScheme, DarkExtendedColors)
+        ).forEach { (name, cs, ext) ->
+            val semanticPairs = listOf(
+                "correct/background" to Triple(ext.correct, cs.background, cs.background),
+                "correct/surface" to Triple(ext.correct, cs.surface, cs.surface),
+                "onCorrect/correct" to Triple(ext.onCorrect, ext.correct, cs.surface),
+                "onCorrectContainer/correctContainer" to Triple(ext.onCorrectContainer, ext.correctContainer, cs.surface),
+                "error/background" to Triple(ext.error, cs.background, cs.background),
+                "error/surface" to Triple(ext.error, cs.surface, cs.surface),
+                "onError/error" to Triple(ext.onError, ext.error, cs.surface),
+                "onErrorContainer/errorContainer" to Triple(ext.onErrorContainer, ext.errorContainer, cs.surface),
+                "warning/background" to Triple(ext.warning, cs.background, cs.background),
+                "warning/surface" to Triple(ext.warning, cs.surface, cs.surface),
+                "onWarning/warning" to Triple(ext.onWarning, ext.warning, cs.surface),
+                "onWarningContainer/warningContainer" to Triple(ext.onWarningContainer, ext.warningContainer, cs.surface),
+                "neutral/background" to Triple(ext.neutral, cs.background, cs.background),
+                "neutral/surface" to Triple(ext.neutral, cs.surface, cs.surface),
+                "onNeutral/neutral" to Triple(ext.onNeutral, ext.neutral, cs.surface)
+            )
+            semanticPairs.forEach { (label, colors) ->
+                val ratio = effectiveContrast(colors.first, colors.second, colors.third)
+                assertTrue("$name [$label] contraste insuficiente: $ratio (< 4.5)", ratio >= 4.5)
+            }
         }
     }
 }

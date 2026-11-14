@@ -2,7 +2,7 @@ use crate::AppState;
 use axum::{
     body::{Body, Bytes},
     extract::State,
-    http::{header, StatusCode},
+    http::{header, HeaderMap, StatusCode},
     response::Response,
     Json,
 };
@@ -46,12 +46,42 @@ fn apk_missing() -> ApkError {
     (StatusCode::NOT_FOUND, "APK indisponível".into())
 }
 
+#[cfg(test)]
 pub async fn read_apk_bytes(configured: &Path) -> Result<(PathBuf, Vec<u8>), ApkError> {
     let apk = tokio::fs::canonicalize(configured)
         .await
         .map_err(|_| apk_missing())?;
     let bytes = tokio::fs::read(&apk).await.map_err(|_| apk_missing())?;
     Ok((apk, bytes))
+}
+
+pub fn format_apk_etag(sha256_hex: &str) -> String {
+    format!("\"{sha256_hex}\"")
+}
+
+pub fn if_none_match_hit(headers: &HeaderMap, etag_quoted: &str) -> bool {
+    let expected_unquoted = etag_quoted.trim_matches('"');
+    for val in headers.get_all(header::IF_NONE_MATCH) {
+        let Ok(raw) = val.to_str() else {
+            continue;
+        };
+        for candidate in raw.split(',') {
+            let trimmed = candidate.trim();
+            if trimmed == "*" {
+                return true;
+            }
+            let normalized = trimmed
+                .strip_prefix("W/")
+                .or_else(|| trimmed.strip_prefix("w/"))
+                .unwrap_or(trimmed)
+                .trim()
+                .trim_matches('"');
+            if !normalized.is_empty() && normalized.eq_ignore_ascii_case(expected_unquoted) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 pub async fn read_apk_meta(configured: &Path) -> Result<ApkMeta, ApkError> {
@@ -63,13 +93,10 @@ pub async fn read_apk_meta(configured: &Path) -> Result<ApkMeta, ApkError> {
     let modified = fs_meta.modified().ok();
 
     let cache_mutex = APK_META_CACHE.get_or_init(|| Mutex::new(None));
-    {
-        let guard = cache_mutex.lock().await;
-        if let Some(cached) = guard.as_ref() {
-            if cached.path == apk && cached.size_bytes == size_bytes && cached.modified == modified
-            {
-                return Ok(cached.clone());
-            }
+    let mut guard = cache_mutex.lock().await;
+    if let Some(cached) = guard.as_ref() {
+        if cached.path == apk && cached.size_bytes == size_bytes && cached.modified == modified {
+            return Ok(cached.clone());
         }
     }
 
@@ -97,7 +124,7 @@ pub async fn read_apk_meta(configured: &Path) -> Result<ApkMeta, ApkError> {
         modified,
         sha256,
     };
-    *cache_mutex.lock().await = Some(meta.clone());
+    *guard = Some(meta.clone());
     Ok(meta)
 }
 
@@ -158,8 +185,22 @@ pub async fn get_apk_info(State(state): State<Arc<AppState>>) -> Result<Json<Val
 
 pub async fn download_apk(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
 ) -> Result<Response, (StatusCode, String)> {
     let meta = read_apk_meta(&state.config.apk_storage_path).await?;
+    if meta.size_bytes == 0 {
+        return Err(apk_missing());
+    }
+    let etag = format_apk_etag(&meta.sha256);
+    if if_none_match_hit(&headers, &etag) {
+        return Response::builder()
+            .status(StatusCode::NOT_MODIFIED)
+            .header(header::ETAG, &etag)
+            .header(header::CACHE_CONTROL, "no-cache, no-transform")
+            .body(Body::empty())
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()));
+    }
+
     let file = tokio::fs::File::open(&meta.path)
         .await
         .map_err(|_| apk_missing())?;
@@ -187,7 +228,8 @@ pub async fn download_apk(
             "attachment; filename=\"cogniva.apk\"",
         )
         .header(header::CONTENT_LENGTH, meta.size_bytes)
-        .header(header::CACHE_CONTROL, "no-store, no-transform")
+        .header(header::ETAG, &etag)
+        .header(header::CACHE_CONTROL, "no-cache, no-transform")
         .header("X-Accel-Buffering", "no")
         .body(Body::from_stream(stream))
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
@@ -218,5 +260,30 @@ mod tests {
         assert_eq!(missing.0, StatusCode::NOT_FOUND);
         assert_eq!(missing.1, "APK indisponível");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn if_none_match_handles_strong_weak_wildcard_and_multi_valued_etags() {
+        let etag = format_apk_etag("abcdef0123456789");
+        assert_eq!(etag, "\"abcdef0123456789\"");
+
+        let mut exact = HeaderMap::new();
+        exact.insert(header::IF_NONE_MATCH, etag.parse().unwrap());
+        assert!(if_none_match_hit(&exact, &etag));
+
+        let mut weak_list = HeaderMap::new();
+        weak_list.insert(
+            header::IF_NONE_MATCH,
+            "\"other\", W/\"ABCDEF0123456789\"".parse().unwrap(),
+        );
+        assert!(if_none_match_hit(&weak_list, &etag));
+
+        let mut wildcard = HeaderMap::new();
+        wildcard.insert(header::IF_NONE_MATCH, "*".parse().unwrap());
+        assert!(if_none_match_hit(&wildcard, &etag));
+
+        let mut miss = HeaderMap::new();
+        miss.insert(header::IF_NONE_MATCH, "\"different\"".parse().unwrap());
+        assert!(!if_none_match_hit(&miss, &etag));
     }
 }

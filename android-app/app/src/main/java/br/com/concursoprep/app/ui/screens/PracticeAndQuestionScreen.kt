@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -70,10 +71,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import java.util.Locale
 import br.com.concursoprep.app.R
 import br.com.concursoprep.app.domain.model.QuestionDto
 import br.com.concursoprep.app.domain.model.QuestionType
@@ -226,6 +232,7 @@ fun QuestionSessionScreen(
     snapshot: SessionSnapshot? = null,
     onUpdateSession: (SessionSnapshot) -> Unit = {},
     onCompleteSession: () -> Unit = onExitSession,
+    onSubmitSimuladoBatch: (suspend (Map<String, UserAttemptState>) -> Boolean)? = null,
     snackbarState: androidx.compose.material3.SnackbarHostState? = null
 ) {
     var currentIndex by rememberSaveable(snapshot?.sessionId) { mutableIntStateOf(snapshot?.currentIndex ?: initialIndex) }
@@ -236,6 +243,20 @@ fun QuestionSessionScreen(
     var isSimuladoReviewMode by rememberSaveable(snapshot?.sessionId) { mutableStateOf(snapshot?.reviewing ?: false) }
     var showReportSheet by rememberSaveable { mutableStateOf(false) }
     var questionStartEpochMs by rememberSaveable(snapshot?.sessionId,currentIndex) { mutableStateOf(if(snapshot?.currentIndex==currentIndex) snapshot.questionStartedAtEpochMs else System.currentTimeMillis()) }
+
+    val persistSessionNow = { idx: Int, finishedFlag: Boolean, reviewFlag: Boolean ->
+        snapshot?.let {
+            onUpdateSession(
+                it.copy(
+                    currentIndex = idx,
+                    answers = userAnswers.toMap(),
+                    finished = finishedFlag,
+                    reviewing = reviewFlag,
+                    questionStartedAtEpochMs = questionStartEpochMs
+                )
+            )
+        }
+    }
 
     val handleBackNavigation = {
         if (isSimuladoReviewMode) {
@@ -265,19 +286,34 @@ fun QuestionSessionScreen(
         }
     }
     LaunchedEffect(currentIndex,userAnswers.toMap(),isSimuladoFinished,isSimuladoReviewMode) {
-        snapshot?.let { onUpdateSession(it.copy(currentIndex=currentIndex,answers=userAnswers.toMap(),finished=isSimuladoFinished,reviewing=isSimuladoReviewMode,questionStartedAtEpochMs=questionStartEpochMs)) }
+        persistSessionNow(currentIndex, isSimuladoFinished, isSimuladoReviewMode)
     }
     LaunchedEffect(isSimuladoFinished) {
-        if(isSimuladoMode&&isSimuladoFinished) {
-            saving=true
-            try {
-                for((id,answer) in userAnswers.toMap()) {
-                    if(!answer.submitted) {
-                        val q=questions.firstOrNull { it.id==id } ?: continue
-                        if(onSubmitAnswer(q,answer.chosenIndex,answer.confidenceLevel,answer.timeSpentSeconds)) userAnswers[id]=answer.copy(submitted=true)
+        if (isSimuladoMode && isSimuladoFinished) {
+            val pendingSnapshot = userAnswers.toMap()
+            if (pendingSnapshot.values.any { !it.submitted }) {
+                saving = true
+                try {
+                    if (onSubmitSimuladoBatch != null) {
+                        if (onSubmitSimuladoBatch(pendingSnapshot)) {
+                            pendingSnapshot.forEach { (id, answer) ->
+                                userAnswers[id] = answer.copy(submitted = true)
+                            }
+                        }
+                    } else {
+                        for ((id, answer) in pendingSnapshot) {
+                            if (!answer.submitted) {
+                                val q = questions.firstOrNull { it.id == id } ?: continue
+                                if (onSubmitAnswer(q, answer.chosenIndex, answer.confidenceLevel, answer.timeSpentSeconds)) {
+                                    userAnswers[id] = answer.copy(submitted = true)
+                                }
+                            }
+                        }
                     }
+                } finally {
+                    saving = false
                 }
-            } finally {saving=false}
+            }
         }
     }
 
@@ -425,7 +461,7 @@ fun QuestionSessionScreen(
                                     Icon(Icons.Default.Timer, contentDescription = null, tint = timerColor)
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = String.format("%02d:%02d", minutes, seconds),
+                                        text = String.format(Locale.forLanguageTag("pt-BR"), "%02d:%02d", minutes, seconds),
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
                                         color = timerColor
@@ -476,7 +512,9 @@ fun QuestionSessionScreen(
                                 OutlinedButton(
                                     onClick = {
                                         onDismissAiSheet()
-                                        currentIndex -= 1
+                                        val nextIdx = currentIndex - 1
+                                        currentIndex = nextIdx
+                                        persistSessionNow(nextIdx, isSimuladoFinished, isSimuladoReviewMode)
                                     },
                                     modifier = Modifier
                                         .weight(1f)
@@ -495,9 +533,12 @@ fun QuestionSessionScreen(
                                 onClick = {
                                     onDismissAiSheet()
                                     if (currentIndex + 1 < questions.size) {
-                                        currentIndex += 1
+                                        val nextIdx = currentIndex + 1
+                                        currentIndex = nextIdx
+                                        persistSessionNow(nextIdx, isSimuladoFinished, isSimuladoReviewMode)
                                     } else {
                                         isSimuladoFinished = true
+                                        persistSessionNow(currentIndex, true, isSimuladoReviewMode)
                                     }
                                 },
                                 modifier = Modifier
@@ -752,7 +793,9 @@ fun QuestionSessionScreen(
                     }
                     item(key = "cebraspe_options") {
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .selectableGroup(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             question.answers.mapIndexed { index,label->index to label }.forEach { (idx, label) ->
@@ -762,16 +805,19 @@ fun QuestionSessionScreen(
                                     onClick = {
                                         if (!isAnswerSubmitted || hideFeedback) {
                                             selectedOptionIndex = idx
-                                            if (!isAnswerSubmitted || hideFeedback) {
-                                                val elapsed = computeElapsedSeconds()
-                                                val attempt = UserAttemptState(idx, selectedConfidence, elapsed)
-                                                userAnswers[question.id] = attempt
-                                            }
+                                            val elapsed = computeElapsedSeconds()
+                                            val attempt = UserAttemptState(idx, selectedConfidence, elapsed)
+                                            userAnswers[question.id] = attempt
+                                            persistSessionNow(currentIndex, isSimuladoFinished, isSimuladoReviewMode)
                                         }
                                     },
                                     modifier = Modifier
                                         .weight(1f)
-                                        .heightIn(min = 56.dp),
+                                        .heightIn(min = 56.dp)
+                                        .semantics {
+                                            role = Role.RadioButton
+                                            selected = isSelected
+                                        },
                                     shape = RoundedCornerShape(14.dp),
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = when {
@@ -809,11 +855,10 @@ fun QuestionSessionScreen(
                             onClick = {
                                 if (!isAnswerSubmitted || hideFeedback) {
                                     selectedOptionIndex = idx
-                                    if (!isAnswerSubmitted || hideFeedback) {
-                                        val elapsed = computeElapsedSeconds()
-                                        val attempt = UserAttemptState(idx, selectedConfidence, elapsed)
-                                        userAnswers[question.id] = attempt
-                                    }
+                                    val elapsed = computeElapsedSeconds()
+                                    val attempt = UserAttemptState(idx, selectedConfidence, elapsed)
+                                    userAnswers[question.id] = attempt
+                                    persistSessionNow(currentIndex, isSimuladoFinished, isSimuladoReviewMode)
                                 }
                             }
                         )
@@ -830,6 +875,7 @@ fun QuestionSessionScreen(
                                     val elapsed = computeElapsedSeconds()
                                     val attempt = UserAttemptState(selectedOptionIndex!!, level, elapsed)
                                     userAnswers[question.id] = attempt
+                                    persistSessionNow(currentIndex, isSimuladoFinished, isSimuladoReviewMode)
                                 }
                             }
                         )
@@ -1131,7 +1177,7 @@ fun SimuladoResultScreen(
                         style = MaterialTheme.typography.labelLarge
                     )
                     Text(
-                        text = String.format("%.1f%%", netScorePct),
+                        text = String.format(Locale.forLanguageTag("pt-BR"), "%.1f%%", netScorePct),
                         style = MaterialTheme.typography.displayMedium,
                         fontWeight = FontWeight.Bold,
                         color = if (isApproved) ext.correct else ext.warning
@@ -1159,7 +1205,7 @@ fun SimuladoResultScreen(
                                 "Acima da referência cadastrada: Corte histórico de referência: ${historicalCutoffPct}%"
                             } else {
                                 val diff = historicalCutoffPct - netScorePct
-                                "Abaixo da Nota de Corte de Referência (${historicalCutoffPct}%). Diferença de ${String.format("%.1f", diff)}%."
+                                "Abaixo da Nota de Corte de Referência (${historicalCutoffPct}%). Diferença de ${String.format(Locale.forLanguageTag("pt-BR"), "%.1f", diff)}%."
                             },
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold

@@ -78,14 +78,14 @@ pub fn calculate_decay(
     pontos_restantes.max(0.0)
 }
 
-/// Calcula o Score de Repetição Espaçada (portado de `calculate_spaced_repetition_score` em AFTBot.py)
+/// Calcula o Score de Repetição Espaçada (usando `streak_atual` consecutivo vigente)
 pub fn calculate_spaced_repetition_score(
-    streak_max: i32,
+    streak_atual: i32,
     tempo_medio_resposta: f64,
     tempo_gasto_segundos: i32,
     nivel_confianca: i32,
 ) -> f64 {
-    let streak_factor = ((streak_max as f64) / 5.0).min(1.0).max(0.0);
+    let streak_factor = ((streak_atual as f64) / 5.0).clamp(0.0, 1.0);
 
     let time_factor = if tempo_medio_resposta > 0.0 {
         (2.0 - (tempo_gasto_segundos as f64 / tempo_medio_resposta)).clamp(0.0, 1.0)
@@ -99,10 +99,10 @@ pub fn calculate_spaced_repetition_score(
     score.clamp(0.0, 1.0)
 }
 
-/// Calcula o intervalo de Repetição Espaçada em dias (portado de `calculate_spaced_repetition_interval`)
+/// Calcula o intervalo de Repetição Espaçada em dias (usando `streak_atual` consecutivo vigente)
 /// Suporta também o modo SRS simplificado de degraus fixos (1d / 7d / 30d) quando `use_simplified_steps` = true
 pub fn calculate_spaced_repetition_interval(
-    streak_max: i32,
+    streak_atual: i32,
     tempo_medio_resposta: f64,
     tempo_gasto_segundos: i32,
     nivel_confianca: i32,
@@ -110,7 +110,7 @@ pub fn calculate_spaced_repetition_interval(
     use_simplified_steps: bool,
 ) -> (f64, i32) {
     let score = calculate_spaced_repetition_score(
-        streak_max,
+        streak_atual,
         tempo_medio_resposta,
         tempo_gasto_segundos,
         nivel_confianca,
@@ -120,7 +120,7 @@ pub fn calculate_spaced_repetition_interval(
         // Nota Técnica Quiz Kotlin §11.1: Intervalos 24h (1d) / 7d / 30d
         let interval = if !is_correct || nivel_confianca <= 1 {
             1
-        } else if streak_max <= 2 {
+        } else if streak_atual <= 2 {
             7
         } else {
             30
@@ -240,6 +240,33 @@ mod tests {
             classify_confidence_quadrant(true, 3),
             ConfidenceQuadrant::HighConfidenceCorrect
         );
+    }
+
+    #[test]
+    fn streak_factor_uses_current_streak_after_error_not_historical_peak() {
+        let history = calculate_streak_and_points(&[true, true, true, true, true, false, true]);
+        assert_eq!(history.streak_max, 5);
+        assert_eq!(history.streak_atual, 1);
+
+        let (score_current, interval_current) = calculate_spaced_repetition_interval(
+            history.streak_atual,
+            30.0,
+            25,
+            3,
+            true,
+            true,
+        );
+        let (score_peak, interval_peak) = calculate_spaced_repetition_interval(
+            history.streak_max,
+            30.0,
+            25,
+            3,
+            true,
+            true,
+        );
+        assert!(score_current < score_peak);
+        assert_eq!(interval_current, 7);
+        assert_eq!(interval_peak, 30);
     }
 }
 

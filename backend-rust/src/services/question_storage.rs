@@ -200,19 +200,21 @@ pub async fn prepare(db: &Database) -> Result<Value, AppError> {
     let created_indexes = ensure_indexes(db).await?;
     let payload = contracts::catalog();
     let catalogs = collection(db, "knowledge_catalog_versions");
-    catalogs
-        .create_index(
-            IndexModel::builder()
-                .keys(doc! { "catalog_id": 1, "version": 1 })
-                .options(
-                    IndexOptions::builder()
-                        .name("qv2_catalog_version".to_string())
-                        .unique(true)
-                        .build(),
-                )
-                .build(),
-        )
-        .await?;
+    create_index_tolerant(
+        db,
+        "knowledge_catalog_versions",
+        IndexModel::builder()
+            .keys(doc! { "catalog_id": 1, "version": 1 })
+            .options(
+                IndexOptions::builder()
+                    .name("qv2_catalog_version".to_string())
+                    .unique(true)
+                    .build(),
+            )
+            .build(),
+        "qv2_catalog_version",
+    )
+    .await?;
     let catalog_id = payload["catalog_id"].as_str().expect("catalog id");
     let catalog_version = payload["catalog_version"]
         .as_i64()
@@ -264,6 +266,43 @@ pub async fn prepare(db: &Database) -> Result<Value, AppError> {
         "indexes": created_indexes.len(),
         "catalog_version": catalog_version
     }))
+}
+
+pub fn is_benign_index_conflict_message(msg: &str) -> bool {
+    let lower = msg.to_ascii_lowercase();
+    lower.contains("indexoptionsconflict")
+        || lower.contains("indexkeyspecsconflict")
+        || lower.contains("indexalreadyexists")
+        || lower.contains("code 85")
+        || lower.contains("code: 85")
+        || lower.contains("code 86")
+        || lower.contains("code: 86")
+        || lower.contains("code 68")
+        || lower.contains("code: 68")
+        || lower.contains("already exists with a different name")
+        || lower.contains("already exists with different options")
+        || lower.contains("equivalent index already exists")
+}
+
+async fn create_index_tolerant(
+    db: &Database,
+    coll_name: &str,
+    model: IndexModel,
+    label: &str,
+) -> Result<bool, AppError> {
+    match collection(db, coll_name).create_index(model).await {
+        Ok(_) => Ok(true),
+        Err(err) if is_benign_index_conflict_message(&err.to_string()) => {
+            tracing::warn!(
+                "Índice '{}' em '{}' já existe com nome/opções anteriores ({}); mantendo índice existente.",
+                label,
+                coll_name,
+                err
+            );
+            Ok(false)
+        }
+        Err(err) => Err(err.into()),
+    }
 }
 
 pub async fn ensure_indexes(db: &Database) -> Result<Vec<String>, AppError> {
@@ -319,6 +358,11 @@ pub async fn ensure_indexes(db: &Database) -> Result<Vec<String>, AppError> {
             "idx_activity_user_srs",
         ),
         (
+            "attempt_receipts",
+            doc! { "recorded_at": 1 },
+            "idx_attempt_receipts_recorded_at",
+        ),
+        (
             "exam_revisions",
             doc! { "scope": 1, "exam_id": 1, "revision": -1 },
             "idx_exam_revisions_lookup",
@@ -327,6 +371,21 @@ pub async fn ensure_indexes(db: &Database) -> Result<Vec<String>, AppError> {
             "sessions",
             doc! { "user_id": 1 },
             "idx_sessions_user_id",
+        ),
+        (
+            "tutor_budgets",
+            doc! { "day": 1 },
+            "idx_tutor_budgets_day",
+        ),
+        (
+            "catalog_editor_drafts",
+            doc! { "owner_user_id": 1, "saved_at": -1 },
+            "idx_catalog_drafts_owner_saved",
+        ),
+        (
+            "question_import_ai_requests",
+            doc! { "actor_user_id": 1 },
+            "idx_import_ai_actor",
         ),
         (
             "reportedQuestoes",
@@ -339,14 +398,16 @@ pub async fn ensure_indexes(db: &Database) -> Result<Vec<String>, AppError> {
             "idx_reported_status_date",
         ),
     ] {
-        collection(db, name)
-            .create_index(
-                IndexModel::builder()
-                    .keys(keys)
-                    .options(IndexOptions::builder().name(label.to_string()).build())
-                    .build(),
-            )
-            .await?;
+        create_index_tolerant(
+            db,
+            name,
+            IndexModel::builder()
+                .keys(keys)
+                .options(IndexOptions::builder().name(label.to_string()).build())
+                .build(),
+            label,
+        )
+        .await?;
         created.push(label.to_string());
     }
 
@@ -382,58 +443,75 @@ pub async fn ensure_indexes(db: &Database) -> Result<Vec<String>, AppError> {
             "idx_usuarios_installation_id",
         ),
     ] {
-        collection(db, name)
-            .create_index(
-                IndexModel::builder()
-                    .keys(keys)
-                    .options(
-                        IndexOptions::builder()
-                            .name(label.to_string())
-                            .unique(true)
-                            .sparse(true)
-                            .build(),
-                    )
-                    .build(),
-            )
-            .await?;
-        created.push(label.to_string());
-    }
-
-    collection(db, "usuarios")
-        .create_index(
+        create_index_tolerant(
+            db,
+            name,
             IndexModel::builder()
-                .keys(doc! { "email_normalized": 1 })
+                .keys(keys)
                 .options(
                     IndexOptions::builder()
-                        .name("idx_usuarios_email_normalized".to_string())
+                        .name(label.to_string())
                         .unique(true)
-                        .partial_filter_expression(doc! {
-                            "email_normalized": { "$type": "string" }
-                        })
+                        .sparse(true)
                         .build(),
                 )
                 .build(),
+            label,
         )
         .await?;
-    created.push("idx_usuarios_email_normalized".to_string());
+        created.push(label.to_string());
+    }
 
-    for (name, label) in [
-        ("sessions", "idx_sessions_expires_ttl"),
-        ("auth_rate_limits", "idx_auth_rate_limits_ttl"),
-    ] {
-        collection(db, name)
-            .create_index(
-                IndexModel::builder()
-                    .keys(doc! { "expires_at": 1 })
-                    .options(
-                        IndexOptions::builder()
-                            .name(label.to_string())
-                            .expire_after(Duration::ZERO)
-                            .build(),
-                    )
+    create_index_tolerant(
+        db,
+        "usuarios",
+        IndexModel::builder()
+            .keys(doc! { "email_normalized": 1 })
+            .options(
+                IndexOptions::builder()
+                    .name("idx_usuarios_email_normalized".to_string())
+                    .unique(true)
+                    .partial_filter_expression(doc! {
+                        "email_normalized": { "$type": "string" }
+                    })
                     .build(),
             )
-            .await?;
+            .build(),
+        "idx_usuarios_email_normalized",
+    )
+    .await?;
+    created.push("idx_usuarios_email_normalized".to_string());
+
+    for (name, field, ttl, label) in [
+        ("sessions", "expires_at", Duration::ZERO, "idx_sessions_expires_ttl"),
+        (
+            "auth_rate_limits",
+            "expires_at",
+            Duration::ZERO,
+            "idx_auth_rate_limits_ttl",
+        ),
+        (
+            "tutor_budgets",
+            "updated_at",
+            Duration::from_secs(30 * 24 * 60 * 60),
+            "idx_tutor_budgets_updated_ttl",
+        ),
+    ] {
+        create_index_tolerant(
+            db,
+            name,
+            IndexModel::builder()
+                .keys(doc! { field: 1 })
+                .options(
+                    IndexOptions::builder()
+                        .name(label.to_string())
+                        .expire_after(ttl)
+                        .build(),
+                )
+                .build(),
+            label,
+        )
+        .await?;
         created.push(label.to_string());
     }
 
@@ -787,12 +865,8 @@ async fn save_internal(
     };
     update.insert("schema_outbox", event);
 
-    if raw.is_none() {
-        update.insert("_id", id);
-        coll.insert_one(update).await?;
-    } else {
+    if let Some(old) = &raw {
         let mut filter = doc! { "_id": id, "schema_outbox": { "$exists": false } };
-        let old = raw.as_ref().unwrap();
         for key in [
             "revision",
             "schema_version",
@@ -857,6 +931,9 @@ async fn save_internal(
                 "Alteração concorrente; operação não sobrescreveu a questão",
             ));
         }
+    } else {
+        update.insert("_id", id);
+        coll.insert_one(update).await?;
     }
     flush_audit(db, id).await?;
     Ok(json!({
@@ -877,7 +954,9 @@ fn validate_transition(old: Option<&Document>, next: &Value) -> Result<(), AppEr
         let previous = Bson::Document(old.clone()).into_relaxed_extjson();
         for field in ["classification", "validity"] {
             let prior = &previous[field];
-            let n = next[field]["revision"].as_i64().unwrap();
+            let n = next[field]["revision"]
+                .as_i64()
+                .ok_or_else(|| err("Revisão de classificação/validade não inteira"))?;
             if prior.is_null() {
                 if n > 1 {
                     return Err(err("Bloco novo deve iniciar com revisão zero ou um"));
@@ -901,4 +980,36 @@ fn validate_transition(old: Option<&Document>, next: &Value) -> Result<(), AppEr
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn benign_index_conflict_classifier_distinguishes_legacy_index_drift_from_fatal_errors() {
+        assert!(is_benign_index_conflict_message(
+            "Command failed (IndexOptionsConflict, code 85): Index with name: expires_at_1 already exists with different options"
+        ));
+        assert!(is_benign_index_conflict_message(
+            "Command failed (IndexKeySpecsConflict, code: 86): Index already exists with a different name: idx_legacy_user"
+        ));
+        assert!(is_benign_index_conflict_message(
+            "CommandError { code: 68, code_name: \"IndexAlreadyExists\" }"
+        ));
+        assert!(!is_benign_index_conflict_message(
+            "Command failed (Unauthorized, code 13): not authorized on cogniva"
+        ));
+        assert!(!is_benign_index_conflict_message(
+            "Server selection timeout: No available servers"
+        ));
+    }
+
+    #[test]
+    fn mongo_schema_expands_all_contract_kinds_cleanly() {
+        for kind in ["question", "suggestion", "compatibility", "evaluation"] {
+            let doc = mongo_schema(kind);
+            assert!(doc.contains_key("properties"), "missing properties in {kind}");
+        }
+    }
 }

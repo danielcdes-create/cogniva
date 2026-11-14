@@ -14,7 +14,7 @@ on:
 
 jobs:
   s23-ultra-insets:
-    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    if: "github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]')"
     name: API 35 1440x3088 500dpi punch-hole
     runs-on: ubuntu-latest
     timeout-minutes: 50
@@ -31,9 +31,13 @@ jobs:
 
       - name: Enable KVM
         run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo groupadd -f kvm
+          sudo usermod -aG kvm "$USER"
+          printf 'KERNEL=="kvm", OWNER="%s", GROUP="kvm", MODE="0660", OPTIONS+="static_node=kvm"\n' "$USER" | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+          sudo chown "$USER:kvm" /dev/kvm
+          sudo chmod 0660 /dev/kvm
 
       - name: Boot headless emulator and check question insets
         uses: reactivecircus/android-emulator-runner@v2

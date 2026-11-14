@@ -16,8 +16,8 @@ android {
         applicationId = "br.com.concursoprep.app"
         minSdk = 28
         targetSdk = 35
-        versionCode = 25
-        versionName = "2.0.0"
+        versionCode = 26
+        versionName = "2.0.1"
 
         val doApiBaseUrl = (project.findProperty("DO_API_BASE_URL") as? String)
             ?: "https://198.199.65.103/api/v1/"
@@ -71,6 +71,10 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+}
+
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 val syncSharedContracts = tasks.register<Sync>("syncSharedContracts") {
@@ -131,12 +135,18 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
 
-// Paparazzi 1.3.5 replaces Gradle's test reporter with one that calls a Gradle 8
-// internal method removed in Gradle 9.3. Put the stock reporter back so verify
-// still fails the task when a screenshot test fails.
+// Paparazzi 1.3.5 unconditionally registers a doFirst on all unit Test tasks that
+// replaces AbstractTestTask.testReporter with a Gradle 8 reporter incompatible with
+// Gradle 9.3. Scope NoopTestReporter strictly to Paparazzi invocations, and reset
+// testReporter to null on normal unit test runs so Gradle 9.3 falls back to its
+// built-in HTML + JUnit XML test reporting!
+val isPaparazziTaskRequested = gradle.startParameter.taskNames.any {
+    it.contains("Paparazzi", ignoreCase = true)
+}
 tasks.withType<Test>().configureEach {
-    // Runs after Paparazzi's doFirst (which installs its Gradle 8 reporter) and
-    // before the test action reads the reporter back.
+    reports.junitXml.required.set(true)
+    // Runs after Paparazzi's doFirst (which installs its broken Gradle 8 reporter)
+    // and before AbstractTestTask.executeTests reads testReporter.
     actions.add(
         0,
         Action<Task> {
@@ -146,10 +156,14 @@ tasks.withType<Test>().configureEach {
                 reporterType,
             )
             setter.isAccessible = true
-            val noop = Class.forName("cogniva.NoopTestReporter")
-                .getMethod("create", Class::class.java)
-                .invoke(null, reporterType)
-            setter.invoke(this, noop)
+            if (name.contains("Paparazzi", ignoreCase = true) || isPaparazziTaskRequested) {
+                val noop = Class.forName("cogniva.NoopTestReporter")
+                    .getMethod("create", Class::class.java)
+                    .invoke(null, reporterType)
+                setter.invoke(this, noop)
+            } else {
+                setter.invoke(this, null)
+            }
         },
     )
 }

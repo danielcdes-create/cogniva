@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -34,7 +36,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -131,12 +138,18 @@ fun OptionCard(
     }
 
     Surface(
-        onClick = onClick,
         shape = RoundedCornerShape(14.dp),
         color = containerColor,
         contentColor = contentColor,
         border = BorderStroke(width = if (selected || showResult) 2.dp else 1.dp, color = borderColor),
-        modifier = modifier.fillMaxWidth()
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .selectable(
+                selected = selected,
+                onClick = onClick,
+                role = Role.RadioButton
+            )
     ) {
         Row(
             modifier = Modifier.padding(14.dp),
@@ -246,6 +259,7 @@ fun ConfidenceSelectorGrid(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .selectableGroup()
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
@@ -311,6 +325,12 @@ private fun ConfidenceButton(
     modifier: Modifier = Modifier
 ) {
     val cs = MaterialTheme.colorScheme
+    val a11yModifier = modifier
+        .heightIn(min = 48.dp)
+        .semantics {
+            role = Role.RadioButton
+            this.selected = selected
+        }
     if (selected) {
         Button(
             onClick = onClick,
@@ -320,7 +340,7 @@ private fun ConfidenceButton(
                 containerColor = cs.primary,
                 contentColor = cs.onPrimary
             ),
-            modifier = modifier.heightIn(min = 48.dp)
+            modifier = a11yModifier
         ) {
             Text(
                 text = label,
@@ -339,7 +359,7 @@ private fun ConfidenceButton(
                 contentColor = cs.onSurface
             ),
             border = BorderStroke(1.dp, cs.outlineVariant),
-            modifier = modifier.heightIn(min = 48.dp)
+            modifier = a11yModifier
         ) {
             Text(
                 text = label,

@@ -1,6 +1,6 @@
 # Contratos e Schema de Questões V2
 
-No **Cogniva `2.0.0`**, 100% do acervo em `cogniva.todasQuestoes` segue estritamente o contrato `schema_version = 2`, formalizado em [`shared/schemas/question-contracts.schema.json`](../shared/schemas/question-contracts.schema.json), exemplificado em [`shared/examples/question-contracts/`](../shared/examples/question-contracts/) e validado por [`scripts/question_contracts.py`](../scripts/question_contracts.py) e pelo backend Rust.
+No **Cogniva `2.0.1`**, 100% do acervo em `cogniva.todasQuestoes` segue estritamente o contrato `schema_version = 2`, formalizado em [`shared/schemas/question-contracts.schema.json`](../shared/schemas/question-contracts.schema.json), exemplificado em [`shared/examples/question-contracts/`](../shared/examples/question-contracts/) e validado por [`scripts/question_contracts.py`](../scripts/question_contracts.py) e pelo backend Rust.
 
 ---
 
@@ -11,7 +11,7 @@ No **Cogniva `2.0.0`**, 100% do acervo em `cogniva.todasQuestoes` segue estritam
 | `todasQuestoes` | Documento V2 completo: enunciado, alternativas/gabarito ou rubrica, origens, classificação confirmada, validade, revisões CAS e caches pedagógicos. |
 | `question_classification_suggestions` | Sugestões geradas por IA (`PENDING`, `ACCEPTED`, `REJECTED`, `STALE`, `SUPERSEDED`); nunca alteram seleção de treino sem aceitação humana explícita. |
 | `question_exam_compatibility` | Decisões explícitas (`DIRECT`, `ANALOGOUS`, `EXCLUDED`) vinculadas ao proprietário da grade (`POST /api/v1/exams/:id/compatibility`), componente e revisão. |
-| `question_reports` | Reportes de problemas abertos por estudantes, isolados por `user_id` denunciante até resolução administrativa na aba **Reportes**. |
+| `reportedQuestoes` | Reportes de problemas abertos por estudantes, isolados por `user_id` denunciante até resolução administrativa na aba **Reportes** (anonimizáveis sob LGPD Art. 18). |
 | `answer_evaluations` | Avaliações imutáveis de respostas discursivas referenciando tentativa, rubrica e política de revisão. |
 
 ---
@@ -20,7 +20,7 @@ No **Cogniva `2.0.0`**, 100% do acervo em `cogniva.todasQuestoes` segue estritam
 
 | `question_type` | `answers` | `correct_answer_indices` | Correção / Seleção |
 | :--- | :--- | :--- | :--- |
-| `MULTIPLE_CHOICE` | 5 alternativas não vazias e distintas | `[0..4]` (1 índice válido) | `EXACT_OPTION` · elegível para prática objetiva |
+| `MULTIPLE_CHOICE` | 4 ou 5 alternativas não vazias e distintas | `[0..3]` ou `[0..4]` (1 índice válido) | `EXACT_OPTION` · elegível para prática objetiva |
 | `TRUE_FALSE` | Exatamente `["Certo", "Errado"]` | `[0]` ou `[1]` | `EXACT_OPTION` · elegível para prática objetiva |
 | `OPEN_ENDED` | `[]` | `[]` | `RUBRIC` (`max_score = 100`) · **modo preparatório** |
 
@@ -53,8 +53,9 @@ Qualquer edição no enunciado, nas alternativas, no gabarito ou na rubrica alte
 - **Validade (`validity`):**
   - Status explícito editável no `/admin/`: `CURRENT` (vigente e revisada), `UNDER_REVIEW` (em revisão — suspensa das filas correntes), `OBSOLETE` (superada — preservada apenas no acervo histórico) e `UNKNOWN` (sem revisão conclusiva).
   - Se houver mudança no conteúdo (`content_revision`) sem nova decisão explícita do revisor, o status retorna automaticamente para `UNDER_REVIEW`.
-- **Campos Pedagógicos e Documentais:**
-  - Edições V2 persistem integralmente `explanation` (comentário do gabarito), `level` (dificuldade) e `exam_year` (ano da prova sincronizado com `origins[0].exam_year`).
+- **Campos Pedagógicos, Evidências e Limites:**
+  - Edições V2 persistem integralmente `explanation` (comentário do gabarito), `level` (dificuldade) e `exam_year` (`1900..=2200`, sincronizado com `origins[0].exam_year`), limitando `concursos` a no máximo 50 entradas.
+  - Todas as URIs documentais (`origins[*].source_reference.uri` e `evidence[*].uri`) exigem esquema `http://` ou `https://` (`^https?://`), bloqueando esquemas executáveis ou locais (`javascript:`, `data:`, `file:`).
 
 ---
 

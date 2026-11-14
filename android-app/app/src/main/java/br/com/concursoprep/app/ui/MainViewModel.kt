@@ -1,13 +1,16 @@
 package br.com.concursoprep.app.ui
 
 import android.content.Context
+import android.content.Intent
 import android.os.Build
 import androidx.lifecycle.*
+import androidx.lifecycle.viewmodel.CreationExtras
 import br.com.concursoprep.app.BuildConfig
 import br.com.concursoprep.app.ConcursoApp
 import br.com.concursoprep.app.data.local.PendingAttemptEntity
 import br.com.concursoprep.app.data.repository.ConcursoRepository
 import br.com.concursoprep.app.data.sync.OfflineSyncWorker
+import br.com.concursoprep.app.data.update.AppUpdateManager
 import br.com.concursoprep.app.domain.exam.*
 import br.com.concursoprep.app.domain.model.*
 import kotlinx.coroutines.*
@@ -17,10 +20,30 @@ import java.time.LocalDate
 import java.util.UUID
 
 sealed interface ApkInstallEvent {
-    data object NeedsUnknownSourcesPermission: ApkInstallEvent
-    data class ReadyToInstall(val apkFile:File): ApkInstallEvent
+    data object NeedsUnknownSourcesPermission : ApkInstallEvent
+    data class ReadyToInstall(val apkFile: File) : ApkInstallEvent
+    data class ConfirmSessionInstall(val confirmationIntent: Intent) : ApkInstallEvent
 }
-class MainViewModel(private val repository:ConcursoRepository,private val appContext:Context?=null):ViewModel(){
+
+data class AccountDeletionSwitch(
+    val deletedUserId: Long,
+    val nextGuestUserId: Long
+)
+
+class MainViewModel(
+    private val repository: ConcursoRepository,
+    private val appContext: Context? = null,
+    private val savedStateHandle: SavedStateHandle? = null,
+    overrideScope: CoroutineScope? = null
+) : ViewModel() {
+
+    private val vmScope: CoroutineScope = overrideScope ?: viewModelScope
+
+    companion object {
+        private const val KEY_ACTIVE_SESSION_ID = "active_session_id"
+        private const val KEY_ACTIVE_SESSION_INDEX = "active_session_index"
+    }
+
     private val prefs=appContext?.getSharedPreferences("cogniva_prefs",Context.MODE_PRIVATE)
     private val _userId=MutableStateFlow(repository.ownerUserId);val userId=_userId.asStateFlow()
     private val _userProfile=MutableStateFlow(UserProfileDto(repository.ownerUserId,
@@ -54,22 +77,74 @@ class MainViewModel(private val repository:ConcursoRepository,private val appCon
     private val _pendingSyncCount=MutableStateFlow(0);val pendingSyncCount=_pendingSyncCount.asStateFlow()
     private val _userFeedbackMessage=MutableSharedFlow<String>(extraBufferCapacity=16);val userFeedbackMessage=_userFeedbackMessage.asSharedFlow()
     private val _accountChanged=MutableSharedFlow<Long>(extraBufferCapacity=1);val accountChanged=_accountChanged.asSharedFlow()
+    private val _accountDeletedSwitch=MutableSharedFlow<AccountDeletionSwitch>(extraBufferCapacity=1);val accountDeletedSwitch=_accountDeletedSwitch.asSharedFlow()
+    private val _isDeletingAccount=MutableStateFlow(false);val isDeletingAccount=_isDeletingAccount.asStateFlow()
     private val _accountAuthState=MutableStateFlow(AccountAuthUiState(isAuthenticated=!(prefs?.getBoolean("is_guest",true)?:true)));val accountAuthState=_accountAuthState.asStateFlow()
     private val _isStartingQuiz=MutableStateFlow(false);val isStartingQuiz=_isStartingQuiz.asStateFlow()
     private val _apkUpdateState=MutableStateFlow(ApkUpdateUiState(installedVersionCode=BuildConfig.VERSION_CODE,installedVersionName=BuildConfig.VERSION_NAME));val apkUpdateState=_apkUpdateState.asStateFlow()
-    private val _apkInstallEvents=MutableSharedFlow<ApkInstallEvent>();val apkInstallEvents=_apkInstallEvents.asSharedFlow()
+    private val _apkInstallEvents=MutableSharedFlow<ApkInstallEvent>(extraBufferCapacity=4);val apkInstallEvents=_apkInstallEvents.asSharedFlow()
     private val _pendingReview=MutableStateFlow<List<PendingReviewItem>>(emptyList());val pendingReview=_pendingReview.asStateFlow()
     private val _showPendingReview=MutableStateFlow(false);val showPendingReview=_showPendingReview.asStateFlow()
     private val _pendingExport=MutableSharedFlow<File>();val pendingExport=_pendingExport.asSharedFlow()
     fun openPendingReview(){operation{_pendingReview.value=repository.pendingReview();_showPendingReview.value=true}}
     fun dismissPendingReview(){_showPendingReview.value=false}
+    fun dismissPendingReviewItem(item: PendingReviewItem) {
+        operation {
+            repository.dismissQuarantinedItem(item.id)
+            _pendingReview.value = repository.pendingReview()
+            localStats()
+            refreshAllData()
+            _userFeedbackMessage.emit("Registro rejeitado descartado da fila local.")
+        }
+    }
+    fun clearQuarantinedReviewItems() {
+        operation {
+            val removed = repository.clearQuarantinedAttempts()
+            _pendingReview.value = repository.pendingReview()
+            localStats()
+            refreshAllData()
+            _userFeedbackMessage.emit("$removed registro(s) rejeitado(s) descartado(s).")
+        }
+    }
     fun useServerExam(exam:StoredExam){operation {val context=appContext?:return@operation;val file=repository.preserveAndUseServerExam(exam,File(context.cacheDir,"preserved"));refreshAllData();_pendingExport.emit(file);_userFeedbackMessage.emit("Versão do servidor carregada. Sua edição anterior continua preservada e disponível para exportação.")}}
     fun exportPendingReview(){operation{val context=appContext?:return@operation;_pendingExport.emit(repository.exportPending(File(context.cacheDir,"preserved")))}}
     private var refreshJob:Job?=null;private var syllabusJob:Job?=null;private var startJob:Job?=null;private var aiJob:Job?=null;private var aiGeneration=0L
-    private fun operation(block:suspend CoroutineScope.()->Unit)=viewModelScope.launch {
+    private fun operation(block:suspend CoroutineScope.()->Unit)=vmScope.launch {
         try{block()}catch(e:CancellationException){throw e}catch(e:Exception){_userFeedbackMessage.emit(e.message?:"Não foi possível concluir. Seus registros foram preservados.")}
     }
-    init { refreshAllData();checkApkUpdate();appContext?.let { OfflineSyncWorker.enqueueNow(it) };operation { repository.observeSync().distinctUntilChanged().collect { refreshAllData() } } }
+    init {
+        prefs?.getString("pending_feedback_message", null)?.takeIf { it.isNotBlank() }?.let { pendingMsg ->
+            prefs.edit().remove("pending_feedback_message").apply()
+            operation { _userFeedbackMessage.emit(pendingMsg) }
+        }
+        vmScope.launch {
+            AppUpdateManager.statusEvents.collect { event ->
+                when (event) {
+                    is AppUpdateManager.InstallSessionEvent.PendingUserConfirmation -> {
+                        _apkUpdateState.value = _apkUpdateState.value.copy(
+                            statusMessage = "Confirme a instalação da atualização no sistema."
+                        )
+                        _apkInstallEvents.emit(ApkInstallEvent.ConfirmSessionInstall(event.confirmationIntent))
+                    }
+                    is AppUpdateManager.InstallSessionEvent.Succeeded -> {
+                        _apkUpdateState.value = _apkUpdateState.value.copy(
+                            hasUpdate = false,
+                            statusMessage = "Atualização concluída com sucesso."
+                        )
+                        _userFeedbackMessage.emit("Atualização instalada com sucesso.")
+                    }
+                    is AppUpdateManager.InstallSessionEvent.Failed -> {
+                        _apkUpdateState.value = _apkUpdateState.value.copy(statusMessage = event.message)
+                        _userFeedbackMessage.emit(event.message)
+                    }
+                }
+            }
+        }
+        refreshAllData()
+        checkApkUpdate()
+        appContext?.let { OfflineSyncWorker.enqueueNow(it) }
+        operation { repository.observeSync().distinctUntilChanged().collect { refreshAllData() } }
+    }
     private fun saveProfile(profile:UserProfileDto){
         check(prefs?.edit()?.putLong("user_id",profile.userId)
             ?.putString("email",profile.email)
@@ -119,7 +194,7 @@ class MainViewModel(private val repository:ConcursoRepository,private val appCon
             return
         }
         _accountAuthState.value=AccountAuthUiState(isSubmitting=true,isAuthenticated=!_userProfile.value.isGuest)
-        viewModelScope.launch {
+        vmScope.launch {
             try {
                 val session=if(isRegister) repository.registerAccount(normalizedEmail,password,displayName?:_userProfile.value.displayName) else repository.loginWithEmail(normalizedEmail,password)
                 saveProfile(session.profile);_isOnboardingCompleted.value=true
@@ -142,13 +217,70 @@ class MainViewModel(private val repository:ConcursoRepository,private val appCon
         }
     }
     fun logoutAccount(){
-        if(_accountAuthState.value.isSubmitting)return
+        if(_accountAuthState.value.isSubmitting || _isDeletingAccount.value)return
         operation {
+            savedStateHandle?.remove<String>(KEY_ACTIVE_SESSION_ID)
+            savedStateHandle?.remove<Int>(KEY_ACTIVE_SESSION_INDEX)
             val nextUserId=repository.logoutAccount()
             _accountAuthState.value=AccountAuthUiState(isAuthenticated=false,message="Sessão encerrada neste aparelho.")
             if(nextUserId!=repository.ownerUserId){_accountChanged.emit(nextUserId);return@operation}
             _userProfile.value=_userProfile.value.copy(email=null,role="student",isGuest=true,isAdmin=false)
             refreshAllData()
+        }
+    }
+    fun deleteAccount(confirmText: String = ConcursoRepository.LGPD_CONFIRM_WORD) {
+        if (_isDeletingAccount.value || _accountAuthState.value.isSubmitting) return
+        val normalizedConfirm = confirmText.trim()
+        if (normalizedConfirm != ConcursoRepository.LGPD_CONFIRM_WORD) {
+            vmScope.launch {
+                _userFeedbackMessage.emit("Digite EXCLUIR exatamente em letras maiúsculas para confirmar a exclusão.")
+            }
+            return
+        }
+        _isDeletingAccount.value = true
+        vmScope.launch {
+            try {
+                val confirmationMsg = "Conta e dados pessoais excluídos conforme a LGPD (Lei 13.709/2018). O acervo compartilhado de questões foi mantido."
+                val deletedUserId = repository.ownerUserId
+                val nextGuestId = repository.deleteAccount(
+                    confirm = normalizedConfirm,
+                    postSwitchMessage = confirmationMsg
+                )
+                savedStateHandle?.remove<String>(KEY_ACTIVE_SESSION_ID)
+                savedStateHandle?.remove<Int>(KEY_ACTIVE_SESSION_INDEX)
+                _activeSession.value = null
+                _activeQuizQuestions.value = null
+                _isSimuladoSession.value = false
+                _accountAuthState.value = AccountAuthUiState(
+                    isAuthenticated = false,
+                    message = confirmationMsg
+                )
+                if (appContext != null && nextGuestId != 0L) {
+                    _accountDeletedSwitch.emit(AccountDeletionSwitch(deletedUserId, nextGuestId))
+                } else {
+                    _userProfile.value = UserProfileDto(
+                        userId = if (nextGuestId != 0L) nextGuestId else deletedUserId,
+                        email = null,
+                        displayName = "Estudante",
+                        role = "student",
+                        isGuest = true,
+                        isAdmin = false
+                    )
+                    refreshAllData()
+                    _userFeedbackMessage.emit(confirmationMsg)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                val msg = when (e) {
+                    is retrofit2.HttpException -> "Não foi possível excluir a conta no servidor (HTTP ${e.code()}). Seus dados locais foram preservados."
+                    is java.io.IOException -> "Sem conexão com o servidor para confirmar a exclusão definitiva. Tente novamente conectado."
+                    else -> e.message ?: "Não foi possível concluir a exclusão da conta."
+                }
+                _userFeedbackMessage.emit(msg)
+            } finally {
+                _isDeletingAccount.value = false
+            }
         }
     }
     fun adoptExamTemplate(examId:String){
@@ -191,7 +323,17 @@ class MainViewModel(private val repository:ConcursoRepository,private val appCon
             val dashboard=repository.getTodayDashboard(uid,profile.dailyQuestionsTarget,profile.activeContestIds)
             _todayDashboard.value=overlayLadder(dashboard,stored,_focusedTrunks.value,repository.canonicalMasteryBySubject())
             _analytics.value=repository.getProgressAnalytics(uid)
-            if(_activeSession.value==null){_pausedDiscipline.value=repository.pausedSession()?.questions?.firstOrNull()?.disciplina}
+            if(_activeSession.value==null){
+                val paused=repository.pausedSession()
+                val savedActiveId=savedStateHandle?.get<String>(KEY_ACTIVE_SESSION_ID)
+                if(paused!=null && savedActiveId!=null && paused.sessionId==savedActiveId){
+                    val maxIdx=(paused.questions.size-1).coerceAtLeast(0)
+                    val restoredIdx=(savedStateHandle.get<Int>(KEY_ACTIVE_SESSION_INDEX) ?: paused.currentIndex).coerceIn(0,maxIdx)
+                    showSession(paused.copy(currentIndex=restoredIdx))
+                } else {
+                    _pausedDiscipline.value=paused?.questions?.firstOrNull()?.disciplina
+                }
+            }
             localStats();loadSyllabus(_selectedContestId.value)
         }
     }
@@ -268,16 +410,30 @@ class MainViewModel(private val repository:ConcursoRepository,private val appCon
             }finally{_isStartingQuiz.value=false}
         }
     }
-    private fun showSession(session:SessionSnapshot){dismissAiSheet();_activeSession.value=session;_activeQuizQuestions.value=session.questions;_isSimuladoSession.value=session.mode==QuizMode.SIMULADO;_pausedDiscipline.value=session.questions.firstOrNull()?.disciplina}
+    private fun showSession(session:SessionSnapshot){
+        dismissAiSheet()
+        savedStateHandle?.set(KEY_ACTIVE_SESSION_ID,session.sessionId)
+        savedStateHandle?.set(KEY_ACTIVE_SESSION_INDEX,session.currentIndex)
+        _activeSession.value=session
+        _activeQuizQuestions.value=session.questions
+        _isSimuladoSession.value=session.mode==QuizMode.SIMULADO
+        _pausedDiscipline.value=session.questions.firstOrNull()?.disciplina
+    }
     fun resumeSession(){operation {repository.pausedSession()?.let(::showSession)?:_userFeedbackMessage.emit("Não há sessão pausada neste aparelho.")}}
     fun updateSession(incoming:SessionSnapshot){
+        if(_activeSession.value?.sessionId==incoming.sessionId){
+            savedStateHandle?.set(KEY_ACTIVE_SESSION_ID,incoming.sessionId)
+            savedStateHandle?.set(KEY_ACTIVE_SESSION_INDEX,incoming.currentIndex)
+        }
         operation {
-            repository.withMutationLock {
-                val current=_activeSession.value?:return@withMutationLock
-                if(current.sessionId!=incoming.sessionId)return@withMutationLock
-                val answers=incoming.answers.toMutableMap();current.answers.filterValues { it.submitted }.forEach{(id,answer)->answers[id]=answer}
-                val next=incoming.copy(revision=current.revision+1,answers=answers);_activeSession.value=next
-                repository.saveSession(next)
+            withContext(NonCancellable) {
+                repository.withMutationLock {
+                    val current=_activeSession.value?:return@withMutationLock
+                    if(current.sessionId!=incoming.sessionId)return@withMutationLock
+                    val answers=incoming.answers.toMutableMap();current.answers.filterValues { it.submitted }.forEach{(id,answer)->answers[id]=answer}
+                    val next=incoming.copy(revision=current.revision+1,answers=answers);_activeSession.value=next
+                    repository.saveSession(next)
+                }
             }
         }
     }
@@ -297,13 +453,85 @@ class MainViewModel(private val repository:ConcursoRepository,private val appCon
             localStats();appContext?.let{OfflineSyncWorker.enqueueNow(it)};true
         }catch(e:CancellationException){throw e}catch(e:Exception){_userFeedbackMessage.emit(e.message?:"A resposta não foi salva. Tente novamente antes de sair.");false}
     }
+
+    /**
+     * Registra todo o lote final de respostas de um Simulado em uma única transação Room (`@Transaction`)
+     * sobre `viewModelScope` + `NonCancellable`, impedindo perda parcial caso a tela navegue/feche imediatamente.
+     */
+    suspend fun submitSimuladoBatch(answersSnapshot: Map<String, SessionAnswer>): Boolean {
+        val deferred = vmScope.async {
+            withContext(NonCancellable) {
+                try {
+                    val saved = repository.withMutationLock {
+                        val session = _activeSession.value ?: return@withMutationLock false
+                        val questionsById = session.questions.associateBy { it.id }
+                        val mergedAnswers = session.answers.toMutableMap()
+                        val attemptsToRecord = mutableListOf<PendingAttemptEntity>()
+                        for ((qId, ans) in answersSnapshot) {
+                            val question = questionsById[qId] ?: continue
+                            if (ans.chosenIndex !in question.answers.indices || question.correctAnswerIndices.size != 1) continue
+                            val safeTime = ans.timeSpentSeconds.coerceIn(1, 86400)
+                            if (mergedAnswers[qId]?.submitted != true) {
+                                attemptsToRecord += PendingAttemptEntity(
+                                    questionId = question.id,
+                                    chosenIndex = ans.chosenIndex,
+                                    chosenText = question.answers[ans.chosenIndex],
+                                    isCorrect = ans.chosenIndex in question.correctAnswerIndices,
+                                    timeSpentSeconds = safeTime,
+                                    confidenceLevel = ans.confidenceLevel,
+                                    sessionUuid = session.sessionId,
+                                    quizMode = session.mode.name,
+                                    examBlock = null,
+                                    contestId = session.exam?.examId,
+                                    userNote = null,
+                                    canonicalSubjectId = question.canonicalSubjectId,
+                                    canonicalTopicId = question.canonicalTopicId,
+                                    ownerUserId = session.ownerUserId,
+                                    attemptId = UUID.nameUUIDFromBytes("${session.sessionId}:${question.id}".toByteArray()).toString(),
+                                    questionRevision = question.questionRevision,
+                                    examComponentId = question.examComponentId
+                                )
+                            }
+                            mergedAnswers[qId] = ans.copy(timeSpentSeconds = safeTime, submitted = true)
+                        }
+                        val nextSession = session.copy(
+                            answers = mergedAnswers,
+                            finished = true,
+                            revision = session.revision + 1
+                        )
+                        repository.recordSimuladoBatchUnlocked(session.ownerUserId, attemptsToRecord, nextSession)
+                        if (_activeSession.value?.sessionId == session.sessionId) {
+                            _activeSession.value = nextSession
+                        }
+                        true
+                    }
+                    if (saved) {
+                        localStats()
+                        appContext?.let { OfflineSyncWorker.enqueueNow(it) }
+                    }
+                    saved
+                } catch (e: Exception) {
+                    _userFeedbackMessage.emit(
+                        e.message ?: "Não foi possível salvar todas as respostas do simulado. Tente novamente."
+                    )
+                    false
+                }
+            }
+        }
+        return deferred.await()
+    }
+
     fun exitSession(completed:Boolean=false){operation {
-        val closed=repository.withMutationLock {
-            val current=_activeSession.value?:return@withMutationLock false
-            repository.saveSession(current)
-            if(completed)repository.completeSession(current.sessionId)
-            _activeSession.value=null;_activeQuizQuestions.value=null;_isSimuladoSession.value=false
-            true
+        savedStateHandle?.remove<String>(KEY_ACTIVE_SESSION_ID)
+        savedStateHandle?.remove<Int>(KEY_ACTIVE_SESSION_INDEX)
+        val closed=withContext(NonCancellable){
+            repository.withMutationLock {
+                val current=_activeSession.value?:return@withMutationLock false
+                repository.saveSession(current)
+                if(completed)repository.completeSession(current.sessionId)
+                _activeSession.value=null;_activeQuizQuestions.value=null;_isSimuladoSession.value=false
+                true
+            }
         }
         if(!closed)return@operation
         dismissAiSheet();refreshAllData()
@@ -321,18 +549,18 @@ class MainViewModel(private val repository:ConcursoRepository,private val appCon
     fun downloadAndInstallApk(context:Context){operation {
         if(_apkUpdateState.value.isDownloading)return@operation
         if(Build.VERSION.SDK_INT>=26&&!context.packageManager.canRequestPackageInstalls()){_apkInstallEvents.emit(ApkInstallEvent.NeedsUnknownSourcesPermission);return@operation}
-        _apkUpdateState.value=_apkUpdateState.value.copy(isDownloading=true,statusMessage="Baixando e verificando a atualização…")
+        _apkUpdateState.value=_apkUpdateState.value.copy(isDownloading=true,statusMessage="Baixando e verificando a atualização (SHA-256)…")
         try{
-            val file=repository.downloadApkUpdate(File(context.cacheDir,"updates"))?:error("O download não pôde ser verificado.")
-            val flags=if(Build.VERSION.SDK_INT>=28)android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES else android.content.pm.PackageManager.GET_SIGNATURES
-            @Suppress("DEPRECATION") val installed=context.packageManager.getPackageInfo(context.packageName,flags)
-            @Suppress("DEPRECATION") val incoming=context.packageManager.getPackageArchiveInfo(file.absolutePath,flags)?:error("Pacote inválido")
-            @Suppress("DEPRECATION") val installedCerts=if(Build.VERSION.SDK_INT>=28)installed.signingInfo?.apkContentsSigners.orEmpty()else installed.signatures.orEmpty()
-            @Suppress("DEPRECATION") val incomingHistory=if(Build.VERSION.SDK_INT>=28)(incoming.signingInfo?.signingCertificateHistory?:incoming.signingInfo?.apkContentsSigners).orEmpty()else incoming.signatures.orEmpty()
-            @Suppress("DEPRECATION") val version=if(Build.VERSION.SDK_INT>=28)incoming.longVersionCode else incoming.versionCode.toLong()
-            require(incoming.packageName==context.packageName&&version>BuildConfig.VERSION_CODE&&installedCerts.isNotEmpty()&&installedCerts.all{old->incomingHistory.any{it==old}}){"O pacote não corresponde à identidade e à versão esperadas do aplicativo."}
-            _apkUpdateState.value=_apkUpdateState.value.copy(statusMessage="Atualização verificada. Abrindo instalador…")
-            _apkInstallEvents.emit(ApkInstallEvent.ReadyToInstall(file))
+            val info=_apkUpdateState.value.remoteInfo ?: repository.fetchRemoteApkInfo()
+                ?: error("Metadados da atualização indisponíveis. Toque em 'Verificar Versão' e tente novamente.")
+            AppUpdateManager.validateMetadata(info, BuildConfig.VERSION_CODE)
+            _apkUpdateState.value=_apkUpdateState.value.copy(remoteInfo=info)
+            AppUpdateManager.downloadVerifyAndStageInstall(
+                context = context,
+                info = info,
+                apiBaseUrl = BuildConfig.API_BASE_URL
+            )
+            _apkUpdateState.value=_apkUpdateState.value.copy(statusMessage="Pacote verificado e enviado ao instalador do sistema…")
         }catch(e:CancellationException){throw e}catch(e:Exception){
             val msg=e.message?.takeIf{it.isNotBlank()}?:"Não foi possível baixar ou validar a atualização. Tente novamente."
             _apkUpdateState.value=_apkUpdateState.value.copy(statusMessage=msg)
@@ -340,6 +568,20 @@ class MainViewModel(private val repository:ConcursoRepository,private val appCon
         }finally{_apkUpdateState.value=_apkUpdateState.value.copy(isDownloading=false)}
     }}
 }
-class MainViewModelFactory(private val repository:ConcursoRepository,private val appContext:Context?=null):ViewModelProvider.Factory{
-    override fun <T:ViewModel>create(modelClass:Class<T>):T{require(modelClass.isAssignableFrom(MainViewModel::class.java));@Suppress("UNCHECKED_CAST")return MainViewModel(repository,appContext) as T}
+class MainViewModelFactory(
+    private val repository: ConcursoRepository,
+    private val appContext: Context? = null
+) : ViewModelProvider.Factory {
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        require(modelClass.isAssignableFrom(MainViewModel::class.java))
+        @Suppress("UNCHECKED_CAST")
+        return MainViewModel(repository, appContext, null) as T
+    }
+
+    override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
+        require(modelClass.isAssignableFrom(MainViewModel::class.java))
+        val handle = runCatching { extras.createSavedStateHandle() }.getOrNull()
+        @Suppress("UNCHECKED_CAST")
+        return MainViewModel(repository, appContext, handle) as T
+    }
 }

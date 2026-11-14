@@ -89,22 +89,27 @@ class AuthStore(context: Context) {
         check(prefs.edit().putString(prefKey, encryptSecret(plain)).commit())
     }
 
-    val installationId: String = prefs.getString("installation_id", null) ?: UUID.randomUUID().toString().also {
+    var installationId: String = prefs.getString("installation_id", null) ?: UUID.randomUUID().toString().also {
         check(prefs.edit().putString("installation_id", it).commit())
     }
+        private set
 
-    val installationSecret: String = readSecret("installation_secret") ?: ByteArray(32).also {
+    var installationSecret: String = readSecret("installation_secret") ?: ByteArray(32).also {
         SecureRandom().nextBytes(it)
     }.joinToString("") { "%02x".format(it) }.also {
         writeSecret("installation_secret", it)
     }
+        private set
 
-    val localUserId: Long = -(
+    private fun computeLocalUserId(instId: String, instSecret: String): Long = -(
         ByteBuffer.wrap(
             MessageDigest.getInstance("SHA-256")
-                .digest("cogniva-native:$installationId:$installationSecret".toByteArray(Charsets.UTF_8))
+                .digest("cogniva-native:$instId:$instSecret".toByteArray(Charsets.UTF_8))
         ).long.ushr(1).coerceAtLeast(1)
     )
+
+    var localUserId: Long = computeLocalUserId(installationId, installationSecret)
+        private set
 
     val selectedUserId: Long get() = prefs.getLong("user_id", localUserId)
 
@@ -162,6 +167,44 @@ class AuthStore(context: Context) {
                 .commit()
         )
         return localUserId
+    }
+
+    /**
+     * Exclusão definitiva de credenciais e preferências pessoais da conta (Art. 18 da LGPD),
+     * rotacionando a identidade local de instalação e retornando ao modo convidado desautenticado.
+     */
+    fun wipeAccountAndResetToGuest(deletedUserId: Long, postSwitchMessage: String? = null): Long {
+        val freshInstallationId = UUID.randomUUID().toString()
+        val freshSecretBytes = ByteArray(32).also { SecureRandom().nextBytes(it) }
+        val freshSecret = freshSecretBytes.joinToString("") { "%02x".format(it) }
+        val freshLocalId = computeLocalUserId(freshInstallationId, freshSecret)
+
+        installationId = freshInstallationId
+        installationSecret = freshSecret
+        localUserId = freshLocalId
+
+        val editor = prefs.edit()
+            .remove("auth_token_$deletedUserId")
+            .remove("account_registered_$deletedUserId")
+            .remove("pending_profile_$deletedUserId")
+            .putString("installation_id", freshInstallationId)
+            .putString("installation_secret", encryptSecret(freshSecret))
+            .putLong("user_id", freshLocalId)
+            .remove("email")
+            .putString("display_name", "Estudante")
+            .putString("role", "student")
+            .putBoolean("is_guest", true)
+            .putBoolean("is_admin", false)
+            .putInt("daily_questions_target", 50)
+            .putFloat("daily_study_hours_target", 2f)
+            .putString("active_contests", "CPNU")
+            .putString("selected_contest_id", "CPNU")
+            .putBoolean("onboarding_completed", true)
+        if (!postSwitchMessage.isNullOrBlank()) {
+            editor.putString("pending_feedback_message", postSwitchMessage)
+        }
+        check(editor.commit())
+        return freshLocalId
     }
 
     fun saveProfile(profile: UserProfileDto) {

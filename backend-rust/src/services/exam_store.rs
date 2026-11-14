@@ -388,7 +388,7 @@ fn validate_active_links(
         .unwrap()
         .iter()
         .any(|t| t["trunk_id"] == exam.trunk_slug && t["status"] == "ACTIVE");
-    if !active_trunk && !previous.is_some_and(|e| e.trunk_slug == exam.trunk_slug) {
+    if !active_trunk && previous.is_none_or(|e| e.trunk_slug != exam.trunk_slug) {
         return Err(AppError::BadRequest(
             "Novos vínculos exigem um tronco ativo".into(),
         ));

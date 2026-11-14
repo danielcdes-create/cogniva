@@ -69,6 +69,9 @@ interface ConcursoLocalDao {
     @Query("SELECT * FROM cached_questions WHERE id = :id LIMIT 1")
     suspend fun findQuestionById(id: String): CachedQuestionEntity?
 
+    @Query("SELECT * FROM cached_questions WHERE id IN (:ids)")
+    suspend fun findQuestionsByIds(ids: List<String>): List<CachedQuestionEntity>
+
     @Query("SELECT * FROM cached_questions WHERE (:disciplina IS NULL OR disciplina = :disciplina) ORDER BY RANDOM() LIMIT :limit")
     suspend fun getCachedQuestions(disciplina: String?, limit: Int): List<CachedQuestionEntity>
 
@@ -109,6 +112,10 @@ interface ConcursoLocalDao {
     suspend fun acknowledgeAttempt(eventId: String, owner: Long)
     @Query("UPDATE pending_attempts SET syncError=:error WHERE attemptId=:eventId AND ownerUserId=:owner")
     suspend fun markAttemptError(eventId: String, owner: Long, error: String?)
+    @Query("DELETE FROM pending_attempts WHERE attemptId=:attemptId AND ownerUserId=:owner AND syncError IS NOT NULL")
+    suspend fun dismissQuarantinedAttempt(attemptId: String, owner: Long): Int
+    @Query("DELETE FROM pending_attempts WHERE ownerUserId=:owner AND syncError IS NOT NULL")
+    suspend fun clearQuarantinedAttempts(owner: Long): Int
     @Query("UPDATE cached_questions SET inErrorNotebook=:error, isMastered=:mastered WHERE id=:id")
     suspend fun updateLearningFlags(id: String, error: Boolean, mastered: Boolean)
 
@@ -126,7 +133,7 @@ interface ConcursoLocalDao {
         CanonicalMasteryEntity::class
     ],
     version = 6,
-    exportSchema = false
+    exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun concursoDao(): ConcursoLocalDao

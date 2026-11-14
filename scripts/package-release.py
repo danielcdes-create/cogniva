@@ -22,7 +22,7 @@ manifest = {
     'apk_sha256': hashlib.sha256(apk.read_bytes()).hexdigest(),
     'apk_size_bytes': apk.stat().st_size,
     'signing_policy': 'Private v2/v3 release signer on API 28+ (minSdk 28, no debug lineage)',
-    'contract_version': 2,
+    'contract_version': 3,
 }
 (a.bundle / 'release.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')
 print(json.dumps(manifest))

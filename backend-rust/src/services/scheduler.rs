@@ -111,16 +111,42 @@ pub async fn run_daily_reviews_decay_and_countdown(
 
 /// Inicia o agendador assíncrono em background dentro do binário Rust.
 pub fn spawn_background_daily_scheduler(db: Database) {
+    let (_tx, rx) = tokio::sync::watch::channel(false);
+    spawn_background_daily_scheduler_with_shutdown(db, rx);
+}
+
+/// Inicia o agendador diário em background com encerramento gracioso via canal `watch`.
+pub fn spawn_background_daily_scheduler_with_shutdown(
+    db: Database,
+    mut shutdown_rx: tokio::sync::watch::Receiver<bool>,
+) {
     tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_secs(30)).await;
+        tokio::select! {
+            _ = tokio::time::sleep(Duration::from_secs(30)) => {}
+            _ = shutdown_rx.changed() => {
+                if *shutdown_rx.borrow() {
+                    tracing::info!("Agendador diário encerrado antes do primeiro ciclo.");
+                    return;
+                }
+            }
+        }
         let mut interval = tokio::time::interval(Duration::from_secs(24 * 60 * 60));
         loop {
-            interval.tick().await;
-            if let Err(e) = run_daily_reviews_decay_and_countdown(&db).await {
-                tracing::error!(
-                    "Erro durante execução da rotina diária em background: {:?}",
-                    e
-                );
+            tokio::select! {
+                _ = interval.tick() => {
+                    if let Err(e) = run_daily_reviews_decay_and_countdown(&db).await {
+                        tracing::error!(
+                            "Erro durante execução da rotina diária em background: {:?}",
+                            e
+                        );
+                    }
+                }
+                _ = shutdown_rx.changed() => {
+                    if *shutdown_rx.borrow() {
+                        tracing::info!("Agendador diário em background encerrado graciosamente.");
+                        break;
+                    }
+                }
             }
         }
     });

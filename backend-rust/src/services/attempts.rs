@@ -96,7 +96,8 @@ fn validate(
     // Submitted taxonomy is historical client context, never authority. A
     // review may change it while the exact same content is queued offline.
     question.answer_indices()?;
-    let occurred = DateTime::parse_from_rfc3339(&item.occurred_at)
+    let raw_ts = item.effective_answered_at();
+    let occurred = DateTime::parse_from_rfc3339(raw_ts)
         .map_err(|_| AppError::BadRequest("Data da tentativa deve incluir fuso".into()))?
         .with_timezone(&Utc);
     if occurred > Utc::now() + Duration::minutes(5) || occurred.timestamp() < 946684800 {
@@ -153,6 +154,10 @@ fn project(
     at: DateTime<Utc>,
 ) -> Result<(Document, Document, ProcessedAttemptResult), AppError> {
     let correct = question.answer_indices()?.contains(&item.chosen_index);
+    let prior_had_history =
+        !activity.past_sessions.is_empty() || activity.quantidade_praticas > 0;
+    let prior_ultima_sessao = prior_had_history.then_some(activity.datas.ultima_sessao);
+
     let mut event = PastSessionEntry {
         attempt_id: item.attempt_id.clone(),
         data: at,
@@ -165,7 +170,7 @@ fn project(
         concurso: item.contest_id.clone(),
         canonical_subject_id: question.canonical_subject_id.clone(),
         canonical_topic_id: question.canonical_topic_id.clone(),
-        dias_desde_ultima_sessao: (at - activity.datas.ultima_sessao).num_days().max(0),
+        dias_desde_ultima_sessao: 0,
         dias_desde_ultima_revisao: None,
         percentual_acertos_acumulado: 0.0,
         tempo_medio_acumulado: 0.0,
@@ -174,17 +179,18 @@ fn project(
         spaced_repetition_score: 0.0,
         streak_atual: 0,
         points_session: 0.0,
-        is_revision: activity.revisao_necessaria,
+        is_revision: false,
     };
     activity.past_sessions.push(event.clone());
-    // Delivery order cannot change the meaning of occurrence order.
+    // Delivery order cannot change the meaning of occurrence order: keep pastSessions chronological.
     activity
         .past_sessions
         .sort_by_key(|s| (s.data, s.attempt_id.clone(), s.session_uuid.clone()));
-    let statuses: Vec<bool> = activity.past_sessions.iter().map(|s| s.status).collect();
-    let streak = calculate_streak_and_points(&statuses);
-    activity.quantidade_praticas =
-        activity.quantidade_praticas.saturating_add(1).max(activity.past_sessions.len() as i32);
+
+    activity.quantidade_praticas = activity
+        .quantidade_praticas
+        .saturating_add(1)
+        .max(activity.past_sessions.len() as i32);
     if correct {
         activity.quantidade_acertos += 1;
     } else {
@@ -195,54 +201,124 @@ fn project(
     activity.tempos.tempo_total_estudo += item.time_spent_seconds as f64;
     activity.tempos.tempo_medio_resposta =
         activity.tempos.tempo_total_estudo / activity.quantidade_praticas.max(1) as f64;
-    let last = activity.past_sessions.last().unwrap();
-    let (score, interval) = calculate_spaced_repetition_interval(
-        streak.streak_atual,
-        activity.tempos.tempo_medio_resposta,
-        last.tempo_gasto_segundos,
-        last.nivel_confianca,
-        last.status,
-        true,
-    );
-    activity.datas.ultima_sessao = last.data;
-    activity.datas.data_primeira_sessao = activity.datas.data_primeira_sessao.min(at);
-    if correct {
-        activity.datas.data_primeiro_acerto = Some(
-            activity
-                .datas
-                .data_primeiro_acerto
-                .map_or(at, |old| old.min(at)),
-        );
-    }
-    if event.is_revision {
-        activity.datas.ultima_revisao =
-            Some(activity.datas.ultima_revisao.map_or(at, |old| old.max(at)));
-    }
-    activity.streak_atual = streak.streak_atual;
-    activity.streak_max = streak.streak_max;
-    activity.points = streak.points_total;
-    activity.points_with_decay = calculate_decay(activity.points, last.data, Utc::now());
-    activity.dominada = is_mastered(activity.points)
-        && calculate_recent_confidence_avg(&activity.past_sessions, 3).unwrap_or(0) >= 2;
-    activity.spaced_repetition_score = score;
-    activity.spaced_repetition_interval = interval;
-    activity.revisao_necessaria = Utc::now() >= last.data + Duration::days(interval as i64);
-    activity.high_confidence_error_flag = if !last.status {
-        last.nivel_confianca >= 2
+
+    // Replay chronologically across past_sessions so an out-of-order offline attempt
+    // never overwrites newer SRS state or corrupts ultima_sessao / ultima_resposta_em backwards.
+    let mut running_statuses = Vec::with_capacity(activity.past_sessions.len());
+    let mut running_correct = 0i32;
+    let mut running_time = 0.0f64;
+    let mut prev_session_date: Option<DateTime<Utc>> = None;
+    let mut prev_interval: i32 = 0;
+    let mut latest_revision: Option<DateTime<Utc>> = activity.datas.ultima_revisao;
+    let mut first_correct: Option<DateTime<Utc>> = activity.datas.data_primeiro_acerto;
+    let mut replay_notebook = if activity.past_sessions.len() <= 1 && prior_had_history {
+        activity.in_error_notebook
     } else {
         false
     };
-    activity.in_error_notebook = next_error_notebook(
-        activity.in_error_notebook,
-        last.status,
-        activity.dominada,
-        activity.streak_atual,
-        last.nivel_confianca,
-    );
+    let mut final_streak = calculate_streak_and_points(&[]);
+    let mut final_score = 0.0;
+    let mut final_interval = 1;
+
+    let total_sessions_len = activity.past_sessions.len();
+    for idx in 0..total_sessions_len {
+        let conf_avg_step = calculate_recent_confidence_avg(&activity.past_sessions[..=idx], 3);
+        let s = &mut activity.past_sessions[idx];
+        running_statuses.push(s.status);
+        if s.status {
+            running_correct += 1;
+            first_correct = Some(first_correct.map_or(s.data, |old| old.min(s.data)));
+        }
+        running_time += s.tempo_gasto_segundos as f64;
+        let step_streak = calculate_streak_and_points(&running_statuses);
+        let step_count = (idx + 1) as f64;
+        let step_avg_time = running_time / step_count;
+        let step_acc = 100.0 * (running_correct as f64) / step_count;
+        let avg_for_srs = if idx + 1 == total_sessions_len {
+            activity.tempos.tempo_medio_resposta
+        } else {
+            step_avg_time
+        };
+        let (step_score, step_interval) = calculate_spaced_repetition_interval(
+            step_streak.streak_atual,
+            avg_for_srs,
+            s.tempo_gasto_segundos,
+            s.nivel_confianca,
+            s.status,
+            true,
+        );
+        let step_dias_ultima = prev_session_date
+            .map(|p| (s.data - p).num_days().max(0))
+            .unwrap_or(0);
+        let step_is_revision = prev_session_date
+            .is_some_and(|p| s.data >= p + Duration::days(prev_interval.max(1) as i64));
+        let step_dias_revisao = latest_revision
+            .filter(|&r| r <= s.data)
+            .map(|r| (s.data - r).num_days().max(0));
+        if step_is_revision {
+            latest_revision = Some(latest_revision.map_or(s.data, |old| old.max(s.data)));
+        }
+        let step_dominada =
+            is_mastered(step_streak.points_total) && conf_avg_step.unwrap_or(0) >= 2;
+        replay_notebook = next_error_notebook(
+            replay_notebook,
+            s.status,
+            step_dominada,
+            step_streak.streak_atual,
+            s.nivel_confianca,
+        );
+
+        s.dias_desde_ultima_sessao = step_dias_ultima;
+        s.dias_desde_ultima_revisao = step_dias_revisao;
+        s.percentual_acertos_acumulado = step_acc;
+        s.tempo_medio_acumulado = step_avg_time;
+        s.spaced_repetition_interval = step_interval;
+        s.spaced_repetition_score = step_score;
+        s.streak_atual = step_streak.streak_atual;
+        s.points_session = step_streak.last_session_points;
+        s.is_revision = step_is_revision;
+
+        if s.attempt_id == item.attempt_id {
+            event = s.clone();
+        }
+
+        prev_session_date = Some(s.data);
+        prev_interval = step_interval;
+        final_streak = step_streak;
+        final_score = step_score;
+        final_interval = step_interval;
+    }
+
+    let first_session_data = activity.past_sessions.first().unwrap().data;
+    let last = activity.past_sessions.last().unwrap().clone();
+    let is_latest_attempt = last.attempt_id == item.attempt_id;
+    let monotonic_ultima = prior_ultima_sessao.map_or(last.data, |prev| prev.max(last.data));
+
+    activity.datas.ultima_sessao = monotonic_ultima;
+    activity.datas.data_primeira_sessao = if prior_had_history {
+        activity.datas.data_primeira_sessao.min(first_session_data)
+    } else {
+        first_session_data
+    };
+    activity.datas.data_primeiro_acerto = first_correct;
+    activity.datas.ultima_revisao = latest_revision;
+
+    activity.streak_atual = final_streak.streak_atual;
+    activity.streak_max = final_streak.streak_max;
+    activity.points = final_streak.points_total;
+    activity.points_with_decay = calculate_decay(activity.points, monotonic_ultima, Utc::now());
+    activity.nivel_confianca_med_rec = calculate_recent_confidence_avg(&activity.past_sessions, 3);
+    activity.dominada =
+        is_mastered(activity.points) && activity.nivel_confianca_med_rec.unwrap_or(0) >= 2;
+    activity.spaced_repetition_score = final_score;
+    activity.spaced_repetition_interval = final_interval;
+    activity.revisao_necessaria =
+        Utc::now() >= monotonic_ultima + Duration::days(final_interval as i64);
+    activity.high_confidence_error_flag = !last.status && last.nivel_confianca >= 2;
+    activity.in_error_notebook = replay_notebook;
     activity.var_alternativa_escolhida = calculate_alternative_variation(&activity.past_sessions);
     activity.frequencia_estudo_mes =
         calculate_monthly_study_frequency(&activity.past_sessions, Utc::now());
-    activity.nivel_confianca_med_rec = calculate_recent_confidence_avg(&activity.past_sessions, 3);
     activity.canonical_subject_id = question
         .canonical_subject_id
         .clone()
@@ -252,14 +328,11 @@ fn project(
         .clone()
         .or(activity.canonical_topic_id);
     if let Some(note) = &item.user_note {
-        activity.user_note = Some(note.clone());
+        if is_latest_attempt || activity.user_note.is_none() {
+            activity.user_note = Some(note.clone());
+        }
     }
-    event.percentual_acertos_acumulado = activity.percentual_acertos;
-    event.tempo_medio_acumulado = activity.tempos.tempo_medio_resposta;
-    event.spaced_repetition_interval = interval;
-    event.spaced_repetition_score = score;
-    event.streak_atual = streak.streak_atual;
-    event.points_session = streak.last_session_points;
+
     let ack = ProcessedAttemptResult {
         confidence_avg: activity.nivel_confianca_med_rec,
         attempts_total: activity.quantidade_praticas,
@@ -274,11 +347,10 @@ fn project(
         points_total: activity.points,
         points_with_decay: activity.points_with_decay,
         is_mastered: activity.dominada,
-        next_review_interval_days: interval,
+        next_review_interval_days: final_interval,
         accuracy_accumulated_pct: activity.percentual_acertos,
         in_error_notebook: activity.in_error_notebook,
-        next_review_at: (activity.datas.ultima_sessao + Duration::days(interval as i64))
-            .to_rfc3339(),
+        next_review_at: (monotonic_ultima + Duration::days(final_interval as i64)).to_rfc3339(),
         canonical_subject_id: activity.canonical_subject_id.clone(),
         canonical_topic_id: activity.canonical_topic_id.clone(),
     };
@@ -295,6 +367,10 @@ fn project(
             }
         }
     }
+    fields.insert(
+        "datas.ultima_resposta_em",
+        bson::DateTime::from_chrono(monotonic_ultima),
+    );
     fields.insert("projection_version", 2);
     let mut event =
         bson::to_document(&event).map_err(|_| AppError::Internal("Evento inválido".into()))?;
@@ -476,6 +552,7 @@ mod tests {
             exam_component_id:None,
             attempt_id: uuid::Uuid::new_v4().to_string(),
             occurred_at: Utc::now().to_rfc3339(),
+            client_answered_at: None,
             question_revision: q.revision().unwrap(),
             question_id: q.id.to_hex(),
             chosen_index: 0,
@@ -537,6 +614,7 @@ mod tests {
             exam_component_id: None,
             attempt_id: uuid::Uuid::new_v4().to_string(),
             occurred_at: now.to_rfc3339(),
+            client_answered_at: None,
             question_revision: q.revision().unwrap(),
             question_id: q.id.to_hex(),
             chosen_index: 1,
@@ -554,5 +632,150 @@ mod tests {
         };
         let (_, _, ack) = project(act, &q, &item, now).unwrap();
         assert_eq!(ack.attempts_total, 6);
+    }
+
+    #[test]
+    fn out_of_order_offline_sync_replays_chronologically_without_regressing_srs_or_timestamps() {
+        let q: QuestionDocument = bson::from_document(doc! {
+            "_id": ObjectId::new(),
+            "question": "Questão Offline",
+            "answers": ["Errada", "Certa"],
+            "correct_answers": ["Certa"],
+            "disciplina": "Direito Constitucional"
+        })
+        .unwrap();
+        let rev = q.revision().unwrap();
+        // Use millisecond-precision timestamps so BSON DateTime round-trip is exact.
+        let t1 = DateTime::parse_from_rfc3339("2026-11-10T10:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let t2 = DateTime::parse_from_rfc3339("2026-11-12T15:30:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+
+        let older_offline_wrong = AnswerAttemptItem {
+            exam_component_id: None,
+            attempt_id: "11111111-1111-4111-8111-111111111111".into(),
+            occurred_at: String::new(),
+            client_answered_at: Some(t1.to_rfc3339()),
+            question_revision: rev.clone(),
+            question_id: q.id.to_hex(),
+            chosen_index: 0,
+            chosen_text: "Errada".into(),
+            is_correct: false,
+            time_spent_seconds: 30,
+            confidence_level: 3,
+            session_uuid: "sess-offline".into(),
+            quiz_mode: "STANDARD".into(),
+            exam_block: None,
+            contest_id: None,
+            user_note: Some("Nota antiga offline".into()),
+            canonical_subject_id: None,
+            canonical_topic_id: None,
+        };
+        let newer_online_right = AnswerAttemptItem {
+            exam_component_id: None,
+            attempt_id: "22222222-2222-4222-8222-222222222222".into(),
+            occurred_at: t2.to_rfc3339(),
+            client_answered_at: None,
+            question_revision: rev,
+            question_id: q.id.to_hex(),
+            chosen_index: 1,
+            chosen_text: "Certa".into(),
+            is_correct: true,
+            time_spent_seconds: 20,
+            confidence_level: 1,
+            session_uuid: "sess-online".into(),
+            quiz_mode: "STANDARD".into(),
+            exam_block: None,
+            contest_id: None,
+            user_note: Some("Nota recente online".into()),
+            canonical_subject_id: None,
+            canonical_topic_id: None,
+        };
+
+        let apply_step = |existing: Option<Document>, item: &AnswerAttemptItem| -> Document {
+            let at = validate(item, &q).unwrap();
+            let act: UserActivityDocument = match &existing {
+                Some(raw) => bson::from_document(raw.clone()).unwrap(),
+                None => empty(42, &q, at),
+            };
+            let (fields, event, _) = project(act, &q, item, at).unwrap();
+            let mut doc_state = existing.unwrap_or_else(|| doc! {
+                "_id": ObjectId::new(),
+                "user_id": 42_i64,
+                "question_id": q.id,
+                "datas": {},
+                "tempos": {},
+                "pastSessions": []
+            });
+            for (k, v) in fields {
+                if let Some((parent, child)) = k.split_once('.') {
+                    doc_state
+                        .entry(parent.to_string())
+                        .or_insert_with(|| bson::Bson::Document(Document::new()))
+                        .as_document_mut()
+                        .unwrap()
+                        .insert(child, v);
+                } else {
+                    doc_state.insert(k, v);
+                }
+            }
+            let sessions = doc_state.get_array_mut("pastSessions").unwrap();
+            sessions.push(bson::Bson::Document(event));
+            sessions.sort_by_key(|b| {
+                let d = b.as_document().unwrap();
+                (
+                    d.get_datetime("data").unwrap().timestamp_millis(),
+                    d.get_str("attempt_id").unwrap().to_string(),
+                )
+            });
+            doc_state
+        };
+
+        // Path A: Chronological arrival (t1 -> t2)
+        let in_order = apply_step(
+            Some(apply_step(None, &older_offline_wrong)),
+            &newer_online_right,
+        );
+        // Path B: Out-of-order offline sync arrival (t2 -> t1)
+        let out_of_order = apply_step(
+            Some(apply_step(None, &newer_online_right)),
+            &older_offline_wrong,
+        );
+
+        let parsed_in: UserActivityDocument = bson::from_document(in_order.clone()).unwrap();
+        let parsed_out: UserActivityDocument = bson::from_document(out_of_order.clone()).unwrap();
+
+        assert_eq!(parsed_out.datas.ultima_sessao, t2);
+        assert_eq!(parsed_out.datas.data_primeira_sessao, t1);
+        assert_eq!(
+            out_of_order
+                .get_document("datas")
+                .unwrap()
+                .get_datetime("ultima_resposta_em")
+                .unwrap()
+                .to_chrono(),
+            t2
+        );
+        // Chronological order in pastSessions preserved [t1, t2]
+        assert_eq!(parsed_out.past_sessions.len(), 2);
+        assert_eq!(parsed_out.past_sessions[0].data, t1);
+        assert_eq!(parsed_out.past_sessions[1].data, t2);
+
+        // Final SRS & notebook state matches chronological replay [false, true], never regressing to t1!
+        assert_eq!(parsed_out.streak_atual, parsed_in.streak_atual);
+        assert_eq!(parsed_out.streak_atual, 1);
+        assert_eq!(parsed_out.points, parsed_in.points);
+        assert_eq!(
+            parsed_out.spaced_repetition_interval,
+            parsed_in.spaced_repetition_interval
+        );
+        assert_eq!(parsed_out.in_error_notebook, parsed_in.in_error_notebook);
+        // Notice: t1 wrong put question in notebook; t2 right with confidence=1 and streak=1 keeps it in notebook!
+        assert!(parsed_out.in_error_notebook);
+        assert!(!parsed_out.high_confidence_error_flag);
+        // Newer user_note at t2 is NOT overwritten by older offline note at t1
+        assert_eq!(parsed_out.user_note.as_deref(), Some("Nota recente online"));
     }
 }

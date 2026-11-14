@@ -52,7 +52,9 @@
       "properties": {
         "uri": {
           "type": "string",
-          "format": "uri"
+          "format": "uri",
+          "maxLength": 2048,
+          "pattern": "^https?://"
         },
         "title": {
           "type": "string",
@@ -1224,7 +1226,9 @@
         "exam_year": {
           "anyOf": [
             {
-              "type": "integer"
+              "type": "integer",
+              "minimum": 1900,
+              "maximum": 2200
             },
             {
               "type": "null"
@@ -1246,12 +1250,15 @@
         "concursos": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "string",
+              "maxLength": 300
             },
             {
               "type": "array",
+              "maxItems": 50,
               "items": {
-                "type": "string"
+                "type": "string",
+                "maxLength": 300
               }
             },
             {

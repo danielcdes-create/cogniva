@@ -160,15 +160,21 @@ fn json_doc(d: Document) -> Value {
 }
 
 impl Runtime {
+    fn read_cache(&self) -> std::sync::RwLockReadGuard<'_, (Arc<Snapshot>, Option<Instant>)> {
+        self.cache.read().unwrap_or_else(|e| e.into_inner())
+    }
+
+    fn write_cache(&self) -> std::sync::RwLockWriteGuard<'_, (Arc<Snapshot>, Option<Instant>)> {
+        self.cache.write().unwrap_or_else(|e| e.into_inner())
+    }
+
     pub fn invalidate(&self) {
-        if let Ok(mut guard) = self.cache.write() {
-            guard.1 = None;
-        }
+        self.write_cache().1 = None;
     }
 
     pub async fn refresh(&self, db: &Database) -> Result<Arc<Snapshot>, AppError> {
         {
-            let guard = self.cache.read().unwrap();
+            let guard = self.read_cache();
             if guard.1.is_some_and(|t| t.elapsed() < CACHE_TTL) {
                 return Ok(guard.0.clone());
             }
@@ -184,7 +190,7 @@ impl Runtime {
     async fn refresh_uncached(&self, db: &Database) -> Result<Arc<Snapshot>, AppError> {
         let _guard = self.refresh_lock.lock().await;
         {
-            let guard = self.cache.read().unwrap();
+            let guard = self.read_cache();
             if guard.1.is_some_and(|t| t.elapsed() < CACHE_TTL) {
                 return Ok(guard.0.clone());
             }
@@ -192,14 +198,14 @@ impl Runtime {
         let head = question_storage::collection(db, "knowledge_catalog_head")
             .find_one(doc! { "_id": "cogniva-knowledge" })
             .await?;
-        let cached = self.cache.read().unwrap().0.clone();
+        let cached = self.read_cache().0.clone();
         let Some(head) = head else {
             if cached.activation_id.is_some() {
                 return Err(conflict(
                     "Ponteiro do catálogo desapareceu; histórico preservado para revisão",
                 ));
             }
-            *self.cache.write().unwrap() = (cached.clone(), Some(Instant::now()));
+            *self.write_cache() = (cached.clone(), Some(Instant::now()));
             return Ok(cached);
         };
         let activation = head
@@ -209,7 +215,7 @@ impl Runtime {
             && head.get_str("catalog_sha256").ok() == Some(cached.hash.as_str())
             && head.get_i64("version").ok() == Some(cached.version)
         {
-            *self.cache.write().unwrap() = (cached.clone(), Some(Instant::now()));
+            *self.write_cache() = (cached.clone(), Some(Instant::now()));
             return Ok(cached);
         }
         let mut lineage = Vec::new();
@@ -276,7 +282,7 @@ impl Runtime {
         }
         archive(db, &next.current).await?;
         let next = Arc::new(next);
-        *self.cache.write().unwrap() = (next.clone(), Some(Instant::now()));
+        *self.write_cache() = (next.clone(), Some(Instant::now()));
         Ok(next)
     }
 }

@@ -23,8 +23,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.CheckCircle
@@ -236,7 +238,11 @@ fun ContestsScreen(
                     androidx.compose.material3.AlertDialog(
                         onDismissRequest = { confirmDeleteContest = false },
                         title = { Text("Excluir $currentContestName?") },
-                        text = { Text("O concurso e sua grade sairão da sua lista. Seu histórico de respostas será mantido.") },
+                        text = {
+                            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                                Text("O concurso e sua grade sairão da sua lista. Seu histórico de respostas será mantido.")
+                            }
+                        },
                         confirmButton = {
                             androidx.compose.material3.TextButton(
                                 onClick = {
@@ -459,6 +465,7 @@ fun ContestsScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
+                    .verticalScroll(rememberScrollState())
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
@@ -538,6 +545,7 @@ fun ContestsScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
+                    .verticalScroll(rememberScrollState())
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {

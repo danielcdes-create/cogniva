@@ -40,6 +40,17 @@ def human_review(provenance):
     return provenance is not None and provenance["actor"]["type"] == "HUMAN" and provenance["method"] == "MANUAL_REVIEW"
 
 
+def check_safe_evidence_list(items):
+    for ev in items or []:
+        uri = str(ev.get("uri") or "").strip()
+        require(uri.startswith(("https://", "http://")), "unsafe evidence uri scheme")
+
+
+def check_provenance_uris(provenance):
+    if provenance is not None:
+        check_safe_evidence_list(provenance.get("evidence"))
+
+
 def taxonomy_links(links, catalog, confirmed):
     topics = {t["topic_id"]: t for t in catalog["topics"]}
     subjects = {s["subject_id"]: s for s in catalog["subjects"]}
@@ -63,6 +74,17 @@ def taxonomy_links(links, catalog, confirmed):
 def validate_question(q, catalog):
     shape("question", q)
     require(q["content_revision"] == content_revision(q), "content revision mismatch")
+    if q.get("exam_year") is not None:
+        require(1900 <= q["exam_year"] <= 2200, "exam_year out of bounds")
+    if isinstance(q.get("concursos"), list):
+        require(len(q["concursos"]) <= 50, "concursos exceeds limit")
+    for origin in q["origins"]:
+        if origin.get("source_reference") is not None:
+            check_safe_evidence_list([origin["source_reference"]])
+        check_provenance_uris(origin.get("provenance"))
+    for link in q["classification"]["links"]:
+        check_provenance_uris(link.get("provenance"))
+    check_provenance_uris(q["validity"].get("decision"))
     require(bool(q["question"].strip()), "empty question")
     answers = q["answers"]
     require(all(a.strip() for a in answers), "blank answer option")

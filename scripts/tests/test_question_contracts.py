@@ -274,6 +274,22 @@ class QuestionContractsTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "another attempt"):
             qc.validate_evaluation_binding(current, attempt, previous)
 
+    def test_unsafe_evidence_uri_schemes_and_out_of_bounds_metadata_fail(self):
+        for bad_uri in ("javascript:alert(1)", "data:text/html,<h1>x</h1>", "file:///etc/passwd"):
+            q = fixture("question-obsolete")
+            q["validity"]["decision"]["evidence"][0]["uri"] = bad_uri
+            with self.assertRaisesRegex(ValueError, "(schema|unsafe evidence uri)"):
+                qc.validate_question(q, self.catalog)
+        for bad_year in (1850, 2250):
+            q = fixture("question-multiple-choice")
+            q["exam_year"] = bad_year
+            with self.assertRaisesRegex(ValueError, "(schema|exam_year)"):
+                qc.validate_question(q, self.catalog)
+        q = fixture("question-multiple-choice")
+        q["concursos"] = [f"CONCURSO_{i}" for i in range(51)]
+        with self.assertRaisesRegex(ValueError, "(schema|concursos)"):
+            qc.validate_question(q, self.catalog)
+
 
 if __name__ == "__main__":
     unittest.main()

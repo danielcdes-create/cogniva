@@ -5,9 +5,12 @@ import hashlib
 import json
 import os
 import pathlib
+import socket
+import ssl
 import subprocess
 import tempfile
 import urllib.error
+import urllib.parse
 import urllib.request
 
 p = argparse.ArgumentParser(description=__doc__)
@@ -25,16 +28,46 @@ assert len(a.revision) == 40 and all(c in '0123456789abcdef' for c in a.revision
 base = a.origin.rstrip('/')
 
 
-def get_json(path: str) -> dict:
+def get_json_with_headers(path: str) -> tuple[dict, dict[str, str]]:
     with urllib.request.urlopen(base + path, timeout=60) as response:
-        return json.load(response)
+        headers = {k.lower(): v for k, v in response.headers.items()}
+        return json.load(response), headers
 
 
-health = get_json('/api/v1/health')
+def get_json(path: str) -> dict:
+    payload, _ = get_json_with_headers(path)
+    return payload
+
+
+def check_tls_remaining_hours(origin_url: str) -> float | None:
+    parsed = urllib.parse.urlsplit(origin_url)
+    if parsed.scheme != 'https' or not parsed.hostname:
+        return None
+    port = parsed.port or 443
+    ctx = ssl.create_default_context()
+    with socket.create_connection((parsed.hostname, port), timeout=10) as raw_sock:
+        with ctx.wrap_socket(raw_sock, server_hostname=parsed.hostname) as tls_sock:
+            cert = tls_sock.getpeercert()
+    not_after = cert.get('notAfter')
+    assert not_after, 'Missing TLS certificate notAfter'
+    expires_at = datetime.datetime.strptime(not_after, '%b %d %H:%M:%S %Y %Z').replace(
+        tzinfo=datetime.timezone.utc
+    )
+    remaining_hours = (expires_at - datetime.datetime.now(datetime.timezone.utc)).total_seconds() / 3600.0
+    assert remaining_hours >= 48.0, f'TLS certificate expires too soon: {remaining_hours:.1f}h'
+    return round(remaining_hours, 2)
+
+
+health, health_headers = get_json_with_headers('/api/v1/health')
 ready = get_json('/api/v1/ready')
 assert health['revision'] == ready['revision'] == a.revision
-assert health['contract_version'] == ready['contract_version'] == 2
+assert health['contract_version'] == ready['contract_version'] == 3
 assert health['version'] == a.version_name
+assert 'max-age=' in health_headers.get('strict-transport-security', ''), 'Missing HSTS header'
+assert health_headers.get('x-content-type-options') == 'nosniff', 'Missing X-Content-Type-Options'
+assert health_headers.get('x-frame-options') == 'DENY', 'Missing X-Frame-Options'
+
+tls_remaining_hours = check_tls_remaining_hours(base)
 
 info = get_json('/api/v1/apk/info')
 assert info == get_json('/api/v1/apk/info'), 'Repeated APK metadata differs'
@@ -100,6 +133,7 @@ server = json.loads(
 
 manifest = server['manifest']
 assert manifest['revision'] == a.revision
+assert manifest.get('contract_version') == 3
 assert manifest['apk_sha256'] == info['sha256_checksum']
 assert manifest['apk_size_bytes'] == info['size_bytes']
 assert manifest['runtime_size_bytes'] < 50_000_000
@@ -118,6 +152,7 @@ result = {
     'metadata_twice_equal': True,
     'anonymous_protected_status': 401,
     'apk': info,
+    'tls_remaining_hours': tls_remaining_hours,
     'tls_renewal_verified': True,
     'server': server,
 }

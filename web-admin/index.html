@@ -52,36 +52,40 @@
     </div>
   </section>
   <div id="app" class="app-shell" hidden>
-    <aside class="sidebar">
-      <a class="brand" href="/admin/"><span class="brand-mark">c.</span> cogniva<span class="brand-sub">ADMIN</span></a>
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-top">
+        <a class="brand" href="/admin/"><span class="brand-mark">c.</span> cogniva<span class="brand-sub">ADMIN</span></a>
+        <button type="button" id="menu-close" class="icon-button sidebar-close" aria-label="Fechar menu">✕</button>
+      </div>
       <span class="nav-label">ESPAÇO DE TRABALHO</span>
       <nav aria-label="Navegação principal">
-        <button data-page="overview">◉ <span>Visão geral</span></button>
-        <button data-page="exams">▣ <span>Concursos</span></button>
-        <button data-page="edital">▤ <span>Editais e grades</span></button>
-        <button data-page="trunks">⌘ <span>Troncos de carreira</span></button>
-        <button data-page="subjects">▥ <span>Disciplinas e assuntos</span></button>
-        <button data-page="questions">▦ <span>Banco de questões</span></button>
-        <button data-page="import">＋ <span>Inserir questões</span></button>
-        <button data-page="classification">✦ <span>Classificação IA</span></button>
-        <button data-page="reports">⚑ <span>Reportes</span></button>
-        <button data-page="catalog">↗ <span>Revisões do catálogo</span></button>
-        <button data-page="drafts">◷ <span>Rascunhos e pendências</span></button>
-        <button data-page="help">? <span>Ajuda</span></button>
+        <button type="button" data-page="overview">◉ <span>Visão geral</span></button>
+        <button type="button" data-page="exams">▣ <span>Concursos</span></button>
+        <button type="button" data-page="edital">▤ <span>Editais e grades</span></button>
+        <button type="button" data-page="trunks">⌘ <span>Troncos de carreira</span></button>
+        <button type="button" data-page="subjects">▥ <span>Disciplinas e assuntos</span></button>
+        <button type="button" data-page="questions">▦ <span>Banco de questões</span></button>
+        <button type="button" data-page="import">＋ <span>Inserir questões</span></button>
+        <button type="button" data-page="classification">✦ <span>Classificação IA</span></button>
+        <button type="button" data-page="reports">⚑ <span>Reportes</span></button>
+        <button type="button" data-page="catalog">↗ <span>Revisões do catálogo</span></button>
+        <button type="button" data-page="drafts">◷ <span>Rascunhos e pendências</span></button>
+        <button type="button" data-page="help">? <span>Ajuda</span></button>
       </nav>
       <div class="sidebar-bottom">
         <span class="connection-dot"></span><span id="connection">Conectado à base Cogniva</span>
         <small>O conhecimento se conecta.<br>O histórico permanece.</small>
       </div>
     </aside>
+    <div id="sidebar-backdrop" class="sidebar-backdrop" hidden aria-hidden="true"></div>
     <div class="main-shell">
       <header class="topbar">
-        <button id="menu-toggle" class="icon-button" aria-label="Abrir menu" aria-expanded="false">☰</button>
+        <button type="button" id="menu-toggle" class="icon-button" aria-label="Abrir menu" aria-controls="sidebar" aria-expanded="false">☰</button>
         <span id="breadcrumb">Administração / Visão geral</span>
         <div class="account">
           <span class="avatar" aria-hidden="true">C</span>
           <span id="account-name"></span>
-          <button id="logout" class="text-button">Sair</button>
+          <button type="button" id="logout" class="text-button">Sair</button>
         </div>
       </header>
       <main id="content" tabindex="-1">
@@ -92,13 +96,13 @@
       <footer>COGNIVA ADMIN 2.0 <span>Base canônica unificada · Decisões auditáveis.</span></footer>
     </div>
   </div>
-  <dialog id="confirm-dialog">
-    <form method="dialog">
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-text">
+    <form method="dialog" class="dialog-panel">
       <h2 id="confirm-title"></h2>
       <p id="confirm-text"></p>
       <div class="actions">
-        <button value="cancel">Cancelar</button>
-        <button value="confirm" class="primary">Confirmar</button>
+        <button type="submit" value="cancel">Cancelar</button>
+        <button type="submit" value="confirm" class="primary">Confirmar</button>
       </div>
     </form>
   </dialog>

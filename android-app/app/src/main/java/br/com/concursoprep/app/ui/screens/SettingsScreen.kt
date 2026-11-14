@@ -1,5 +1,6 @@
 package br.com.concursoprep.app.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -20,15 +21,19 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SettingsBrightness
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.TrackChanges
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -39,6 +44,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -47,9 +53,11 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -62,6 +70,7 @@ import br.com.concursoprep.app.domain.model.AppThemeMode
 import br.com.concursoprep.app.domain.model.UserProfileDto
 import br.com.concursoprep.app.ui.theme.CognivaBrandHeader
 import br.com.concursoprep.app.ui.theme.LocalExtendedColors
+import java.util.Locale
 
 /**
  * Aba "Ajustes" (SettingsScreen):
@@ -107,9 +116,13 @@ fun SettingsScreen(
     accountAuthState: AccountAuthUiState = AccountAuthUiState(),
     onAuthenticateAccount: (email: String, password: String, displayName: String?, isRegister: Boolean) -> Unit = { _, _, _, _ -> },
     onLogoutAccount: () -> Unit = {},
-    onOpenQuestionImport: () -> Unit = {}
+    onOpenQuestionImport: () -> Unit = {},
+    isDeletingAccount: Boolean = false,
+    onDeleteAccount: (confirmText: String) -> Unit = {}
 ) {
-    var managementOpen by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    var managementOpen by rememberSaveable { mutableStateOf(false) }
+    var showDeleteAccountDialog by rememberSaveable { mutableStateOf(false) }
+    var deleteConfirmInput by rememberSaveable { mutableStateOf("") }
     val ext = LocalExtendedColors.current
 
     var displayName by remember(userProfile.displayName) {
@@ -499,7 +512,7 @@ fun SettingsScreen(
                     )
 
                     apkUpdateState.remoteInfo?.let { remote ->
-                        val sizeMb = String.format("%.1f MB", remote.sizeBytes.toDouble() / (1024.0 * 1024.0))
+                        val sizeMb = String.format(Locale.forLanguageTag("pt-BR"), "%.1f MB", remote.sizeBytes.toDouble() / (1024.0 * 1024.0))
                         Text(
                             text = "Servidor Cogniva: v${remote.versionName} (build ${remote.versionCode}) · $sizeMb",
                             style = MaterialTheme.typography.labelMedium,
@@ -639,6 +652,140 @@ fun SettingsScreen(
                     }
                 }
             }
+
+            // =========================================================================
+            // 6. PRIVACIDADE E LGPD (Lei 13.709/2018 - Art. 18)
+            // =========================================================================
+            Card(
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Security,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Privacidade e LGPD (Lei 13.709/2018)",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Text(
+                        text = "Seus dados pessoais de conta, histórico de respostas, estatísticas SRS e grades personalizadas pertencem exclusivamente a você (Art. 18 da LGPD). O acervo compartilhado de questões públicas (todasQuestoes) é mantido de forma anônima para estudo coletivo.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    val canDeleteServerAccount = !userProfile.isGuest || accountAuthState.isAuthenticated || userProfile.userId > 0L
+                    if (canDeleteServerAccount) {
+                        OutlinedButton(
+                            onClick = {
+                                deleteConfirmInput = ""
+                                showDeleteAccountDialog = true
+                            },
+                            enabled = !isDeletingAccount && !accountAuthState.isSubmitting,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .testTag("lgpd_delete_account_button")
+                        ) {
+                            if (isDeletingAccount) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Excluindo conta e dados...")
+                            } else {
+                                Icon(Icons.Default.DeleteForever, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Excluir minha conta e dados pessoais")
+                            }
+                        }
+                    }
+                }
+            }
         }
+    }
+
+    if (showDeleteAccountDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!isDeletingAccount) {
+                    showDeleteAccountDialog = false
+                    deleteConfirmInput = ""
+                }
+            },
+            title = {
+                Text("Excluir minha conta e dados pessoais")
+            },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "Esta ação é irreversível e apagará permanentemente sua conta, credenciais, histórico de tentativas, estatísticas SRS e concursos pessoais no servidor e neste aparelho (Art. 18, VI da LGPD). O banco público de questões (todasQuestoes) permanece intacto.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    OutlinedTextField(
+                        value = deleteConfirmInput,
+                        onValueChange = { deleteConfirmInput = it },
+                        label = { Text("Digite EXCLUIR para confirmar") },
+                        singleLine = true,
+                        enabled = !isDeletingAccount,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("lgpd_delete_confirm_input")
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val confirmedWord = deleteConfirmInput.trim()
+                        showDeleteAccountDialog = false
+                        deleteConfirmInput = ""
+                        onDeleteAccount(confirmedWord)
+                    },
+                    enabled = deleteConfirmInput.trim() == "EXCLUIR" && !isDeletingAccount,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    ),
+                    modifier = Modifier.testTag("lgpd_delete_confirm_submit")
+                ) {
+                    Text("Confirmar exclusão")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteAccountDialog = false
+                        deleteConfirmInput = ""
+                    },
+                    enabled = !isDeletingAccount
+                ) {
+                    Text("Cancelar")
+                }
+            }
+        )
     }
 }

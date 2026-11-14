@@ -1,5 +1,6 @@
 package br.com.concursoprep.app.data.remote
 
+import androidx.annotation.Keep
 import br.com.concursoprep.app.domain.model.AiAssistResponseDto
 import br.com.concursoprep.app.domain.model.ApkInfoDto
 import br.com.concursoprep.app.domain.model.AuthSessionDto
@@ -11,8 +12,10 @@ import br.com.concursoprep.app.domain.model.UserProfileDto
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
+import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.HTTP
 import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Path
@@ -140,6 +143,12 @@ data class ExamBlueprintPayload(
     @SerialName("catalog_version") val catalogVersion:Long
 )
 @Serializable data class CacheStateResponse(@SerialName("projection_version") val projectionVersion:Int,val questions:List<CacheStateItem>,val decisions:List<PracticeDecision> = emptyList())
+@Keep
+@Serializable
+data class DeleteAccountRequest(
+    val confirm: String = "EXCLUIR"
+)
+
 interface ConcursoApiService {
     @GET("admin/questions/import/capabilities") suspend fun questionImportCapabilities(): JsonObject
     @POST("admin/questions/import/preview") suspend fun previewQuestionImport(@Body payload: JsonObject): JsonObject
@@ -165,6 +174,9 @@ interface ConcursoApiService {
 
     @POST("auth/logout")
     suspend fun logout(): JsonObject
+
+    @HTTP(method = "DELETE", path = "auth/account", hasBody = true)
+    suspend fun deleteAccount(@Body body: DeleteAccountRequest): Response<Unit>
 
     @GET("exams")
     suspend fun listExams(): List<ExamBlueprintPayload>

@@ -114,7 +114,11 @@ jobs:
               if not ids:
                   return {}
               out: dict[str, str] = {}
-              for item in json.loads(run('docker', 'inspect', *ids)):
+              for cid in ids:
+                  try:
+                      item = json.loads(run('docker', 'inspect', cid))[0]
+                  except (subprocess.CalledProcessError, IndexError, KeyError, json.JSONDecodeError):
+                      continue
                   name = item.get('Name', '')
                   if name == '/' + service:
                       continue

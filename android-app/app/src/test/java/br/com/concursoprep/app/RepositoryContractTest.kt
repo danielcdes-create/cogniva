@@ -47,33 +47,54 @@ class RepositoryContractTest {
         val questions=ConcurrentHashMap<String,CachedQuestionEntity>()
         val learning=ConcurrentHashMap<String,LearningRecordEntity>()
         val reports=ConcurrentHashMap<String,PendingReportEntity>()
+        val sessions=ConcurrentHashMap<String,QuizSessionEntity>()
         val metadata=ConcurrentHashMap<String,String>()
         val examRows=ConcurrentHashMap<String,UserExamEntity>()
         val subjectRows=ConcurrentHashMap<String,List<ExamSubjectEntity>>()
         val topicRows=ConcurrentHashMap<String,List<ExamTopicEntity>>()
+        val learningChunkSizes=java.util.Collections.synchronizedList(mutableListOf<Int>())
+        val questionChunkSizes=java.util.Collections.synchronizedList(mutableListOf<Int>())
         var remoteExams:List<ExamBlueprintPayload> = emptyList()
         fun putExam(exam:StoredExam){examRows[exam.examId]=ExamLocalMapping.toEntity(exam);subjectRows[exam.examId]=ExamLocalMapping.subjectsOf(exam);topicRows[exam.examId]=ExamLocalMapping.topicsOf(exam)}
         val dao=fake<ConcursoLocalDao>{method,args->when(method){
             "getAllPendingAttempts"->pending.values.sortedBy{it.createdAtEpochMs}
             "getCachedQuestions"->questions.values.toList()
             "findQuestionById"->questions[args[0]]
+            "findQuestionsByIds"->{
+                val ids=(args[0] as List<*>).filterIsInstance<String>()
+                questionChunkSizes.add(ids.size)
+                ids.mapNotNull { questions[it] }
+            }
             "countPendingAttempts"->pending.size
             "countCachedQuestions"->questions.size
             "bindLegacyOwner"->{pending.replaceAll{_,a->if(a.ownerUserId==0L)a.copy(ownerUserId=args[0] as Long)else a};Unit}
             "findPendingAttemptInSession"->pending.values.find{it.sessionUuid==args[0]&&it.questionId==args[1]}
             "enqueuePendingAttempt"->{val a=args[0] as PendingAttemptEntity;pending[a.attemptId]=a;Unit}
             "acknowledgeAttempt"->{val a=pending[args[0]];if(a?.ownerUserId==args[1])pending.remove(args[0]);Unit}
+            "dismissQuarantinedAttempt"->{
+                val id=args[0] as String;val owner=args[1] as Long
+                val a=pending[id]
+                if(a!=null && a.ownerUserId==owner && a.syncError!=null){pending.remove(id);1}else 0
+            }
+            "clearQuarantinedAttempts"->{
+                val owner=args[0] as Long
+                val toRemove=pending.values.filter{it.ownerUserId==owner && it.syncError!=null}.map{it.attemptId}
+                toRemove.forEach{pending.remove(it)}
+                toRemove.size
+            }
             "markAttemptError"->{val a=pending[args[0]];if(a!=null&&a.ownerUserId==args[1])pending[a.attemptId]=a.copy(syncError=args[2] as String?);Unit}
             "insertQuestions"->{(args[0] as List<*>).filterIsInstance<CachedQuestionEntity>().forEach{questions[it.id]=it};Unit}
+            "clearCachedQuestions"->{questions.clear();Unit}
             "updateLearningFlags"->Unit
             else->error("Unexpected DAO operation $method")
         }}
         val exams=fake<ExamDao>{method,args->when(method){
-            "countExams"->1
+            "countExams"->examRows.size.coerceAtLeast(1)
             "listExams"->examRows.values.toList()
             "listPendingExams"->examRows.values.filter { it.syncStatus!="SYNCED" }
             "listTrunks"->emptyList<CareerTrunkEntity>()
             "upsertTrunks"->Unit
+            "setActive"->{val id=args[0] as String;val act=args[1] as Boolean;examRows[id]?.let{examRows[id]=it.copy(isActiveInLadder=act)};Unit}
             "subjectsFor"->subjectRows[args[0]].orEmpty()
             "topicsFor"->topicRows[args[0]].orEmpty()
             "upsertExam"->{val e=args[0] as UserExamEntity;examRows[e.examId]=e;Unit}
@@ -85,17 +106,56 @@ class RepositoryContractTest {
         }}
         val durable=fake<DurableStateDao>{method,args->when(method){
             "learning"->learning.values.toList()
+            "learningForQuestions"->{
+                val ids=(args[0] as List<*>).filterIsInstance<String>()
+                learningChunkSizes.add(ids.size)
+                ids.mapNotNull { learning[it] }
+            }
             "putLearning"->{(args[0] as List<*>).filterIsInstance<LearningRecordEntity>().forEach{learning[it.questionId]=it};Unit}
             "metadata"->metadata[args[0]]
+            "deleteMetadata"->{metadata.remove(args[0] as String);Unit}
             "preservedExamEdits"->metadata.filterKeys { it.startsWith("exam_backup:") }.map { LocalMetadataEntity(it.key,it.value) }
             "putMetadata"->{val m=args[0] as LocalMetadataEntity;metadata[m.key]=m.value;Unit}
             "reports"->reports.values.filter{it.ownerUserId==args[0]}
             "enqueueReport"->{val r=args[0] as PendingReportEntity;reports.putIfAbsent(r.eventId,r);Unit}
             "acknowledgeReport"->{reports.remove(args[0]);Unit}
+            "createSession"->{val s=args[0] as QuizSessionEntity;sessions[s.sessionId]=s;Unit}
+            "deactivateOtherSessions"->{
+                val owner=args[0] as Long;val keep=args[1] as String
+                sessions.replaceAll{_,s->if(s.ownerUserId==owner && s.active && s.sessionId!=keep)s.copy(active=false)else s};Unit
+            }
+            "saveSession"->{
+                val id=args[0] as String;val owner=args[1] as Long;val payload=args[2] as String;val rev=args[3] as Long;val at=args[4] as Long
+                val cur=sessions[id]
+                if(cur!=null && cur.ownerUserId==owner && cur.active && cur.revision<rev){
+                    sessions[id]=cur.copy(payloadJson=payload,revision=rev,updatedAt=at)
+                }
+                Unit
+            }
+            "completeSession"->{
+                val id=args[0] as String;val owner=args[1] as Long
+                sessions[id]?.takeIf{it.ownerUserId==owner}?.let{sessions[id]=it.copy(active=false)};Unit
+            }
+            "pausedSession"->{
+                val owner=args[0] as Long
+                sessions.values.filter{it.active && it.ownerUserId==owner}.maxByOrNull{it.updatedAt}
+            }
+            "pruneSessionsOlderThan"->{
+                val cutoff=args[0] as Long
+                sessions.entries.removeIf{it.value.updatedAt<cutoff};Unit
+            }
             "observeMetadata"->flowOf(null)
             else->error("Unexpected durable operation $method")
         }}
-        fun repository(submit:(SubmitBatchPayload)->SubmitBatchResponseDto={throw IOException("Synthetic outage")},sendReport:()->Unit={},updateExam:(ExamBlueprintPayload)->ExamBlueprintPayload={throw IOException("Synthetic outage")},generate:(QuizGeneratePayload)->List<QuestionDto> = {throw IOException("Synthetic outage")},aiTutor:(String,String,Int?)->AiAssistResponseDto={_,_,_->throw IOException("Synthetic outage")}):ConcursoRepository {
+        fun repository(
+            submit:(SubmitBatchPayload)->SubmitBatchResponseDto={throw IOException("Synthetic outage")},
+            sendReport:()->Unit={},
+            updateExam:(ExamBlueprintPayload)->ExamBlueprintPayload={throw IOException("Synthetic outage")},
+            generate:(QuizGeneratePayload)->List<QuestionDto> = {throw IOException("Synthetic outage")},
+            aiTutor:(String,String,Int?)->AiAssistResponseDto={_,_,_->throw IOException("Synthetic outage")},
+            saveOnboarding:(OnboardingPayload)->UserProfileDto={UserProfileDto(it.userId,displayName=it.displayName,dailyQuestionsTarget=it.dailyQuestionsTarget,dailyStudyHoursTarget=it.dailyStudyHoursTarget,activeContestIds=it.activeContestIds)},
+            deleteAccount:(DeleteAccountRequest)->retrofit2.Response<Unit> = {retrofit2.Response.success(Unit)}
+        ):ConcursoRepository {
             val api=fake<ConcursoApiService>{method,args->when(method){
                 "submitAttemptsBatch"->submit(args[0] as SubmitBatchPayload)
                 "listExams"->remoteExams
@@ -107,6 +167,10 @@ class RepositoryContractTest {
                 "reportQuestionProblem"->{sendReport();Unit}
                 "generateQuizQuestions"->generate(args[0] as QuizGeneratePayload)
                 "requestAiTutor"->aiTutor(args[0] as String,args[1] as String,args[2] as Int?)
+                "saveOnboardingPreferences"->saveOnboarding(args[0] as OnboardingPayload)
+                "profile"->UserProfileDto(123,displayName="Estudante",isGuest=true)
+                "getApkInfo"->{throw IOException("Synthetic offline APK check")}
+                "deleteAccount"->deleteAccount(args[0] as DeleteAccountRequest)
                 else->error("Unexpected API operation $method")
             }}
             return ConcursoRepository(api,dao,exams,json,durable=durable,ownerUserId=123)
@@ -403,5 +467,207 @@ class RepositoryContractTest {
             syllabusTopicId="FIN_PUB_01"
         )
         assertEquals(listOf(qTopic1.id),selected.map { it.id })
+    }
+
+    @Test fun profileSyncFailureNeverAbortsPendingAttemptSyncAndTerminal4xxClearsDirtyFlag() = runBlocking {
+        val store = Store()
+        val a = attempt()
+        store.add(a)
+        val dirtyPayload = OnboardingPayload(123, listOf("CPNU"), 45, 2.5, "Estudante")
+        store.metadata["pending_profile"] = json.encodeToString(dirtyPayload)
+
+        // 1. Transient HTTP 500 on profile sync: attempts MUST still sync, and pending_profile stays queued for retry
+        val repo500 = store.repository(
+            submit = { SubmitBatchResponseDto(1, listOf(ack(a))) },
+            saveOnboarding = {
+                throw retrofit2.HttpException(
+                    retrofit2.Response.error<UserProfileDto>(500, "{}".toResponseBody("application/json".toMediaType()))
+                )
+            }
+        )
+        assertTrue(runCatching { repo500.syncPendingAttempts(123) }.isFailure)
+        assertTrue("Pending attempt must sync even when profile sync returns 500", store.pending.isEmpty())
+        assertTrue("Dirty profile flag must remain set for retry on 500", store.metadata["pending_profile"]?.isNotBlank() == true)
+
+        // 2. Terminal HTTP 422 on profile sync: attempts sync AND dirty profile flag is cleared
+        val b = attempt(question("000000000000000000000002"))
+        store.add(b)
+        val repo422 = store.repository(
+            submit = { SubmitBatchResponseDto(1, listOf(ack(b))) },
+            saveOnboarding = {
+                throw retrofit2.HttpException(
+                    retrofit2.Response.error<UserProfileDto>(422, """{"message":"invalid"}""".toResponseBody("application/json".toMediaType()))
+                )
+            }
+        )
+        val synced = repo422.syncPendingAttempts(123)
+        assertEquals(1, synced)
+        assertTrue(store.pending.isEmpty())
+        assertEquals("", store.metadata["pending_profile"].orEmpty())
+    }
+
+    @Test fun quarantinedAttemptsCanBeDismissedAndDoNotBlockClearLocalQuestionCache() = runBlocking {
+        val store = Store()
+        val unsynced = attempt(question("000000000000000000000021"))
+        store.add(unsynced)
+        val repo = store.repository()
+
+        // Unsynced attempt (syncError == null) blocks clearing question cache
+        assertTrue(runCatching { repo.clearLocalQuestionCache() }.isFailure)
+        assertEquals(1, store.questions.size)
+
+        // Mark attempt as permanently rejected/quarantined (syncError != null)
+        store.pending[unsynced.attemptId] = unsynced.copy(syncError = "Questão substituída no servidor")
+
+        // Quarantined item no longer permanently blocks clearing local question cache!
+        repo.clearLocalQuestionCache()
+        assertTrue(store.questions.isEmpty())
+        assertEquals(1, store.pending.size)
+
+        // PendingReviewItem exposes canDismiss = true for quarantined attempt and user can dismiss it
+        val reviewItems = repo.pendingReview()
+        val reviewTarget = reviewItems.single { it.id == unsynced.attemptId }
+        assertTrue(reviewTarget.canDismiss)
+        assertTrue(repo.dismissQuarantinedAttempt(unsynced.attemptId))
+        assertTrue(store.pending.isEmpty())
+    }
+
+    @Test fun learningMapForQuestionsChunksRequestsAtMost400Parameters() = runBlocking {
+        val store = Store()
+        val repo = store.repository()
+        val ids = (1..950).map { idx -> "q-%04d".format(idx) }
+        ids.forEach { qid ->
+            val rec = LearningRecord(
+                questionId = qid,
+                disciplina = "Direito Constitucional",
+                attempts = 2,
+                correct = 1,
+                accuracyPct = 50.0,
+                isMastered = false,
+                inErrorNotebook = true,
+                highConfidenceError = false,
+                points = 0.2,
+                nextReviewAt = "2026-12-01T00:00:00Z"
+            )
+            store.learning[qid] = LearningRecordEntity(qid, 1L, json.encodeToString(rec))
+        }
+        store.learningChunkSizes.clear()
+        val loaded = repo.learningMapForQuestions(ids)
+        assertEquals(950, loaded.size)
+        assertEquals(listOf(400, 400, 150), store.learningChunkSizes.toList())
+        assertTrue(store.learningChunkSizes.all { it <= ConcursoRepository.SQLITE_BIND_CHUNK_SIZE })
+    }
+
+    @Test fun pruneAbandonedSessionsRemovesSessionsOlderThan30Days() = runBlocking {
+        val store = Store()
+        val repo = store.repository()
+        val nowMs = Instant.parse("2026-11-14T12:00:00Z").toEpochMilli()
+        val staleMs = nowMs - (31L * 24L * 60L * 60L * 1000L)
+        val recentMs = nowMs - (5L * 24L * 60L * 60L * 1000L)
+        store.sessions["stale-1"] = QuizSessionEntity("stale-1", 123L, "{}", 1L, active = false, updatedAt = staleMs)
+        store.sessions["stale-2"] = QuizSessionEntity("stale-2", 123L, "{}", 1L, active = true, updatedAt = staleMs)
+        store.sessions["recent-1"] = QuizSessionEntity("recent-1", 123L, "{}", 1L, active = true, updatedAt = recentMs)
+
+        repo.pruneAbandonedSessions(nowMs)
+        assertEquals(setOf("recent-1"), store.sessions.keys)
+    }
+
+    @Test fun simuladoBatchPersistsAtomicallyAndRestoresProgressAcrossProcessDeath() = runBlocking {
+        val store = Store()
+        val q1 = question("000000000000000000000031")
+        val q2 = question("000000000000000000000032")
+        val q3 = question("000000000000000000000033")
+        listOf(q1, q2, q3).forEach { store.questions[it.id] = QuestionCacheMapping.toEntity(it, json) }
+        val repo = store.repository()
+
+        val initialSession = SessionSnapshot(
+            sessionId = "simulado-1",
+            ownerUserId = 123L,
+            questions = listOf(q1, q2, q3),
+            mode = QuizMode.SIMULADO,
+            exam = null,
+            currentIndex = 1,
+            answers = mapOf(
+                q1.id to SessionAnswer(chosenIndex = 1, confidenceLevel = 3, timeSpentSeconds = 25, submitted = false),
+                q2.id to SessionAnswer(chosenIndex = 0, confidenceLevel = 2, timeSpentSeconds = 30, submitted = false)
+            ),
+            revision = 2L
+        )
+        repo.createSession(initialSession)
+
+        // Simulate SavedStateHandle surviving Android process death at index 2
+        val savedHandle = androidx.lifecycle.SavedStateHandle(
+            mapOf(
+                "active_session_id" to "simulado-1",
+                "active_session_index" to 2
+            )
+        )
+        val testVmScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        try {
+            val restoredVm = br.com.concursoprep.app.ui.MainViewModel(
+                repo,
+                appContext = null,
+                savedStateHandle = savedHandle,
+                overrideScope = testVmScope
+            )
+            withTimeout(5_000) {
+                while (restoredVm.activeSession.value == null) {
+                    delay(20)
+                }
+            }
+            val restoredSession = checkNotNull(restoredVm.activeSession.value)
+            assertEquals("simulado-1", restoredSession.sessionId)
+            assertEquals(2, restoredSession.currentIndex)
+            assertEquals(2, restoredSession.answers.size)
+            assertTrue(restoredVm.isSimuladoSession.value)
+
+            // Submit final Simulado batch atomically
+            val finalAnswers = restoredSession.answers + (
+                q3.id to SessionAnswer(chosenIndex = 1, confidenceLevel = 1, timeSpentSeconds = 18, submitted = false)
+            )
+            assertTrue(restoredVm.submitSimuladoBatch(finalAnswers))
+            assertEquals(3, store.pending.size)
+            val persistedAfterFinish = checkNotNull(repo.pausedSession())
+            assertTrue(persistedAfterFinish.finished)
+            assertTrue(persistedAfterFinish.answers.values.all { it.submitted })
+        } finally {
+            testVmScope.cancel()
+        }
+    }
+
+    @Test fun lgpdDeleteAccountSendsConfirmExcluirAndWipesLocalQueueOnlyOnSuccess() = runBlocking {
+        val store = Store()
+        val a = attempt()
+        store.add(a)
+        store.metadata["pending_profile"] = """{"user_id":123}"""
+        val capturedConfirm = mutableListOf<String>()
+
+        // 1. Wrong confirmation word is rejected locally before calling server
+        val repoRejectWord = store.repository(deleteAccount = {
+            capturedConfirm += it.confirm
+            retrofit2.Response.success(Unit)
+        })
+        assertTrue(runCatching { repoRejectWord.deleteAccount("CANCELAR") }.isFailure)
+        assertTrue(capturedConfirm.isEmpty())
+        assertEquals(1, store.pending.size)
+
+        // 2. Server HTTP 500 preserves local pending queue
+        val repo500 = store.repository(deleteAccount = {
+            capturedConfirm += it.confirm
+            retrofit2.Response.error(500, """{"message":"erro"}""".toResponseBody("application/json".toMediaType()))
+        })
+        assertTrue(runCatching { repo500.deleteAccount("EXCLUIR") }.isFailure)
+        assertEquals(listOf("EXCLUIR"), capturedConfirm)
+        assertEquals(1, store.pending.size)
+
+        // 3. Server HTTP 200 wipes local pending queue and sync metadata
+        val repoOk = store.repository(deleteAccount = {
+            capturedConfirm += it.confirm
+            retrofit2.Response.success(Unit)
+        })
+        repoOk.deleteAccount("EXCLUIR")
+        assertEquals(listOf("EXCLUIR", "EXCLUIR"), capturedConfirm)
+        assertTrue(store.pending.isEmpty())
+        assertNull(store.metadata["pending_profile"])
     }
 }

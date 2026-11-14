@@ -104,6 +104,7 @@ jobs:
           cp deploy/promote.py release-bundle/
           cp deploy/stage_bundle.py release-bundle/
           cp scripts/cleanup-registry.py release-bundle/
+          (cd release-bundle && sha256sum cogniva.apk output-metadata.json release.json promote.py stage_bundle.py cleanup-registry.py > SHA256SUMS)
       - uses: actions/upload-artifact@v4
         with:
           name: cogniva-release-${{ github.sha }}
@@ -122,6 +123,9 @@ jobs:
         with:
           name: cogniva-release-${{ github.sha }}
           path: release-bundle
+      - name: Verify release bundle SHA256SUMS
+        working-directory: release-bundle
+        run: sha256sum -c SHA256SUMS
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -198,6 +202,9 @@ jobs:
         with:
           name: cogniva-release-${{ github.sha }}
           path: release-bundle
+      - name: Verify release bundle SHA256SUMS
+        working-directory: release-bundle
+        run: sha256sum -c SHA256SUMS
       - name: Install trusted SSH credentials
         env:
           SSH_KEY: ${{ secrets.DO_SSH_KEY }}

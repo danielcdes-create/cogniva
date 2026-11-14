@@ -145,8 +145,35 @@ pub fn decode(mut raw: Document) -> Result<QuestionDocument, AppError> {
         raw.insert("canonical_topic_id", Bson::Null);
     }
 
+    if let Some(year_bson) = raw.get("exam_year").cloned() {
+        if !matches!(year_bson, Bson::Null) {
+            let year = crate::services::question_contracts::checked_bson_i32(&year_bson, "exam_year")
+                .map_err(|_| AppError::Conflict("Ano da prova inválido".into()))?;
+            if !(crate::services::question_contracts::MIN_EXAM_YEAR
+                ..=crate::services::question_contracts::MAX_EXAM_YEAR)
+                .contains(&year)
+            {
+                return Err(AppError::Conflict("Ano da prova fora da faixa válida".into()));
+            }
+            raw.insert("exam_year", Bson::Int32(year));
+        }
+    }
+    if let Some(Bson::String(single_concurso)) = raw.get("concursos").cloned() {
+        let items = if single_concurso.trim().is_empty() {
+            Vec::new()
+        } else {
+            vec![Bson::String(single_concurso)]
+        };
+        raw.insert("concursos", Bson::Array(items));
+    }
+
     let mut q: QuestionDocument = bson::from_document(raw.clone())
         .map_err(|_| AppError::Conflict("Documento de questão inválido".into()))?;
+    if q.concursos.len() > crate::services::question_contracts::MAX_CONCURSOS_ITEMS {
+        return Err(AppError::Conflict(
+            "Lista de concursos excede o limite contratual".into(),
+        ));
+    }
     let computed_rev = q.revision()?;
     if !q.content_revision.is_empty() && q.content_revision != computed_rev {
         return Err(AppError::Conflict(

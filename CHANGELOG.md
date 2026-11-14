@@ -1,6 +1,26 @@
 # Changelog — Cogniva
 
-Todas as mudanças arquiteturais e funcionais relevantes do ecossistema **Cogniva** são documentadas neste arquivo.
+Todas as mudanças arquiteturais, de segurança, acessibilidade e operacionais relevantes do ecossistema **Cogniva** são documentadas neste arquivo.
+
+---
+
+## [2.0.1] - 2026-11-14 (build 26)
+
+Blindagem estrutural pós-auditoria adversarial completa nos 8 eixos de engenharia (segurança, confiabilidade/SRS, performance, contratos Schema v2, UX/WCAG 2.1 AA, CI/CD, infraestrutura TLS/Nginx e governança LGPD/IA) sobre a arquitetura convergente `2.0`.
+
+### Governança LGPD (Art. 18), Segurança e Privacidade de IA
+- **Direito de eliminação imediata pelo titular (`DELETE /api/v1/auth/account` + fluxo Android):** Implementação física da exclusão de conta e dados pessoais mediante confirmação explícita `{"confirm": "EXCLUIR"}` no backend Rust e em **Ajustes → Privacidade e LGPD** no Android, removendo `usuarios`, `sessions`, `userActivityLog`, `attempt_receipts`, `user_exams`, `exam_revisions` de usuário, `question_exam_compatibility`, `answer_evaluations`, `tutor_budgets` individuais, rascunhos privados e requisições de IA, anonimizando `reportedQuestoes` e **preservando 100% do acervo compartilhado** (`todasQuestoes`, `question_revision_events`, `knowledge_catalog_*`, `exam_templates`). Adicionados [`PRIVACY.md`](PRIVACY.md) e [`SECURITY.md`](SECURITY.md).
+- **Blindagem contra CSRF, enumeração e abuso de cotas:** Validação estrita de esquema + origem (`X-Forwarded-Proto` + `Origin`/`Referer`) e `Sec-Fetch-Site` em requisições autenticadas por cookie, extração resiliente de múltiplos cabeçalhos `Cookie`, CORS estrito sem curingas, limitador deslizante em memória por IP (`BoundedSlidingWindowLimiter`) nas rotas `/api/v1/auth/{guest,register,login,web-session}` e teto diário reduzido (`5/dia`) para contas convidadas no fuso `America/Sao_Paulo` (`UTC-3`).
+- **Defesa contra injeção indireta de prompt e sigilo de cache (`xAI`):** Delimitação XML `<untrusted_student_input>` e `<untrusted_raw_source>` com neutralização de fechamento prematuro, bloqueio total de leitura/escrita em cache compartilhado quando há `user_note` ou resposta pessoal do estudante (`should_use_shared_ai_cache`) e estorno garantido de cota em falhas do provedor em `ai_tutor.rs` e `question_import.rs`.
+
+### Confiabilidade Offline-First, Contratos V2 e Cliente Android (`build 26`)
+- **Replay cronológico SRS e simetria de bônus:** Correção do fator de sequência em `srs_engine.rs` para utilizar `streak_atual` (em vez de `streak_max` histórico) e reordenação/replay cronológico em `attempts.rs` quando tentativas *offline* sincronizadas trazem `client_answered_at` anterior à última sessão registrada.
+- **Endurecimento de contratos Schema v2:** Bloqueio de esquemas URI inseguros (`javascript:`, `data:`, `file:`) exigindo `^https?://` em `source_reference.uri` e `evidence[*].uri`, validação de limites em `exam_year` (`1900..=2200`) e `concursos` (`<= 50`) e conversão inteira BSON verificada sem truncamento silencioso em [`shared/schemas/question-contracts.schema.json`](shared/schemas/question-contracts.schema.json), Python e Rust.
+- **Durabilidade e segurança no Android (`2.0.1` / `versionCode = 26`):** `android:allowBackup="false"` com regras explícitas de exclusão XML, `readTimeout(65s)` para chamadas IA, verificação estrita de tamanho + SHA-256 sem janela TOCTOU e limpeza de sessões órfãs no `PackageInstaller`, isolamento entre falhas de `syncPendingProfile` e `syncPendingAttempts`, descarte de itens em quarentena sem bloquear limpeza de cache, consulta em lote `learningForQuestions`, persistência atômica de simulados + rascunho resistente à morte de processo, parser Markdown multi-linha com links restritos a `https://`, tema próprio `Theme.Cogniva.EdgeToEdgeDialog` (zero `@PrivateResource`) e contraste WCAG 2.1 AA verificado por teste automatizado.
+
+### Painel Web Admin (`/admin/`), Borda TLS/Nginx e CI/CD
+- **Resiliência e acessibilidade WCAG 2.1 AA no `/admin/`:** Teto de 20 snapshots locais sem aninhamento recursivo em `localStorage` + botão *Limpar histórico local*, tratamento gracioso de `QuotaExceededError`, logout resiliente sob falhas HTTP `502`/`503`, banner de recuperação em falhas parciais de carregamento, detecção de conflito entre rascunhos limpos/sujos, validação amigável do JSON de rubrica `OPEN_ENDED`, rotação de `aiOperationId` após erros, paginação bidirecional, busca normalizada NFD, *drawer* móvel responsivo, `<dialog>` acessível com preservação de foco/`<details>` e contraste `>= 4.5:1` auditado em `web-admin/tests/app.test.js`.
+- **Infraestrutura, Nginx e Pipeline Imutável:** Cabeçalhos HSTS (`max-age=604800`), `Referrer-Policy: no-referrer`, `Permissions-Policy` e JSON `503` (`Retry-After: 15`) em [`deploy/nginx-cogniva.conf`](deploy/nginx-cogniva.conf), zonas de rate-limit `4m` com prefixo IPv6 `/64` em [`deploy/nginx-rate-limits.conf`](deploy/nginx-rate-limits.conf), inspeção individual tolerante a contêineres efêmeros + *hardlink* de APKs + poda automática de releases antigas em [`deploy/promote.py`](deploy/promote.py), alinhamento `contract_version == 3` e auditoria direta de validade TLS (`>= 48h`) em [`scripts/package-release.py`](scripts/package-release.py) e [`scripts/verify-production-release.py`](scripts/verify-production-release.py), `cargo clippy -- -D warnings` em `validate.yml`, verificação `SHA256SUMS` em `deploy.yml` e permissões KVM restritas (`0660`) em `emulator-insets.yml`.
 
 ---
 

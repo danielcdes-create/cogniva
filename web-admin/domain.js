@@ -1,3 +1,6 @@
+export const MAX_ARCHIVES = 20;
+export const RUBRIC_JSON_ERROR = 'JSON inválido na rubrica: informe um array JSON válido nos critérios da rubrica.';
+
 export function normalizeIdentityKey(value) {
   return String(value ?? '')
     .normalize('NFKD')
@@ -5,6 +8,53 @@ export function normalizeIdentityKey(value) {
     .trim()
     .replace(/\s+/g, ' ')
     .toLocaleLowerCase('pt-BR');
+}
+
+export function normalizeSearchText(value) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+export function matchesSearch(text, query) {
+  const terms = normalizeSearchText(query).trim().split(/\s+/).filter(Boolean);
+  if (!terms.length) return true;
+  const haystack = normalizeSearchText(text);
+  return terms.every(term => haystack.includes(term));
+}
+
+export function parseOpenEndedGradingJson(rawText) {
+  if (typeof rawText !== 'string' || !rawText.trim()) {
+    throw new Error('JSON inválido na rubrica: informe o objeto JSON de correção e rubrica.');
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(rawText);
+  } catch {
+    throw new Error('JSON inválido na rubrica: verifique chaves, aspas e vírgulas.');
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('JSON inválido na rubrica: o campo deve conter um objeto JSON de correção.');
+  }
+  if (parsed.strategy === 'RUBRIC' || parsed.rubric != null) {
+    const criteria = parsed.rubric?.criteria;
+    if (!Array.isArray(criteria) || criteria.length === 0) {
+      throw new Error('JSON inválido na rubrica: rubric.criteria deve conter ao menos um critério.');
+    }
+    let totalPoints = 0;
+    for (const c of criteria) {
+      if (!c || typeof c !== 'object' || typeof c.criterion_id !== 'string' || !c.criterion_id.trim() || typeof c.description !== 'string' || !c.description.trim() || typeof c.max_points !== 'number' || c.max_points <= 0) {
+        throw new Error('JSON inválido na rubrica: cada critério exige criterion_id, description e max_points positivo.');
+      }
+      totalPoints += c.max_points;
+    }
+    const maxScore = typeof parsed.max_score === 'number' && parsed.max_score > 0 ? parsed.max_score : 100;
+    if (Math.abs(totalPoints - maxScore) > 1e-6) {
+      throw new Error(`JSON inválido na rubrica: os pontos dos critérios devem somar ${maxScore} (atual: ${totalPoints}).`);
+    }
+  }
+  return parsed;
 }
 
 export function parseQuestions(source) {
@@ -21,6 +71,15 @@ export function parseQuestions(source) {
   }
   const items = Array.isArray(value) ? value : [value];
   if (items.length < 1 || items.length > 50 || items.some(v => !v || typeof v !== 'object' || Array.isArray(v))) throw new Error('Informe de 1 a 50 objetos de questão.');
+  for (const [idx, item] of items.entries()) {
+    if (item.question_type === 'OPEN_ENDED' && typeof item.grading === 'string') {
+      try {
+        item.grading = parseOpenEndedGradingJson(item.grading);
+      } catch (err) {
+        throw new Error(`Questão ${idx + 1}: ${err.message}`);
+      }
+    }
+  }
   return items;
 }
 
@@ -62,13 +121,14 @@ export function objectiveDraft(form) {
   if (open) {
     if (!form.reference || !form.reference.trim()) throw new Error('Informe a resposta de referência da questão discursiva.');
     let criteria;
+    if (typeof form.criteria !== 'string' || !form.criteria.trim()) throw new Error(RUBRIC_JSON_ERROR);
     try { criteria = JSON.parse(form.criteria); }
-    catch { throw new Error('Informe um array JSON válido nos critérios da rubrica.'); }
-    if (!Array.isArray(criteria) || criteria.length === 0) throw new Error('A rubrica discursiva exige ao menos um critério.');
+    catch { throw new Error(RUBRIC_JSON_ERROR); }
+    if (!Array.isArray(criteria) || criteria.length === 0) throw new Error('JSON inválido na rubrica: a rubrica discursiva exige ao menos um critério.');
     let totalPoints = 0;
     for (const c of criteria) {
       if (!c || typeof c !== 'object' || typeof c.criterion_id !== 'string' || !c.criterion_id.trim() || typeof c.description !== 'string' || !c.description.trim() || typeof c.max_points !== 'number' || c.max_points <= 0) {
-        throw new Error('Cada critério da rubrica exige criterion_id, description e max_points positivo.');
+        throw new Error('JSON inválido na rubrica: cada critério exige criterion_id, description e max_points positivo.');
       }
       totalPoints += c.max_points;
     }
@@ -138,11 +198,51 @@ export function freshImport(id, aiId) {
   return {mode:'single',operationId:id,aiOperationId:aiId,source:'',assistanceId:null,aiMode:'STRUCTURE',preview:null,result:null,submitted:false,form:{kind:'MULTIPLE_CHOICE',question:'',answers:['','','','',''],correctIndex:'',reference:'',criteria:'',originKind:'LEGACY_IMPORT',sourceExamCode:'',institution:'',organizer:'',examYear:'',questionNumber:'',sourceUri:'',sourceTitle:'',sourceLocator:'',sourceDate:'',confirmOrigin:false,explanation:'',level:'',subjectId:'',topicId:'',confirmClassification:false}};
 }
 
-export function exportWorkspace(owner, workspace) { return {format:'cogniva-admin-workspace/1',owner_user_id:String(owner),workspace}; }
+export function sanitizeArchiveValue(value) {
+  const cloned = structuredClone(value);
+  if (cloned && typeof cloned === 'object' && !Array.isArray(cloned)) {
+    if ('archives' in cloned) cloned.archives = [];
+    if (cloned.value && typeof cloned.value === 'object' && !Array.isArray(cloned.value) && 'archives' in cloned.value) {
+      cloned.value.archives = [];
+    }
+  }
+  return cloned;
+}
+
+export function sanitizeArchives(archives) {
+  if (!Array.isArray(archives)) return [];
+  return archives
+    .filter(item => item && typeof item === 'object' && !Array.isArray(item))
+    .map(item => ({
+      ...structuredClone(item),
+      value: sanitizeArchiveValue(item.value)
+    }))
+    .slice(-MAX_ARCHIVES);
+}
+
+export function pushArchive(ws, type, value, savedAt = new Date().toISOString()) {
+  if (!ws || typeof ws !== 'object') return [];
+  ws.archives = sanitizeArchives(ws.archives);
+  ws.archives.push({type, saved_at: savedAt, value: sanitizeArchiveValue(value)});
+  if (ws.archives.length > MAX_ARCHIVES) {
+    ws.archives.splice(0, ws.archives.length - MAX_ARCHIVES);
+  }
+  return ws.archives;
+}
+
+export function exportWorkspace(owner, workspace) {
+  return {format:'cogniva-admin-workspace/1',owner_user_id:String(owner),workspace};
+}
 
 export function restoreWorkspace(owner, envelope) {
-  if (envelope?.format !== 'cogniva-admin-workspace/1' || String(envelope.owner_user_id) !== String(owner) || !envelope.workspace || typeof envelope.workspace !== 'object' || Array.isArray(envelope.workspace)) throw new Error('Rascunho inválido ou pertencente a outra conta.');
-  return structuredClone(envelope.workspace);
+  if (envelope?.format !== 'cogniva-admin-workspace/1' || String(envelope.owner_user_id) !== String(owner) || !envelope.workspace || typeof envelope.workspace !== 'object' || Array.isArray(envelope.workspace)) {
+    throw new Error('Rascunho inválido ou pertencente a outra conta.');
+  }
+  const recovered = structuredClone(envelope.workspace);
+  if ('archives' in recovered) {
+    recovered.archives = sanitizeArchives(recovered.archives);
+  }
+  return recovered;
 }
 
 export function validityPresentation(validity,today) {
@@ -152,7 +252,9 @@ export function validityPresentation(validity,today) {
   return validity.scope==='EXPLICIT_HISTORICAL_DATE' ? `${label} no contexto histórico de ${validity.context_date || 'data não informada'}` : label;
 }
 
-export function manualProvenance(actor,rationale){return {actor:{type:'HUMAN',id:String(actor)},method:'MANUAL_REVIEW',rationale,recorded_at:new Date().toISOString(),evidence:[],model:null,prompt_id:null,prompt_version:null,source_suggestion_id:null};}
+export function manualProvenance(actor,rationale){
+  return {actor:{type:'HUMAN',id:String(actor)},method:'MANUAL_REVIEW',rationale,recorded_at:new Date().toISOString(),evidence:[],model:null,prompt_id:null,prompt_version:null,source_suggestion_id:null};
+}
 
 export function legacyQuestionDraft(raw,catalog,actor,originId){
   const q=structuredClone(raw);
@@ -161,8 +263,15 @@ export function legacyQuestionDraft(raw,catalog,actor,originId){
   let indices=[];
   const explicit=Array.isArray(raw.correct_answer_indices)?raw.correct_answer_indices:[];
   const texts=Array.isArray(raw.correct_answers)?raw.correct_answers:[];
-  if(explicit.length===1 && Number.isInteger(explicit[0]) && explicit[0]>=0 && explicit[0]<answers.length && (texts.length===0 || texts.length===1 && texts[0]===answers[explicit[0]]))indices=[explicit[0]];
-  else if(explicit.length===0 && texts.length===1){const matches=answers.flatMap((answer,index)=>answer===texts[0]?[index]:[]);if(matches.length===1)indices=matches;}
+  const sameAnswer=(a,b)=>typeof a==='string' && typeof b==='string' && a.trim()===b.trim();
+  if(explicit.length===1 && Number.isInteger(explicit[0]) && explicit[0]>=0 && explicit[0]<answers.length && (texts.length===0 || texts.length===1 && sameAnswer(texts[0],answers[explicit[0]])))indices=[explicit[0]];
+  else if(explicit.length===0 && texts.length===1){const matches=answers.flatMap((answer,index)=>sameAnswer(answer,texts[0])?[index]:[]);if(matches.length===1)indices=matches;}
+  for (const key of ['explanation','drSincero','ajudaInfantil','explicacaoInfantil','explanationExtra','mnemonico','plausibilityMarkdown','source','level']) {
+    if (typeof q[key] === 'string' && !q[key].trim()) delete q[key];
+  }
+  if (q.disciplina === null || (typeof q.disciplina === 'string' && !q.disciplina.trim())) delete q.disciplina;
+  if (q.contextualHint === null) delete q.contextualHint;
+  if (q.exam_year === '') delete q.exam_year;
   const catalogVersion = catalog?.catalog_version ?? 2;
   Object.assign(q,{schema_version:2,revision:1,content_hash_version:'question-v2-jcs-sha256',content_revision:'0'.repeat(64),status:raw.status==='ARCHIVED'?'ARCHIVED':'ACTIVE',question:typeof raw.question==='string'?raw.question:'',question_type:kind,answers:kind==='OPEN_ENDED'?[]:answers,correct_answer_indices:kind==='OPEN_ENDED'?[]:indices,correct_answers:kind==='OPEN_ENDED'?[]:indices.map(index=>answers[index]),
     origins:[{origin_id:originId,kind:'LEGACY_IMPORT',verification:'PENDING',source_exam_code:null,institution:null,organizer:null,exam_year:null,question_number:null,source_reference:null,provenance:manualProvenance(actor,'Conversão explícita de registro para o contrato v2, sujeita à conferência humana.')}],
@@ -171,4 +280,94 @@ export function legacyQuestionDraft(raw,catalog,actor,originId){
     grading:kind==='OPEN_ENDED'?(raw.grading || null):{strategy:'EXACT_OPTION',max_score:100,pass_score:60,expected_responses:[],rubric:null,engine:null,confirmation_policy:'AUTOMATIC_EXACT',policy_version:'objective-exact/1'}});
   delete q.schema_outbox;
   return q;
+}
+
+export function isQuestionDraftDirty(draft) {
+  if (!draft) return false;
+  if (draft.result) return false;
+  if (draft.submitted || draft.converted || draft.rubricError || draft.reconfirmValidity) return true;
+  if (draft.classificationChoice && draft.classificationChoice.confirmed === false) return true;
+  if (!draft.original) return false;
+  try {
+    return JSON.stringify(JSON.parse(draft.text)) !== JSON.stringify(draft.original);
+  } catch {
+    return true;
+  }
+}
+
+export function reconcileQuestionDraft(ws, questionId, serverDoc, makeOperationId) {
+  ws.questionEdits ||= {};
+  const existing = ws.questionEdits[questionId];
+  const makeFresh = () => ({
+    original: structuredClone(serverDoc),
+    text: JSON.stringify(serverDoc, null, 2),
+    operationId: makeOperationId(),
+    preview: null,
+    submitted: false,
+    result: null,
+    reconfirmValidity: false
+  });
+  if (!existing) {
+    ws.questionEdits[questionId] = makeFresh();
+    return {status: 'created', draft: ws.questionEdits[questionId]};
+  }
+  if (existing.result) {
+    pushArchive(ws, 'question-edit', existing);
+    ws.questionEdits[questionId] = makeFresh();
+    return {status: 'refreshed_completed', draft: ws.questionEdits[questionId]};
+  }
+  if (!isQuestionDraftDirty(existing)) {
+    ws.questionEdits[questionId] = makeFresh();
+    return {status: 'refreshed_clean', draft: ws.questionEdits[questionId]};
+  }
+  const serverRev = serverDoc?.revision ?? 0;
+  const baseRev = existing.original?.revision ?? 0;
+  if (serverRev > baseRev || (serverRev !== baseRev) || (serverRev === baseRev && JSON.stringify(serverDoc) !== JSON.stringify(existing.original))) {
+    existing.server = structuredClone(serverDoc);
+    existing.conflict = true;
+    return {status: 'conflict', draft: existing};
+  }
+  delete existing.server;
+  existing.conflict = false;
+  return {status: 'kept_dirty', draft: existing};
+}
+
+export function isExamDraftDirty(draft) {
+  if (!draft) return false;
+  if (draft.isNew || draft.pending) return true;
+  if (!draft.original) return false;
+  return JSON.stringify(draft.document) !== JSON.stringify(draft.original);
+}
+
+export function reconcileExamDrafts(ws, serverExams) {
+  if (!ws || typeof ws !== 'object' || !Array.isArray(serverExams)) return false;
+  ws.exams ||= {};
+  let changed = false;
+  for (const serverExam of serverExams) {
+    const id = serverExam._id;
+    if (!Object.hasOwn(ws.exams, id)) continue;
+    const draft = ws.exams[id];
+    if (!draft || typeof draft !== 'object' || !draft.document) {
+      delete ws.exams[id];
+      changed = true;
+      continue;
+    }
+    if (!isExamDraftDirty(draft)) {
+      if (JSON.stringify(draft.document) !== JSON.stringify(serverExam) || draft.server || draft.conflict) {
+        ws.exams[id] = {document: structuredClone(serverExam), original: structuredClone(serverExam), isNew: false, pending: null};
+        changed = true;
+      }
+    } else if ((serverExam.revision ?? 0) > (draft.original?.revision ?? 0)) {
+      if (JSON.stringify(draft.server) !== JSON.stringify(serverExam) || !draft.conflict) {
+        draft.server = structuredClone(serverExam);
+        draft.conflict = true;
+        changed = true;
+      }
+    } else if (draft.server && (serverExam.revision ?? 0) <= (draft.original?.revision ?? 0)) {
+      delete draft.server;
+      draft.conflict = false;
+      changed = true;
+    }
+  }
+  return changed;
 }

@@ -15,7 +15,8 @@ use argon2::{
     Argon2,
 };
 use axum::{
-    extract::State,
+    body::Bytes,
+    extract::{ConnectInfo, State},
     http::{header, HeaderMap, HeaderValue, Method},
     response::{IntoResponse, Response},
     Extension, Json,
@@ -25,7 +26,7 @@ use mongodb::Database;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use std::{sync::Arc, sync::OnceLock};
+use std::{net::SocketAddr, sync::Arc, sync::OnceLock};
 
 const MAX_SAFE_JS_INT: u64 = 9_007_199_254_740_991;
 
@@ -61,6 +62,12 @@ pub struct LoginRequest {
     pub email: String,
     pub password: String,
     pub client: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DeleteAccountRequest {
+    #[serde(default)]
+    pub confirm: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -159,9 +166,10 @@ pub async fn verify_password(password: String, password_hash: String) -> Result<
     .map_err(|_| AppError::Internal("Falha na verificação de credencial".into()))?
 }
 
-pub fn build_web_cookie(
+pub fn build_named_web_cookie(
     headers: &HeaderMap,
     public_origin: &str,
+    cookie_name: &str,
     token: &str,
     max_age_secs: i64,
 ) -> Result<HeaderValue, AppError> {
@@ -179,10 +187,19 @@ pub fn build_web_cookie(
     let origin_https = public_origin.trim().starts_with("https://");
     let secure = proto_https || origin_https || !local_host;
     HeaderValue::from_str(&format!(
-        "{WEB_COOKIE_NAME}={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age={max_age_secs}{}",
+        "{cookie_name}={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age={max_age_secs}{}",
         if secure { "; Secure" } else { "" }
     ))
     .map_err(|_| AppError::Internal("Cookie de sessão indisponível".into()))
+}
+
+pub fn build_web_cookie(
+    headers: &HeaderMap,
+    public_origin: &str,
+    token: &str,
+    max_age_secs: i64,
+) -> Result<HeaderValue, AppError> {
+    build_named_web_cookie(headers, public_origin, WEB_COOKIE_NAME, token, max_age_secs)
 }
 
 pub async fn issue_db_session(
@@ -288,9 +305,13 @@ async fn build_auth_response(
 /// `POST /api/v1/auth/guest` (e alias `/api/v1/auth/native-session`): cria ou retoma conta convidada.
 pub async fn handle_guest_session(
     State(state): State<Arc<AppState>>,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
     headers: HeaderMap,
     Json(req): Json<GuestSessionRequest>,
 ) -> Result<Response, AppError> {
+    let client_ip = rate_limit::extract_client_ip(&headers, connect_info.map(|c| c.0.ip()));
+    rate_limit::check_ip_rate_limit("auth_guest_ip", client_ip, 20, 60)?;
+
     let users = state.db.collection::<UserDocument>("usuarios");
     let now = bson::DateTime::now();
 
@@ -368,12 +389,14 @@ pub async fn handle_guest_session(
             }
         }
         (None, None) => {
-            let host_key = headers
-                .get("x-forwarded-for")
-                .or_else(|| headers.get(header::HOST))
-                .and_then(|v| v.to_str().ok())
-                .unwrap_or("anonymous");
-            rate_limit::check_auth_rate_limit(&state.db, "guest_anon", host_key, 20, 60).await?;
+            rate_limit::check_auth_rate_limit(
+                &state.db,
+                "guest_anon",
+                &client_ip.to_string(),
+                20,
+                60,
+            )
+            .await?;
             let mut uid = random_safe_user_id();
             while users.find_one(doc! { "user_id": uid }).await?.is_some() {
                 uid = random_safe_user_id();
@@ -421,9 +444,13 @@ pub async fn handle_guest_session(
 /// `POST /api/v1/auth/register`: cadastra e-mail + senha Argon2id ou promove conta convidada in-place.
 pub async fn handle_register(
     State(state): State<Arc<AppState>>,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
     headers: HeaderMap,
     Json(req): Json<RegisterRequest>,
 ) -> Result<Response, AppError> {
+    let client_ip = rate_limit::extract_client_ip(&headers, connect_info.map(|c| c.0.ip()));
+    rate_limit::check_ip_rate_limit("auth_register_ip", client_ip, 10, 60)?;
+
     let is_web = req
         .client
         .as_deref()
@@ -625,8 +652,32 @@ pub async fn handle_register(
 /// `POST /api/v1/auth/login`: autentica e-mail + senha Argon2id (mobile Bearer ou web cookie).
 pub async fn handle_login(
     State(state): State<Arc<AppState>>,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
     headers: HeaderMap,
     Json(req): Json<LoginRequest>,
+) -> Result<Response, AppError> {
+    let client_ip = rate_limit::extract_client_ip(&headers, connect_info.map(|c| c.0.ip()));
+    rate_limit::check_ip_rate_limit("auth_login_ip", client_ip, 15, 60)?;
+    login_inner(state, headers, req).await
+}
+
+/// `POST /api/v1/auth/web-session`: autentica sessão administrativa web com cookie HttpOnly + CSRF.
+pub async fn handle_web_session(
+    State(state): State<Arc<AppState>>,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    headers: HeaderMap,
+    Json(mut req): Json<LoginRequest>,
+) -> Result<Response, AppError> {
+    let client_ip = rate_limit::extract_client_ip(&headers, connect_info.map(|c| c.0.ip()));
+    rate_limit::check_ip_rate_limit("auth_web_session_ip", client_ip, 10, 60)?;
+    req.client = Some("web".to_string());
+    login_inner(state, headers, req).await
+}
+
+async fn login_inner(
+    state: Arc<AppState>,
+    headers: HeaderMap,
+    req: LoginRequest,
 ) -> Result<Response, AppError> {
     let is_web = req
         .client
@@ -724,13 +775,205 @@ pub async fn handle_logout(
     }
 
     let mut resp = Json(json!({ "authenticated": false, "revoked": true })).into_response();
-    resp.headers_mut().insert(
+    resp.headers_mut().append(
         header::SET_COOKIE,
         build_web_cookie(&headers, &state.config.public_origin, "", 0)?,
     );
+    if security::has_legacy_admin_cookie(&headers) {
+        resp.headers_mut().append(
+            header::SET_COOKIE,
+            build_named_web_cookie(
+                &headers,
+                &state.config.public_origin,
+                security::LEGACY_ADMIN_COOKIE_NAME,
+                "",
+                0,
+            )?,
+        );
+    }
     resp.headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     Ok(resp)
+}
+
+#[derive(Debug, Clone)]
+pub struct LgpdDeletionPlan {
+    pub delete_filters: Vec<(&'static str, Document)>,
+    pub report_anonymize_filter: Document,
+    pub report_anonymize_update: Document,
+}
+
+pub fn validate_delete_confirmation(body: &[u8]) -> Result<(), AppError> {
+    let parsed: DeleteAccountRequest = serde_json::from_slice(body).map_err(|_| {
+        AppError::BadRequest(
+            "Confirme a exclusão definitiva informando {\"confirm\": \"EXCLUIR\"}.".into(),
+        )
+    })?;
+    if parsed.confirm != "EXCLUIR" {
+        return Err(AppError::BadRequest(
+            "Confirme a exclusão definitiva informando {\"confirm\": \"EXCLUIR\"}.".into(),
+        ));
+    }
+    Ok(())
+}
+
+pub fn lgpd_deletion_plan(uid: i64) -> LgpdDeletionPlan {
+    let uid_str = uid.to_string();
+    let uid_prefix = format!("^{}:", regex::escape(&uid_str));
+
+    let delete_filters = vec![
+        ("usuarios", doc! { "user_id": uid }),
+        ("sessions", doc! { "user_id": uid }),
+        ("web_sessions", doc! { "user_id": uid }),
+        (
+            "native_accounts",
+            doc! { "$or": [{ "user_id": uid }, { "linked_user_id": uid }] },
+        ),
+        ("userActivityLog", doc! { "user_id": uid }),
+        (
+            "attempt_receipts",
+            doc! { "$or": [{ "user_id": uid }, { "_id": { "$regex": &uid_prefix } }] },
+        ),
+        (
+            "user_exams",
+            doc! { "$or": [{ "owner_user_id": &uid_str }, { "owner_user_id": uid }, { "user_id": uid }] },
+        ),
+        (
+            "exam_revisions",
+            doc! { "scope": "user", "$or": [{ "owner_user_id": &uid_str }, { "owner_user_id": uid }] },
+        ),
+        (
+            "question_exam_compatibility",
+            doc! { "$or": [{ "owner_user_id": uid }, { "owner_user_id": &uid_str }] },
+        ),
+        (
+            "answer_evaluations",
+            doc! { "$or": [{ "user_id": uid }, { "owner_user_id": uid }] },
+        ),
+        (
+            "tutor_budgets",
+            doc! {
+                "_id": { "$ne": "global" },
+                "$or": [{ "_id": uid }, { "user_id": uid }, { "_id": { "$regex": &uid_prefix } }]
+            },
+        ),
+        (
+            "catalog_editor_drafts",
+            doc! { "owner_user_id": uid, "status": { "$ne": "ACTIVATED" } },
+        ),
+        (
+            "catalog_editor_versions",
+            doc! { "owner_user_id": uid, "status": { "$ne": "ACTIVATED" } },
+        ),
+        (
+            "question_import_ai_requests",
+            doc! { "$or": [{ "actor_user_id": uid }, { "user_id": uid }, { "_id": { "$regex": &uid_prefix } }] },
+        ),
+    ];
+
+    let report_anonymize_filter = doc! {
+        "$or": [
+            { "user_id": uid },
+            { "userId": uid },
+            { "userId": &uid_str }
+        ]
+    };
+    let report_anonymize_update = doc! {
+        "$set": {
+            "user_id": bson::Bson::Null,
+            "anonymized_lgpd": true
+        },
+        "$unset": {
+            "userId": "",
+            "userEmail": "",
+            "reporterEmail": ""
+        }
+    };
+
+    LgpdDeletionPlan {
+        delete_filters,
+        report_anonymize_filter,
+        report_anonymize_update,
+    }
+}
+
+pub fn build_account_deleted_response(
+    headers: &HeaderMap,
+    public_origin: &str,
+    uid: i64,
+    deleted_documents: u64,
+    anonymized_reports: u64,
+) -> Result<Response, AppError> {
+    let used_web_cookie = security::extract_bearer_token(headers).is_none()
+        && !security::extract_web_cookies(headers).is_empty();
+
+    let mut resp = Json(json!({
+        "deleted": true,
+        "user_id": uid.to_string(),
+        "deleted_documents": deleted_documents,
+        "anonymized_reports": anonymized_reports,
+    }))
+    .into_response();
+
+    if used_web_cookie {
+        resp.headers_mut().append(
+            header::SET_COOKIE,
+            build_web_cookie(headers, public_origin, "", 0)?,
+        );
+        if security::has_legacy_admin_cookie(headers) {
+            resp.headers_mut().append(
+                header::SET_COOKIE,
+                build_named_web_cookie(
+                    headers,
+                    public_origin,
+                    security::LEGACY_ADMIN_COOKIE_NAME,
+                    "",
+                    0,
+                )?,
+            );
+        }
+    }
+    resp.headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    Ok(resp)
+}
+
+/// `DELETE /api/v1/auth/account`: exclusão física dos dados pessoais do titular (LGPD Art. 18, VI),
+/// preservando 100% do acervo compartilhado e anonimizando reportes de qualidade.
+pub async fn handle_delete_account(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<SessionUser>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<Response, AppError> {
+    validate_delete_confirmation(&body)?;
+    let plan = lgpd_deletion_plan(user.user_id);
+
+    let mut deleted_documents = 0u64;
+    // Remove dados pessoais e histórico primeiro, revogando sessões e a conta por último
+    // para que uma falha de rede permita repetição idempotente pelo titular.
+    for (coll_name, filter) in plan.delete_filters.iter().rev() {
+        let res = state
+            .db
+            .collection::<Document>(coll_name)
+            .delete_many(filter.clone())
+            .await?;
+        deleted_documents += res.deleted_count;
+    }
+
+    let report_res = state
+        .db
+        .collection::<Document>("reportedQuestoes")
+        .update_many(plan.report_anonymize_filter, plan.report_anonymize_update)
+        .await?;
+
+    build_account_deleted_response(
+        &headers,
+        &state.config.public_origin,
+        user.user_id,
+        deleted_documents,
+        report_res.modified_count,
+    )
 }
 
 pub async fn get_profile(
@@ -873,5 +1116,121 @@ mod tests {
         assert!(u >= 1 && (u as u64) <= MAX_SAFE_JS_INT);
         let r = random_safe_user_id();
         assert!(r >= 1 && (r as u64) <= MAX_SAFE_JS_INT);
+    }
+
+    #[test]
+    fn lgpd_delete_account_guard_cookie_clearing_and_shared_corpus_preservation() {
+        assert!(validate_delete_confirmation(b"").is_err());
+        assert!(validate_delete_confirmation(br#"{}"#).is_err());
+        assert!(validate_delete_confirmation(br#"{"confirm":"excluir"}"#).is_err());
+        assert!(validate_delete_confirmation(br#"{"confirm":"OUTRO"}"#).is_err());
+        validate_delete_confirmation(br#"{"confirm":"EXCLUIR"}"#).unwrap();
+
+        let plan = lgpd_deletion_plan(987654);
+        let targeted: std::collections::HashSet<&str> =
+            plan.delete_filters.iter().map(|(c, _)| *c).collect();
+        for required in [
+            "usuarios",
+            "sessions",
+            "userActivityLog",
+            "attempt_receipts",
+            "user_exams",
+            "exam_revisions",
+            "question_exam_compatibility",
+            "answer_evaluations",
+            "tutor_budgets",
+            "catalog_editor_drafts",
+            "question_import_ai_requests",
+        ] {
+            assert!(targeted.contains(required), "missing {required}");
+        }
+        for shared in [
+            "todasQuestoes",
+            "question_revision_events",
+            "question_commands",
+            "question_classification_suggestions",
+            "knowledge_catalog_versions",
+            "knowledge_catalog_runtime",
+            "knowledge_catalog_head",
+            "knowledge_catalog_activations",
+            "exam_templates",
+            "cogniva_schema_versions",
+            "ai_explanations",
+            "reportedQuestoes",
+        ] {
+            assert!(!targeted.contains(shared), "must preserve {shared}");
+        }
+
+        // exam_revisions must restrict deletion to user scope, never templates
+        let (_, rev_filter) = plan
+            .delete_filters
+            .iter()
+            .find(|(c, _)| *c == "exam_revisions")
+            .unwrap();
+        assert_eq!(rev_filter.get_str("scope").unwrap(), "user");
+
+        // tutor_budgets must never delete the global bucket
+        let (_, budget_filter) = plan
+            .delete_filters
+            .iter()
+            .find(|(c, _)| *c == "tutor_budgets")
+            .unwrap();
+        assert_eq!(
+            budget_filter.get_document("_id").unwrap().get_str("$ne").unwrap(),
+            "global"
+        );
+
+        // reportedQuestoes anonymization must not overlap $set and $unset keys
+        let set_keys: std::collections::HashSet<&str> = plan
+            .report_anonymize_update
+            .get_document("$set")
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        let unset_keys: std::collections::HashSet<&str> = plan
+            .report_anonymize_update
+            .get_document("$unset")
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        assert!(set_keys.is_disjoint(&unset_keys));
+        assert!(unset_keys.contains("userId"));
+        assert!(unset_keys.contains("userEmail"));
+        assert!(unset_keys.contains("reporterEmail"));
+
+        // Cookie auth clears session cookie; Bearer auth does not emit Set-Cookie
+        let mut web_headers = HeaderMap::new();
+        web_headers.insert(header::HOST, "cogniva.example.org".parse().unwrap());
+        web_headers.insert(
+            header::COOKIE,
+            "cogniva_web_session=tok123; cogniva_admin_session=legacy"
+                .parse()
+                .unwrap(),
+        );
+        let web_resp =
+            build_account_deleted_response(&web_headers, "https://cogniva.example.org", 42, 7, 1)
+                .unwrap();
+        let cookies: Vec<_> = web_resp
+            .headers()
+            .get_all(header::SET_COOKIE)
+            .iter()
+            .map(|v| v.to_str().unwrap().to_string())
+            .collect();
+        assert_eq!(cookies.len(), 2);
+        assert!(cookies.iter().any(|c| c.starts_with("cogniva_web_session=; ") && c.contains("Max-Age=0")));
+
+        let mut bearer_headers = HeaderMap::new();
+        bearer_headers.insert(header::AUTHORIZATION, "Bearer tok-mobile".parse().unwrap());
+        let mobile_resp = build_account_deleted_response(
+            &bearer_headers,
+            "https://cogniva.example.org",
+            42,
+            7,
+            0,
+        )
+        .unwrap();
+        assert!(mobile_resp.headers().get(header::SET_COOKIE).is_none());
     }
 }

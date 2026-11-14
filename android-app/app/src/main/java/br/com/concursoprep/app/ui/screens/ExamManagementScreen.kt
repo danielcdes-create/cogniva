@@ -59,6 +59,12 @@ fun ExamManagementScreen(
         }
     }
     exams.find { it.examId==deletingId }?.let { exam ->
-        AlertDialog(onDismissRequest={deletingId=null},title={Text("Excluir ${exam.shortName}?")},text={Text("O concurso e sua grade sairão da sua lista. Seu histórico de respostas será mantido. Para voltar a usá-lo depois, prefira arquivar.")},confirmButton={TextButton(onClick={onDelete(exam);deletingId=null}) { Text("Excluir concurso") }},dismissButton={TextButton(onClick={deletingId=null}) { Text("Cancelar") }})
+        AlertDialog(
+            onDismissRequest={deletingId=null},
+            title={Text("Excluir ${exam.shortName}?")},
+            text={Column(Modifier.verticalScroll(rememberScrollState())){Text("O concurso e sua grade sairão da sua lista. Seu histórico de respostas será mantido. Para voltar a usá-lo depois, prefira arquivar.")}},
+            confirmButton={TextButton(onClick={onDelete(exam);deletingId=null}) { Text("Excluir concurso") }},
+            dismissButton={TextButton(onClick={deletingId=null}) { Text("Cancelar") }}
+        )
     }
 }

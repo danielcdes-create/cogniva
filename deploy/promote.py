@@ -4,12 +4,16 @@ Supports both live DigitalOcean promotion (against shared /opt/apps/docker-compo
 and isolated Docker Compose rollback drills in GitHub Actions CI.
 Usage: python3 promote.py /opt/apps/cogniva-releases/<git-sha> [--exercise-rollback]
 """
-import fcntl
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows unit test runner compatibility
+    fcntl = None  # type: ignore[assignment]
 import hashlib
 import json
 import os
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -56,6 +60,47 @@ def symlink(target: str, path: pathlib.Path) -> None:
     os.replace(temp, path)
 
 
+def link_or_copy(src: pathlib.Path, dst: pathlib.Path) -> None:
+    if dst.exists():
+        assert sha(dst) == sha(src), f'An immutable release differs: {dst.name}'
+        return
+    try:
+        os.link(src, dst)
+    except OSError:
+        shutil.copy2(src, dst)
+    dst.chmod(0o644)
+
+
+def prune_old_releases(protected_revisions: set[str], keep_latest: int = 3) -> None:
+    protected = {rev for rev in protected_revisions if rev and re.fullmatch(r'[0-9a-f]{40}', rev)}
+    for base_dir in (ROOT / 'cogniva-releases', ROOT / 'apk' / 'releases'):
+        if not base_dir.is_dir():
+            continue
+        entries = [
+            entry
+            for entry in base_dir.iterdir()
+            if entry.is_dir() and re.fullmatch(r'[0-9a-f]{40}', entry.name)
+        ]
+        entries.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        keep = {entry.name for entry in entries[:keep_latest]} | protected
+        for entry in entries:
+            if entry.name not in keep:
+                shutil.rmtree(entry, ignore_errors=True)
+
+    incoming = ROOT / 'cogniva-incoming'
+    if incoming.is_dir():
+        cutoff = time.time() - 3600
+        for entry in incoming.iterdir():
+            try:
+                if entry.stat().st_mtime < cutoff:
+                    if entry.is_dir():
+                        shutil.rmtree(entry, ignore_errors=True)
+                    else:
+                        entry.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
 def compose_up() -> None:
     # Named service only: sibling containers on the shared VPS remain untouched.
     print(
@@ -82,11 +127,15 @@ def snapshot_persistent_neighbors() -> dict[str, str]:
     if not ids:
         return {}
     result: dict[str, str] = {}
-    for item in json.loads(run('docker', 'inspect', *ids)):
+    for cid in ids:
+        try:
+            item = json.loads(run('docker', 'inspect', cid))[0]
+        except (subprocess.CalledProcessError, IndexError, KeyError, json.JSONDecodeError):
+            # Container exited between `docker ps -q` and `docker inspect` (e.g. certbot --rm).
+            continue
         name = item.get('Name', '')
         if name == '/' + SERVICE:
             continue
-        # Ignore ephemeral --rm jobs (e.g. hourly certbot renewal) to prevent TOCTOU races.
         if item.get('HostConfig', {}).get('AutoRemove'):
             continue
         image_cfg = item.get('Config', {}).get('Image', '')
@@ -118,6 +167,8 @@ def gate(paused: bool) -> None:
         except urllib.error.HTTPError as error:
             if error.code == expected_code:
                 return
+        except (urllib.error.URLError, TimeoutError, OSError):
+            pass
         time.sleep(0.3)
     raise RuntimeError(f'Nginx gate did not reach HTTP {expected_code}')
 
@@ -144,7 +195,8 @@ def main() -> None:
 
     LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
     with LOCK_PATH.open('w', encoding='utf-8') as lock_file:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        if fcntl is not None:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
         _promote_locked(release)
 
 
@@ -164,9 +216,6 @@ def _promote_locked(release: pathlib.Path) -> None:
     )
 
     before = inspect_service()
-    with urllib.request.urlopen(f'{LOCAL_API}/api/v1/health', timeout=5) as resp:
-        old_health = json.load(resp)
-    protocol_migration = old_health.get('contract_version', 1) != manifest['contract_version']
     assert before['Config']['Labels'].get('com.docker.compose.project') == PROJECT
     assert before['Config']['Labels'].get('com.docker.compose.service') == SERVICE
 
@@ -174,6 +223,7 @@ def _promote_locked(release: pathlib.Path) -> None:
     compose_hash = sha(COMPOSE)
     current = ROOT / 'apk' / 'current'
     old_target = os.readlink(current) if current.is_symlink() else None
+    old_target_rev = pathlib.Path(old_target).name if old_target else ''
     old_override = OVERRIDE.read_bytes() if OVERRIDE.exists() else None
     old_image = before['Image']
     old_details = json.loads(run('docker', 'image', 'inspect', old_image))[0]
@@ -224,12 +274,7 @@ def _promote_locked(release: pathlib.Path) -> None:
         apk_release = ROOT / 'apk' / 'releases' / release.name
         apk_release.mkdir(parents=True, exist_ok=True)
         for file in [apk, metadata]:
-            target = apk_release / file.name
-            if target.exists():
-                assert sha(target) == sha(file), 'An immutable release differs'
-            else:
-                target.write_bytes(file.read_bytes())
-                target.chmod(0o644)
+            link_or_copy(file, apk_release / file.name)
         symlink('releases/' + release.name, current)
         compose_up()
         wait_ready(release.name)
@@ -262,6 +307,7 @@ def _promote_locked(release: pathlib.Path) -> None:
                 'previous_image': before['Config']['Image'],
             },
         )
+        prune_old_releases({release.name, old_target_rev})
         print(
             json.dumps(
                 {
@@ -295,9 +341,7 @@ def _promote_locked(release: pathlib.Path) -> None:
                     if retry == 29:
                         raise RuntimeError('Rollback requires operator attention') from primary_error
                     time.sleep(2)
-            if restored_previous and not protocol_migration:
-                gate(False)
-            elif restored_previous:
+            if restored_previous:
                 gate(False)
         except BaseException:
             raise

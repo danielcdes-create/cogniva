@@ -44,13 +44,13 @@ val CognivaElectricBlue = Color(0xFF0052CC) // Azul Elétrico com alto contraste
 val CognivaElectricBright = Color(0xFF38BDF8)
 val CognivaPureWhite = Color(0xFFFFFFFF)
 
-// Cores Semânticas de Desempenho (acessíveis em modo claro e escuro)
+// Cores Semânticas de Desempenho (acessíveis em modo claro e escuro — WCAG 2.1 AA >= 4.5:1)
 val InstitutionalBlue = CognivaElectricBlue
 val PetrolTeal = Color(0xFF0284C7)
-val CorrectGreen = Color(0xFF16A34A)
-val ErrorRed = Color(0xFFDC2626)
-val ReviewAmber = Color(0xFFD97706)
-val EstimatedNeutral = Color(0xFF64748B)
+val CorrectGreen = Color(0xFF166534)
+val ErrorRed = Color(0xFFB91C1C)
+val ReviewAmber = Color(0xFFB45309)
+val EstimatedNeutral = Color(0xFF475569)
 
 @Immutable
 data class ExtendedColors(
@@ -88,19 +88,19 @@ val DarkExtendedColors = ExtendedColors(
 )
 
 val LightExtendedColors = ExtendedColors(
-    correct = Color(0xFF16A34A),
+    correct = Color(0xFF166534),
     onCorrect = Color(0xFFFFFFFF),
     correctContainer = Color(0xFFDCFCE7),
     onCorrectContainer = Color(0xFF14532D),
-    error = Color(0xFFDC2626),
+    error = Color(0xFFB91C1C),
     onError = Color(0xFFFFFFFF),
     errorContainer = Color(0xFFFEE2E2),
     onErrorContainer = Color(0xFF7F1D1D),
-    warning = Color(0xFFD97706),
+    warning = Color(0xFFB45309),
     onWarning = Color(0xFFFFFFFF),
     warningContainer = Color(0xFFFEF3C7),
     onWarningContainer = Color(0xFF78350F),
-    neutral = Color(0xFF64748B),
+    neutral = Color(0xFF475569),
     onNeutral = Color(0xFFFFFFFF)
 )
 

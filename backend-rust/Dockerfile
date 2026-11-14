@@ -23,6 +23,7 @@ LABEL org.opencontainers.image.source="https://github.com/danielcdes-create/cogn
       org.opencontainers.image.title="cogniva-api" \
       org.opencontainers.image.revision=${BUILD_REVISION}
 WORKDIR /app
+USER 65532:65532
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD ["/usr/local/bin/cogniva-api", "--health-check"]
 ENTRYPOINT ["/usr/local/bin/cogniva-api"]

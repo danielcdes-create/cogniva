@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 pub const MOBILE_SESSION_TTL_SECS: i64 = 30 * 24 * 60 * 60;
 pub const WEB_SESSION_TTL_SECS: i64 = 12 * 60 * 60;
 pub const WEB_COOKIE_NAME: &str = "cogniva_web_session";
+pub const LEGACY_ADMIN_COOKIE_NAME: &str = "cogniva_admin_session";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SessionUser {
@@ -108,16 +109,43 @@ pub fn verify_session_token(
 }
 
 pub fn extract_web_cookies(headers: &HeaderMap) -> Vec<String> {
+    let mut primary = Vec::new();
+    let mut legacy = Vec::new();
+    for header_val in headers.get_all(header::COOKIE) {
+        let Ok(raw) = header_val.to_str() else {
+            continue;
+        };
+        for pair in raw.split(';') {
+            let trimmed = pair.trim();
+            if let Some(val) = trimmed.strip_prefix("cogniva_web_session=") {
+                let clean = val.trim().trim_matches('"').trim();
+                if !clean.is_empty() && !primary.iter().any(|existing| existing == clean) {
+                    primary.push(clean.to_string());
+                }
+            } else if let Some(val) = trimmed.strip_prefix("cogniva_admin_session=") {
+                let clean = val.trim().trim_matches('"').trim();
+                if !clean.is_empty() && !legacy.iter().any(|existing| existing == clean) {
+                    legacy.push(clean.to_string());
+                }
+            }
+        }
+    }
+    for item in legacy {
+        if !primary.iter().any(|existing| existing == &item) {
+            primary.push(item);
+        }
+    }
+    primary
+}
+
+pub fn has_legacy_admin_cookie(headers: &HeaderMap) -> bool {
     headers
         .get_all(header::COOKIE)
         .iter()
         .filter_map(|v| v.to_str().ok())
         .flat_map(|raw| raw.split(';'))
         .map(str::trim)
-        .filter_map(|pair| pair.strip_prefix("cogniva_web_session="))
-        .map(|val| val.trim().to_string())
-        .filter(|val| !val.is_empty())
-        .collect()
+        .any(|pair| pair.starts_with("cogniva_admin_session="))
 }
 
 pub fn extract_bearer_token(headers: &HeaderMap) -> Option<String> {
@@ -129,12 +157,143 @@ pub fn extract_bearer_token(headers: &HeaderMap) -> Option<String> {
         .filter(|v| !v.is_empty())
 }
 
+pub fn check_sec_fetch_site(headers: &HeaderMap) -> Result<(), AppError> {
+    if let Some(raw) = headers.get("sec-fetch-site") {
+        let site = raw
+            .to_str()
+            .map_err(|_| AppError::Forbidden("Cabeçalho Sec-Fetch-Site inválido".into()))?
+            .trim()
+            .to_ascii_lowercase();
+        if !matches!(site.as_str(), "same-origin" | "none") {
+            return Err(AppError::Forbidden(
+                "Requisição cross-site bloqueada na sessão web".into(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+type NormalizedOrigin = (String, String, Option<u16>);
+
+fn parse_http_origin(raw: &str) -> Option<NormalizedOrigin> {
+    let parsed = reqwest::Url::parse(raw.trim()).ok()?;
+    if !matches!(parsed.scheme(), "http" | "https")
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+    {
+        return None;
+    }
+    let host = parsed.host_str()?.to_ascii_lowercase();
+    Some((
+        parsed.scheme().to_ascii_lowercase(),
+        host,
+        parsed.port_or_known_default(),
+    ))
+}
+
+fn is_loopback_authority(host_header: &str) -> bool {
+    reqwest::Url::parse(&format!("http://{}", host_header.trim()))
+        .ok()
+        .is_some_and(|u| matches!(u.host_str(), Some("127.0.0.1" | "localhost" | "[::1]")))
+}
+
+pub fn same_origin(headers: &HeaderMap, public_origin: &str) -> Result<(), AppError> {
+    let candidate_raw = headers
+        .get(header::ORIGIN)
+        .or_else(|| headers.get(header::REFERER))
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .filter(|s| !s.is_empty() && !s.eq_ignore_ascii_case("null"))
+        .ok_or_else(|| AppError::Forbidden("Origem ausente na mutação da sessão web".into()))?;
+
+    let candidate_origin = parse_http_origin(candidate_raw)
+        .ok_or_else(|| AppError::Forbidden("Origem inválida na sessão web".into()))?;
+
+    if let Some(expected_public) = parse_http_origin(public_origin) {
+        if candidate_origin == expected_public {
+            // Se estiver atrás de proxy TLS (`X-Forwarded-Proto`), exige que o esquema também coincida com o proxy.
+            if let Some(xfp) = headers
+                .get("x-forwarded-proto")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| v.split(',').next())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
+                let proto = xfp.to_ascii_lowercase();
+                if !matches!(proto.as_str(), "http" | "https") {
+                    return Err(AppError::Forbidden(
+                        "Protocolo encaminhado inválido na sessão web".into(),
+                    ));
+                }
+                if candidate_origin.0 != proto {
+                    return Err(AppError::Forbidden(
+                        "Esquema da origem diverge do protocolo da sessão web".into(),
+                    ));
+                }
+            }
+            return Ok(());
+        }
+    }
+
+    if let Some(host_raw) = headers.get(header::HOST).and_then(|v| v.to_str().ok()) {
+        let host = host_raw.trim();
+        if !host.is_empty()
+            && !host.contains('/')
+            && !host.contains('\\')
+            && !host.contains('@')
+            && !host.contains(char::is_whitespace)
+        {
+            let expected_scheme = if let Some(xfp) = headers
+                .get("x-forwarded-proto")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| v.split(',').next())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
+                let lower = xfp.to_ascii_lowercase();
+                match lower.as_str() {
+                    "https" => "https",
+                    "http" => "http",
+                    _ => {
+                        return Err(AppError::Forbidden(
+                            "Protocolo encaminhado inválido na sessão web".into(),
+                        ));
+                    }
+                }
+            } else if is_loopback_authority(host) {
+                "http"
+            } else if public_origin.trim().to_ascii_lowercase().starts_with("https://") {
+                "https"
+            } else {
+                "http"
+            };
+
+            if let Some(expected_host_origin) =
+                parse_http_origin(&format!("{expected_scheme}://{host}"))
+            {
+                if candidate_origin == expected_host_origin {
+                    return Ok(());
+                }
+            }
+        }
+    }
+
+    Err(AppError::Forbidden(
+        "Origem inválida na sessão web".into(),
+    ))
+}
+
 pub fn verify_csrf_same_origin(
     headers: &HeaderMap,
     method: &Method,
     public_origin: &str,
 ) -> Result<(), AppError> {
+    check_sec_fetch_site(headers)?;
+
     if matches!(method, &Method::GET | &Method::HEAD | &Method::OPTIONS) {
+        if headers.contains_key(header::ORIGIN) {
+            same_origin(headers, public_origin)?;
+        }
         return Ok(());
     }
     if headers
@@ -147,30 +306,7 @@ pub fn verify_csrf_same_origin(
             "Cabeçalho CSRF ausente na mutação da sessão web".into(),
         ));
     }
-    let origin = headers
-        .get(header::ORIGIN)
-        .and_then(|v| v.to_str().ok())
-        .map(|v| v.trim().trim_end_matches('/'))
-        .ok_or_else(|| AppError::Forbidden("Origem ausente na mutação da sessão web".into()))?;
-    let expected = public_origin.trim().trim_end_matches('/');
-    if origin == expected {
-        return Ok(());
-    }
-    if let Some(host) = headers.get(header::HOST).and_then(|v| v.to_str().ok()) {
-        let host = host.trim();
-        let proto = headers
-            .get("x-forwarded-proto")
-            .and_then(|v| v.to_str().ok())
-            .map(str::trim)
-            .filter(|s| *s == "https" || *s == "http")
-            .unwrap_or("http");
-        if origin == format!("{proto}://{host}") || origin == format!("http://{host}") {
-            return Ok(());
-        }
-    }
-    Err(AppError::Forbidden(
-        "Origem inválida na sessão web".into(),
-    ))
+    same_origin(headers, public_origin)
 }
 
 async fn resolve_db_session(
@@ -213,10 +349,11 @@ async fn resolve_db_session(
 }
 
 pub async fn authenticate(
-    State(state): State< std::sync::Arc<AppState> >,
+    State(state): State<std::sync::Arc<AppState>>,
     mut request: Request,
     next: Next,
 ) -> Result<Response, AppError> {
+    let mut used_cookie_auth = false;
     let user = if let Some(bearer) = extract_bearer_token(request.headers()) {
         let claims = verify_session_token(&state.config.jwt_secret, &bearer, "mobile")?;
         resolve_db_session(&state, &claims).await?
@@ -239,12 +376,24 @@ pub async fn authenticate(
                 }
             }
         }
+        used_cookie_auth = true;
         resolved.ok_or_else(|| AppError::Unauthorized("Sessão web inválida ou expirada".into()))?
     };
 
     let catalog = state.catalog.refresh(&state.db).await?;
     request.extensions_mut().insert(user);
-    Ok(crate::services::catalog_runtime::scope(catalog, next.run(request)).await)
+    let mut response = crate::services::catalog_runtime::scope(catalog, next.run(request)).await;
+    if used_cookie_auth {
+        response.headers_mut().insert(
+            header::CACHE_CONTROL,
+            axum::http::HeaderValue::from_static("no-store"),
+        );
+        response.headers_mut().insert(
+            header::VARY,
+            axum::http::HeaderValue::from_static("Cookie"),
+        );
+    }
+    Ok(response)
 }
 
 pub async fn require_admin(
@@ -277,10 +426,56 @@ mod tests {
         let mut headers = HeaderMap::new();
         headers.append(
             header::COOKIE,
-            "cogniva_web_session=stale; other=1; cogniva_web_session=fresh"
+            "cogniva_web_session=; other=1; cogniva_admin_session=legacy_tok"
                 .parse()
                 .unwrap(),
         );
-        assert_eq!(extract_web_cookies(&headers), vec!["stale", "fresh"]);
+        headers.append(
+            header::COOKIE,
+            "cogniva_web_session=stale; cogniva_web_session=fresh"
+                .parse()
+                .unwrap(),
+        );
+        assert_eq!(
+            extract_web_cookies(&headers),
+            vec!["stale", "fresh", "legacy_tok"]
+        );
+    }
+
+    #[test]
+    fn csrf_same_origin_validates_scheme_host_referer_and_sec_fetch_site() {
+        let mut h = HeaderMap::new();
+        h.insert(header::HOST, "cogniva.example.org".parse().unwrap());
+        h.insert("x-forwarded-proto", "https".parse().unwrap());
+        h.insert("x-cogniva-csrf", "1".parse().unwrap());
+        h.insert(header::ORIGIN, "http://cogniva.example.org".parse().unwrap());
+
+        // Scheme downgrade http:// against X-Forwarded-Proto: https MUST fail
+        assert!(verify_csrf_same_origin(&h, &Method::POST, "https://cogniva.example.org").is_err());
+
+        // Matching https:// origin succeeds
+        h.insert(
+            header::ORIGIN,
+            "https://cogniva.example.org".parse().unwrap(),
+        );
+        assert!(verify_csrf_same_origin(&h, &Method::POST, "https://cogniva.example.org").is_ok());
+
+        // Referer fallback when Origin is absent
+        h.remove(header::ORIGIN);
+        h.insert(
+            header::REFERER,
+            "https://cogniva.example.org/admin/".parse().unwrap(),
+        );
+        assert!(verify_csrf_same_origin(&h, &Method::DELETE, "https://cogniva.example.org").is_ok());
+
+        // Sec-Fetch-Site: cross-site rejected even on safe GET or valid CSRF POST
+        h.insert("sec-fetch-site", "cross-site".parse().unwrap());
+        assert!(verify_csrf_same_origin(&h, &Method::GET, "https://cogniva.example.org").is_err());
+        assert!(verify_csrf_same_origin(&h, &Method::POST, "https://cogniva.example.org").is_err());
+
+        // Sec-Fetch-Site: same-origin allowed
+        h.insert("sec-fetch-site", "same-origin".parse().unwrap());
+        assert!(verify_csrf_same_origin(&h, &Method::GET, "https://cogniva.example.org").is_ok());
+        assert!(verify_csrf_same_origin(&h, &Method::POST, "https://cogniva.example.org").is_ok());
     }
 }

@@ -46,5 +46,9 @@ nohup.out
 release-bundle/
 current-release.json
 
+# Local unversioned exam PDFs & one-off import scratch scripts
+/questoes/
+scripts/*-bcb2027-*.py
+
 # VS Code & IDEs
 .vscode/

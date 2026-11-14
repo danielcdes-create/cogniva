@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   web-admin:
-    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    if: "github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]')"
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -27,10 +27,10 @@ jobs:
           node --test web-admin/tests/*.test.js
           python3 scripts/check_markdown_links.py
   knowledge-contracts:
-    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    if: "github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]')"
     uses: ./.github/workflows/knowledge-contracts.yml
   backend:
-    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    if: "github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]')"
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -41,6 +41,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: backend-rust
+      - name: Lint Rust backend with Clippy (-D warnings)
+        working-directory: backend-rust
+        run: cargo clippy --all-targets --locked -- -D warnings
       - name: Dedicated synthetic Mongo (never Atlas)
         run: |
           docker run -d --name cogniva-test-mongo --memory=512m -p 127.0.0.1:27048:27017 mongo:7.0.41 --bind_ip_all --wiredTigerCacheSizeGB 0.25 --setParameter enableTestCommands=1
@@ -61,7 +64,7 @@ jobs:
           docker logs --tail 30 cogniva-test-mongo || true
           docker rm -f cogniva-test-mongo || true
   android:
-    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    if: "github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]')"
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:

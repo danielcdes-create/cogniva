@@ -107,7 +107,7 @@ pub async fn cache_state(
     let ids = body
         .question_ids
         .iter()
-        .map(|id| ObjectId::parse_str(id))
+        .map(ObjectId::parse_str)
         .collect::<Result<Vec<_>, _>>()?;
     if ids
         .iter()

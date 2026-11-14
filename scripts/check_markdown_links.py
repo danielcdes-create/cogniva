@@ -11,7 +11,17 @@ FORBIDDEN_WORKSTATION_RE = re.compile(r'(?:[A-Za-z]:\\Users\\|[A-Za-z]:/Users/|f
 
 
 def iter_markdown_files() -> list[pathlib.Path]:
-    ignored_dirs = {'.git', 'target', 'build', '.gradle', 'node_modules', '.venv', '.pytest_cache'}
+    ignored_dirs = {
+        '.git',
+        'target',
+        'build',
+        '.gradle',
+        'node_modules',
+        '.venv',
+        '.pytest_cache',
+        'questoes',
+        'release-bundle',
+    }
     results: list[pathlib.Path] = []
     for path in ROOT.rglob('*.md'):
         if any(part in ignored_dirs for part in path.parts):

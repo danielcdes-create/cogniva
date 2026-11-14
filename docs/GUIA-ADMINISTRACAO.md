@@ -209,3 +209,16 @@ No Cogniva 2.0, a autenticação administrativa é 100% nativa por e-mail e senh
 A mesma conta de e-mail pode ser usada no aplicativo Android e no painel administrativo, mantendo rascunhos locais isolados no navegador.
 
 No portal: **Ver rascunhos preservados**.
+
+## Privacidade (LGPD Art. 18) e Governança de IA
+
+O Cogniva separa estritamente os dados pessoais de estudo do acervo editorial compartilhado e aplica controles rígidos nas chamadas assistidas por IA.
+
+1. A exclusão de conta pelo titular (via DELETE /api/v1/auth/account ou pelo aplicativo Android) remove estritamente os registros pessoais do usuário, sessões ativas, progresso individual e grades privadas.
+2. O acervo compartilhado e sua auditoria permanecem 100% preservados após exclusões de conta: todasQuestoes, question_revision_events, knowledge_catalog e exam_templates nunca são apagados.
+3. Todo conteúdo enviado ao provedor de IA recebe isolamento contra prompt injection (delimitadores explícitos de entrada não confiável, instruções de sistema fixas e validação estrita de schema JSON na resposta).
+4. O uso de IA obedece a cotas diárias por usuário e teto operacional global, estornando reservas em falhas de rede/provedor e exigindo revisão humana explícita antes de qualquer publicação.
+
+Nenhuma resposta de IA publica questões, altera gabaritos ou confirma classificação/validade automaticamente sem confirmação humana auditada.
+
+No portal: **Voltar à visão geral**.

@@ -169,13 +169,17 @@ pub fn validate_against(catalog:&Value,baseline:&Value,registry_base:&Value)->Re
                     return Err(bad(format!("Nome anterior/alias removido: {id}")));
                 }
                 if row.get("revision").is_some() {
+                    let row_rev = row["revision"]
+                        .as_u64()
+                        .ok_or_else(|| bad(format!("Revisão inteira inválida: {id}")))?;
+                    let prior_rev = prior["revision"]
+                        .as_u64()
+                        .ok_or_else(|| bad(format!("Revisão anterior inválida: {id}")))?;
                     let mut a: Value = (**prior).clone();
                     let mut b: Value = (**row).clone();
                     a.as_object_mut().unwrap().remove("revision");
                     b.as_object_mut().unwrap().remove("revision");
-                    if row["revision"].as_u64().unwrap()
-                        < prior["revision"].as_u64().unwrap() + u64::from(a != b)
-                    {
+                    if row_rev < prior_rev + u64::from(a != b) {
                         return Err(bad(format!("Revisão não avançou: {id}")));
                     }
                 }
@@ -265,7 +269,10 @@ pub fn validate_against(catalog:&Value,baseline:&Value,registry_base:&Value)->Re
     }
     entries.sort_by(|a, b| a["id"].as_str().cmp(&b["id"].as_str()));
     registry["entries"] = json!(entries);
-    registry["registry_version"] = json!(registry["registry_version"].as_u64().unwrap() + 1);
+    let reg_ver = registry["registry_version"]
+        .as_u64()
+        .ok_or_else(|| bad("registry_version inválida"))?;
+    registry["registry_version"] = json!(reg_ver + 1);
     Ok(
         json!({"valid":true,"catalog_sha256":hash(catalog),"registry":registry,"activation":"ADMIN_REVIEW","counts":{"trunks":trunks.len(),"subjects":subjects.len(),"topics":topics.len()}}),
     )

@@ -7,7 +7,7 @@ import br.com.concursoprep.app.domain.exam.StoredExam
 import java.time.Instant
 import java.time.ZoneOffset
 
-data class PendingReviewItem(val id:String,val title:String,val detail:String,val status:String)
+data class PendingReviewItem(val id:String,val title:String,val detail:String,val status:String,val canDismiss:Boolean=false)
 
 @Serializable
 data class LearningEvent(

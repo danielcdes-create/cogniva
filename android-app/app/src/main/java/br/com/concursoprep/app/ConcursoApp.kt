@@ -2,6 +2,7 @@ package br.com.concursoprep.app
 
 import android.app.Application
 import androidx.room.Room
+import androidx.work.WorkManager
 import br.com.concursoprep.app.data.AuthStore
 import br.com.concursoprep.app.data.local.AccountDatabaseOpener
 import br.com.concursoprep.app.data.local.AccountDatabaseSession
@@ -10,12 +11,13 @@ import br.com.concursoprep.app.data.local.ExamMigrations
 import br.com.concursoprep.app.data.remote.ConcursoApiService
 import br.com.concursoprep.app.data.repository.ConcursoRepository
 import br.com.concursoprep.app.data.sync.OfflineSyncWorker
-import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
+import retrofit2.converter.kotlinx.serialization.asConverterFactory
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 class ConcursoApp : Application() {
@@ -30,6 +32,7 @@ class ConcursoApp : Application() {
         private set
 
     private var accountDatabases: AccountDatabaseSession<AppDatabase>? = null
+    private var activeHttpClient: OkHttpClient? = null
 
     suspend fun selectAccount(userId: Long) {
         if (::repository.isInitialized) {
@@ -37,6 +40,35 @@ class ConcursoApp : Application() {
         }
         authStore.select(userId)
         openAccount(userId)
+    }
+
+    /**
+     * Fecha o banco Room da conta excluída, apaga seus arquivos locais SQLite/WAL/SHM e backups,
+     * e abre o novo banco limpo de convidado (LGPD Art. 18).
+     */
+    suspend fun wipeLocalAccountDatabaseAndOpenGuest(deletedUserId: Long, nextGuestUserId: Long) {
+        runCatching { WorkManager.getInstance(this).cancelUniqueWork("CognivaImmediateSync") }
+        if (::repository.isInitialized) {
+            repository.awaitIdleForClose()
+        }
+        val prefs = getSharedPreferences("cogniva_prefs", MODE_PRIVATE)
+        val legacyOwner = prefs.getLong("legacy_database_owner", 0L)
+        val deletedDbName = AccountDatabaseOpener.fileName(legacyOwner, deletedUserId)
+
+        authStore.select(nextGuestUserId)
+        openAccount(nextGuestUserId)
+
+        if (deletedUserId != nextGuestUserId) {
+            runCatching { deleteDatabase(deletedDbName) }
+            runCatching { deleteDatabase("cogniva-$deletedUserId.db") }
+            if (legacyOwner != 0L && legacyOwner == deletedUserId) {
+                runCatching { deleteDatabase("concurso_prep.db") }
+                prefs.edit().remove("legacy_database_owner").apply()
+            }
+        }
+        runCatching {
+            File(cacheDir, "preserved").listFiles()?.forEach { it.delete() }
+        }
     }
 
     override fun onCreate() {
@@ -76,22 +108,36 @@ class ConcursoApp : Application() {
         ).also { accountDatabases = it }
         database = session.open(databaseName)
 
-        // 2. Configura OkHttp sem vazamento de logs HTTP em builds release
-        val loggingInterceptor = HttpLoggingInterceptor().apply {
-            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC else HttpLoggingInterceptor.Level.NONE
+        activeHttpClient?.let { previous ->
+            previous.dispatcher.executorService.shutdown()
+            previous.connectionPool.evictAll()
         }
 
-        val okHttpClient = OkHttpClient.Builder()
+        // 2. Configura OkHttp com timeout estendido (65s para xAI tutor/grading) e interceptor de log restrito a DEBUG
+        val okHttpBuilder = OkHttpClient.Builder()
             .addInterceptor { chain ->
-                val token=authStore.token(ownerUserId)
-                val request=chain.request().newBuilder().apply { if(!token.isNullOrBlank()) header("Authorization","Bearer $token") }.build()
+                val token = authStore.token(ownerUserId)
+                val request = chain.request().newBuilder().apply {
+                    if (!token.isNullOrBlank()) header("Authorization", "Bearer $token")
+                }.build()
                 chain.proceed(request)
             }
-            .addInterceptor(loggingInterceptor)
             .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(45, TimeUnit.SECONDS)
-            .writeTimeout(15, TimeUnit.SECONDS)
-            .build()
+            .readTimeout(65, TimeUnit.SECONDS)
+            .writeTimeout(20, TimeUnit.SECONDS)
+
+        if (BuildConfig.DEBUG) {
+            val loggingInterceptor = HttpLoggingInterceptor().apply {
+                level = HttpLoggingInterceptor.Level.BASIC
+                redactHeader("Authorization")
+                redactHeader("Cookie")
+                redactHeader("Set-Cookie")
+            }
+            okHttpBuilder.addInterceptor(loggingInterceptor)
+        }
+
+        val okHttpClient = okHttpBuilder.build()
+        activeHttpClient = okHttpClient
 
         // 3. Serializador Kotlinx com tolerância a novos campos do MongoDB
         val json = Json {
@@ -100,7 +146,7 @@ class ConcursoApp : Application() {
             coerceInputValues = true
         }
 
-        // 4. Retrofit apontando para o container api-rust-core no Droplet DigitalOcean (via BuildConfig.API_BASE_URL)
+        // 4. Retrofit apontando para o container api-rust-core (via BuildConfig.API_BASE_URL)
         val contentType = "application/json".toMediaType()
         val retrofit = Retrofit.Builder()
             .baseUrl(BuildConfig.API_BASE_URL)
@@ -116,9 +162,11 @@ class ConcursoApp : Application() {
             dao = database.concursoDao(),
             examDao = database.examDao(),
             json = json,
-            durable = database.durableDao(), database = database, ownerUserId = ownerUserId, auth = authStore
+            durable = database.durableDao(),
+            database = database,
+            ownerUserId = ownerUserId,
+            auth = authStore
         )
-
     }
 
     companion object {

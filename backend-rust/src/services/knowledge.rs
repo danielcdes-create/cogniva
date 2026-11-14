@@ -71,7 +71,7 @@ pub fn project(activity: &Document, question: &Document) -> Option<Evidence> {
         .rev()
         .collect();
     let confidence =
-        Some((recent.iter().sum::<i32>() as f64 / recent.len() as f64 + 0.5).floor() as i32);
+        (recent.iter().sum::<i32>() as f64 / recent.len() as f64 + 0.5).floor() as i32;
     let recorded_practices = activity.get_i32("quantidade_praticas").unwrap_or(0) as usize;
     let last = events.last()?;
     Some(Evidence {
@@ -81,7 +81,7 @@ pub fn project(activity: &Document, question: &Document) -> Option<Evidence> {
         attempts: events.len() as i32,
         correct,
         accuracy_pct: 100.0 * correct as f64 / events.len() as f64,
-        confidence_avg: confidence,
+        confidence_avg: Some(confidence),
         recent_confidences: recent,
         high_confidence_error: last.get_bool("status").ok() == Some(false)
             && last.get_i32("nivel_confianca").unwrap_or(0) >= 2,
@@ -96,7 +96,7 @@ pub fn project(activity: &Document, question: &Document) -> Option<Evidence> {
                 )
                 .points_total,
             )
-            && confidence.unwrap_or(0) >= 2,
+            && confidence >= 2,
         review_due_on: q
             .validity
             .as_ref()
