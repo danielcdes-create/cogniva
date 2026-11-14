@@ -275,7 +275,10 @@ class QuestionContractsTest(unittest.TestCase):
             qc.validate_evaluation_binding(current, attempt, previous)
 
     def test_unsafe_evidence_uri_schemes_and_out_of_bounds_metadata_fail(self):
-        for bad_uri in ("javascript:alert(1)", "data:text/html,<h1>x</h1>", "file:///etc/passwd"):
+        q_urn = fixture("question-obsolete")
+        q_urn["validity"]["decision"]["evidence"][0]["uri"] = "urn:cogniva:admin-review:672f8b2c4e1a2b3c4d5e6f70"
+        qc.validate_question(q_urn, self.catalog)
+        for bad_uri in ("javascript:alert(1)", "data:text/html,<h1>x</h1>", "file:///etc/passwd", "urn:evil:payload"):
             q = fixture("question-obsolete")
             q["validity"]["decision"]["evidence"][0]["uri"] = bad_uri
             with self.assertRaisesRegex(ValueError, "(schema|unsafe evidence uri)"):

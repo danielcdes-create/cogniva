@@ -54,7 +54,7 @@
           "type": "string",
           "format": "uri",
           "maxLength": 2048,
-          "pattern": "^https?://"
+          "pattern": "^([Hh][Tt][Tt][Pp][Ss]?://.+|urn:cogniva:[A-Za-z0-9._:-]+)$"
         },
         "title": {
           "type": "string",

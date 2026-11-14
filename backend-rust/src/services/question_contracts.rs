@@ -88,6 +88,16 @@ pub fn validate_http_uri(uri: &str) -> Result<(), AppError> {
     {
         return Err(bad("URI de referência inválida ou acima de 2048 caracteres"));
     }
+    if let Some(rest) = trimmed.strip_prefix("urn:cogniva:") {
+        if !rest.is_empty()
+            && rest
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b':' | b'-'))
+        {
+            return Ok(());
+        }
+        return Err(bad("URN de referência interna Cogniva malformada"));
+    }
     let has_http_scheme = trimmed
         .get(..7)
         .is_some_and(|p| p.eq_ignore_ascii_case("http://"))
@@ -95,7 +105,9 @@ pub fn validate_http_uri(uri: &str) -> Result<(), AppError> {
             .get(..8)
             .is_some_and(|p| p.eq_ignore_ascii_case("https://"));
     if !has_http_scheme {
-        return Err(bad("URI deve utilizar esquema http:// ou https://"));
+        return Err(bad(
+            "URI deve utilizar esquema http://, https:// ou urn:cogniva:",
+        ));
     }
     let parsed =
         reqwest::Url::parse(trimmed).map_err(|_| bad("URI de referência malformada"))?;
@@ -457,12 +469,15 @@ mod tests {
             .unwrap();
         validate_http_uri("HTTP://example.org/edital.pdf").unwrap();
         validate_http_uri("HTTPS://example.org/prova.pdf").unwrap();
+        validate_http_uri("urn:cogniva:admin-review:672f8b2c4e1a2b3c4d5e6f70").unwrap();
         for bad_uri in [
             "javascript:alert(1)",
             "JAVASCRIPT:alert(1)",
             "data:text/html,<script>alert(1)</script>",
             "file:///etc/passwd",
             "ftp://example.org/file.pdf",
+            "urn:evil:payload",
+            "urn:cogniva:",
             "https://",
         ] {
             assert!(validate_http_uri(bad_uri).is_err(), "{bad_uri}");
@@ -472,6 +487,17 @@ mod tests {
             "../../../shared/examples/question-contracts/question-multiple-choice.json"
         ))
         .unwrap();
+
+        // Internal Cogniva admin-review URN passes full JSON Schema + domain validation
+        let mut with_urn_ev = base_q.clone();
+        with_urn_ev["origins"][0]["provenance"]["evidence"] = json!([{
+            "uri": "urn:cogniva:admin-review:672f8b2c4e1a2b3c4d5e6f70",
+            "title": "Revisão administrativa explícita no painel Cogniva",
+            "locator": null,
+            "retrieved_at": "2026-11-01T00:00:00Z",
+            "sha256": null
+        }]);
+        validate(&with_urn_ev).unwrap();
 
         // source_reference.uri dangerous scheme rejected
         let mut with_bad_source = base_q.clone();

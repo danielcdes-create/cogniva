@@ -5,6 +5,7 @@ from decimal import Decimal
 from functools import lru_cache
 import hashlib
 import json
+import re
 
 from jsonschema import Draft202012Validator, FormatChecker
 import rfc8785
@@ -43,7 +44,9 @@ def human_review(provenance):
 def check_safe_evidence_list(items):
     for ev in items or []:
         uri = str(ev.get("uri") or "").strip()
-        require(uri.startswith(("https://", "http://")), "unsafe evidence uri scheme")
+        is_http = uri.lower().startswith(("https://", "http://")) and len(uri) <= 2048
+        is_cogniva_urn = bool(re.fullmatch(r"urn:cogniva:[A-Za-z0-9._:-]+", uri)) and len(uri) <= 2048
+        require(is_http or is_cogniva_urn, "unsafe evidence uri scheme")
 
 
 def check_provenance_uris(provenance):
