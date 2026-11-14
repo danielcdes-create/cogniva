@@ -47,11 +47,44 @@ class ExamManagementTest {
         }
         rule.onNodeWithText("Criar do zero").performScrollTo().performClick()
         val restingActionsBottom = rule.onNodeWithTag("exam_editor_actions").fetchSemanticsNode().boundsInRoot.bottom
+        fun windowRoots(): List<android.view.View> =
+            if (android.os.Build.VERSION.SDK_INT >= 29) {
+                android.view.inspector.WindowInspector.getGlobalWindowViews()
+            } else {
+                listOf(rule.activity.window.decorView)
+            }
+        fun onMain(block: () -> Unit) {
+            if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) block()
+            else rule.runOnUiThread(block)
+        }
         fun closeKeyboardAndAwaitSettled() {
-            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            rule.runOnIdle {
+                val imm = rule.activity.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+                windowRoots().forEach { root ->
+                    root.clearFocus()
+                    imm?.hideSoftInputFromWindow(root.windowToken, 0)
+                }
+            }
+            rule.waitForIdle()
             rule.waitUntil(timeoutMillis = 5_000) {
+                var imeHidden = false
+                onMain {
+                    val imm = rule.activity.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+                    val roots = windowRoots()
+                    val imeVisible = roots.any { root ->
+                        androidx.core.view.ViewCompat.getRootWindowInsets(root)
+                            ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true
+                    }
+                    if (imeVisible) {
+                        roots.forEach { root ->
+                            root.clearFocus()
+                            imm?.hideSoftInputFromWindow(root.windowToken, 0)
+                        }
+                    }
+                    imeHidden = !imeVisible
+                }
                 val bottom = rule.onNodeWithTag("exam_editor_actions").fetchSemanticsNode().boundsInRoot.bottom
-                kotlin.math.abs(bottom - restingActionsBottom) < 2f
+                imeHidden && kotlin.math.abs(bottom - restingActionsBottom) < 2f
             }
         }
         rule.onNodeWithText("Órgão ou concurso").performScrollTo().performTextInput("Concurso sintético")
