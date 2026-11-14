@@ -9,6 +9,7 @@
     </style>
 
     <style name="Theme.Cogniva.EdgeToEdgeDialog" parent="@android:style/Theme.DeviceDefault.Dialog">
+        <item name="android:windowAnimationStyle">@null</item>
         <item name="android:windowLayoutInDisplayCutoutMode">@integer/cogniva_window_layout_in_display_cutout_mode</item>
         <item name="android:windowClipToOutline">false</item>
         <item name="android:windowIsFloating">false</item>

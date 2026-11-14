@@ -46,18 +46,29 @@ class ExamManagementTest {
             }
         }
         rule.onNodeWithText("Criar do zero").performScrollTo().performClick()
+        val restingActionsBottom = rule.onNodeWithTag("exam_editor_actions").fetchSemanticsNode().boundsInRoot.bottom
+        fun closeKeyboardAndAwaitSettled() {
+            androidx.test.espresso.Espresso.closeSoftKeyboard()
+            rule.waitUntil(timeoutMillis = 5_000) {
+                val bottom = rule.onNodeWithTag("exam_editor_actions").fetchSemanticsNode().boundsInRoot.bottom
+                kotlin.math.abs(bottom - restingActionsBottom) < 2f
+            }
+        }
         rule.onNodeWithText("Órgão ou concurso").performScrollTo().performTextInput("Concurso sintético")
+        closeKeyboardAndAwaitSettled()
         rule.onNodeWithText("Continuar").performClick()
+        rule.onNodeWithText("Passo 2 de 3 · Prova e escada").assertIsDisplayed()
         rule.onNodeWithText("Continuar").performClick()
+        rule.onNodeWithText("Passo 3 de 3 · Disciplinas e tópicos").assertIsDisplayed()
         rule.onNodeWithText("Nome de outra disciplina").performScrollTo().performTextInput("Engenharia de Túneis")
-        androidx.test.espresso.Espresso.closeSoftKeyboard()
+        closeKeyboardAndAwaitSettled()
         rule.onNodeWithText("Adicionar disciplina personalizada").performScrollTo().performClick()
         rule.onNodeWithText("Editar disciplina e tópicos").performScrollTo().performClick()
         rule.onNodeWithText("Etapa (ex.: 1ª etapa · Prova objetiva)").performScrollTo().performTextInput("2ª etapa")
-        androidx.test.espresso.Espresso.closeSoftKeyboard()
+        closeKeyboardAndAwaitSettled()
         rule.onNodeWithText("Conhecimentos gerais").performScrollTo().performClick()
         rule.onNodeWithText("Novo tópico").performScrollTo().performTextInput("Escavação")
-        androidx.test.espresso.Espresso.closeSoftKeyboard()
+        closeKeyboardAndAwaitSettled()
         rule.onNodeWithText("Adicionar tópico").performScrollTo().performClick()
         rule.onNodeWithText("Salvar na escada").performClick()
         rule.runOnIdle {
