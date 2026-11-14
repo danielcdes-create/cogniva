@@ -38,6 +38,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.93.1
+          components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: backend-rust
