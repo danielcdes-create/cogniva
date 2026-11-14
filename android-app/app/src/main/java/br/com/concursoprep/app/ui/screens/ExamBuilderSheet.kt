@@ -213,7 +213,7 @@ private class FullScreenDialogWrapper(
 ) : ComponentDialog(
     ContextThemeWrapper(
         composeView.context,
-        R.style.Theme_Cogniva_EdgeToEdgeDialog
+        R.style.Theme_Cogniva_EdgeToEdgeDialogWindow
     )
 ), ViewRootForInspector {
     private val dialogLayout: FullScreenDialogLayout

@@ -1,18 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
+    <integer name="cogniva_window_layout_in_display_cutout_mode">1</integer>
+
     <style name="Theme.Cogniva" parent="@android:style/Theme.Material.Light.NoActionBar">
         <item name="android:forceDarkAllowed" tools:targetApi="q">false</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 
-    <style name="Theme.Cogniva.EdgeToEdgeDialog" parent="@android:style/Theme.DeviceDefault.Light.Dialog">
+    <style name="Theme.Cogniva.EdgeToEdgeDialog" parent="@android:style/Theme.DeviceDefault.Dialog">
+        <item name="android:windowLayoutInDisplayCutoutMode">@integer/cogniva_window_layout_in_display_cutout_mode</item>
+        <item name="android:windowClipToOutline">false</item>
         <item name="android:windowIsFloating">false</item>
-        <item name="android:windowNoTitle">true</item>
-        <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
-        <item name="android:windowSoftInputMode">adjustResize</item>
-        <item name="android:windowClipToOutline">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowElevation">0dp</item>
+    </style>
+
+    <style name="Theme.Cogniva.EdgeToEdgeDialogWindow">
+        <item name="android:dialogTheme">@style/Theme.Cogniva.EdgeToEdgeDialog</item>
     </style>
 </resources>
