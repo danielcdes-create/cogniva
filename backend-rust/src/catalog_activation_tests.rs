@@ -614,8 +614,13 @@ async fn validator_migration_upgrades_v2_0_0_receipts_without_rewriting_document
     fixture["schema_version"] = json!(2);
     fixture["exam_year"] = json!(2024);
     fixture["concursos"] = json!("CNU");
-    fixture["validity"]["decision"]["evidence"][0]["uri"] =
-        json!(format!("urn:cogniva:admin-review:{}", qid.to_hex()));
+    fixture["validity"]["decision"]["evidence"] = json!([{
+        "uri": format!("urn:cogniva:admin-review:{}", qid.to_hex()),
+        "title": "Revisão administrativa explícita no painel Cogniva",
+        "locator": null,
+        "retrieved_at": "2026-11-02T15:00:00Z",
+        "sha256": null
+    }]);
     let mut question_doc = Bson::try_from(fixture)
         .unwrap()
         .as_document()
