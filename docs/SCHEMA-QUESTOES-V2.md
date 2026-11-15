@@ -55,7 +55,7 @@ Qualquer edição no enunciado, nas alternativas, no gabarito ou na rubrica alte
   - Se houver mudança no conteúdo (`content_revision`) sem nova decisão explícita do revisor, o status retorna automaticamente para `UNDER_REVIEW`.
 - **Campos Pedagógicos, Evidências e Limites:**
   - Edições V2 persistem integralmente `explanation` (comentário do gabarito), `level` (dificuldade) e `exam_year` (`1900..=2200`, sincronizado com `origins[0].exam_year`), limitando `concursos` a no máximo 50 entradas.
-  - Todas as URIs documentais (`origins[*].source_reference.uri` e `evidence[*].uri`) exigem esquema `http://`, `https://` ou URN interna de auditoria `urn:cogniva:*`, bloqueando esquemas executáveis ou locais (`javascript:`, `data:`, `file:`).
+  - Todas as URIs documentais (`origins[*].source_reference.uri` e `evidence[*].uri`) exigem esquema `http://`, `https://`, URN interna de auditoria `urn:cogniva:*` ou referência arquivística de caderno PDF (`file:///*.pdf`, sem travessia `..`), bloqueando esquemas executáveis ou caminhos arbitrários (`javascript:`, `data:`, `file:///etc/passwd`).
 
 ---
 

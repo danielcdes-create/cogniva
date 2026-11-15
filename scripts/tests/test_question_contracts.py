@@ -278,7 +278,16 @@ class QuestionContractsTest(unittest.TestCase):
         q_urn = fixture("question-obsolete")
         q_urn["validity"]["decision"]["evidence"][0]["uri"] = "urn:cogniva:admin-review:672f8b2c4e1a2b3c4d5e6f70"
         qc.validate_question(q_urn, self.catalog)
-        for bad_uri in ("javascript:alert(1)", "data:text/html,<h1>x</h1>", "file:///etc/passwd", "urn:evil:payload"):
+        q_pdf = fixture("question-obsolete")
+        q_pdf["validity"]["decision"]["evidence"][0]["uri"] = "file:///C:/Users/danie/Cogniva/questoes/959_BCB_CB1_01.pdf"
+        qc.validate_question(q_pdf, self.catalog)
+        for bad_uri in (
+            "javascript:alert(1)",
+            "data:text/html,<h1>x</h1>",
+            "file:///etc/passwd",
+            "file:///C:/Users/../secret.pdf",
+            "urn:evil:payload",
+        ):
             q = fixture("question-obsolete")
             q["validity"]["decision"]["evidence"][0]["uri"] = bad_uri
             with self.assertRaisesRegex(ValueError, "(schema|unsafe evidence uri)"):

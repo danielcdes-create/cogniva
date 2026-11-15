@@ -54,7 +54,7 @@
           "type": "string",
           "format": "uri",
           "maxLength": 2048,
-          "pattern": "^([Hh][Tt][Tt][Pp][Ss]?://.+|urn:cogniva:[A-Za-z0-9._:-]+)$"
+          "pattern": "^([Hh][Tt][Tt][Pp][Ss]?://.+|urn:cogniva:[A-Za-z0-9._:-]+|file:///[A-Za-z0-9._:/-]+\\.[Pp][Dd][Ff])$"
         },
         "title": {
           "type": "string",

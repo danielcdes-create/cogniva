@@ -46,7 +46,12 @@ def check_safe_evidence_list(items):
         uri = str(ev.get("uri") or "").strip()
         is_http = uri.lower().startswith(("https://", "http://")) and len(uri) <= 2048
         is_cogniva_urn = bool(re.fullmatch(r"urn:cogniva:[A-Za-z0-9._:-]+", uri)) and len(uri) <= 2048
-        require(is_http or is_cogniva_urn, "unsafe evidence uri scheme")
+        is_archival_pdf = (
+            bool(re.fullmatch(r"file:///[A-Za-z0-9._:/-]+\.[Pp][Dd][Ff]", uri))
+            and ".." not in uri
+            and len(uri) <= 2048
+        )
+        require(is_http or is_cogniva_urn or is_archival_pdf, "unsafe evidence uri scheme")
 
 
 def check_provenance_uris(provenance):

@@ -614,6 +614,13 @@ async fn validator_migration_upgrades_v2_0_0_receipts_without_rewriting_document
     fixture["schema_version"] = json!(2);
     fixture["exam_year"] = json!(2024);
     fixture["concursos"] = json!("CNU");
+    fixture["origins"][0]["source_reference"] = json!({
+        "uri": "file:///C:/Users/danie/Cogniva/questoes/959_BCB_CB1_01.pdf",
+        "title": "Caderno oficial Banco Central CB1",
+        "locator": "Questão 1",
+        "retrieved_at": "2026-11-02T15:00:00Z",
+        "sha256": null
+    });
     fixture["validity"]["decision"]["evidence"] = json!([{
         "uri": format!("urn:cogniva:admin-review:{}", qid.to_hex()),
         "title": "Revisão administrativa explícita no painel Cogniva",

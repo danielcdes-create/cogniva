@@ -98,6 +98,22 @@ pub fn validate_http_uri(uri: &str) -> Result<(), AppError> {
         }
         return Err(bad("URN de referência interna Cogniva malformada"));
     }
+    if let Some(rest) = trimmed.strip_prefix("file:///") {
+        if rest.len() > 4
+            && !rest.contains("..")
+            && rest
+                .get(rest.len() - 4..)
+                .is_some_and(|ext| ext.eq_ignore_ascii_case(".pdf"))
+            && rest
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b':' | b'/' | b'-'))
+        {
+            return Ok(());
+        }
+        return Err(bad(
+            "URI file:/// permitida apenas para caderno PDF arquivístico sem travessia de diretório",
+        ));
+    }
     let has_http_scheme = trimmed
         .get(..7)
         .is_some_and(|p| p.eq_ignore_ascii_case("http://"))
@@ -470,11 +486,13 @@ mod tests {
         validate_http_uri("HTTP://example.org/edital.pdf").unwrap();
         validate_http_uri("HTTPS://example.org/prova.pdf").unwrap();
         validate_http_uri("urn:cogniva:admin-review:672f8b2c4e1a2b3c4d5e6f70").unwrap();
+        validate_http_uri("file:///C:/Users/danie/Cogniva/questoes/959_BCB_CB1_01.pdf").unwrap();
         for bad_uri in [
             "javascript:alert(1)",
             "JAVASCRIPT:alert(1)",
             "data:text/html,<script>alert(1)</script>",
             "file:///etc/passwd",
+            "file:///C:/Users/../secret.pdf",
             "ftp://example.org/file.pdf",
             "urn:evil:payload",
             "urn:cogniva:",
