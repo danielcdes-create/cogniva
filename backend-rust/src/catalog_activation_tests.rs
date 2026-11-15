@@ -566,3 +566,205 @@ async fn competing_catalog_activations_have_one_committed_winner() {
     assert!(name.starts_with("cogniva_test_race_"));
     db.drop().await.unwrap();
 }
+
+#[tokio::test]
+#[ignore = "Requires dedicated loopback Mongo 27048"]
+async fn validator_migration_upgrades_v2_0_0_receipts_without_rewriting_documents_and_recovers_partial_crash(
+) {
+    use services::question_storage;
+    let uri = std::env::var("COGNIVA_TEST_MONGODB_URI").unwrap();
+    assert!(uri.starts_with("mongodb://127.0.0.1:27048/"));
+    let client = Client::with_uri_str(&uri).await.unwrap();
+    let db_name = format!("cogniva_test_valmig_{}", uuid::Uuid::new_v4().simple());
+    let db = client.database(&db_name);
+
+    let old_bundle = question_storage::v2_0_0_schema_bundle();
+    let specs = [
+        ("todasQuestoes", "question"),
+        ("question_classification_suggestions", "suggestion"),
+        ("question_exam_compatibility", "compatibility"),
+        ("answer_evaluations", "evaluation"),
+    ];
+    let receipts = question_storage::collection(&db, "cogniva_schema_versions");
+    for (coll_name, kind) in specs {
+        let old_schema = question_storage::mongo_schema_from_bundle(&old_bundle, kind);
+        let old_validator = doc! { "$jsonSchema": old_schema };
+        let old_hash = question_storage::validator_source_sha256(&old_validator);
+        db.create_collection(coll_name)
+            .validator(old_validator.clone())
+            .await
+            .unwrap();
+        receipts
+            .insert_one(doc! {
+                "_id": format!("question-v2:{coll_name}"),
+                "validator": old_validator,
+                "source_sha256": old_hash,
+                "installed_at": bson::DateTime::now()
+            })
+            .await
+            .unwrap();
+    }
+
+    let mut fixture: Value = serde_json::from_str(include_str!(
+        "../../shared/examples/question-contracts/question-multiple-choice.json"
+    ))
+    .unwrap();
+    let qid = ObjectId::new();
+    fixture["_id"] = json!({ "$oid": qid.to_hex() });
+    fixture["schema_version"] = json!(2);
+    fixture["exam_year"] = json!(2024);
+    fixture["concursos"] = json!("CNU");
+    fixture["validity"]["decision"]["evidence"][0]["uri"] =
+        json!(format!("urn:cogniva:admin-review:{}", qid.to_hex()));
+    let mut question_doc = Bson::try_from(fixture)
+        .unwrap()
+        .as_document()
+        .unwrap()
+        .clone();
+    question_doc.insert("_id", qid);
+    db.collection::<Document>("todasQuestoes")
+        .insert_one(question_doc.clone())
+        .await
+        .unwrap();
+
+    let first_prepare = question_storage::prepare(&db).await.unwrap();
+    assert_eq!(first_prepare["validators_migrated"], json!(4));
+    assert_eq!(first_prepare["question_documents_rewritten"], json!(0));
+
+    let after_doc = db
+        .collection::<Document>("todasQuestoes")
+        .find_one(doc! { "_id": qid })
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(after_doc, question_doc);
+
+    let q_receipt = receipts
+        .find_one(doc! { "_id": "question-v2:todasQuestoes" })
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        q_receipt.get_i32("validator_revision").unwrap(),
+        question_storage::CURRENT_VALIDATOR_REVISION
+    );
+    assert_eq!(
+        q_receipt.get_str("migration_id").unwrap(),
+        question_storage::VALIDATOR_MIGRATION_V2_0_1
+    );
+
+    let mut bad_year_doc = question_doc.clone();
+    bad_year_doc.insert("_id", ObjectId::new());
+    bad_year_doc.insert("exam_year", 9999_i32);
+    assert!(
+        db.collection::<Document>("todasQuestoes")
+            .insert_one(bad_year_doc)
+            .await
+            .is_err(),
+        "upgraded MongoDB validator must reject out-of-range exam_year"
+    );
+
+    let second_prepare = question_storage::prepare(&db).await.unwrap();
+    assert_eq!(second_prepare["validators_migrated"], json!(0));
+
+    // Simulate crash right after collMod before receipt update:
+    let old_q_validator = doc! {
+        "$jsonSchema": question_storage::mongo_schema_from_bundle(&old_bundle, "question")
+    };
+    let old_q_hash = question_storage::validator_source_sha256(&old_q_validator);
+    receipts
+        .update_one(
+            doc! { "_id": "question-v2:todasQuestoes" },
+            doc! {
+                "$set": {
+                    "validator": old_q_validator,
+                    "source_sha256": old_q_hash
+                }
+            },
+        )
+        .await
+        .unwrap();
+    let recovered = question_storage::prepare(&db).await.unwrap();
+    assert_eq!(recovered["validators_migrated"], json!(1));
+
+    db.drop().await.unwrap();
+}
+
+#[tokio::test]
+#[ignore = "Requires dedicated loopback Mongo 27048"]
+async fn validator_migration_rejects_unknown_hash_and_incompatible_existing_documents() {
+    use services::question_storage;
+    let uri = std::env::var("COGNIVA_TEST_MONGODB_URI").unwrap();
+    assert!(uri.starts_with("mongodb://127.0.0.1:27048/"));
+    let client = Client::with_uri_str(&uri).await.unwrap();
+    let db_name = format!("cogniva_test_valerr_{}", uuid::Uuid::new_v4().simple());
+    let db = client.database(&db_name);
+
+    let old_bundle = question_storage::v2_0_0_schema_bundle();
+    let old_q_validator = doc! {
+        "$jsonSchema": question_storage::mongo_schema_from_bundle(&old_bundle, "question")
+    };
+    let old_q_hash = question_storage::validator_source_sha256(&old_q_validator);
+    db.create_collection("todasQuestoes")
+        .validator(old_q_validator.clone())
+        .await
+        .unwrap();
+    let receipts = question_storage::collection(&db, "cogniva_schema_versions");
+    receipts
+        .insert_one(doc! {
+            "_id": "question-v2:todasQuestoes",
+            "validator": old_q_validator.clone(),
+            "source_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "installed_at": bson::DateTime::now()
+        })
+        .await
+        .unwrap();
+
+    let unknown_err = question_storage::prepare(&db).await.unwrap_err().to_string();
+    assert!(
+        unknown_err.contains("migração versionada explícita"),
+        "unexpected error: {unknown_err}"
+    );
+
+    receipts
+        .update_one(
+            doc! { "_id": "question-v2:todasQuestoes" },
+            doc! { "$set": { "source_sha256": old_q_hash } },
+        )
+        .await
+        .unwrap();
+
+    let mut fixture: Value = serde_json::from_str(include_str!(
+        "../../shared/examples/question-contracts/question-multiple-choice.json"
+    ))
+    .unwrap();
+    let qid = ObjectId::new();
+    fixture["_id"] = json!({ "$oid": qid.to_hex() });
+    fixture["schema_version"] = json!(2);
+    fixture["exam_year"] = json!(9999);
+    let mut bad_doc = Bson::try_from(fixture)
+        .unwrap()
+        .as_document()
+        .unwrap()
+        .clone();
+    bad_doc.insert("_id", qid);
+    db.collection::<Document>("todasQuestoes")
+        .insert_one(bad_doc.clone())
+        .await
+        .unwrap();
+
+    let incompat_err = question_storage::prepare(&db).await.unwrap_err().to_string();
+    assert!(
+        incompat_err.contains("Documentos existentes incompatíveis"),
+        "unexpected error: {incompat_err}"
+    );
+    let preserved = db
+        .collection::<Document>("todasQuestoes")
+        .find_one(doc! { "_id": qid })
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(preserved, bad_doc);
+
+    db.drop().await.unwrap();
+}

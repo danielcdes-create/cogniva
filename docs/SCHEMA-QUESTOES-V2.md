@@ -59,7 +59,15 @@ Qualquer edição no enunciado, nas alternativas, no gabarito ou na rubrica alte
 
 ---
 
-## 5. Verificação Local
+## 5. Migração Versionada de Validadores MongoDB (`cogniva_schema_versions`)
+
+- Cada coleção regida pelos contratos V2 (`todasQuestoes`, `question_classification_suggestions`, `question_exam_compatibility`, `answer_evaluations`) possui recibo durável em `cogniva_schema_versions` (`question-v2:<coleção>`) com o `validator` expandido e seu `source_sha256`.
+- Qualquer alteração em [`shared/schemas/question-contracts.schema.json`](../shared/schemas/question-contracts.schema.json) que modifique o `source_sha256` exige etapa explícita na tabela `VALIDATOR_MIGRATIONS` de [`backend-rust/src/services/question_storage.rs`](../backend-rust/src/services/question_storage.rs) (ex.: `question-v2-validator-2.0.1`, `validator_revision = 2`).
+- Antes de executar `collMod` (`validationLevel: "strict"`, `validationAction: "error"`), `question_storage::prepare` verifica `count_documents({ "$nor": [target_validator] }) == 0`, preservando 100% dos documentos existentes sem reescrita ou descarte e suportando recuperação idempotente em caso de falha intermediária.
+
+---
+
+## 6. Verificação Local
 
 ```bash
 python3 scripts/knowledge_catalog.py --check

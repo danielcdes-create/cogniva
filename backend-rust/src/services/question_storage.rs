@@ -102,6 +102,20 @@ fn expand(v: &Value, defs: &Value) -> Value {
     }
 }
 
+pub fn mongo_schema_from_bundle(bundle: &Value, kind: &str) -> Document {
+    let s = json!({
+        "$schema": bundle["$schema"],
+        "$ref": format!("#/$defs/{kind}"),
+        "$defs": bundle["$defs"]
+    });
+    let mut expanded = expand(&s, &s["$defs"]);
+    if kind == "question" {
+        expanded["properties"]["_id"] = json!({"bsonType":"objectId"});
+        expanded["properties"]["schema_version"] = json!({"bsonType":["int","long"],"enum":[2]});
+    }
+    bson_doc(expanded).expect("converted schema")
+}
+
 pub fn mongo_schema(kind: &str) -> Document {
     let s = contracts::schema(kind);
     let mut expanded = expand(&s, &s["$defs"]);
@@ -112,6 +126,89 @@ pub fn mongo_schema(kind: &str) -> Document {
     bson_doc(expanded).expect("converted schema")
 }
 
+pub fn validator_source_sha256(validator: &Document) -> String {
+    format!(
+        "{:x}",
+        Sha256::digest(serde_json::to_vec(validator).expect("validator JSON"))
+    )
+}
+
+pub const CURRENT_VALIDATOR_REVISION: i32 = 2;
+pub const VALIDATOR_MIGRATION_V2_0_1: &str = "question-v2-validator-2.0.1";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ValidatorMigrationStep {
+    pub migration_id: &'static str,
+    pub kind: &'static str,
+    pub from_source_sha256: &'static str,
+    pub to_source_sha256: &'static str,
+    pub to_revision: i32,
+}
+
+pub const VALIDATOR_MIGRATIONS: &[ValidatorMigrationStep] = &[
+    ValidatorMigrationStep {
+        migration_id: VALIDATOR_MIGRATION_V2_0_1,
+        kind: "question",
+        from_source_sha256: "891ab1a222dce8d53dc7fc4cf4335d0e91e45444d2643640f3659a306bc17a9d",
+        to_source_sha256: "7add12aa54ccf3fcdad34eea055325d51d1dceb55d48b715c1d3a9177248e2d4",
+        to_revision: CURRENT_VALIDATOR_REVISION,
+    },
+    ValidatorMigrationStep {
+        migration_id: VALIDATOR_MIGRATION_V2_0_1,
+        kind: "suggestion",
+        from_source_sha256: "fa915882387ab8c1c69b74b501dc3fa4b3ead8afe392b934c554414d56e5c23e",
+        to_source_sha256: "397faddb760815eebb647d36825986f22ae6f0438ad21ad4b03477dcaf0ef274",
+        to_revision: CURRENT_VALIDATOR_REVISION,
+    },
+    ValidatorMigrationStep {
+        migration_id: VALIDATOR_MIGRATION_V2_0_1,
+        kind: "compatibility",
+        from_source_sha256: "14f6963f17029f351688e9656c4cd84b5320853b6cd3ebfe7476aa4cd4710ef4",
+        to_source_sha256: "58b622432f1483b83fdc1e99311cce44f0c19cd6c747f2dc450db0d9b5622079",
+        to_revision: CURRENT_VALIDATOR_REVISION,
+    },
+    ValidatorMigrationStep {
+        migration_id: VALIDATOR_MIGRATION_V2_0_1,
+        kind: "evaluation",
+        from_source_sha256: "328928b756aeef73c4a200dc75d9784ee3739239f93c4b094173b0b13eca5212",
+        to_source_sha256: "4b19de150c008b84b1ad8e304a679a42d94743eb3807fd4a471702249f012023",
+        to_revision: CURRENT_VALIDATOR_REVISION,
+    },
+];
+
+pub fn find_validator_migration(
+    kind: &str,
+    from_sha256: &str,
+    to_sha256: &str,
+) -> Option<&'static ValidatorMigrationStep> {
+    VALIDATOR_MIGRATIONS.iter().find(|step| {
+        step.kind == kind
+            && step.from_source_sha256 == from_sha256
+            && step.to_source_sha256 == to_sha256
+    })
+}
+
+fn upgrade_merged_validator(
+    expected_previous: &Document,
+    next_validator: &Document,
+) -> Result<Document, AppError> {
+    if expected_previous.contains_key("$jsonSchema") && expected_previous.len() == 1 {
+        return Ok(next_validator.clone());
+    }
+    if let Ok(and_clauses) = expected_previous.get_array("$and") {
+        if and_clauses.len() == 2
+            && and_clauses[1]
+                .as_document()
+                .is_some_and(|d| d.contains_key("$jsonSchema") && d.len() == 1)
+        {
+            return Ok(doc! { "$and": [and_clauses[0].clone(), next_validator.clone()] });
+        }
+    }
+    Err(err(
+        "Estrutura de validador anterior inesperada; revisão necessária",
+    ))
+}
+
 pub async fn prepare(db: &Database) -> Result<Value, AppError> {
     let specs = [
         ("todasQuestoes", "question"),
@@ -119,14 +216,12 @@ pub async fn prepare(db: &Database) -> Result<Value, AppError> {
         ("question_exam_compatibility", "compatibility"),
         ("answer_evaluations", "evaluation"),
     ];
+    let mut validators_migrated = 0_usize;
     let receipts = collection(db, "cogniva_schema_versions");
     for (name, kind) in specs {
         let schema = mongo_schema(kind);
         let validator = doc! { "$jsonSchema": schema };
-        let source_hash = format!(
-            "{:x}",
-            Sha256::digest(serde_json::to_vec(&validator).expect("validator JSON"))
-        );
+        let source_hash = validator_source_sha256(&validator);
         let receipt_key = format!("question-v2:{name}");
         let receipt = receipts.find_one(doc! { "_id": &receipt_key }).await?;
         let descriptions: Vec<_> = db
@@ -139,23 +234,84 @@ pub async fn prepare(db: &Database) -> Result<Value, AppError> {
             .first()
             .and_then(|d| d.options.validator.clone())
             .unwrap_or_default();
-        if receipt
-            .as_ref()
-            .is_some_and(|r| r.get_str("source_sha256").ok() != Some(source_hash.as_str()))
-        {
-            return Err(err("Mudança de schema exige migração versionada explícita"));
-        }
-        let expected = receipt
-            .as_ref()
-            .and_then(|r| r.get_document("validator").ok());
-        if let Some(expected) = expected {
+
+        if let Some(receipt_doc) = &receipt {
+            let old_hash = receipt_doc.get_str("source_sha256").unwrap_or_default();
+            let expected = receipt_doc
+                .get_document("validator")
+                .map_err(|_| err("Recibo de schema sem validador válido"))?;
+            if old_hash != source_hash {
+                let Some(step) = find_validator_migration(kind, old_hash, &source_hash) else {
+                    return Err(err("Mudança de schema exige migração versionada explícita"));
+                };
+                let target_merged = upgrade_merged_validator(expected, &validator)?;
+                if descriptions.is_empty() || (&previous != expected && previous != target_merged) {
+                    return Err(err("Validador mudou fora da migração; revisão necessária"));
+                }
+                if db
+                    .collection::<Document>(name)
+                    .count_documents(doc! { "$nor": [target_merged.clone()] })
+                    .await?
+                    > 0
+                {
+                    return Err(err(
+                        "Documentos existentes incompatíveis; migração não altera nem descarta dados",
+                    ));
+                }
+                if previous != target_merged {
+                    db.run_command(doc! {
+                        "collMod": name,
+                        "validator": target_merged.clone(),
+                        "validationLevel": "strict",
+                        "validationAction": "error"
+                    })
+                    .await?;
+                }
+                receipts
+                    .update_one(
+                        doc! { "_id": &receipt_key, "source_sha256": old_hash },
+                        doc! {
+                            "$set": {
+                                "validator": target_merged,
+                                "source_sha256": &source_hash,
+                                "validator_revision": step.to_revision,
+                                "migration_id": step.migration_id,
+                                "previous_source_sha256": old_hash,
+                                "migrated_at": bson::DateTime::now()
+                            }
+                        },
+                    )
+                    .await?;
+                tracing::info!(
+                    collection = name,
+                    kind = kind,
+                    migration_id = step.migration_id,
+                    from_sha256 = old_hash,
+                    to_sha256 = %source_hash,
+                    "Validador MongoDB migrado com sucesso sem reescrita de documentos."
+                );
+                validators_migrated += 1;
+                continue;
+            }
+
             if expected != &previous {
                 return Err(err("Validador mudou fora da migração; revisão necessária"));
             }
+            if !descriptions.is_empty()
+                && db
+                    .collection::<Document>(name)
+                    .count_documents(doc! { "$nor": [expected.clone()] })
+                    .await?
+                    > 0
+            {
+                return Err(err(
+                    "Documentos existentes incompatíveis; migração não altera nem descarta dados",
+                ));
+            }
+            continue;
         }
-        let merged = if let Some(expected) = expected {
-            expected.clone()
-        } else if previous.is_empty() || previous == validator {
+
+        let merged = if previous.is_empty() || previous == validator {
             validator.clone()
         } else {
             doc! { "$and": [previous, validator] }
@@ -173,7 +329,7 @@ pub async fn prepare(db: &Database) -> Result<Value, AppError> {
         }
         if descriptions.is_empty() {
             db.create_collection(name).validator(merged.clone()).await?;
-        } else if expected.is_none() {
+        } else {
             db.run_command(doc! {
                 "collMod": name,
                 "validator": merged.clone(),
@@ -189,6 +345,7 @@ pub async fn prepare(db: &Database) -> Result<Value, AppError> {
                     "$setOnInsert": {
                         "validator": merged,
                         "source_sha256": source_hash,
+                        "validator_revision": CURRENT_VALIDATOR_REVISION,
                         "installed_at": bson::DateTime::now()
                     }
                 },
@@ -262,6 +419,8 @@ pub async fn prepare(db: &Database) -> Result<Value, AppError> {
     Ok(json!({
         "ready": true,
         "schema_version": 2,
+        "validator_revision": CURRENT_VALIDATOR_REVISION,
+        "validators_migrated": validators_migrated,
         "question_documents_rewritten": 0,
         "indexes": created_indexes.len(),
         "catalog_version": catalog_version
@@ -983,6 +1142,41 @@ fn validate_transition(old: Option<&Document>, next: &Value) -> Result<(), AppEr
 }
 
 #[cfg(test)]
+pub fn v2_0_0_schema_bundle() -> Value {
+    let mut bundle: Value = serde_json::from_str(include_str!(
+        "../../../shared/schemas/question-contracts.schema.json"
+    ))
+    .expect("contracts");
+    let uri = bundle["$defs"]["evidence"]["properties"]["uri"]
+        .as_object_mut()
+        .expect("evidence.uri");
+    uri.remove("maxLength");
+    uri.remove("pattern");
+
+    let exam_year_int = bundle["$defs"]["question"]["properties"]["exam_year"]["anyOf"][0]
+        .as_object_mut()
+        .expect("question.exam_year.anyOf[0]");
+    exam_year_int.remove("minimum");
+    exam_year_int.remove("maximum");
+
+    let concursos_str = bundle["$defs"]["question"]["properties"]["concursos"]["anyOf"][0]
+        .as_object_mut()
+        .expect("question.concursos.anyOf[0]");
+    concursos_str.remove("maxLength");
+
+    let concursos_arr = bundle["$defs"]["question"]["properties"]["concursos"]["anyOf"][1]
+        .as_object_mut()
+        .expect("question.concursos.anyOf[1]");
+    concursos_arr.remove("maxItems");
+    concursos_arr["items"]
+        .as_object_mut()
+        .expect("question.concursos.anyOf[1].items")
+        .remove("maxLength");
+
+    bundle
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -1006,10 +1200,46 @@ mod tests {
     }
 
     #[test]
-    fn mongo_schema_expands_all_contract_kinds_cleanly() {
+    fn validator_migration_table_matches_v2_0_0_and_current_schema_hashes() {
+        let old_bundle = v2_0_0_schema_bundle();
         for kind in ["question", "suggestion", "compatibility", "evaluation"] {
-            let doc = mongo_schema(kind);
-            assert!(doc.contains_key("properties"), "missing properties in {kind}");
+            let old_doc = mongo_schema_from_bundle(&old_bundle, kind);
+            let old_hash = validator_source_sha256(&doc! { "$jsonSchema": old_doc });
+            let current_doc = mongo_schema(kind);
+            assert!(
+                current_doc.contains_key("properties"),
+                "missing properties in {kind}"
+            );
+            let current_hash = validator_source_sha256(&doc! { "$jsonSchema": current_doc });
+            let step = find_validator_migration(kind, &old_hash, &current_hash).unwrap_or_else(
+                || panic!("missing explicit validator migration for {kind}: {old_hash} -> {current_hash}"),
+            );
+            assert_eq!(step.migration_id, VALIDATOR_MIGRATION_V2_0_1);
+            assert_eq!(step.to_revision, CURRENT_VALIDATOR_REVISION);
+            assert!(
+                find_validator_migration(kind, "0000000000000000000000000000000000000000000000000000000000000000", &current_hash).is_none(),
+                "unversioned predecessor hash must never match {kind}"
+            );
         }
+    }
+
+    #[test]
+    fn upgrade_merged_validator_preserves_standalone_and_composite_structures() {
+        let old_v = doc! { "$jsonSchema": { "bsonType": "object" } };
+        let new_v = doc! { "$jsonSchema": { "bsonType": "object", "required": ["_id"] } };
+        assert_eq!(
+            upgrade_merged_validator(&old_v, &new_v).unwrap(),
+            new_v.clone()
+        );
+
+        let legacy_guard = doc! { "legacy_ok": { "$ne": false } };
+        let composite_old = doc! { "$and": [legacy_guard.clone(), old_v] };
+        assert_eq!(
+            upgrade_merged_validator(&composite_old, &new_v).unwrap(),
+            doc! { "$and": [legacy_guard, new_v.clone()] }
+        );
+
+        let malformed = doc! { "$or": [] };
+        assert!(upgrade_merged_validator(&malformed, &new_v).is_err());
     }
 }
