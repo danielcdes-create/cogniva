@@ -255,8 +255,12 @@ jobs:
 
           bundle="$RUNNER_TEMP/cogniva-mig-bundle"
           mkdir -p "$bundle/scripts" "$bundle/deps"
-          cp scripts/migrate_cnu_to_cogniva.py scripts/knowledge_catalog.py scripts/question_contracts.py "$bundle/scripts/"
+          cp scripts/migrate_cnu_to_cogniva.py scripts/import_questions_batch.py scripts/knowledge_catalog.py scripts/question_contracts.py "$bundle/scripts/"
           cp -r shared "$bundle/shared"
+          if [ -d questoes/bcb_financas ]; then
+            mkdir -p "$bundle/questoes"
+            cp -r questoes/bcb_financas "$bundle/questoes/bcb_financas"
+          fi
           python3 -m pip install --quiet \
             --platform manylinux2014_x86_64 \
             --implementation cp \
@@ -298,15 +302,24 @@ jobs:
               if not uri:
                   raise RuntimeError('MONGODB_URI not present in /opt/apps/.env.rust')
 
-              report = migrator.run_mongo_migration(
-                  source_uri=uri,
-                  source_db_name='CNU',
-                  target_uri=uri,
-                  target_db_name='cogniva',
-                  dry_run=(mig_mode != 'apply'),
-                  contest_filter=contest_filter,
-                  include_contest_subjects=include_subjects,
-              )
+              if contest_filter and contest_filter.startswith('IMPORT_BATCH'):
+                  import import_questions_batch as importer
+                  report = importer.inspect_and_import_mongo(
+                      mongo_uri=uri,
+                      target_db_name='cogniva',
+                      batch_dir=remote_dir / 'questoes' / 'bcb_financas',
+                      dry_run=(mig_mode != 'apply'),
+                  )
+              else:
+                  report = migrator.run_mongo_migration(
+                      source_uri=uri,
+                      source_db_name='CNU',
+                      target_uri=uri,
+                      target_db_name='cogniva',
+                      dry_run=(mig_mode != 'apply'),
+                      contest_filter=contest_filter,
+                      include_contest_subjects=include_subjects,
+                  )
               if mig_mode == 'apply':
                   proc = subprocess.run(
                       ['docker', 'exec', '-e', 'RUST_LOG=error', 'api-rust-core', '/usr/local/bin/cogniva-api', '--prepare-storage'],
