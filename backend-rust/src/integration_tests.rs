@@ -2416,6 +2416,7 @@ async fn nt_cogniva_questions_002_provenance_idempotency_concurrency_and_eligibi
     expired_q["question"] = json!("Questão vencida em review_due_on?");
     expired_q["content_revision"] = json!(services::question_contracts::hash(&expired_q).unwrap());
     expired_q["validity"]["evaluated_content_revision"] = expired_q["content_revision"].clone();
+    expired_q["validity"]["reference_date"] = json!("2019-01-01");
     expired_q["validity"]["review_due_on"] = json!("2020-01-01");
     services::question_storage::create(
         &db,
