@@ -25,17 +25,32 @@ Para impedir exaustão de créditos ou abuso por criação automatizada de sess�
 
 ---
 
-## 3. Os 8 Tutores Pedagógicos e `ai_resource_meta`
+## 3. Os 8 Tutores Pedagógicos, Bússola Pré-Resposta e `ai_resource_meta`
 
-Os recursos pedagógicos cacheados em `cogniva.todasQuestoes` (apenas quando impessoais) são:
-1. Explicação detalhada pós-resposta (`explanation`);
-2. Dicas contextuais progressivas pré-resposta (`contextualHint`, sem revelar o gabarito);
-3. Dr. Sincero (`drSincero`);
-4. Simplificação pré-resposta (`ajudaInfantil`, nunca faz fallback para `explanation` quando offline);
-5. Explicação didática pós-resposta (`explicacaoInfantil`);
-6. Conceitos extras (`explanationExtra`);
-7. Mnemônico (`mnemonico`);
-8. Plausibilidade das alternativas (`plausibilityMarkdown`).
+Os recursos pedagógicos cacheados em `cogniva.todasQuestoes` (apenas quando impessoais, versão de prompt `ai-tutor/3`) dividem-se estritamente entre **ajuda pré-resposta** e **contexto pós-resposta**:
+
+### 3.1 Tutores Pré-Resposta (Alinhados à Banca, Zero Vazamento de Gabarito)
+Em questões de concursos públicos (FGV, Cebraspe, FCC, divergências STF/STJ), omitir o gabarito do tutor aumentaria o risco de o modelo inferir a alternativa errada e induzir o estudante ao distrator. Por isso, [`services/ai_tutor.rs`](../backend-rust/src/services/ai_tutor.rs) aplica **defesa em 3 camadas**:
+
+1. **Bússola Pedagógica Interna Sigilosa (`bussola_gabarito_sigiloso_nao_revelar`):** O gabarito oficial é enviado dentro de `<untrusted_raw_source>` sob chave semântica distinta (`bussola_gabarito_sigiloso_nao_revelar`, nunca `correct_answer`), instruindo o modelo a consultá-lo **apenas em silêncio** para saber com 100% de certeza qual instituto, dispositivo, jurisprudência ou eixo interpretativo a banca adotou — eliminando dicas contraditórias ou alucinações.
+2. **Técnica de "Um Nível de Abstração Acima" (`PRE_ANSWER_NO_SPOILER_GUARDRAIL_PT_BR`):** O *system prompt* e o *user prompt* instruem o modelo a converter o ponto cobrado pela banca em contextualização geral do instituto, simplificação estritamente simétrica/neutra das opções (sem letras `A`, `B`, `C`) e perguntas-guia abertas — proibindo revelar, insinuar, confirmar ou eliminar alternativas/gabarito (inclusive em itens `Certo/Errado` ou diante de pedidos explícitos em `user_note`).
+3. **Filtro Determinístico Anti-Spoiler em Rust (`detect_pre_answer_spoiler` + Retry Corretivo):**
+   - **Na geração (`generate_verified_tutor_text`):** Antes de devolver ao cliente ou persistir em `todasQuestoes`, o backend inspeciona a resposta em busca de marcadores explícitos de entrega de gabarito (`✅`/`❌`, cabeçalhos `Gabarito:`/`Resposta correta:`, frases declarativas como *"a alternativa correta é"*, indicação de letra `A–E`, julgamentos conclusivos *"o item está certo/errado"* ou menção ao nome do campo interno). Se detectado, o backend executa **1 regeneração corretiva automática** na mesma reserva de cota; se persistir, bloqueia a resposta sem gravar em cache e estorna a cota (`release_xai_quota`).
+   - **Na leitura de cache legado:** Textos pré-resposta antigos em `todasQuestoes` também passam por `detect_pre_answer_spoiler`; se algum registro legado contiver spoiler explícito, o cache é ignorado e substituído por uma geração limpa `ai-tutor/3`.
+   - **No cliente Android ([`ConcursoRepository.kt`](../android-app/app/src/main/java/br/com/concursoprep/app/data/repository/ConcursoRepository.kt)):** Nenhum dos três tutores pré-resposta (`contextual-hint`, `child-friendly-pre`, `dr-sincero`) faz fallback para `explanation` quando offline ou sob falha HTTP.
+
+Os 3 tutores pré-resposta são:
+1. **Ajuda pré-resposta (`child-friendly-pre` / `ajudaInfantil`):** Estrutura-se em *Contexto do Tema*, *Enunciado Simplificado* (destacando termos de comando como `EXCETO`, `INCORRETA`, `APENAS`, `NÃO`), *Leitura Neutra das Opções* e *Orientação de Raciocínio* com perguntas-guia abertas;
+2. **Dicas contextuais progressivas (`contextual-hint` / `contextualHint`):** Até 3 níveis progressivos alinhados à bússola interna (`#1` contextualização do instituto → `#2` recorte e comando → `#3` critério de análise em forma de pergunta aberta), enviando apenas as dicas anteriores ao índice solicitado;
+3. **Dr. Sincero pré-resposta (`dr-sincero` / `drSincero`):** Alerta ácido e direto sobre pegadinhas clássicas da banca nesse ponto da matéria e armadilhas de leitura apressada, sem resolver a questão pelo candidato.
+
+### 3.2 Tutores Pós-Resposta (Recebem e Fundamentam `correct_answer`)
+Como o estudante já submeteu sua resposta, o payload inclui explicitamente `correct_answer` e autoriza fundamentar o gabarito oficial (sem depender de letras fixas `A`, `B`, `C`, pois as alternativas são embaralhadas):
+4. **Contexto adicional pós-resposta (`extra-concepts` / `explanationExtra`):** Situa o tema dentro da disciplina real da questão, explica o fundamento da resposta correta (`correct_answer`), aprofunda conceitos-chave e distinções essenciais, apresenta exemplos práticos coerentes com a área e resume como o tópico costuma cair em prova;
+5. **Explicação simples pós-resposta (`child-friendly-post` / `explicacaoInfantil`):** Traduz a ideia central com analogias do cotidiano, demonstra por que `correct_answer` faz sentido e fecha com um resumo de fixação;
+6. **Explicação detalhada por alternativa (`explanation`):** Panorama da questão seguido de análise individual (`✅:` na correta / `❌:` nas incorretas);
+7. **Mnemônico (`mnemonic` / `mnemonico`):** Recurso de memorização ancorado nos requisitos ou conceitos que sustentam `correct_answer`;
+8. **Plausibilidade dos distratores (`plausibility` / `plausibilityMarkdown`):** Classificação das alternativas incorretas (`Improvável`, `Parcialmente plausível`, `Plausível`) em face de `correct_answer` e de comandos como `NÃO`/`EXCETO`.
 
 - **Exclusão Mútua por Questão/Recurso:** Solicitações concorrentes impessoais para o mesmo recurso da mesma questão são serializadas em processo e releem o documento antes de chamar a xAI.
 - **Proveniência Estruturada (`ai_resource_meta`):** Toda gravação compartilhada registra metadados conformes a `#/$defs/ai_resource_metadata` (`provider: "xai"`, `model`, versão do prompt, `content_revision` JCS SHA-256 avaliado e timestamp UTC). Se a questão for editada durante a chamada externa, a escrita condicional CAS impede gravar texto gerado sobre enunciado antigo.

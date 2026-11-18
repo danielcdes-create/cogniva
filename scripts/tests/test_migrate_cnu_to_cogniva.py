@@ -13,35 +13,59 @@ class MigrateCnuToCognivaTest(unittest.TestCase):
     def setUp(self):
         self.catalog = kc.read(kc.ROOT / "shared/knowledge-catalog.json")
 
-    def test_v1_multiple_choice_with_four_and_five_options_normalize_to_strict_v2(self):
-        for options in (["A1", "B2", "C3", "D4"], ["A1", "B2", "C3", "D4", "E5"]):
-            raw = {
-                "_id": {"$oid": "66a1b2c3d4e5f60123456789"},
-                "question": "De acordo com a CLT, assinale a alternativa correta.",
-                "answers": options,
-                "correct_answers": [options[2]],
-                "disciplina": "direito do trabalho",
-                "source": "CESGRANRIO",
-                "exam_year": 2024,
-                "level": "Superior",
-                "explanation": "Explicação preservada integralmente.",
-                "mnemonico": "Mnemônico preservado.",
-                "contextualHint": ["Dica 1", "Dica 2"],
-            }
-            v2 = migrator.normalize_question_to_v2(raw, self.catalog)
-            qc.validate_question(v2, self.catalog)
-            self.assertEqual(v2["schema_version"], 2)
-            self.assertEqual(v2["question_type"], "MULTIPLE_CHOICE")
-            self.assertEqual(v2["correct_answer_indices"], [2])
-            self.assertEqual(v2["disciplina"], "Direito do Trabalho")
-            self.assertEqual(v2["origins"][0]["kind"], "LEGACY_IMPORT")
-            self.assertEqual(v2["origins"][0]["verification"], "PENDING")
-            self.assertEqual(v2["explanation"], "Explicação preservada integralmente.")
-            self.assertEqual(v2["exam_year"], 2024)
-            self.assertEqual(v2["level"], "Superior")
-            # Idempotency: re-normalizing V2 produces identical document
-            v2_again = migrator.normalize_question_to_v2(v2, self.catalog)
-            self.assertEqual(v2, v2_again)
+    def test_v1_multiple_choice_requires_five_options_and_rejects_sub5_options(self):
+        options = ["A1", "B2", "C3", "D4", "E5"]
+        raw = {
+            "_id": {"$oid": "66a1b2c3d4e5f60123456789"},
+            "question": "De acordo com a CLT, assinale a alternativa correta.",
+            "answers": options,
+            "correct_answers": [options[2]],
+            "disciplina": "direito do trabalho",
+            "source": "CESGRANRIO",
+            "exam_year": 2024,
+            "level": "Superior",
+            "explanation": "Explicação preservada integralmente.",
+            "mnemonico": "Mnemônico preservado.",
+            "contextualHint": ["Dica 1", "Dica 2"],
+        }
+        v2 = migrator.normalize_question_to_v2(raw, self.catalog)
+        qc.validate_question(v2, self.catalog)
+        self.assertEqual(v2["schema_version"], 2)
+        self.assertEqual(v2["question_type"], "MULTIPLE_CHOICE")
+        self.assertEqual(v2["correct_answer_indices"], [2])
+        self.assertEqual(v2["disciplina"], "Direito do Trabalho")
+        self.assertEqual(v2["origins"][0]["kind"], "LEGACY_IMPORT")
+        self.assertEqual(v2["origins"][0]["verification"], "PENDING")
+        self.assertEqual(v2["explanation"], "Explicação preservada integralmente.")
+        self.assertEqual(v2["exam_year"], 2024)
+        self.assertEqual(v2["level"], "Superior")
+        # Idempotency: re-normalizing V2 produces identical document
+        v2_again = migrator.normalize_question_to_v2(v2, self.catalog)
+        self.assertEqual(v2, v2_again)
+
+        raw_4 = copy.deepcopy(raw)
+        raw_4["answers"] = ["A1", "B2", "C3", "D4"]
+        with self.assertRaisesRegex(ValueError, "unsupported multiple-choice option count: 4"):
+            migrator.normalize_question_to_v2(raw_4, self.catalog)
+
+        self.assertTrue(migrator.is_sub5_multiple_choice_doc(raw_4))
+        self.assertTrue(
+            migrator.is_sub5_multiple_choice_doc(
+                {"question_type": "MULTIPLE_CHOICE", "answers": ["A", "B", "C", "D"]}
+            )
+        )
+        self.assertFalse(migrator.is_sub5_multiple_choice_doc(v2))
+        self.assertFalse(
+            migrator.is_sub5_multiple_choice_doc(
+                {"question_type": "TRUE_FALSE", "answers": ["Certo", "Errado"]}
+            )
+        )
+        self.assertFalse(
+            migrator.is_sub5_multiple_choice_doc({"answers": ["Errado", "Certo"]})
+        )
+        self.assertFalse(
+            migrator.is_sub5_multiple_choice_doc({"question_type": "OPEN_ENDED", "answers": []})
+        )
 
     def test_v1_true_false_inverted_order_remaps_correct_index_accurately(self):
         raw = {

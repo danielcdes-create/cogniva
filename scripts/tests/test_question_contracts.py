@@ -30,14 +30,20 @@ class QuestionContractsTest(unittest.TestCase):
             with self.subTest(path=path.name):
                 qc.validate_question(read(path), self.catalog)
 
-    def test_four_or_five_options_and_one_correct_option_are_required(self):
+    def test_five_options_and_one_correct_option_are_required_for_multiple_choice(self):
         q = fixture("question-multiple-choice")
-        q["answers"].pop()
-        rehash(q)
+        self.assertEqual(len(q["answers"]), 5)
         qc.validate_question(q, self.catalog)
-        q["answers"].pop()
+        q4 = copy.deepcopy(q)
+        q4["answers"].pop()
+        rehash(q4)
         with self.assertRaisesRegex(ValueError, "schema"):
-            qc.validate_question(q, self.catalog)
+            qc.validate_question(q4, self.catalog)
+        q6 = copy.deepcopy(q)
+        q6["answers"].append("8")
+        rehash(q6)
+        with self.assertRaisesRegex(ValueError, "schema"):
+            qc.validate_question(q6, self.catalog)
         q = fixture("question-multiple-choice")
         q["correct_answer_indices"] = [0, 1]
         with self.assertRaisesRegex(ValueError, "schema"):
@@ -97,8 +103,10 @@ class QuestionContractsTest(unittest.TestCase):
         for name in ["question-obsolete", "question-unclassified"]:
             q = fixture(name)
             self.assertFalse(qc.practice_eligible(q, "CURRENT_ONLY", date(2026, 11, 2)))
+            self.assertFalse(qc.practice_eligible(q, "GENERAL", date(2026, 11, 2)))
+        q_valid = fixture("question-multiple-choice")
+        self.assertTrue(qc.practice_eligible(q_valid, "GENERAL", date(2026, 11, 2)))
         q = fixture("question-unclassified")
-        self.assertTrue(qc.practice_eligible(q, "GENERAL", date(2026, 11, 2)))
         q["validity"]["status"] = "UNDER_REVIEW"
         self.assertFalse(qc.practice_eligible(q, "GENERAL", date(2026, 11, 2)))
 
@@ -301,6 +309,113 @@ class QuestionContractsTest(unittest.TestCase):
         q["concursos"] = [f"CONCURSO_{i}" for i in range(51)]
         with self.assertRaisesRegex(ValueError, "(schema|concursos)"):
             qc.validate_question(q, self.catalog)
+
+    def test_v2_1_parity_vectors_hashes_errors_and_eligibility(self):
+        bundle = fixture("parity-vectors-v2-1")
+        for vec in bundle["validation_vectors"]:
+            with self.subTest(vector=vec["id"]):
+                doc = copy.deepcopy(vec["document"])
+                if vec["valid"]:
+                    if vec.get("untrusted_input"):
+                        qc.validate_untrusted_client_question(doc, self.catalog)
+                    else:
+                        qc.validate_question(doc, self.catalog)
+                    self.assertEqual(qc.content_revision(doc), vec["expected_hashes"]["content_revision"])
+                    self.assertEqual(qc.semantic_revision(doc), vec["expected_hashes"]["semantic_revision"])
+                    self.assertEqual(qc.grading_revision(doc), vec["expected_hashes"]["grading_revision"])
+                else:
+                    with self.assertRaises(qc.ContractValidationError) as ctx:
+                        if vec.get("untrusted_input"):
+                            qc.validate_untrusted_client_question(doc, self.catalog)
+                        else:
+                            qc.validate_question(doc, self.catalog)
+                    self.assertEqual(ctx.exception.code, vec["expected_code"])
+                    self.assertEqual(ctx.exception.field, vec["expected_field"])
+
+        for vec in bundle["eligibility_vectors"]:
+            with self.subTest(eligibility=vec["id"]):
+                res = qc.evaluate_question_eligibility(
+                    question=copy.deepcopy(vec["question"]),
+                    catalog=self.catalog,
+                    exam_context=vec["exam_context"],
+                    evaluation_date=vec["evaluation_date"],
+                    trusted_review_context=vec["trusted_review_context"],
+                )
+                self.assertEqual(res["eligible"], vec["expected"]["eligible"])
+                self.assertEqual(res["reason_codes"], vec["expected"]["reason_codes"])
+                self.assertEqual(res["coverage_mode"], vec["expected"]["coverage_mode"])
+                self.assertEqual(res["is_borrowed_analogous"], vec["expected"]["is_borrowed_analogous"])
+
+    def test_semantic_vs_grading_revision_separation_and_substantive_criteria(self):
+        # T04, T05, T06, T24
+        open_manual = fixture("question-open-manual")
+        open_ai = fixture("question-open-ai")
+        open_sem = fixture("question-open-semantic")
+        # Identical stem, expected_responses, and substantive criteria across RUBRIC / AI / SEMANTIC!
+        self.assertEqual(qc.semantic_revision(open_manual), qc.semantic_revision(open_ai))
+        self.assertEqual(qc.semantic_revision(open_manual), qc.semantic_revision(open_sem))
+        self.assertNotEqual(qc.grading_revision(open_manual), qc.grading_revision(open_ai))
+        self.assertNotEqual(qc.content_revision(open_manual), qc.content_revision(open_ai))
+
+        q = copy.deepcopy(open_manual)
+        qc.populate_v2_1_hashes(q)
+        q["validity"]["evaluated_semantic_revision"] = q["semantic_revision"]
+        q["validity"]["evaluation_mode"] = "SEMANTIC"
+        qc.validate_question(q, self.catalog)
+
+        # Numeric-only score change preserves semantic_revision and CURRENT validity
+        q_num = copy.deepcopy(q)
+        q_num["grading"]["max_score"] = 50
+        q_num["grading"]["pass_score"] = 30
+        q_num["grading"]["rubric"]["criteria"][0]["max_points"] = 25
+        q_num["grading"]["rubric"]["criteria"][1]["max_points"] = 25
+        qc.populate_v2_1_hashes(q_num)
+        self.assertEqual(q_num["semantic_revision"], q["semantic_revision"])
+        self.assertNotEqual(q_num["grading_revision"], q["grading_revision"])
+        self.assertNotEqual(q_num["content_revision"], q["content_revision"])
+        qc.validate_question(q_num, self.catalog)
+
+        # Substantive criterion essential/description change alters semantic_revision and invalidates stale validity
+        q_sub = copy.deepcopy(q)
+        q_sub["grading"]["rubric"]["criteria"][0]["essential"] = False
+        qc.populate_v2_1_hashes(q_sub)
+        self.assertNotEqual(q_sub["semantic_revision"], q["semantic_revision"])
+        with self.assertRaises(qc.ContractValidationError) as ctx:
+            qc.validate_question(q_sub, self.catalog)
+        self.assertEqual(ctx.exception.code, "SEMANTIC_REVISION_MISMATCH")
+
+    def test_strict_bson_object_id_and_integer_boundaries(self):
+        # T19, T20
+        from bson import ObjectId
+
+        q = fixture("question-multiple-choice")
+        qc.populate_v2_1_hashes(q)
+        bson_doc = qc.contract_to_bson_question(q)
+        self.assertIsInstance(bson_doc["_id"], ObjectId)
+        roundtrip = qc.validate_bson_question(bson_doc, self.catalog)
+        self.assertEqual(roundtrip["_id"], q["_id"])
+
+        # Storing Extended JSON dict directly in BSON _id is rejected
+        bad_extjson = copy.deepcopy(bson_doc)
+        bad_extjson["_id"] = {"$oid": "000000000000000000000001"}
+        with self.assertRaises(qc.ContractValidationError) as ctx:
+            qc.validate_bson_question(bad_extjson, self.catalog)
+        self.assertEqual(ctx.exception.code, "INVALID_OBJECT_ID")
+
+        # Storing float 1.0 or bool True in BSON revision is rejected
+        for bad_val in (1.0, True, "1"):
+            bad_int = copy.deepcopy(bson_doc)
+            bad_int["revision"] = bad_val
+            with self.assertRaises(qc.ContractValidationError) as ctx:
+                qc.validate_bson_question(bad_int, self.catalog)
+            self.assertEqual(ctx.exception.code, "INVALID_INTEGER")
+
+        # API question_id boundary
+        self.assertEqual(qc.validate_api_question_id("000000000000000000000001"), "000000000000000000000001")
+        for bad_api_id in ("00000000000000000000000G", "000000000000000000000001AA", "ABCD00000000000000000001", {"$oid": "000000000000000000000001"}):
+            with self.assertRaises(qc.ContractValidationError) as ctx:
+                qc.validate_api_question_id(bad_api_id)
+            self.assertEqual(ctx.exception.code, "INVALID_OBJECT_ID")
 
 
 if __name__ == "__main__":

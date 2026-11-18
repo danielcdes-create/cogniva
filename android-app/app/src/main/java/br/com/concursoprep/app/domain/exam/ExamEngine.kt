@@ -718,8 +718,89 @@ data class QuestionRef(
     val revision:String=""
 )
 
+data class QuestionHeaderMeta(
+    val disciplineLabel: String,
+    val topicBreadcrumb: String?,
+    val sourceBadge: String,
+    val disciplineAndSourceLine: String
+)
+
 object ExamCatalog {
     fun knowledgeVersion():Long=knowledge.getValue("catalog_version").jsonPrimitive.long
+    fun subjectLabel(subjectId: String): String? =
+        knowledge.array("subjects")
+            .map { it.jsonObject }
+            .find { it.text("subject_id") == subjectId }
+            ?.text("label")
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+
+    fun topicBreadcrumb(topicId: String): String? {
+        val topics = knowledge.array("topics").map { it.jsonObject }
+        val topic = topics.find { it.text("topic_id") == topicId } ?: return null
+        val childLabel = topic.text("label").trim().takeIf { it.isNotEmpty() } ?: return null
+        val parentLabel = topic["parent_topic_id"]?.jsonPrimitive?.contentOrNull?.let { parentId ->
+            topics.find { it.text("topic_id") == parentId }?.text("label")?.trim()?.takeIf { it.isNotEmpty() }
+        }
+        return if (parentLabel != null && !parentLabel.equals(childLabel, ignoreCase = true)) {
+            "$parentLabel › $childLabel"
+        } else {
+            childLabel
+        }
+    }
+
+    fun resolveQuestionHeaderMeta(
+        question: br.com.concursoprep.app.domain.model.QuestionDto,
+        exam: StoredExam? = null
+    ): QuestionHeaderMeta {
+        val rawDisc = question.disciplina.trim()
+        val isGenericDisc = rawDisc.isEmpty() ||
+            rawDisc.equals("Disciplina Geral", ignoreCase = true) ||
+            rawDisc.equals("Geral", ignoreCase = true)
+
+        val examComponentName = exam?.subjects?.firstOrNull { subj ->
+            (question.examComponentId != null && subj.localSubjectId == question.examComponentId) ||
+                (question.canonicalSubjectId != null && subj.canonicalSubjectId == question.canonicalSubjectId)
+        }?.displayName?.trim()?.takeIf { it.isNotEmpty() }
+
+        val catalogSubjectName = question.canonicalSubjectId?.let { subjectLabel(it) }
+
+        val disciplineLabel = examComponentName
+            ?: catalogSubjectName
+            ?: rawDisc.takeIf { !isGenericDisc }
+            ?: rawDisc.ifEmpty { "Disciplina Geral" }
+
+        val topicBreadcrumb = question.canonicalTopicId?.let { tid ->
+            topicBreadcrumb(tid) ?: exam?.subjects
+                ?.asSequence()
+                ?.flatMap { it.topics.asSequence() }
+                ?.firstOrNull { it.canonicalTopicId == tid }
+                ?.displayTitle
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+        }
+
+        val cleanSource = question.source.trim()
+        val year = question.examYear
+        val sourceBadge = when {
+            cleanSource.isEmpty() -> year?.toString().orEmpty()
+            year != null && !cleanSource.contains(year.toString()) -> "$cleanSource · $year"
+            else -> cleanSource
+        }
+
+        val parts = buildList {
+            add(disciplineLabel)
+            if (question.isBorrowedAnalogous) add("Correlato")
+            if (sourceBadge.isNotEmpty()) add(sourceBadge)
+        }
+        return QuestionHeaderMeta(
+            disciplineLabel = disciplineLabel,
+            topicBreadcrumb = topicBreadcrumb,
+            sourceBadge = sourceBadge,
+            disciplineAndSourceLine = parts.joinToString(" · ")
+        )
+    }
+
     fun subjectIdForLabel(label:String):String?=allSubjects().firstOrNull { legacyLabels(it.canonicalSubjectId).any { name -> name.equals(label,true) } }?.canonicalSubjectId
     @Volatile private var installedKnowledge: JsonObject? = null
     private val bundledKnowledge: JsonObject by lazy {

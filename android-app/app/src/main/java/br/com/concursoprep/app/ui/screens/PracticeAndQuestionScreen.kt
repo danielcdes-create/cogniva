@@ -81,6 +81,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import java.util.Locale
 import br.com.concursoprep.app.R
+import br.com.concursoprep.app.domain.exam.ExamCatalog
 import br.com.concursoprep.app.domain.model.QuestionDto
 import br.com.concursoprep.app.domain.model.QuestionType
 import br.com.concursoprep.app.domain.model.QuizMode
@@ -396,6 +397,20 @@ fun QuestionSessionScreen(
     val isHighConfidenceError = isAnswerSubmitted && !isBlankAnswer && !isUserCorrect && selectedConfidence >= 2
     val hideFeedback = isSimuladoMode && !isSimuladoReviewMode
     val ext = LocalExtendedColors.current
+    val headerMeta = remember(
+        question.id,
+        question.disciplina,
+        question.source,
+        question.examYear,
+        question.canonicalSubjectId,
+        question.canonicalTopicId,
+        question.examComponentId,
+        question.isBorrowedAnalogous,
+        snapshot?.exam?.examId,
+        snapshot?.exam?.revision
+    ) {
+        ExamCatalog.resolveQuestionHeaderMeta(question, snapshot?.exam)
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -435,15 +450,16 @@ fun QuestionSessionScreen(
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(
-                                text = "Questão ${currentIndex + 1} de ${questions.size} · ${question.level}",
+                                text = "Questão ${currentIndex + 1} de ${questions.size}",
                                 style = MaterialTheme.typography.titleMedium,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "${question.disciplina} · ${question.source}",
+                                text = headerMeta.disciplineAndSourceLine,
                                 style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -472,6 +488,20 @@ fun QuestionSessionScreen(
                                 Icon(Icons.Default.Flag, contentDescription = "Reportar problema na questão")
                             }
                         }
+                    }
+
+                    headerMeta.topicBreadcrumb?.let { topicPath ->
+                        Text(
+                            text = topicPath,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp)
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(6.dp))

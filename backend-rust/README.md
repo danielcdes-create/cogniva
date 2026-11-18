@@ -17,8 +17,9 @@ Para a visão integrada do sistema, consulte [`docs/ARQUITETURA.md`](../docs/ARQ
 - **Acervo 100% V2, SRS Cronológico e Sincronização (`services/question_storage.rs`, `services/attempts.rs`, `services/srs_engine.rs`):**
   - Validação estrita contra o contrato V2 (incluindo URIs `^https?://`, `exam_year` `1900..=2200`, `concursos <= 50` e conversão inteira verificada), hash canônico JCS SHA-256 (RFC 8785) e outbox de auditoria.
   - Replay cronológico de lotes offline fora de ordem (`client_answered_at`), bônus de intervalo SRS baseado em `streak_atual` e isolamento de reportes abertos (`reportedQuestoes`).
-- **Governança xAI e Privacidade de Cache (`services/ai_tutor.rs`, `services/classification.rs`, `services/question_import.rs`, `services/rate_limit.rs`):**
+- **Governança xAI, Bússola Pré-Resposta e Privacidade de Cache (`services/ai_tutor.rs`, `services/classification.rs`, `services/question_import.rs`, `services/rate_limit.rs`):**
   - Delimitação XML `<untrusted_student_input>` / `<untrusted_raw_source>` contra injeção indireta de prompt, não-persistência em cache compartilhado quando há `user_note`/resposta pessoal, cota diária em `America/Sao_Paulo` (`UTC-3`) com teto reduzido para convidados (`5/dia`) e estorno automático em falhas.
+  - Tutores pedagógicos `ai-tutor/3` com separação estrita entre pré-resposta (`child-friendly-pre`, `contextual-hint`, `dr-sincero` — gabarito enviado como `bussola_gabarito_sigiloso_nao_revelar` para zero alucinação, instrução de abstração em perguntas-guia e filtro determinístico `detect_pre_answer_spoiler` com retry corretivo antes do retorno/cache) e pós-resposta (`explanation`, `extra-concepts`, `child-friendly-post`, `mnemonic`, `plausibility` — fundamentação explícita de `correct_answer`).
 - **Prontidão Real, Shutdown Gracioso e Distribuição OTA (`main.rs`, `routes/apk_ota.rs`):**
   - `GET /api/v1/ready` retorna HTTP `503` se o ping ao MongoDB falhar; servidor encerra conexões e agendador graciosamente sob `SIGTERM`/`Ctrl+C`; entrega streaming de 64 KiB em `/api/v1/apk/download` com suporte a `ETag` / `If-None-Match` (`304`).
 

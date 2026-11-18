@@ -31,9 +31,25 @@ def _text_list(value):
     return isinstance(value, list) and value and all(isinstance(item, str) and item.strip() for item in value)
 
 
+def _is_legacy_true_false(document):
+    answers = document.get("answers")
+    if not _text_list(answers) or len(answers) != 2:
+        return False
+    if document.get("question_type") == "TRUE_FALSE":
+        return True
+    from knowledge_catalog import normalized
+
+    pair = [normalized(a) for a in answers]
+    tf_true = {"certo", "verdadeiro", "c", "v"}
+    tf_false = {"errado", "falso", "e", "f"}
+    return (pair[0] in tf_true and pair[1] in tf_false) or (pair[0] in tf_false and pair[1] in tf_true)
+
+
 def _answer_key_ambiguous(document):
     answers = document.get("answers")
     if not _text_list(answers):
+        return True
+    if not _is_legacy_true_false(document) and len(answers) != 5:
         return True
     texts = document.get("correct_answers")
     indices = document.get("correct_answer_indices")

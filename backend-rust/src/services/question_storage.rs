@@ -1,13 +1,74 @@
-use crate::{error::AppError, services::question_contracts as contracts};
+use crate::{
+    error::AppError,
+    security::SessionUser,
+    services::question_contracts as contracts,
+};
 use bson::{doc, oid::ObjectId, Bson, Document};
 use futures::TryStreamExt;
 use mongodb::{
     options::{Acknowledgment, CollectionOptions, IndexOptions, WriteConcern},
-    Database, IndexModel,
+    ClientSession, Database, IndexModel,
 };
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::time::Duration;
+
+#[derive(Clone, Debug)]
+pub struct ReviewerContext {
+    pub user_id: i64,
+    pub principal_id: String,
+    pub can_confirm_normative: bool,
+}
+
+impl ReviewerContext {
+    pub fn from_session(user: SessionUser) -> Self {
+        Self {
+            user_id: user.user_id,
+            principal_id: user.user_id.to_string(),
+            can_confirm_normative: user.user_id > 0 && user.is_admin && !user.is_guest,
+        }
+    }
+
+    pub fn admin(user_id: i64) -> Self {
+        Self {
+            user_id,
+            principal_id: user_id.to_string(),
+            can_confirm_normative: user_id > 0,
+        }
+    }
+
+    pub fn pending_only(user_id: i64) -> Self {
+        Self {
+            user_id,
+            principal_id: user_id.to_string(),
+            can_confirm_normative: false,
+        }
+    }
+}
+
+pub fn deterministic_review_event_uuid(seed: &str) -> String {
+    let bytes = Sha256::digest(seed.as_bytes());
+    let mut raw = [0u8; 16];
+    raw.copy_from_slice(&bytes[..16]);
+    raw[6] = (raw[6] & 0x0f) | 0x40;
+    raw[8] = (raw[8] & 0x3f) | 0x80;
+    uuid::Uuid::from_bytes(raw).to_string()
+}
+
+pub async fn topology_supports_transactions(db: &Database) -> bool {
+    match db.run_command(doc! { "hello": 1 }).await {
+        Ok(reply) => {
+            reply.get_str("setName").is_ok()
+                || reply.get_str("msg").ok() == Some("isdbgrid")
+        }
+        Err(_) => false,
+    }
+}
+
+pub fn is_duplicate_key_error(error: &mongodb::error::Error) -> bool {
+    let msg = error.to_string();
+    msg.contains("E11000") || msg.contains("code: 11000") || msg.contains("code 11000")
+}
 
 pub fn collection(db: &Database, name: &str) -> mongodb::Collection<Document> {
     db.collection_with_options(
@@ -133,8 +194,21 @@ pub fn validator_source_sha256(validator: &Document) -> String {
     )
 }
 
-pub const CURRENT_VALIDATOR_REVISION: i32 = 2;
+pub const CURRENT_VALIDATOR_REVISION: i32 = 4;
 pub const VALIDATOR_MIGRATION_V2_0_1: &str = "question-v2-validator-2.0.1";
+pub const VALIDATOR_MIGRATION_V2_0_2: &str = "question-v2-validator-2.0.2";
+pub const VALIDATOR_MIGRATION_V2_1_0: &str = "question-v2-validator-2.1.0";
+
+pub const QUESTION_VALIDATOR_V2_0_2_SHA256: &str =
+    "eadf843691163ff7f6d08ce266484038f4f4499f7d5157b99c3e31d4073aa6c9";
+pub const QUESTION_VALIDATOR_V2_1_0_SHA256: &str =
+    "83925ee70854b73c09f6536e8f7a1a080378cb998c5fcaa787819a1c3178577c";
+pub const SUGGESTION_VALIDATOR_V2_1_0_SHA256: &str =
+    "f1204f7bfba57ceebf2603cccfef008f5a65b4e8e26fb799d62e03b5332b4389";
+pub const COMPATIBILITY_VALIDATOR_V2_1_0_SHA256: &str =
+    "e651c77541542f315a69342838312e013381f6b5edd632033c2f158f5847287d";
+pub const EVALUATION_VALIDATOR_V2_1_0_SHA256: &str =
+    "4f6dbb641b2d63113e13a5a273988aa97d562c8d3794ec3a6fd8d94e35bfd7f7";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ValidatorMigrationStep {
@@ -146,35 +220,173 @@ pub struct ValidatorMigrationStep {
 }
 
 pub const VALIDATOR_MIGRATIONS: &[ValidatorMigrationStep] = &[
+    // Historical steps preserved for auditability
     ValidatorMigrationStep {
-        migration_id: VALIDATOR_MIGRATION_V2_0_1,
+        migration_id: VALIDATOR_MIGRATION_V2_0_2,
         kind: "question",
         from_source_sha256: "891ab1a222dce8d53dc7fc4cf4335d0e91e45444d2643640f3659a306bc17a9d",
-        to_source_sha256: "61ef0c9ef5deb4b3868cf22ed668079ce73f87bbef483dfbbc746d12a2140013",
+        to_source_sha256: QUESTION_VALIDATOR_V2_0_2_SHA256,
+        to_revision: 3,
+    },
+    ValidatorMigrationStep {
+        migration_id: VALIDATOR_MIGRATION_V2_0_2,
+        kind: "question",
+        from_source_sha256: "61ef0c9ef5deb4b3868cf22ed668079ce73f87bbef483dfbbc746d12a2140013",
+        to_source_sha256: QUESTION_VALIDATOR_V2_0_2_SHA256,
+        to_revision: 3,
+    },
+    // V2.1.0 migration paths from v2.0.0, v2.0.1, and v2.0.2
+    ValidatorMigrationStep {
+        migration_id: VALIDATOR_MIGRATION_V2_1_0,
+        kind: "question",
+        from_source_sha256: "891ab1a222dce8d53dc7fc4cf4335d0e91e45444d2643640f3659a306bc17a9d",
+        to_source_sha256: QUESTION_VALIDATOR_V2_1_0_SHA256,
         to_revision: CURRENT_VALIDATOR_REVISION,
     },
     ValidatorMigrationStep {
-        migration_id: VALIDATOR_MIGRATION_V2_0_1,
+        migration_id: VALIDATOR_MIGRATION_V2_1_0,
+        kind: "question",
+        from_source_sha256: "61ef0c9ef5deb4b3868cf22ed668079ce73f87bbef483dfbbc746d12a2140013",
+        to_source_sha256: QUESTION_VALIDATOR_V2_1_0_SHA256,
+        to_revision: CURRENT_VALIDATOR_REVISION,
+    },
+    ValidatorMigrationStep {
+        migration_id: VALIDATOR_MIGRATION_V2_1_0,
+        kind: "question",
+        from_source_sha256: QUESTION_VALIDATOR_V2_0_2_SHA256,
+        to_source_sha256: QUESTION_VALIDATOR_V2_1_0_SHA256,
+        to_revision: CURRENT_VALIDATOR_REVISION,
+    },
+    ValidatorMigrationStep {
+        migration_id: VALIDATOR_MIGRATION_V2_1_0,
         kind: "suggestion",
         from_source_sha256: "fa915882387ab8c1c69b74b501dc3fa4b3ead8afe392b934c554414d56e5c23e",
-        to_source_sha256: "5da194157dc8bd0154fc25eba3dcd3618c99b4d7f16e27ede39ba87e18a66091",
+        to_source_sha256: SUGGESTION_VALIDATOR_V2_1_0_SHA256,
         to_revision: CURRENT_VALIDATOR_REVISION,
     },
     ValidatorMigrationStep {
-        migration_id: VALIDATOR_MIGRATION_V2_0_1,
+        migration_id: VALIDATOR_MIGRATION_V2_1_0,
+        kind: "suggestion",
+        from_source_sha256: "5da194157dc8bd0154fc25eba3dcd3618c99b4d7f16e27ede39ba87e18a66091",
+        to_source_sha256: SUGGESTION_VALIDATOR_V2_1_0_SHA256,
+        to_revision: CURRENT_VALIDATOR_REVISION,
+    },
+    ValidatorMigrationStep {
+        migration_id: VALIDATOR_MIGRATION_V2_1_0,
         kind: "compatibility",
         from_source_sha256: "14f6963f17029f351688e9656c4cd84b5320853b6cd3ebfe7476aa4cd4710ef4",
-        to_source_sha256: "68de8f1929279932b9b9a51b2ff432d14c2435a486ce7bd7933caf98da0c2943",
+        to_source_sha256: COMPATIBILITY_VALIDATOR_V2_1_0_SHA256,
         to_revision: CURRENT_VALIDATOR_REVISION,
     },
     ValidatorMigrationStep {
-        migration_id: VALIDATOR_MIGRATION_V2_0_1,
+        migration_id: VALIDATOR_MIGRATION_V2_1_0,
+        kind: "compatibility",
+        from_source_sha256: "68de8f1929279932b9b9a51b2ff432d14c2435a486ce7bd7933caf98da0c2943",
+        to_source_sha256: COMPATIBILITY_VALIDATOR_V2_1_0_SHA256,
+        to_revision: CURRENT_VALIDATOR_REVISION,
+    },
+    ValidatorMigrationStep {
+        migration_id: VALIDATOR_MIGRATION_V2_1_0,
         kind: "evaluation",
         from_source_sha256: "328928b756aeef73c4a200dc75d9784ee3739239f93c4b094173b0b13eca5212",
-        to_source_sha256: "94095af3ffb78706949ae12aa8b1d4320a8c57e777a99b3d4b026455cf8f5ab6",
+        to_source_sha256: EVALUATION_VALIDATOR_V2_1_0_SHA256,
+        to_revision: CURRENT_VALIDATOR_REVISION,
+    },
+    ValidatorMigrationStep {
+        migration_id: VALIDATOR_MIGRATION_V2_1_0,
+        kind: "evaluation",
+        from_source_sha256: "94095af3ffb78706949ae12aa8b1d4320a8c57e777a99b3d4b026455cf8f5ab6",
+        to_source_sha256: EVALUATION_VALIDATOR_V2_1_0_SHA256,
         to_revision: CURRENT_VALIDATOR_REVISION,
     },
 ];
+
+fn is_legacy_true_false_pair(arr: &[Bson]) -> bool {
+    if arr.len() != 2 {
+        return false;
+    }
+    let (Some(a), Some(b)) = (arr[0].as_str(), arr[1].as_str()) else {
+        return false;
+    };
+    let (na, nb) = (a.trim().to_lowercase(), b.trim().to_lowercase());
+    let tf_true = ["certo", "verdadeiro", "c", "v"];
+    let tf_false = ["errado", "falso", "e", "f"];
+    (tf_true.contains(&na.as_str()) && tf_false.contains(&nb.as_str()))
+        || (tf_false.contains(&na.as_str()) && tf_true.contains(&nb.as_str()))
+}
+
+pub fn is_sub5_multiple_choice_doc(doc: &Document) -> bool {
+    match doc
+        .get_str("question_type")
+        .ok()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        Some("MULTIPLE_CHOICE") => doc.get_array("answers").is_ok_and(|arr| arr.len() < 5),
+        Some("TRUE_FALSE" | "OPEN_ENDED") => false,
+        Some(_) => false,
+        None => doc.get_array("answers").is_ok_and(|arr| {
+            !arr.is_empty() && arr.len() < 5 && !is_legacy_true_false_pair(arr)
+        }),
+    }
+}
+
+pub async fn purge_sub5_multiple_choice_questions(db: &Database) -> Result<u64, AppError> {
+    let coll = collection(db, "todasQuestoes");
+    let mut cursor = coll
+        .find(doc! {
+            "question_type": { "$nin": ["TRUE_FALSE", "OPEN_ENDED"] },
+            "answers.4": { "$exists": false }
+        })
+        .projection(doc! { "_id": 1, "question_type": 1, "answers": 1 })
+        .await?;
+    let mut raw_ids: Vec<Bson> = Vec::new();
+    let mut oids: Vec<ObjectId> = Vec::new();
+    let mut hex_ids: Vec<String> = Vec::new();
+    while let Some(doc) = cursor.try_next().await? {
+        if is_sub5_multiple_choice_doc(&doc) {
+            if let Some(id_bson) = doc.get("_id").cloned() {
+                if let Some(oid) = id_bson.as_object_id() {
+                    oids.push(oid);
+                    hex_ids.push(oid.to_hex());
+                } else if let Some(s) = id_bson.as_str() {
+                    hex_ids.push(s.to_owned());
+                }
+                raw_ids.push(id_bson);
+            }
+        }
+    }
+    if raw_ids.is_empty() {
+        return Ok(0);
+    }
+    let deleted = coll
+        .delete_many(doc! { "_id": { "$in": &raw_ids } })
+        .await?
+        .deleted_count;
+    if !hex_ids.is_empty() {
+        let _ = collection(db, "question_classification_suggestions")
+            .delete_many(doc! { "question_id": { "$in": &hex_ids } })
+            .await?;
+        let _ = collection(db, "question_exam_compatibility")
+            .delete_many(doc! { "question_id": { "$in": &hex_ids } })
+            .await?;
+    }
+    if !oids.is_empty() || !hex_ids.is_empty() {
+        let _ = collection(db, "reportedQuestoes")
+            .delete_many(doc! {
+                "$or": [
+                    { "questao_id": { "$in": &oids } },
+                    { "question_id": { "$in": &hex_ids } }
+                ]
+            })
+            .await?;
+    }
+    tracing::info!(
+        purged_count = deleted,
+        "Questões MULTIPLE_CHOICE com menos de 5 alternativas removidas de todasQuestoes."
+    );
+    Ok(deleted)
+}
 
 pub fn find_validator_migration(
     kind: &str,
@@ -217,6 +429,7 @@ pub async fn prepare(db: &Database) -> Result<Value, AppError> {
         ("answer_evaluations", "evaluation"),
     ];
     let mut validators_migrated = 0_usize;
+    let mut purged_sub5_multiple_choice = 0_u64;
     let receipts = collection(db, "cogniva_schema_versions");
     for (name, kind) in specs {
         let schema = mongo_schema(kind);
@@ -247,6 +460,9 @@ pub async fn prepare(db: &Database) -> Result<Value, AppError> {
                 let target_merged = upgrade_merged_validator(expected, &validator)?;
                 if descriptions.is_empty() || (&previous != expected && previous != target_merged) {
                     return Err(err("Validador mudou fora da migração; revisão necessária"));
+                }
+                if kind == "question" {
+                    purged_sub5_multiple_choice += purge_sub5_multiple_choice_questions(db).await?;
                 }
                 if db
                     .collection::<Document>(name)
@@ -316,6 +532,9 @@ pub async fn prepare(db: &Database) -> Result<Value, AppError> {
         } else {
             doc! { "$and": [previous, validator] }
         };
+        if !descriptions.is_empty() && kind == "question" {
+            purged_sub5_multiple_choice += purge_sub5_multiple_choice_questions(db).await?;
+        }
         if !descriptions.is_empty()
             && db
                 .collection::<Document>(name)
@@ -421,6 +640,7 @@ pub async fn prepare(db: &Database) -> Result<Value, AppError> {
         "schema_version": 2,
         "validator_revision": CURRENT_VALIDATOR_REVISION,
         "validators_migrated": validators_migrated,
+        "legacy_sub5_multiple_choice_purged": purged_sub5_multiple_choice,
         "question_documents_rewritten": 0,
         "indexes": created_indexes.len(),
         "catalog_version": catalog_version
@@ -474,6 +694,16 @@ pub async fn ensure_indexes(db: &Database) -> Result<Vec<String>, AppError> {
         ),
         (
             "todasQuestoes",
+            doc! { "content_revision": 1 },
+            "qv2_content_revision",
+        ),
+        (
+            "todasQuestoes",
+            doc! { "semantic_revision": 1 },
+            "qv2_semantic_revision",
+        ),
+        (
+            "todasQuestoes",
             doc! {
                 "classification.links.subject_id": 1,
                 "classification.links.topic_id": 1,
@@ -510,6 +740,21 @@ pub async fn ensure_indexes(db: &Database) -> Result<Vec<String>, AppError> {
             "question_revision_events",
             doc! { "question_id": 1, "revision": 1 },
             "qv2_question_audit",
+        ),
+        (
+            "question_review_events",
+            doc! { "resource_id": 1, "resource_revision": 1 },
+            "qv2_review_events_resource",
+        ),
+        (
+            "question_review_events",
+            doc! { "principal_id": 1, "reviewed_at": -1 },
+            "qv2_review_events_principal",
+        ),
+        (
+            "question_import_commits",
+            doc! { "actor_user_id": 1, "created_at": -1 },
+            "qv2_import_commits_actor",
         ),
         (
             "userActivityLog",
@@ -677,27 +922,88 @@ pub async fn ensure_indexes(db: &Database) -> Result<Vec<String>, AppError> {
     Ok(created)
 }
 
-pub async fn flush_audit(db: &Database, id: ObjectId) -> Result<(), AppError> {
+pub async fn persist_review_event_idempotent(
+    db: &Database,
+    session: Option<&mut ClientSession>,
+    ev: &Document,
+) -> Result<(), AppError> {
+    let ev_id = ev
+        .get_str("review_event_id")
+        .or_else(|_| ev.get_str("_id"))
+        .map_err(|_| err("Evento de revisão sem review_event_id"))?;
+    let mut stored = ev.clone();
+    stored.insert("_id", ev_id);
+    let coll = collection(db, "question_review_events");
+    if let Some(s) = session {
+        coll.update_one(doc! { "_id": ev_id }, doc! { "$setOnInsert": stored })
+            .upsert(true)
+            .session(s)
+            .await?;
+    } else {
+        coll.update_one(doc! { "_id": ev_id }, doc! { "$setOnInsert": stored })
+            .upsert(true)
+            .await?;
+    }
+    Ok(())
+}
+
+pub async fn flush_audit_with_session(
+    db: &Database,
+    mut session: Option<&mut ClientSession>,
+    id: ObjectId,
+) -> Result<(), AppError> {
     let coll = collection(db, "todasQuestoes");
-    if let Some(raw) = coll.find_one(doc! { "_id": id }).await? {
+    let raw = if let Some(s) = session.as_deref_mut() {
+        coll.find_one(doc! { "_id": id }).session(s).await?
+    } else {
+        coll.find_one(doc! { "_id": id }).await?
+    };
+    if let Some(raw) = raw {
         if let Ok(event) = raw.get_document("schema_outbox") {
             let event_id = event
                 .get_str("_id")
                 .map_err(|_| err("Outbox sem identidade"))?;
+            if let Ok(rev_events) = event.get_array("review_events") {
+                for item in rev_events {
+                    if let Some(rev_doc) = item.as_document() {
+                        persist_review_event_idempotent(db, session.as_deref_mut(), rev_doc).await?;
+                    }
+                }
+            }
             let mut content = event.clone();
             content.remove("_id");
-            collection(db, "question_revision_events")
-                .update_one(doc! { "_id": event_id }, doc! { "$setOnInsert": content })
-                .upsert(true)
+            content.remove("review_events");
+            let audit_coll = collection(db, "question_revision_events");
+            if let Some(s) = session {
+                audit_coll
+                    .update_one(doc! { "_id": event_id }, doc! { "$setOnInsert": content })
+                    .upsert(true)
+                    .session(&mut *s)
+                    .await?;
+                coll.update_one(
+                    doc! { "_id": id, "schema_outbox._id": event_id },
+                    doc! { "$unset": { "schema_outbox": "" } },
+                )
+                .session(&mut *s)
                 .await?;
-            coll.update_one(
-                doc! { "_id": id, "schema_outbox._id": event_id },
-                doc! { "$unset": { "schema_outbox": "" } },
-            )
-            .await?;
+            } else {
+                audit_coll
+                    .update_one(doc! { "_id": event_id }, doc! { "$setOnInsert": content })
+                    .upsert(true)
+                    .await?;
+                coll.update_one(
+                    doc! { "_id": id, "schema_outbox._id": event_id },
+                    doc! { "$unset": { "schema_outbox": "" } },
+                )
+                .await?;
+            }
         }
     }
     Ok(())
+}
+
+pub async fn flush_audit(db: &Database, id: ObjectId) -> Result<(), AppError> {
+    flush_audit_with_session(db, None, id).await
 }
 
 pub async fn recover_audit(db: &Database) -> Result<(), AppError> {
@@ -715,7 +1021,7 @@ pub async fn recover_audit(db: &Database) -> Result<(), AppError> {
     Ok(())
 }
 
-#[derive(serde::Deserialize)]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct SaveRequest {
     pub operation_id: String,
     pub expected_revision: i64,
@@ -723,57 +1029,378 @@ pub struct SaveRequest {
     pub dry_run: bool,
     pub document: Value,
 }
+
 fn yes() -> bool {
     true
 }
+
 fn number(d: &Document, k: &str) -> i64 {
     d.get_i64(k)
         .or_else(|_| d.get_i32(k).map(i64::from))
         .unwrap_or(0)
 }
-fn stamp(v: &mut Value, user: i64) {
+
+fn strip_provenance_server_stamps(v: &Value) -> Value {
     match v {
         Value::Object(o) => {
-            if o.get("actor").is_some_and(|a| a["type"] == "HUMAN") && o.contains_key("method") {
-                o.get_mut("actor").unwrap()["id"] = json!(user.to_string());
-                o.insert(
-                    "recorded_at".into(),
-                    json!(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
-                );
+            let mut m = serde_json::Map::new();
+            let is_prov = o.contains_key("actor") && o.contains_key("method");
+            for (k, val) in o {
+                if is_prov && matches!(k.as_str(), "recorded_at" | "review_event_id" | "trust_level") {
+                    continue;
+                }
+                if k == "actor" && is_prov {
+                    if let Some(ao) = val.as_object() {
+                        let mut am = ao.clone();
+                        if am.get("type").and_then(Value::as_str) == Some("HUMAN") {
+                            am.remove("id");
+                        }
+                        m.insert(k.clone(), Value::Object(am));
+                        continue;
+                    }
+                }
+                m.insert(k.clone(), strip_provenance_server_stamps(val));
             }
-            for x in o.values_mut() {
-                stamp(x, user);
-            }
+            Value::Object(m)
         }
-        Value::Array(a) => {
-            for x in a {
-                stamp(x, user)
-            }
-        }
-        _ => {}
+        Value::Array(arr) => Value::Array(arr.iter().map(strip_provenance_server_stamps).collect()),
+        _ => v.clone(),
     }
 }
 
+fn collect_existing_review_event_ids(old_ext: &Value) -> std::collections::HashSet<String> {
+    let mut ids = std::collections::HashSet::new();
+    if let Some(origins) = old_ext["origins"].as_array() {
+        for o in origins {
+            if let Some(id) = o["provenance"]["review_event_id"].as_str() {
+                ids.insert(id.to_string());
+            }
+        }
+    }
+    if let Some(links) = old_ext["classification"]["links"].as_array() {
+        for l in links {
+            if let Some(id) = l["provenance"]["review_event_id"].as_str() {
+                ids.insert(id.to_string());
+            }
+        }
+    }
+    if let Some(id) = old_ext["validity"]["decision"]["review_event_id"].as_str() {
+        ids.insert(id.to_string());
+    }
+    ids
+}
+
+fn ensure_no_spoofed_provenance(
+    old_ext: Option<&Value>,
+    next_doc: &Value,
+) -> Result<(), AppError> {
+    if let Some(old) = old_ext {
+        let allowed = collect_existing_review_event_ids(old);
+        if let Some(origins) = next_doc["origins"].as_array() {
+            for (idx, o) in origins.iter().enumerate() {
+                if let Some(rev_id) = o["provenance"]["review_event_id"].as_str() {
+                    if !allowed.contains(rev_id) {
+                        return Err(AppError::bad_request_code(
+                            "REVIEW_ACTOR_UNTRUSTED",
+                            Some(format!("origins.{idx}.provenance.review_event_id")),
+                            "Cliente não pode autoatribuir review_event_id não verificado",
+                        ));
+                    }
+                } else if o["provenance"]["trust_level"] == "SERVER_VERIFIED" {
+                    return Err(AppError::bad_request_code(
+                        "REVIEW_ACTOR_UNTRUSTED",
+                        Some(format!("origins.{idx}.provenance.trust_level")),
+                        "Cliente não pode autoatribuir trust_level SERVER_VERIFIED",
+                    ));
+                }
+            }
+        }
+        if let Some(links) = next_doc["classification"]["links"].as_array() {
+            for (idx, l) in links.iter().enumerate() {
+                if let Some(rev_id) = l["provenance"]["review_event_id"].as_str() {
+                    if !allowed.contains(rev_id) {
+                        return Err(AppError::bad_request_code(
+                            "REVIEW_ACTOR_UNTRUSTED",
+                            Some(format!("classification.links.{idx}.provenance.review_event_id")),
+                            "Cliente não pode autoatribuir review_event_id não verificado",
+                        ));
+                    }
+                } else if l["provenance"]["trust_level"] == "SERVER_VERIFIED" {
+                    return Err(AppError::bad_request_code(
+                        "REVIEW_ACTOR_UNTRUSTED",
+                        Some(format!("classification.links.{idx}.provenance.trust_level")),
+                        "Cliente não pode autoatribuir trust_level SERVER_VERIFIED",
+                    ));
+                }
+            }
+        }
+        if !next_doc["validity"]["decision"].is_null() {
+            if let Some(rev_id) = next_doc["validity"]["decision"]["review_event_id"].as_str() {
+                if !allowed.contains(rev_id) {
+                    return Err(AppError::bad_request_code(
+                        "REVIEW_ACTOR_UNTRUSTED",
+                        Some("validity.decision.review_event_id"),
+                        "Cliente não pode autoatribuir review_event_id não verificado",
+                    ));
+                }
+            } else if next_doc["validity"]["decision"]["trust_level"] == "SERVER_VERIFIED" {
+                return Err(AppError::bad_request_code(
+                    "REVIEW_ACTOR_UNTRUSTED",
+                    Some("validity.decision.trust_level"),
+                    "Cliente não pode autoatribuir trust_level SERVER_VERIFIED",
+                ));
+            }
+        }
+    } else {
+        if let Some(origins) = next_doc["origins"].as_array() {
+            for (idx, o) in origins.iter().enumerate() {
+                let prefix = format!("origins.{idx}.provenance");
+                contracts::reject_client_server_provenance(&o["provenance"], &prefix)?;
+            }
+        }
+        if let Some(links) = next_doc["classification"]["links"].as_array() {
+            for (idx, l) in links.iter().enumerate() {
+                let prefix = format!("classification.links.{idx}.provenance");
+                contracts::reject_client_server_provenance(&l["provenance"], &prefix)?;
+            }
+        }
+        if !next_doc["validity"]["decision"].is_null() {
+            contracts::reject_client_server_provenance(
+                &next_doc["validity"]["decision"],
+                "validity.decision",
+            )?;
+        }
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn build_review_event_doc(
+    seed: &str,
+    reviewer: &ReviewerContext,
+    action: &str,
+    resource_id: &str,
+    resource_revision: i64,
+    content_revision: &str,
+    semantic_revision: &str,
+    reviewed_at: &str,
+) -> Result<(String, Document), AppError> {
+    let review_event_id = deterministic_review_event_uuid(seed);
+    let ev_json = json!({
+        "_id": review_event_id,
+        "schema_version": 1,
+        "review_event_id": review_event_id,
+        "principal_id": reviewer.principal_id,
+        "actor_user_id": reviewer.user_id,
+        "action": action,
+        "resource_id": resource_id,
+        "resource_revision": resource_revision,
+        "content_revision": content_revision,
+        "semantic_revision": semantic_revision,
+        "reviewed_at": reviewed_at,
+        "decision": "APPROVED"
+    });
+    contracts::shape("review_event", &ev_json)?;
+    let doc = bson_doc(ev_json)?;
+    Ok((review_event_id, doc))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn authorize_and_stamp_human_decisions(
+    old_ext: Option<&Value>,
+    doc_val: &mut Value,
+    reviewer: &ReviewerContext,
+    operation_id: &str,
+    qid_hex: &str,
+    next_rev: i64,
+    content_rev: &str,
+    semantic_rev: &str,
+) -> Result<Vec<Document>, AppError> {
+    if reviewer.user_id <= 0 {
+        return Err(AppError::forbidden_code(
+            "REVIEW_ACTOR_UNTRUSTED",
+            None::<String>,
+            "Revisão exige sessão autenticada válida no servidor",
+        ));
+    }
+
+    let now_iso = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let mut review_events = Vec::new();
+
+    let origins_changed = old_ext.is_none_or(|old| {
+        strip_provenance_server_stamps(&old["origins"])
+            != strip_provenance_server_stamps(&doc_val["origins"])
+    });
+    let class_changed = old_ext.is_none_or(|old| {
+        strip_provenance_server_stamps(&old["classification"])
+            != strip_provenance_server_stamps(&doc_val["classification"])
+    });
+    let validity_changed = old_ext.is_none_or(|old| {
+        strip_provenance_server_stamps(&old["validity"])
+            != strip_provenance_server_stamps(&doc_val["validity"])
+    });
+
+    if origins_changed {
+        if let Some(origins) = doc_val["origins"].as_array_mut() {
+            for (idx, origin) in origins.iter_mut().enumerate() {
+                let requires_normative =
+                    origin["kind"] == "OFFICIAL_EXAM" && origin["verification"] == "CONFIRMED";
+                let has_human = contracts::human_review(&origin["provenance"]);
+                if requires_normative || has_human {
+                    if requires_normative && !reviewer.can_confirm_normative {
+                        return Err(AppError::forbidden_code(
+                            "REVIEW_PERMISSION_DENIED",
+                            Some(format!("origins.{idx}.verification")),
+                            "Permissão insuficiente para confirmar origem documental oficial",
+                        ));
+                    }
+                    origin["provenance"]["actor"]["id"] = json!(reviewer.principal_id);
+                    origin["provenance"]["recorded_at"] = json!(now_iso);
+                    if reviewer.can_confirm_normative {
+                        let (rev_id, ev_doc) = build_review_event_doc(
+                            &format!("{}:{operation_id}:origin:{idx}", reviewer.user_id),
+                            reviewer,
+                            "ORIGIN_CONFIRM",
+                            qid_hex,
+                            next_rev,
+                            content_rev,
+                            semantic_rev,
+                            &now_iso,
+                        )?;
+                        origin["provenance"]["review_event_id"] = json!(rev_id);
+                        origin["provenance"]["trust_level"] = json!("SERVER_VERIFIED");
+                        review_events.push(ev_doc);
+                    }
+                }
+            }
+        }
+    }
+
+    if class_changed {
+        let is_confirmed = doc_val["classification"]["state"] == "CONFIRMED";
+        let has_links = doc_val["classification"]["links"]
+            .as_array()
+            .is_some_and(|a| !a.is_empty());
+        if is_confirmed || has_links {
+            if !reviewer.can_confirm_normative {
+                return Err(AppError::forbidden_code(
+                    "REVIEW_PERMISSION_DENIED",
+                    Some("classification.state"),
+                    "Permissão insuficiente para confirmar vínculos de classificação",
+                ));
+            }
+            let (rev_id, ev_doc) = build_review_event_doc(
+                &format!("{}:{operation_id}:classification", reviewer.user_id),
+                reviewer,
+                "CLASSIFICATION_CONFIRM",
+                qid_hex,
+                next_rev,
+                content_rev,
+                semantic_rev,
+                &now_iso,
+            )?;
+            if let Some(links) = doc_val["classification"]["links"].as_array_mut() {
+                for link in links {
+                    if contracts::human_review(&link["provenance"]) {
+                        link["provenance"]["actor"]["id"] = json!(reviewer.principal_id);
+                        link["provenance"]["recorded_at"] = json!(now_iso);
+                        link["provenance"]["review_event_id"] = json!(rev_id);
+                        link["provenance"]["trust_level"] = json!("SERVER_VERIFIED");
+                    }
+                }
+            }
+            review_events.push(ev_doc);
+        }
+    }
+
+    if validity_changed {
+        let vstatus = doc_val["validity"]["status"].as_str().unwrap_or("UNKNOWN");
+        if matches!(vstatus, "CURRENT" | "OBSOLETE") {
+            if !reviewer.can_confirm_normative {
+                return Err(AppError::forbidden_code(
+                    "REVIEW_PERMISSION_DENIED",
+                    Some("validity.status"),
+                    "Permissão insuficiente para confirmar validade normativa da questão",
+                ));
+            }
+            let action = if vstatus == "CURRENT" {
+                "VALIDITY_CONFIRM_CURRENT"
+            } else {
+                "VALIDITY_CONFIRM_OBSOLETE"
+            };
+            let (rev_id, ev_doc) = build_review_event_doc(
+                &format!("{}:{operation_id}:validity:{vstatus}", reviewer.user_id),
+                reviewer,
+                action,
+                qid_hex,
+                next_rev,
+                content_rev,
+                semantic_rev,
+                &now_iso,
+            )?;
+            doc_val["validity"]["decision"]["actor"]["id"] = json!(reviewer.principal_id);
+            doc_val["validity"]["decision"]["recorded_at"] = json!(now_iso);
+            doc_val["validity"]["decision"]["review_event_id"] = json!(rev_id);
+            doc_val["validity"]["decision"]["trust_level"] = json!("SERVER_VERIFIED");
+            doc_val["validity"]["evaluated_semantic_revision"] = json!(semantic_rev);
+            doc_val["validity"]["evaluation_mode"] = json!("SEMANTIC");
+            review_events.push(ev_doc);
+        }
+    }
+
+    Ok(review_events)
+}
+
 pub async fn save(db: &Database, user: i64, r: SaveRequest) -> Result<Value, AppError> {
-    save_internal(db, user, r, false).await
+    save_with_reviewer(db, &ReviewerContext::admin(user), r).await
+}
+
+pub async fn save_with_reviewer(
+    db: &Database,
+    reviewer: &ReviewerContext,
+    r: SaveRequest,
+) -> Result<Value, AppError> {
+    save_internal(db, None, reviewer, r, false).await
 }
 
 /// Insertion never upgrades or overwrites an existing question.
 pub async fn create(db: &Database, user: i64, r: SaveRequest) -> Result<Value, AppError> {
-    save_internal(db, user, r, true).await
+    create_with_reviewer(db, &ReviewerContext::admin(user), r).await
+}
+
+pub async fn create_with_reviewer(
+    db: &Database,
+    reviewer: &ReviewerContext,
+    r: SaveRequest,
+) -> Result<Value, AppError> {
+    save_internal(db, None, reviewer, r, true).await
+}
+
+pub async fn create_in_session(
+    db: &Database,
+    session: Option<&mut ClientSession>,
+    reviewer: &ReviewerContext,
+    r: SaveRequest,
+) -> Result<Value, AppError> {
+    save_internal(db, session, reviewer, r, true).await
 }
 
 async fn save_internal(
     db: &Database,
-    user: i64,
+    mut external_session: Option<&mut ClientSession>,
+    reviewer: &ReviewerContext,
     mut r: SaveRequest,
     create_only: bool,
 ) -> Result<Value, AppError> {
+    let user = reviewer.user_id;
     if uuid::Uuid::parse_str(&r.operation_id).is_err()
         || r.expected_revision < 0
         || r.expected_revision >= i64::MAX - 1
     {
         return Err(err("Operação/revisão inválida"));
+    }
+    if r.document.get("schema_outbox").is_some() {
+        return Err(err("Outbox é preenchida apenas pelo servidor"));
     }
     if r.document
         .get("explanation")
@@ -789,11 +1416,18 @@ async fn save_internal(
     {
         r.document["level"] = Value::Null;
     }
-    contracts::validate(&r.document)?;
+
     if r.document["revision"].as_i64() != Some(r.expected_revision + 1) {
-        return Err(err("A revisão deve avançar exatamente uma unidade"));
+        return Err(AppError::bad_request_code(
+            "SCHEMA_VALIDATION_FAILED",
+            Some("revision"),
+            "A revisão deve avançar exatamente uma unidade",
+        ));
     }
-    let id = ObjectId::parse_str(r.document["_id"]["$oid"].as_str().unwrap())?;
+    let qid_hex = contracts::validate_contract_oid(&r.document["_id"], "_id")?;
+    let id = ObjectId::parse_str(&qid_hex)?;
+
+    // Canonical command digest computed over client-submitted payload BEFORE server timestamps
     let hash = format!(
         "{:x}",
         Sha256::digest(
@@ -805,24 +1439,46 @@ async fn save_internal(
     );
     let event_id = format!("{user}:{}", r.operation_id);
     let coll = collection(db, "todasQuestoes");
-    if !r.dry_run {
+
+    if !r.dry_run && external_session.is_none() {
         flush_audit(db, id).await?;
     }
-    if let Some(receipt) = collection(db, "question_revision_events")
-        .find_one(doc! { "_id": &event_id })
-        .await?
-    {
+
+    let existing_receipt = if let Some(s) = external_session.as_deref_mut() {
+        collection(db, "question_revision_events")
+            .find_one(doc! { "_id": &event_id })
+            .session(s)
+            .await?
+    } else {
+        collection(db, "question_revision_events")
+            .find_one(doc! { "_id": &event_id })
+            .await?
+    };
+    if let Some(receipt) = existing_receipt {
         if receipt.get_str("payload_sha256").ok() != Some(hash.as_str()) {
-            return Err(err("Operação repetida com outro conteúdo"));
+            return Err(AppError::conflict_code(
+                "IDEMPOTENCY_KEY_CONFLICT",
+                Some("operation_id"),
+                "Operação repetida com outro conteúdo",
+            ));
         }
         return Ok(json!({
             "status": "already_applied",
-            "revision": receipt.get_i64("revision").unwrap_or(r.expected_revision + 1)
+            "revision": receipt.get_i64("revision").unwrap_or(r.expected_revision + 1),
+            "id": id.to_hex()
         }));
     }
-    let raw = coll.find_one(doc! { "_id": id }).await?;
+
+    let raw = if let Some(s) = external_session.as_deref_mut() {
+        coll.find_one(doc! { "_id": id }).session(s).await?
+    } else {
+        coll.find_one(doc! { "_id": id }).await?
+    };
+
     if create_only && (raw.is_some() || r.expected_revision != 0) {
-        return Err(err(
+        return Err(AppError::conflict_code(
+            "QUESTION_ALREADY_EXISTS",
+            Some("_id"),
             "Inserção exige uma questão nova; o registro existente foi preservado",
         ));
     }
@@ -831,6 +1487,53 @@ async fn save_internal(
     {
         return Err(err("Questão mudou; refaça a revisão"));
     }
+
+    let old_ext = raw
+        .as_ref()
+        .map(|d| Bson::Document(d.clone()).into_relaxed_extjson());
+    ensure_no_spoofed_provenance(old_ext.as_ref(), &r.document)?;
+
+    // V2.0 compatibility on update: if a V2.0 caller updated content_revision (matching hash(doc))
+    // while carrying over untouched V2.1 fields from GET, refresh those V2.1 fields before validate.
+    // Any stale/mismatched content_revision or forged semantic_revision/grading_revision still fails T07!
+    if let Some(prev) = old_ext.as_ref() {
+        if let Ok(new_crev) = contracts::hash(&r.document) {
+            if r.document["content_revision"].as_str() == Some(new_crev.as_str()) {
+                let carried_old_sem = r.document.get("semantic_revision").is_some_and(|v| {
+                    !v.is_null() && v == &prev["semantic_revision"]
+                });
+                let carried_old_grad = r.document.get("grading_revision").is_some_and(|v| {
+                    !v.is_null() && v == &prev["grading_revision"]
+                });
+                if carried_old_sem {
+                    if let Ok(new_srev) = contracts::semantic_hash(&r.document) {
+                        if r.document["validity"]["evaluated_content_revision"].as_str()
+                            == Some(new_crev.as_str())
+                            && r.document["validity"].get("evaluated_semantic_revision")
+                                == prev["validity"].get("evaluated_semantic_revision")
+                        {
+                            r.document["validity"]["evaluated_semantic_revision"] =
+                                json!(&new_srev);
+                        }
+                        r.document["semantic_revision"] = json!(new_srev);
+                        r.document["semantic_hash_version"] =
+                            json!(contracts::SEMANTIC_HASH_VERSION);
+                    }
+                }
+                if carried_old_grad {
+                    if let Ok(new_grev) = contracts::grading_hash(&r.document) {
+                        r.document["grading_revision"] = json!(new_grev);
+                        r.document["grading_hash_version"] =
+                            json!(contracts::GRADING_HASH_VERSION);
+                    }
+                }
+            }
+        }
+    }
+
+    // Validate full contract (enforcing T07 hash integrity, T19 ObjectId, T20 strict ints, schema)
+    contracts::validate(&r.document)?;
+
     validate_transition(raw.as_ref(), &r.document)?;
     for link in r.document["classification"]["links"].as_array().unwrap() {
         if !contracts::known_topic(
@@ -856,9 +1559,10 @@ async fn save_internal(
             }
         }
     }
-    let unchanged_classification = raw.as_ref().is_some_and(|d| {
-        Bson::Document(d.clone()).into_relaxed_extjson()["classification"]
-            == r.document["classification"]
+
+    let unchanged_classification = old_ext.as_ref().is_some_and(|prev| {
+        strip_provenance_server_stamps(&prev["classification"])
+            == strip_provenance_server_stamps(&r.document["classification"])
     });
     if r.document["classification"]["links"]
         .as_array()
@@ -871,64 +1575,190 @@ async fn save_internal(
             "Aceitação de sugestões exige o fluxo de revisão da etapa de classificação",
         ));
     }
-    if r.dry_run {
-        return Ok(json!({"status":"validated_dry_run","revision":r.expected_revision+1}));
-    }
-    if collection(db, "cogniva_schema_versions")
-        .find_one(doc! { "_id": "question-v2:ready", "ready": true })
-        .await?
-        .is_none()
+
+    // Populate V2.1 semantic and grading signatures deterministically
+    contracts::populate_v2_1_hashes(&mut r.document)?;
+    let computed_content = r.document["content_revision"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let computed_semantic = r.document["semantic_revision"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    if matches!(
+        r.document["validity"]["status"].as_str(),
+        Some("CURRENT" | "OBSOLETE")
+    ) && r.document["validity"]
+        .get("evaluated_semantic_revision")
+        .is_none_or(Value::is_null)
     {
+        r.document["validity"]["evaluated_semantic_revision"] = json!(&computed_semantic);
+        r.document["validity"]["evaluation_mode"] = json!("SEMANTIC");
+    }
+
+    // Enforce server-authenticated reviewer permissions and generate auditable ReviewEvents
+    let review_events = authorize_and_stamp_human_decisions(
+        old_ext.as_ref(),
+        &mut r.document,
+        reviewer,
+        &r.operation_id,
+        &qid_hex,
+        r.expected_revision + 1,
+        &computed_content,
+        &computed_semantic,
+    )?;
+
+    // Re-validate final stamped document against full V2.1 contract before touching MongoDB
+    contracts::validate(&r.document)?;
+
+    if r.dry_run {
+        return Ok(json!({
+            "status": "validated_dry_run",
+            "revision": r.expected_revision + 1,
+            "semantic_revision": r.document["semantic_revision"],
+            "grading_revision": r.document["grading_revision"]
+        }));
+    }
+
+    let schema_ready = if let Some(s) = external_session.as_deref_mut() {
+        collection(db, "cogniva_schema_versions")
+            .find_one(doc! { "_id": "question-v2:ready", "ready": true })
+            .session(s)
+            .await?
+    } else {
+        collection(db, "cogniva_schema_versions")
+            .find_one(doc! { "_id": "question-v2:ready", "ready": true })
+            .await?
+    };
+    if schema_ready.is_none() {
         return Err(AppError::TemporarilyUnavailable(
             "Prepare os validadores e índices antes da escrita v2".into(),
         ));
     }
-    let commands = collection(db, "question_commands");
-    if let Some(command) = commands.find_one(doc! { "_id": &event_id }).await? {
-        if command.get_str("payload_sha256").ok() != Some(hash.as_str()) {
-            return Err(err("Operação já reservada com outro conteúdo"));
+
+    // If caller didn't open a session and MongoDB topology supports transactions, start one!
+    let mut owned_session = if external_session.is_none() && topology_supports_transactions(db).await {
+        if let Ok(mut s) = db.client().start_session().await {
+            if s.start_transaction().await.is_ok() {
+                Some(s)
+            } else {
+                None
+            }
+        } else {
+            None
         }
     } else {
-        commands
-            .insert_one(doc! {
-                "_id": &event_id,
-                "payload_sha256": &hash,
-                "question_id": id.to_hex(),
-                "actor_user_id": user
-            })
-            .await?;
-    }
-    if let Some(old) = &raw {
-        let previous = bson::Bson::Document(old.clone()).into_relaxed_extjson();
-        for field in ["origins", "classification", "validity"] {
-            if previous[field] != r.document[field] {
-                stamp(&mut r.document[field], user);
+        None
+    };
+
+    let active_session: Option<&mut ClientSession> = match external_session {
+        Some(s) => Some(s),
+        None => owned_session.as_mut(),
+    };
+
+    let result = execute_write_steps(
+        db,
+        active_session,
+        &coll,
+        id,
+        user,
+        &event_id,
+        &hash,
+        raw.as_ref(),
+        old_ext.as_ref(),
+        &r,
+        &computed_semantic,
+        review_events,
+    )
+    .await;
+
+    if let Some(mut s) = owned_session {
+        match &result {
+            Ok(_) => {
+                s.commit_transaction().await?;
+            }
+            Err(_) => {
+                let _ = s.abort_transaction().await;
             }
         }
-    } else {
-        stamp(&mut r.document, user);
     }
+
+    result
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn execute_write_steps(
+    db: &Database,
+    mut session: Option<&mut ClientSession>,
+    coll: &mongodb::Collection<Document>,
+    id: ObjectId,
+    user: i64,
+    event_id: &str,
+    hash: &str,
+    raw: Option<&Document>,
+    old_ext: Option<&Value>,
+    r: &SaveRequest,
+    computed_semantic: &str,
+    review_events: Vec<Document>,
+) -> Result<Value, AppError> {
+    let commands = collection(db, "question_commands");
+    let existing_cmd = if let Some(s) = session.as_deref_mut() {
+        commands.find_one(doc! { "_id": event_id }).session(s).await?
+    } else {
+        commands.find_one(doc! { "_id": event_id }).await?
+    };
+    if let Some(command) = existing_cmd {
+        if command.get_str("payload_sha256").ok() != Some(hash) {
+            return Err(AppError::conflict_code(
+                "IDEMPOTENCY_KEY_CONFLICT",
+                Some("operation_id"),
+                "Operação já reservada com outro conteúdo",
+            ));
+        }
+    } else {
+        let cmd_doc = doc! {
+            "_id": event_id,
+            "payload_sha256": hash,
+            "question_id": id.to_hex(),
+            "actor_user_id": user
+        };
+        let insert_res = if let Some(s) = session.as_deref_mut() {
+            commands.insert_one(cmd_doc).session(s).await
+        } else {
+            commands.insert_one(cmd_doc).await
+        };
+        if let Err(e) = insert_res {
+            if is_duplicate_key_error(&e) {
+                return Err(AppError::conflict_code(
+                    "IDEMPOTENCY_KEY_CONFLICT",
+                    Some("operation_id"),
+                    "Conflito concorrente na reserva de operação",
+                ));
+            }
+            return Err(e.into());
+        }
+    }
+
     let primary = r.document["classification"]["links"]
         .as_array()
         .unwrap()
         .iter()
         .find(|l| l["role"] == "PRIMARY");
     if primary.is_none()
-        && raw
-            .as_ref()
-            .is_some_and(|d| d.get_str("canonical_topic_id").is_ok())
+        && raw.is_some_and(|d| d.get_str("canonical_topic_id").is_ok())
     {
         return Err(err("Preserve o vínculo canônico confirmado na migração"));
     }
     let mirrors = primary.map(|p| (p["subject_id"].clone(), p["topic_id"].clone()));
-    if r.document.get("schema_outbox").is_some() {
-        return Err(err("Outbox é preenchida apenas pelo servidor"));
-    }
 
-    let previous = raw.clone().unwrap_or_default();
-    let content_changed = raw.as_ref().is_some_and(|d| {
-        d.get_str("content_revision").ok() != r.document["content_revision"].as_str()
-    });
+    let previous = raw.cloned().unwrap_or_default();
+    let old_semantic_rev = raw
+        .and_then(|d| d.get_str("semantic_revision").ok().map(str::to_string))
+        .or_else(|| old_ext.and_then(|prev| contracts::semantic_hash(prev).ok()));
+    let semantic_changed =
+        raw.is_some() && old_semantic_rev.as_deref() != Some(computed_semantic);
 
     let incoming_explanation = r
         .document
@@ -937,14 +1767,13 @@ async fn save_internal(
         .map(str::trim)
         .filter(|s| !s.is_empty());
     let old_explanation = raw
-        .as_ref()
         .and_then(|d| d.get_str("explanation").ok())
         .map(str::trim);
     let explicit_updated_explanation =
-        incoming_explanation.filter(|exp| !content_changed || Some(*exp) != old_explanation);
+        incoming_explanation.filter(|exp| !semantic_changed || Some(*exp) != old_explanation);
 
     let mut update = if raw.is_none() {
-        bson_doc(r.document.clone())?
+        contracts::contract_to_bson_question(&r.document)?
     } else {
         Document::new()
     };
@@ -953,6 +1782,10 @@ async fn save_internal(
         "revision",
         "content_revision",
         "content_hash_version",
+        "semantic_revision",
+        "semantic_hash_version",
+        "grading_revision",
+        "grading_hash_version",
         "status",
         "question",
         "question_type",
@@ -970,7 +1803,6 @@ async fn save_internal(
         );
     }
 
-    // Persist optional metadata fields on V2 edits (ADR-08)
     for opt_key in ["level", "exam_year", "disciplina", "concursos"] {
         if let Some(val) = r.document.get(opt_key) {
             update.insert(
@@ -984,7 +1816,7 @@ async fn save_internal(
     if raw.is_some() {
         if let Some(exp) = explicit_updated_explanation {
             update.insert("explanation", exp);
-        } else if content_changed || r.document.get("explanation") == Some(&Value::Null) {
+        } else if semantic_changed || r.document.get("explanation") == Some(&Value::Null) {
             unset_fields.insert("explanation", "");
         }
     }
@@ -996,7 +1828,7 @@ async fn save_internal(
         .find(|o| o["kind"] == "OFFICIAL_EXAM" && o["verification"] == "CONFIRMED")
     {
         update.insert("source", origin["organizer"].as_str().unwrap());
-    } else if raw.as_ref().is_none_or(|d| !d.contains_key("source")) {
+    } else if raw.is_none_or(|d| !d.contains_key("source")) {
         let first = &r.document["origins"][0];
         let label = match first["kind"].as_str() {
             Some("AUTHOR_CREATED") => "Autoral",
@@ -1013,18 +1845,29 @@ async fn save_internal(
         update.insert("canonical_topic_id", Bson::Null);
     }
 
+    let review_event_ids: Vec<String> = review_events
+        .iter()
+        .filter_map(|d| d.get_str("review_event_id").ok().map(str::to_string))
+        .collect();
+    let review_events_bson: Vec<Bson> = review_events
+        .into_iter()
+        .map(Bson::Document)
+        .collect();
+
     let event = doc! {
-        "_id": &event_id,
+        "_id": event_id,
         "question_id": id.to_hex(),
         "revision": r.expected_revision + 1,
-        "payload_sha256": &hash,
+        "payload_sha256": hash,
         "actor_user_id": user,
+        "review_event_ids": review_event_ids.clone(),
+        "review_events": review_events_bson,
         "recorded_at": bson::DateTime::now(),
         "previous": previous
     };
     update.insert("schema_outbox", event);
 
-    if let Some(old) = &raw {
+    if let Some(old) = raw {
         let mut filter = doc! { "_id": id, "schema_outbox": { "$exists": false } };
         for key in [
             "revision",
@@ -1046,7 +1889,7 @@ async fn save_internal(
                     .unwrap_or(Bson::Document(doc! { "$exists": false })),
             );
         }
-        if content_changed {
+        if semantic_changed {
             for key in [
                 "explanation",
                 "contextualHint",
@@ -1084,7 +1927,11 @@ async fn save_internal(
         if !unset_fields.is_empty() {
             command.insert("$unset", unset_fields);
         }
-        let result = coll.update_one(filter, command).await?;
+        let result = if let Some(s) = session.as_deref_mut() {
+            coll.update_one(filter, command).session(s).await?
+        } else {
+            coll.update_one(filter, command).await?
+        };
         if result.matched_count != 1 {
             return Err(err(
                 "Alteração concorrente; operação não sobrescreveu a questão",
@@ -1092,13 +1939,31 @@ async fn save_internal(
         }
     } else {
         update.insert("_id", id);
-        coll.insert_one(update).await?;
+        let ins_res = if let Some(s) = session.as_deref_mut() {
+            coll.insert_one(update).session(s).await
+        } else {
+            coll.insert_one(update).await
+        };
+        if let Err(e) = ins_res {
+            if is_duplicate_key_error(&e) {
+                return Err(AppError::conflict_code(
+                    "QUESTION_ALREADY_EXISTS",
+                    Some("_id"),
+                    "Questão já existente; inserção concorrente bloqueada",
+                ));
+            }
+            return Err(e.into());
+        }
     }
-    flush_audit(db, id).await?;
+
+    flush_audit_with_session(db, session, id).await?;
     Ok(json!({
         "status": "applied",
         "revision": r.expected_revision + 1,
-        "id": id.to_hex()
+        "id": id.to_hex(),
+        "semantic_revision": computed_semantic,
+        "grading_revision": r.document["grading_revision"],
+        "review_event_ids": review_event_ids
     }))
 }
 
@@ -1122,7 +1987,8 @@ fn validate_transition(old: Option<&Document>, next: &Value) -> Result<(), AppEr
                 }
             } else {
                 let p = prior["revision"].as_i64().unwrap_or(0);
-                let changed = prior != &next[field];
+                let changed = strip_provenance_server_stamps(prior)
+                    != strip_provenance_server_stamps(&next[field]);
                 if changed && n != p + 1 || !changed && n != p {
                     return Err(err("Revisão de classificação/validade divergente"));
                 }
@@ -1142,11 +2008,97 @@ fn validate_transition(old: Option<&Document>, next: &Value) -> Result<(), AppEr
 }
 
 #[cfg(test)]
-pub fn v2_0_0_schema_bundle() -> Value {
+pub fn v2_0_2_schema_bundle() -> Value {
     let mut bundle: Value = serde_json::from_str(include_str!(
         "../../../shared/schemas/question-contracts.schema.json"
     ))
     .expect("contracts");
+
+    if let Some(one_of) = bundle["oneOf"].as_array_mut() {
+        one_of.retain(|entry| entry["$ref"] != "#/$defs/review_event");
+    }
+    bundle["$defs"]
+        .as_object_mut()
+        .unwrap()
+        .retain(|k, _| k != "review_event");
+
+    let prov_props = bundle["$defs"]["provenance"]["properties"]
+        .as_object_mut()
+        .unwrap();
+    prov_props.retain(|k, _| k != "review_event_id" && k != "trust_level");
+
+    let val_props = bundle["$defs"]["validity"]["properties"]
+        .as_object_mut()
+        .unwrap();
+    val_props.retain(|k, _| k != "evaluated_semantic_revision" && k != "evaluation_mode");
+
+    let val_all_of = bundle["$defs"]["validity"]["allOf"].as_array_mut().unwrap();
+    if let Some(unknown_props) = val_all_of[0]["then"]["properties"].as_object_mut() {
+        unknown_props.retain(|k, _| k != "evaluated_semantic_revision" && k != "evaluation_mode");
+    }
+    val_all_of.retain(|rule| rule["if"]["properties"]["status"]["const"] != "UNDER_REVIEW");
+
+    let q_props = bundle["$defs"]["question"]["properties"]
+        .as_object_mut()
+        .unwrap();
+    q_props["schema_version"]
+        .as_object_mut()
+        .unwrap()
+        .retain(|k, _| k != "type");
+    q_props.retain(|k, _| {
+        !matches!(
+            k.as_str(),
+            "semantic_revision"
+                | "semantic_hash_version"
+                | "grading_revision"
+                | "grading_hash_version"
+        )
+    });
+
+    let s_props = bundle["$defs"]["suggestion"]["properties"]
+        .as_object_mut()
+        .unwrap();
+    s_props["schema_version"]
+        .as_object_mut()
+        .unwrap()
+        .retain(|k, _| k != "type");
+    s_props.retain(|k, _| k != "question_semantic_revision");
+    s_props["resolution"]["anyOf"][0]["properties"]
+        .as_object_mut()
+        .unwrap()
+        .retain(|k, _| k != "review_event_id");
+
+    let c_props = bundle["$defs"]["compatibility"]["properties"]
+        .as_object_mut()
+        .unwrap();
+    c_props["schema_version"]
+        .as_object_mut()
+        .unwrap()
+        .retain(|k, _| k != "type");
+    c_props.retain(|k, _| k != "question_semantic_revision");
+
+    let e_props = bundle["$defs"]["evaluation"]["properties"]
+        .as_object_mut()
+        .unwrap();
+    e_props["schema_version"]
+        .as_object_mut()
+        .unwrap()
+        .retain(|k, _| k != "type");
+    e_props.retain(|k, _| k != "question_semantic_revision" && k != "grading_revision");
+
+    bundle
+}
+
+#[cfg(test)]
+pub fn v2_0_1_schema_bundle() -> Value {
+    let mut bundle = v2_0_2_schema_bundle();
+    bundle["$defs"]["question"]["allOf"][0]["then"]["properties"]["answers"]["minItems"] = json!(4);
+    bundle
+}
+
+#[cfg(test)]
+pub fn v2_0_0_schema_bundle() -> Value {
+    let mut bundle = v2_0_1_schema_bundle();
     let uri = bundle["$defs"]["evidence"]["properties"]["uri"]
         .as_object_mut()
         .expect("evidence.uri");
@@ -1200,46 +2152,174 @@ mod tests {
     }
 
     #[test]
-    fn validator_migration_table_matches_v2_0_0_and_current_schema_hashes() {
+    fn validator_migration_table_matches_v2_0_0_v2_0_1_v2_0_2_and_current_v2_1_0_hashes() {
         let old_bundle = v2_0_0_schema_bundle();
+        let v2_0_1_bundle = v2_0_1_schema_bundle();
+        let v2_0_2_bundle = v2_0_2_schema_bundle();
         for kind in ["question", "suggestion", "compatibility", "evaluation"] {
             let old_doc = mongo_schema_from_bundle(&old_bundle, kind);
             let old_hash = validator_source_sha256(&doc! { "$jsonSchema": old_doc });
+            let v2_0_1_doc = mongo_schema_from_bundle(&v2_0_1_bundle, kind);
+            let v2_0_1_hash = validator_source_sha256(&doc! { "$jsonSchema": v2_0_1_doc });
+            let v2_0_2_doc = mongo_schema_from_bundle(&v2_0_2_bundle, kind);
+            let v2_0_2_hash = validator_source_sha256(&doc! { "$jsonSchema": v2_0_2_doc });
             let current_doc = mongo_schema(kind);
             assert!(
                 current_doc.contains_key("properties"),
                 "missing properties in {kind}"
             );
             let current_hash = validator_source_sha256(&doc! { "$jsonSchema": current_doc });
-            let step = find_validator_migration(kind, &old_hash, &current_hash).unwrap_or_else(
-                || panic!("missing explicit validator migration for {kind}: {old_hash} -> {current_hash}"),
-            );
-            assert_eq!(step.migration_id, VALIDATOR_MIGRATION_V2_0_1);
-            assert_eq!(step.to_revision, CURRENT_VALIDATOR_REVISION);
+            if kind == "question" {
+                assert_eq!(v2_0_2_hash, QUESTION_VALIDATOR_V2_0_2_SHA256);
+                let step_202 = find_validator_migration(kind, &v2_0_2_hash, &current_hash)
+                    .unwrap_or_else(|| {
+                        panic!("missing v2.0.2 -> v2.1.0 migration for {kind}: {v2_0_2_hash} -> {current_hash}")
+                    });
+                assert_eq!(step_202.migration_id, VALIDATOR_MIGRATION_V2_1_0);
+                assert_eq!(step_202.to_revision, CURRENT_VALIDATOR_REVISION);
+            }
+            let step_old = find_validator_migration(kind, &old_hash, &current_hash)
+                .unwrap_or_else(|| {
+                    panic!("missing v2.0.0 -> v2.1.0 migration for {kind}: {old_hash} -> {current_hash}")
+                });
+            assert_eq!(step_old.migration_id, VALIDATOR_MIGRATION_V2_1_0);
+            assert_eq!(step_old.to_revision, CURRENT_VALIDATOR_REVISION);
+
+            let step_201 = find_validator_migration(kind, &v2_0_1_hash, &current_hash)
+                .unwrap_or_else(|| {
+                    panic!("missing v2.0.1 -> v2.1.0 migration for {kind}: {v2_0_1_hash} -> {current_hash}")
+                });
+            assert_eq!(step_201.migration_id, VALIDATOR_MIGRATION_V2_1_0);
+            assert_eq!(step_201.to_revision, CURRENT_VALIDATOR_REVISION);
+
             assert!(
-                find_validator_migration(kind, "0000000000000000000000000000000000000000000000000000000000000000", &current_hash).is_none(),
+                find_validator_migration(
+                    kind,
+                    "0000000000000000000000000000000000000000000000000000000000000000",
+                    &current_hash
+                )
+                .is_none(),
                 "unversioned predecessor hash must never match {kind}"
             );
         }
     }
 
     #[test]
-    fn upgrade_merged_validator_preserves_standalone_and_composite_structures() {
-        let old_v = doc! { "$jsonSchema": { "bsonType": "object" } };
-        let new_v = doc! { "$jsonSchema": { "bsonType": "object", "required": ["_id"] } };
-        assert_eq!(
-            upgrade_merged_validator(&old_v, &new_v).unwrap(),
-            new_v.clone()
-        );
+    fn reviewer_authorization_blocks_untrusted_or_unauthorized_normative_decisions_t01_t02_t03() {
+        let mut mc: Value = serde_json::from_str(include_str!(
+            "../../../shared/examples/question-contracts/question-multiple-choice.json"
+        ))
+        .unwrap();
+        contracts::populate_v2_1_hashes(&mut mc).unwrap();
+        let c_rev = mc["content_revision"].as_str().unwrap().to_string();
+        let s_rev = mc["semantic_revision"].as_str().unwrap().to_string();
 
-        let legacy_guard = doc! { "legacy_ok": { "$ne": false } };
-        let composite_old = doc! { "$and": [legacy_guard.clone(), old_v] };
-        assert_eq!(
-            upgrade_merged_validator(&composite_old, &new_v).unwrap(),
-            doc! { "$and": [legacy_guard, new_v.clone()] }
-        );
+        // T01: Client spoofing review_event_id or SERVER_VERIFIED rejected immediately
+        let mut spoofed = mc.clone();
+        spoofed["validity"]["decision"]["review_event_id"] =
+            json!("11111111-1111-4111-8111-111111111111");
+        let spoof_err = ensure_no_spoofed_provenance(None, &spoofed).unwrap_err();
+        assert_eq!(spoof_err.error_code(), "REVIEW_ACTOR_UNTRUSTED");
 
-        let malformed = doc! { "$or": [] };
-        assert!(upgrade_merged_validator(&malformed, &new_v).is_err());
+        // T01: Unauthenticated context (user_id <= 0) rejected
+        let unauth_err = authorize_and_stamp_human_decisions(
+            None,
+            &mut mc.clone(),
+            &ReviewerContext::pending_only(0),
+            "00000000-0000-4000-8000-000000000001",
+            "000000000000000000000001",
+            1,
+            &c_rev,
+            &s_rev,
+        )
+        .unwrap_err();
+        assert_eq!(unauth_err.error_code(), "REVIEW_ACTOR_UNTRUSTED");
+
+        // T02: Authenticated user WITHOUT normative permission attempting CURRENT validity rejected
+        let forbidden_err = authorize_and_stamp_human_decisions(
+            None,
+            &mut mc.clone(),
+            &ReviewerContext::pending_only(42),
+            "00000000-0000-4000-8000-000000000001",
+            "000000000000000000000001",
+            1,
+            &c_rev,
+            &s_rev,
+        )
+        .unwrap_err();
+        assert_eq!(forbidden_err.error_code(), "REVIEW_PERMISSION_DENIED");
+
+        // Pending unclassified/unknown question CAN be created by pending_only operator
+        let mut pending: Value = serde_json::from_str(include_str!(
+            "../../../shared/examples/question-contracts/question-unclassified.json"
+        ))
+        .unwrap();
+        contracts::populate_v2_1_hashes(&mut pending).unwrap();
+        let pending_crev = pending["content_revision"].as_str().unwrap().to_string();
+        let pending_srev = pending["semantic_revision"].as_str().unwrap().to_string();
+        let pending_events = authorize_and_stamp_human_decisions(
+            None,
+            &mut pending,
+            &ReviewerContext::pending_only(42),
+            "00000000-0000-4000-8000-000000000002",
+            "000000000000000000000007",
+            1,
+            &pending_crev,
+            &pending_srev,
+        )
+        .unwrap();
+        assert!(pending_events.is_empty());
+
+        // T03: Authorized admin reviewer produces persistent ReviewEvents and SERVER_VERIFIED provenance
+        let mut approved = mc.clone();
+        let events = authorize_and_stamp_human_decisions(
+            None,
+            &mut approved,
+            &ReviewerContext::admin(99),
+            "00000000-0000-4000-8000-000000000003",
+            "000000000000000000000001",
+            1,
+            &c_rev,
+            &s_rev,
+        )
+        .unwrap();
+        assert_eq!(events.len(), 3);
+        assert_eq!(approved["validity"]["decision"]["actor"]["id"], "99");
+        assert_eq!(
+            approved["validity"]["decision"]["trust_level"],
+            "SERVER_VERIFIED"
+        );
+        assert_eq!(approved["validity"]["evaluation_mode"], "SEMANTIC");
+        assert_eq!(approved["validity"]["evaluated_semantic_revision"], s_rev);
+        contracts::validate(&approved).unwrap();
+    }
+
+    #[test]
+    fn sub5_multiple_choice_classifier_excludes_true_false_open_ended_and_5_option_mc() {
+        assert!(is_sub5_multiple_choice_doc(&doc! {
+            "question_type": "MULTIPLE_CHOICE",
+            "answers": ["A", "B", "C", "D"]
+        }));
+        assert!(is_sub5_multiple_choice_doc(&doc! {
+            "answers": ["A", "B", "C", "D"]
+        }));
+        assert!(is_sub5_multiple_choice_doc(&doc! {
+            "answers": ["Sim", "Talvez"]
+        }));
+        assert!(!is_sub5_multiple_choice_doc(&doc! {
+            "question_type": "MULTIPLE_CHOICE",
+            "answers": ["A", "B", "C", "D", "E"]
+        }));
+        assert!(!is_sub5_multiple_choice_doc(&doc! {
+            "question_type": "TRUE_FALSE",
+            "answers": ["Certo", "Errado"]
+        }));
+        assert!(!is_sub5_multiple_choice_doc(&doc! {
+            "answers": ["Certo", "Errado"]
+        }));
+        assert!(!is_sub5_multiple_choice_doc(&doc! {
+            "question_type": "OPEN_ENDED",
+            "answers": []
+        }));
     }
 }

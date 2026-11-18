@@ -4,6 +4,21 @@ Todas as mudanças arquiteturais, de segurança, acessibilidade e operacionais r
 
 ---
 
+## [2.1.0] - 2026-11-17 (build 27)
+
+### Contratos de Questões V2.1, Pacotes Prontos e Cabeçalho de Estudo no Android
+- **Cabeçalho contextual de questões no Android (`PracticeAndQuestionScreen.kt`, `ExamEngine.kt`, `models/question.rs`):** Remoção do nível de dificuldade (`Fácil`/`Média`/`Difícil`) da barra superior de `QuestionSessionScreen` e inclusão de resolução canônica em tempo real (`ExamCatalog.resolveQuestionHeaderMeta`) exibindo `Disciplina · Origem/Ano` e o caminho hierárquico completo `Assunto › Subassunto` a partir do catálogo sincronizado (`/api/v1/catalog/knowledge`), evitando rótulos genéricos (`Disciplina Geral`) mesmo em cache local.
+- **Guia e importador de pacotes prontos (`docs/PACOTES-QUESTOES.md`, `docs/INSERCAO-QUESTOES.md`, `scripts/cogniva_import.py`):** Documentação passo a passo para modelagem `Disciplina → TOPIC → SUBTOPIC` folha, validação local offline (`--check-local`), ativação versionada de catálogo, sincronização de `SUBTOPIC`s na grade do concurso, promoção automática para `classification = CONFIRMED` + `validity = CURRENT`, vínculo `DIRECT` e verificação pós-importação via sorteio real.
+
+### Tutoria Pedagógica por IA (`ai-tutor/3`) e Blindagem Pré-Resposta
+- **Bússola pedagógica interna sigilosa e filtro determinístico anti-spoiler nos tutores pré-resposta (`services/ai_tutor.rs`, `ConcursoRepository.kt`):**
+  - Revisão dos prompts pré-resposta (`child-friendly-pre` / `ajudaInfantil`, `contextual-hint` / `contextualHint` com progressão explícita `#1..#3` e `dr-sincero` / `drSincero`) para receberem o gabarito sob chave dedicada `bussola_gabarito_sigiloso_nao_revelar` — garantindo alinhamento 100% com a banca sem risco de dica invertida/alucinação — combinada à diretriz `PRE_ANSWER_NO_SPOILER_GUARDRAIL_PT_BR` (*técnica de um nível de abstração acima*, leitura neutra/simétrica e perguntas-guia abertas sem revelar nem eliminar opções).
+  - Adicionado validador determinístico pós-geração `detect_pre_answer_spoiler` em Rust (cobrindo também leitura de cache legado) com 1 tentativa automática de regeneração corretiva na mesma cota e estorno + bloqueio preventivo de persistência caso o vazamento persista.
+  - No Android (`ConcursoRepository.kt`), `dr-sincero` passa a integrar o conjunto de tutores pré-resposta que jamais fazem fallback para `explanation` quando offline ou sob erro HTTP.
+- **Revisão do contexto adicional pós-resposta (`extra-concepts` / `explanationExtra` e demais tutores pós-resposta):** Remoção do viés fixo em *"Administração Pública/Fiscalização"* e reestruturação didática ancorada na `disciplina` real da questão e na fundamentação explícita de `correct_answer` (contexto adicional, conceitos-chave/distinções, exemplos práticos e recorrência em prova), mantendo proibição de letras fixas (`A`, `B`, `C`) devido ao embaralhamento de alternativas. Documentação detalhada em [`docs/IA-XAI.md`](docs/IA-XAI.md), [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md) e [`backend-rust/README.md`](backend-rust/README.md).
+
+---
+
 ## [2.0.1] - 2026-11-14 (build 26)
 
 Blindagem estrutural pós-auditoria adversarial completa nos 8 eixos de engenharia (segurança, confiabilidade/SRS, performance, contratos Schema v2, UX/WCAG 2.1 AA, CI/CD, infraestrutura TLS/Nginx e governança LGPD/IA) sobre a arquitetura convergente `2.0`.

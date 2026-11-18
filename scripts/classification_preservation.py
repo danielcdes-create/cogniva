@@ -10,6 +10,10 @@ AUTHORIZED_FIELDS = frozenset({
     "revision",
     "content_revision",
     "content_hash_version",
+    "semantic_revision",
+    "semantic_hash_version",
+    "grading_revision",
+    "grading_hash_version",
 })
 CONTENT_FIELDS = (
     "question",

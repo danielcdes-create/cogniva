@@ -14,6 +14,9 @@
     },
     {
       "$ref": "#/$defs/evaluation"
+    },
+    {
+      "$ref": "#/$defs/review_event"
     }
   ],
   "$defs": {
@@ -176,6 +179,31 @@
             {
               "type": "string",
               "format": "uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "review_event_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "trust_level": {
+          "anyOf": [
+            {
+              "enum": [
+                "SERVER_VERIFIED",
+                "UNVERIFIED_LEGACY"
+              ]
             },
             {
               "type": "null"
@@ -451,6 +479,30 @@
             }
           ]
         },
+        "evaluated_semantic_revision": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "evaluation_mode": {
+          "anyOf": [
+            {
+              "enum": [
+                "LEGACY_CONTENT",
+                "SEMANTIC"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "decision": {
           "anyOf": [
             {
@@ -499,10 +551,44 @@
               "evaluated_content_revision": {
                 "type": "null"
               },
+              "evaluated_semantic_revision": {
+                "type": "null"
+              },
+              "evaluation_mode": {
+                "type": "null"
+              },
               "reference_date": {
                 "type": "null"
               },
               "review_due_on": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "UNDER_REVIEW"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "decision": {
+                "type": "null"
+              },
+              "evaluated_content_revision": {
+                "type": "null"
+              },
+              "evaluated_semantic_revision": {
+                "type": "null"
+              },
+              "evaluation_mode": {
                 "type": "null"
               }
             }
@@ -1012,6 +1098,7 @@
           }
         },
         "schema_version": {
+          "type": "integer",
           "const": 2
         },
         "revision": {
@@ -1025,6 +1112,48 @@
         },
         "content_hash_version": {
           "const": "question-v2-jcs-sha256"
+        },
+        "semantic_revision": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "semantic_hash_version": {
+          "anyOf": [
+            {
+              "const": "question-v2-semantic-jcs-sha256-v1"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "grading_revision": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "grading_hash_version": {
+          "anyOf": [
+            {
+              "const": "question-v2-grading-jcs-sha256-v1"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "status": {
           "enum": [
@@ -1323,7 +1452,7 @@
           "then": {
             "properties": {
               "answers": {
-                "minItems": 4,
+                "minItems": 5,
                 "maxItems": 5
               },
               "correct_answer_indices": {
@@ -1450,6 +1579,7 @@
           "format": "uuid"
         },
         "schema_version": {
+          "type": "integer",
           "const": 1
         },
         "question_id": {
@@ -1459,6 +1589,17 @@
         "question_content_revision": {
           "type": "string",
           "pattern": "^[a-f0-9]{64}$"
+        },
+        "question_semantic_revision": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "expected_classification_revision": {
           "type": "integer",
@@ -1526,6 +1667,18 @@
                       "type": "null"
                     }
                   ]
+                },
+                "review_event_id": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             },
@@ -1561,6 +1714,7 @@
           "format": "uuid"
         },
         "schema_version": {
+          "type": "integer",
           "const": 1
         },
         "owner_user_id": {
@@ -1593,6 +1747,17 @@
         "question_content_revision": {
           "type": "string",
           "pattern": "^[a-f0-9]{64}$"
+        },
+        "question_semantic_revision": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "catalog_version": {
           "type": "integer",
@@ -1662,6 +1827,7 @@
           "format": "uuid"
         },
         "schema_version": {
+          "type": "integer",
           "const": 1
         },
         "attempt_id": {
@@ -1683,6 +1849,28 @@
         "question_content_revision": {
           "type": "string",
           "pattern": "^[a-f0-9]{64}$"
+        },
+        "question_semantic_revision": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "grading_revision": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "rubric_revision": {
           "anyOf": [
@@ -1896,6 +2084,104 @@
           "type": "string",
           "format": "date-time",
           "pattern": "Z$"
+        }
+      }
+    },
+    "review_event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "review_event_id",
+        "principal_id",
+        "action",
+        "resource_id",
+        "resource_revision",
+        "reviewed_at",
+        "decision"
+      ],
+      "properties": {
+        "_id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "schema_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "review_event_id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "principal_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "actor_user_id": {
+          "type": "integer",
+          "not": {
+            "const": 0
+          },
+          "minimum": -9223372036854775808,
+          "maximum": 9223372036854775807
+        },
+        "action": {
+          "enum": [
+            "CLASSIFICATION_CONFIRM",
+            "ORIGIN_CONFIRM",
+            "VALIDITY_CONFIRM_CURRENT",
+            "VALIDITY_CONFIRM_OBSOLETE",
+            "COMPATIBILITY_CONFIRM",
+            "COMPATIBILITY_EXCLUDE",
+            "SUGGESTION_ACCEPT",
+            "SUGGESTION_REJECT",
+            "EVALUATION_CONFIRM"
+          ]
+        },
+        "resource_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "resource_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9223372036854775806
+        },
+        "content_revision": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "semantic_revision": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reviewed_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "decision": {
+          "enum": [
+            "APPROVED",
+            "REJECTED"
+          ]
         }
       }
     }

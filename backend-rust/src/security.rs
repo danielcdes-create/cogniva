@@ -402,8 +402,10 @@ pub async fn require_admin(
     next: Next,
 ) -> Result<Response, AppError> {
     if !user.is_admin {
-        return Err(AppError::Forbidden(
-            "Acesso restrito a administradores".into(),
+        return Err(AppError::forbidden_code(
+            "REVIEW_PERMISSION_DENIED",
+            None::<String>,
+            "Acesso restrito a administradores",
         ));
     }
     Ok(next.run(request).await)

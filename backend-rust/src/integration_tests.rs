@@ -260,7 +260,7 @@ async fn protected_routes_reject_untrusted_identity_before_database_access() {
         .unwrap();
     assert_eq!(forged.status(), StatusCode::UNAUTHORIZED);
 
-    // Health check reports cogniva-api v2.0.1 and contract_version 3 without DB access
+    // Health check reports cogniva-api v2.1.0 and contract_version 3 without DB access
     let health_resp = app
         .oneshot(
             Request::builder()
@@ -277,7 +277,7 @@ async fn protected_routes_reject_untrusted_identity_before_database_access() {
         .unwrap();
     let health: Value = serde_json::from_slice(&health_bytes).unwrap();
     assert_eq!(health["service"], "cogniva-api");
-    assert_eq!(health["version"], "2.0.1");
+    assert_eq!(health["version"], "2.1.0");
     assert_eq!(health["contract_version"], 3);
 }
 
@@ -886,7 +886,7 @@ async fn cogniva_2_0_guest_upgrade_templates_and_report_isolation() {
         .insert_one(v2_question_doc(
             qid,
             "Questão reportada apenas por um aluno",
-            &["A", "B", "C", "D"],
+            &["A", "B", "C", "D", "E"],
             1,
             "Matemática",
             Some(("MAT", "MAT_01_001")),
@@ -1526,7 +1526,7 @@ async fn xai_generates_missing_resource_once_and_persists_for_reuse() {
     let mut qdoc = v2_question_doc(
         id,
         "Synthetic memory question",
-        &["A", "B"],
+        &["A", "B", "C", "D", "E"],
         1,
         "Matemática",
         Some(("MAT", "MAT_01_001")),
@@ -2048,6 +2048,411 @@ async fn etapa5_classification_is_reviewable_and_pending_proposals_do_not_change
     assert_eq!(listed_compat["current"].as_array().unwrap().len(), 1);
 
     server.abort();
+    assert!(name.starts_with("cogniva_test_"));
+    db.drop().await.unwrap();
+}
+
+#[tokio::test]
+#[ignore = "Requires dedicated loopback Mongo 27048"]
+async fn nt_cogniva_questions_002_provenance_idempotency_concurrency_and_eligibility_matrix() {
+    let uri = std::env::var("COGNIVA_TEST_MONGODB_URI").unwrap();
+    assert!(uri.starts_with("mongodb://127.0.0.1:27048/"));
+    let client = Client::with_uri_str(&uri).await.unwrap();
+    let name = format!("cogniva_test_{}", uuid::Uuid::new_v4().simple());
+    let db = client.database(&name);
+    let cfg = config(&uri);
+    let secret = cfg.jwt_secret.clone();
+    let state = Arc::new(AppState::new(db.clone(), cfg));
+    let app = build_router(state.clone());
+
+    services::question_storage::prepare(&db).await.unwrap();
+    seed_user_and_session(&db, 123, true).await;
+    seed_user_and_session(&db, 456, false).await;
+
+    let base_mc: Value = serde_json::from_str(include_str!(
+        "../../shared/examples/question-contracts/question-multiple-choice.json"
+    ))
+    .unwrap();
+
+    // T01 / T02: Unauthenticated -> 401; non-admin student -> 403 REVIEW_PERMISSION_DENIED; spoofed review_event_id -> 400 REVIEW_ACTOR_UNTRUSTED
+    let mut candidate = base_mc.clone();
+    candidate["_id"] = json!({ "$oid": ObjectId::new().to_hex() });
+    let save_body = json!({
+        "operation_id": uuid::Uuid::new_v4().to_string(),
+        "expected_revision": 0,
+        "dry_run": false,
+        "document": candidate
+    });
+    assert_eq!(
+        request(
+            &app,
+            &secret,
+            None,
+            "POST",
+            "/api/v1/admin/questions/save",
+            save_body.clone()
+        )
+        .await
+        .0,
+        StatusCode::UNAUTHORIZED
+    );
+    let (student_st, student_err) = request(
+        &app,
+        &secret,
+        Some(456),
+        "POST",
+        "/api/v1/admin/questions/save",
+        save_body,
+    )
+    .await;
+    assert_eq!(student_st, StatusCode::FORBIDDEN);
+    assert_eq!(student_err["code"], "REVIEW_PERMISSION_DENIED");
+
+    let mut spoofed = base_mc.clone();
+    spoofed["_id"] = json!({ "$oid": ObjectId::new().to_hex() });
+    spoofed["validity"]["decision"]["review_event_id"] =
+        json!("33333333-3333-4333-8333-333333333333");
+    let (spoof_st, spoof_err) = request(
+        &app,
+        &secret,
+        Some(123),
+        "POST",
+        "/api/v1/admin/questions/save",
+        json!({
+            "operation_id": uuid::Uuid::new_v4().to_string(),
+            "expected_revision": 0,
+            "dry_run": false,
+            "document": spoofed
+        }),
+    )
+    .await;
+    assert_eq!(spoof_st, StatusCode::BAD_REQUEST);
+    assert_eq!(spoof_err["code"], "REVIEW_ACTOR_UNTRUSTED");
+
+    // T03: Authorized admin creates normative question -> persistent ReviewEvents written and linked
+    let eligible_oid = ObjectId::new();
+    let mut eligible_doc = base_mc.clone();
+    eligible_doc["_id"] = json!({ "$oid": eligible_oid.to_hex() });
+    eligible_doc["mnemonico"] = json!("preserve-across-numeric-grading-edit");
+    let (ok_st, saved_receipt) = request(
+        &app,
+        &secret,
+        Some(123),
+        "POST",
+        "/api/v1/admin/questions/save",
+        json!({
+            "operation_id": uuid::Uuid::new_v4().to_string(),
+            "expected_revision": 0,
+            "dry_run": false,
+            "document": eligible_doc
+        }),
+    )
+    .await;
+    assert_eq!(ok_st, StatusCode::OK, "{saved_receipt}");
+    let rev_event_ids = saved_receipt["review_event_ids"].as_array().unwrap();
+    assert!(!rev_event_ids.is_empty());
+    let persisted_rev_count = db
+        .collection::<Document>("question_review_events")
+        .count_documents(doc! { "resource_id": eligible_oid.to_hex(), "principal_id": "123" })
+        .await
+        .unwrap();
+    assert_eq!(persisted_rev_count as usize, rev_event_ids.len());
+
+    // T12: Re-running outbox flush does not duplicate question_revision_events or question_review_events
+    let rev_events_before = db
+        .collection::<Document>("question_revision_events")
+        .count_documents(doc! { "question_id": eligible_oid.to_hex() })
+        .await
+        .unwrap();
+    services::question_storage::flush_audit(&db, eligible_oid)
+        .await
+        .unwrap();
+    services::question_storage::flush_audit(&db, eligible_oid)
+        .await
+        .unwrap();
+    let rev_events_after = db
+        .collection::<Document>("question_revision_events")
+        .count_documents(doc! { "question_id": eligible_oid.to_hex() })
+        .await
+        .unwrap();
+    assert_eq!(rev_events_before, rev_events_after);
+
+    // T10: Two concurrent creates for the same _id -> strictly 1 succeeds, 1 fails with QUESTION_ALREADY_EXISTS
+    let race_oid = ObjectId::new();
+    let mut race_doc = base_mc.clone();
+    race_doc["_id"] = json!({ "$oid": race_oid.to_hex() });
+    race_doc["question"] = json!("Questão sintética de concorrência em _id único?");
+    race_doc["content_revision"] = json!(services::question_contracts::hash(&race_doc).unwrap());
+    race_doc["validity"]["evaluated_content_revision"] = race_doc["content_revision"].clone();
+    let req_a = services::question_storage::SaveRequest {
+        operation_id: uuid::Uuid::new_v4().to_string(),
+        expected_revision: 0,
+        dry_run: false,
+        document: race_doc.clone(),
+    };
+    let req_b = services::question_storage::SaveRequest {
+        operation_id: uuid::Uuid::new_v4().to_string(),
+        expected_revision: 0,
+        dry_run: false,
+        document: race_doc,
+    };
+    let (res_a, res_b) = tokio::join!(
+        services::question_storage::create(&db, 123, req_a),
+        services::question_storage::create(&db, 123, req_b)
+    );
+    let successes = usize::from(res_a.is_ok()) + usize::from(res_b.is_ok());
+    assert_eq!(successes, 1, "Exactly one concurrent create must win");
+    let loser = res_a.err().or_else(|| res_b.err()).unwrap();
+    assert_eq!(loser.error_code(), "QUESTION_ALREADY_EXISTS");
+    assert_eq!(
+        db.collection::<Document>("todasQuestoes")
+            .count_documents(doc! { "_id": race_oid })
+            .await
+            .unwrap(),
+        1
+    );
+
+    // T08, T09, T11: Batch preview -> atomic pre-validated failure -> idempotent commit -> conflict on payload mismatch
+    let batch_key = uuid::Uuid::new_v4().to_string();
+    let (_, prev_out) = request(
+        &app,
+        &secret,
+        Some(123),
+        "POST",
+        "/api/v1/admin/questions/import/preview",
+        json!({
+            "operation_id": batch_key,
+            "items": [{
+                "question_type": "MULTIPLE_CHOICE",
+                "question": "Questão de lote idempotente V2.1 exclusiva?",
+                "answers": ["10", "20", "30", "40", "50"],
+                "correct_answer_indices": [2],
+                "grading": null
+            }]
+        }),
+    )
+    .await;
+    let valid_cmd = prev_out["items"][0]["command"].clone();
+    let mut bad_second = valid_cmd.clone();
+    bad_second["operation_id"] = json!(uuid::Uuid::new_v4().to_string());
+    bad_second["document"]["_id"] = json!({ "$oid": ObjectId::new().to_hex() });
+    bad_second["document"]["content_revision"] =
+        json!("0000000000000000000000000000000000000000000000000000000000000000");
+
+    let count_before_fail = db
+        .collection::<Document>("todasQuestoes")
+        .count_documents(doc! {})
+        .await
+        .unwrap();
+    let fail_key = uuid::Uuid::new_v4().to_string();
+    let (fail_st, _) = request(
+        &app,
+        &secret,
+        Some(123),
+        "POST",
+        "/api/v1/admin/questions/import/commit",
+        json!({
+            "idempotency_key": fail_key,
+            "reviewed": true,
+            "commands": [valid_cmd.clone(), bad_second]
+        }),
+    )
+    .await;
+    assert_eq!(fail_st, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        db.collection::<Document>("todasQuestoes")
+            .count_documents(doc! {})
+            .await
+            .unwrap(),
+        count_before_fail,
+        "T11: invalid second item must prevent partial persistence of first item"
+    );
+
+    let (commit_st, commit_first) = request(
+        &app,
+        &secret,
+        Some(123),
+        "POST",
+        "/api/v1/admin/questions/import/commit",
+        json!({
+            "idempotency_key": prev_out["idempotency_key"],
+            "payload_digest": prev_out["payload_digest"],
+            "reviewed": true,
+            "commands": [valid_cmd.clone()]
+        }),
+    )
+    .await;
+    assert_eq!(commit_st, StatusCode::OK, "{commit_first}");
+    assert_eq!(commit_first["idempotent_replay"], false);
+
+    let (replay_st, commit_replay) = request(
+        &app,
+        &secret,
+        Some(123),
+        "POST",
+        "/api/v1/admin/questions/import/commit",
+        json!({
+            "idempotency_key": prev_out["idempotency_key"],
+            "payload_digest": prev_out["payload_digest"],
+            "reviewed": true,
+            "commands": [valid_cmd.clone()]
+        }),
+    )
+    .await;
+    assert_eq!(replay_st, StatusCode::OK);
+    assert_eq!(commit_replay["idempotent_replay"], true);
+    assert_eq!(commit_replay["items"][0]["receipt"]["status"], "already_applied");
+
+    let mut mutated_cmd = valid_cmd;
+    mutated_cmd["document"]["level"] = json!("Avançada");
+    let (conflict_st, conflict_err) = request(
+        &app,
+        &secret,
+        Some(123),
+        "POST",
+        "/api/v1/admin/questions/import/commit",
+        json!({
+            "idempotency_key": prev_out["idempotency_key"],
+            "reviewed": true,
+            "commands": [mutated_cmd]
+        }),
+    )
+    .await;
+    assert_eq!(conflict_st, StatusCode::CONFLICT);
+    assert_eq!(conflict_err["code"], "IDEMPOTENCY_KEY_CONFLICT");
+
+    // T24: Operational grading edit via admin PUT preserves CURRENT validity, mnemonico cache, and practice eligibility
+    let (_, edit_out) = request(
+        &app,
+        &secret,
+        Some(123),
+        "PUT",
+        &format!("/api/v1/admin/questions/{eligible_oid}"),
+        json!({
+            "operation_id": uuid::Uuid::new_v4().to_string(),
+            "expected_revision": 1,
+            "dry_run": false,
+            "grading": {
+                "strategy": "EXACT_OPTION",
+                "max_score": 10,
+                "pass_score": 6,
+                "expected_responses": [],
+                "rubric": null,
+                "engine": null,
+                "confirmation_policy": "AUTOMATIC_EXACT",
+                "policy_version": "objective-exact/2"
+            }
+        }),
+    )
+    .await;
+    assert_eq!(edit_out["semantic_changed"], false);
+    let updated_eligible = db
+        .collection::<Document>("todasQuestoes")
+        .find_one(doc! { "_id": eligible_oid })
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        updated_eligible
+            .get_document("validity")
+            .unwrap()
+            .get_str("status")
+            .unwrap(),
+        "CURRENT"
+    );
+    assert_eq!(
+        updated_eligible.get_str("mnemonico").unwrap(),
+        "preserve-across-numeric-grading-edit"
+    );
+
+    // T25: Seed ineligible questions (obsolete, unclassified, open-ended, expired review_due_on) and verify ALL endpoints block them
+    let mut obsolete_q: Value = serde_json::from_str(include_str!(
+        "../../shared/examples/question-contracts/question-obsolete.json"
+    ))
+    .unwrap();
+    let obsolete_oid = ObjectId::new();
+    obsolete_q["_id"] = json!({ "$oid": obsolete_oid.to_hex() });
+    services::question_storage::create(
+        &db,
+        123,
+        services::question_storage::SaveRequest {
+            operation_id: uuid::Uuid::new_v4().to_string(),
+            expected_revision: 0,
+            dry_run: false,
+            document: obsolete_q,
+        },
+    )
+    .await
+    .unwrap();
+
+    let mut expired_q = base_mc.clone();
+    let expired_oid = ObjectId::new();
+    expired_q["_id"] = json!({ "$oid": expired_oid.to_hex() });
+    expired_q["question"] = json!("Questão vencida em review_due_on?");
+    expired_q["content_revision"] = json!(services::question_contracts::hash(&expired_q).unwrap());
+    expired_q["validity"]["evaluated_content_revision"] = expired_q["content_revision"].clone();
+    expired_q["validity"]["review_due_on"] = json!("2020-01-01");
+    services::question_storage::create(
+        &db,
+        123,
+        services::question_storage::SaveRequest {
+            operation_id: uuid::Uuid::new_v4().to_string(),
+            expected_revision: 0,
+            dry_run: false,
+            document: expired_q,
+        },
+    )
+    .await
+    .unwrap();
+
+    // Note: imported question from commit above has validity=UNKNOWN & classification=UNCLASSIFIED (ineligible!)
+    let imported_oid_hex = commit_first["items"][0]["id"]["$oid"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let (_, cache_res) = request(
+        &app,
+        &secret,
+        Some(456),
+        "POST",
+        "/api/v1/questions/cache-state",
+        json!({
+            "question_ids": [
+                eligible_oid.to_hex(),
+                obsolete_oid.to_hex(),
+                expired_oid.to_hex(),
+                imported_oid_hex
+            ]
+        }),
+    )
+    .await;
+    assert!(!cache_res["items"][0]["question"].is_null());
+    assert!(cache_res["items"][1]["question"].is_null());
+    assert!(cache_res["items"][2]["question"].is_null());
+    assert!(cache_res["items"][3]["question"].is_null());
+
+    let (_, quiz_res) = request(
+        &app,
+        &secret,
+        Some(456),
+        "POST",
+        "/api/v1/quiz/generate",
+        json!({ "mode": "SHUFFLE", "quantity": 50 }),
+    )
+    .await;
+    let returned_ids: HashSet<String> = quiz_res
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|q| q["id"].as_str().map(str::to_string))
+        .collect();
+    assert!(returned_ids.contains(&eligible_oid.to_hex()));
+    assert!(returned_ids.contains(&race_oid.to_hex()));
+    assert!(!returned_ids.contains(&obsolete_oid.to_hex()));
+    assert!(!returned_ids.contains(&expired_oid.to_hex()));
+    assert!(!returned_ids.contains(&imported_oid_hex));
+
     assert!(name.starts_with("cogniva_test_"));
     db.drop().await.unwrap();
 }

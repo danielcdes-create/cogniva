@@ -4,6 +4,7 @@ import {
   parseOpenEndedGradingJson,
   parseQuestions,
   verifyReceipt,
+  buildImportCommitPayload,
   blankExam,
   newComponent,
   validateExamDraft,
@@ -1454,6 +1455,8 @@ function questionView() {
       field('Estado de validade',val.status || 'UNKNOWN',v=>update(q=>{
         q.validity.status=v;
         q.validity.evaluated_content_revision=null;
+        q.validity.evaluated_semantic_revision=null;
+        q.validity.evaluation_mode=null;
         if(v==='CURRENT')q.validity.reason_codes=[];
         else if(v==='UNDER_REVIEW' && (!Array.isArray(q.validity.reason_codes) || !q.validity.reason_codes.length))q.validity.reason_codes=['REVIEW_REQUESTED'];
         else if(v==='OBSOLETE' && (!Array.isArray(q.validity.reason_codes) || !q.validity.reason_codes.length))q.validity.reason_codes=['FACT_CHANGED'];
@@ -1476,7 +1479,11 @@ function questionView() {
     check('Reconfirmar explicitamente o estado de validade selecionado caso o enunciado/gabarito tenha sido editado',!!draft.reconfirmValidity,checked=>edit(()=>{
       draft.reconfirmValidity=checked;
       const q=JSON.parse(draft.text);
-      if(checked)q.validity.evaluated_content_revision=null;
+      if(checked){
+        q.validity.evaluated_content_revision=null;
+        q.validity.evaluated_semantic_revision=null;
+        q.validity.evaluation_mode=null;
+      }
       draft.text=pretty(q);
       draft.preview=null;
     }))
@@ -1492,7 +1499,11 @@ function questionView() {
       docPayload.grading = parseOpenEndedGradingJson(rawRubric);
       draft.rubricError = null;
     }
-    if(draft.reconfirmValidity)docPayload.validity.evaluated_content_revision=null;
+    if(draft.reconfirmValidity){
+      docPayload.validity.evaluated_content_revision=null;
+      docPayload.validity.evaluated_semantic_revision=null;
+      docPayload.validity.evaluation_mode=null;
+    }
     try {
       draft.preview=await api(`admin/questions/${encodeURIComponent(selectedQuestion)}/prepare-edit`,{method:'POST',body:{operation_id:draft.operationId,expected_revision:original.revision || 0,document:docPayload}});
     } catch (error) {
@@ -1543,9 +1554,11 @@ function questionView() {
     }),'primary');
     send.disabled=true;
     root.append(card(
-      draft.preview.content_changed
-        ? badge(`Conteúdo alterado · Validade resultante: ${statuses[draft.preview.command.document.validity.status] || draft.preview.command.document.validity.status}`,'warning')
-        : badge(`Conteúdo preservado · Validade: ${statuses[draft.preview.command.document.validity.status] || draft.preview.command.document.validity.status}`,'good'),
+      draft.preview.semantic_changed === false && draft.preview.content_changed
+        ? badge(`Correção alterada (semântica preservada) · Validade: ${statuses[draft.preview.command.document.validity.status] || draft.preview.command.document.validity.status}`,'good')
+        : draft.preview.content_changed
+          ? badge(`Conteúdo alterado · Validade resultante: ${statuses[draft.preview.command.document.validity.status] || draft.preview.command.document.validity.status}`,'warning')
+          : badge(`Conteúdo preservado · Validade: ${statuses[draft.preview.command.document.validity.status] || draft.preview.command.document.validity.status}`,'good'),
       h('pre',{},pretty(draft.preview.command.document)),
       check('Revisei o contrato final, a validade, a classificação e os metadados.',reviewed,value=>{reviewed=value;send.disabled=!value || !!draft.result;}),
       send
@@ -1691,7 +1704,9 @@ function importView() {
         badge(`Questão ${index+1}`),
         badge(kinds[q.question_type]),
         q.question_type==='OPEN_ENDED'?badge('Acervo preparatório','warning'):null,
+        item.duplicate_warning?badge('Possível duplicidade','warning'):null,
         h('h3',{},q.question),
+        item.duplicate_warning?h('p',{class:'review-meta'},item.duplicate_warning.message):null,
         h('ol',{type:'A'},...q.answers.map(a=>h('li',{},a))),
         h('strong',{},q.correct_answers.length?`Gabarito: ${q.correct_answers.join(', ')}`:'Discursiva · correção por rubrica'),
         q.question_type==='OPEN_ENDED'?h('pre',{},pretty(q.grading)):null,
@@ -1705,7 +1720,7 @@ function importView() {
     const commit=button(locked?'Conferir / reenviar os mesmos comandos':`Confirmar inserção de ${draft.preview.items.length} questão(ões)`,()=>run('Inserindo questões…',async()=>{
       draft.submitted=true;persist();
       try {
-        draft.result=verifyReceipt(draft.preview,await api('admin/questions/import/commit',{method:'POST',body:{reviewed:true,commands:draft.preview.items.map(item=>item.command)}}));
+        draft.result=verifyReceipt(draft.preview,await api('admin/questions/import/commit',{method:'POST',body:buildImportCommitPayload(draft.preview)}));
         persist();
         data.summary=await api('admin/summary');
         notice(draft.result.complete?'Todas as questões foram confirmadas no servidor.':'Alguns itens ainda não foram confirmados. Confira os resultados ou inicie novo cadastro preservando o recibo.',draft.result.complete?'':'warning');

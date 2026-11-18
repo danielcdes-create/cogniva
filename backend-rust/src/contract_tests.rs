@@ -77,3 +77,171 @@ fn both_runtimes_share_utf8_mastery_weighted_score_srs_and_calendar_fixtures() {
         );
     }
 }
+
+#[tokio::test]
+async fn structured_error_response_carries_stable_code_field_and_correlation_id() {
+    use crate::error::AppError;
+    use axum::{body::to_bytes, http::StatusCode, response::IntoResponse};
+
+    let cases = [
+        (
+            AppError::bad_request_code("INVALID_INTEGER", Some("revision"), "Inteiro inválido"),
+            StatusCode::BAD_REQUEST,
+            "INVALID_INTEGER",
+            Some("revision"),
+        ),
+        (
+            AppError::forbidden_code(
+                "REVIEW_PERMISSION_DENIED",
+                Some("validity.status"),
+                "Sem permissão normativa",
+            ),
+            StatusCode::FORBIDDEN,
+            "REVIEW_PERMISSION_DENIED",
+            Some("validity.status"),
+        ),
+        (
+            AppError::conflict_code(
+                "QUESTION_ALREADY_EXISTS",
+                Some("_id"),
+                "Questão já existente",
+            ),
+            StatusCode::CONFLICT,
+            "QUESTION_ALREADY_EXISTS",
+            Some("_id"),
+        ),
+    ];
+
+    for (err, expected_status, expected_code, expected_field) in cases {
+        let resp = err.into_response();
+        assert_eq!(resp.status(), expected_status);
+        let bytes = to_bytes(resp.into_body(), 64 * 1024).await.unwrap();
+        let body: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(body["error"], true);
+        assert_eq!(body["code"], expected_code);
+        assert_eq!(body["field"].as_str(), expected_field);
+        assert!(body["message"].as_str().is_some_and(|s| !s.is_empty()));
+        assert!(body["correlation_id"]
+            .as_str()
+            .is_some_and(|id| uuid::Uuid::parse_str(id).is_ok()));
+    }
+}
+
+#[test]
+fn operational_grading_change_preserves_semantic_validity_while_substantive_change_invalidates_t04_t05_t24() {
+    use crate::services::question_eligibility::{
+        evaluate_question_eligibility, EligibilityMode, TrustedReviewContext,
+    };
+    use serde_json::json;
+
+    let mut open: Value = serde_json::from_str(include_str!(
+        "../../shared/examples/question-contracts/question-open-manual.json"
+    ))
+    .unwrap();
+    question_contracts::populate_v2_1_hashes(&mut open).unwrap();
+    let orig_content = open["content_revision"].as_str().unwrap().to_string();
+    let orig_semantic = open["semantic_revision"].as_str().unwrap().to_string();
+    let orig_grading = open["grading_revision"].as_str().unwrap().to_string();
+
+    // Confirm CURRENT validity bound to semantic_revision
+    open["validity"] = json!({
+        "revision": 1,
+        "status": "CURRENT",
+        "basis": "FACTUAL",
+        "reference_date": "2026-11-01",
+        "review_due_on": "2027-11-01",
+        "reason_codes": [],
+        "evaluated_content_revision": orig_content,
+        "evaluated_semantic_revision": orig_semantic,
+        "evaluation_mode": "SEMANTIC",
+        "decision": {
+            "actor": { "type": "HUMAN", "id": "123" },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Conteúdo discursivo revisado e vigente.",
+            "recorded_at": "2026-11-01T12:00:00Z",
+            "evidence": [{
+                "uri": "https://www.planalto.gov.br/ccivil_03/constituicao/constituicao.htm",
+                "title": "Constituição da República Federativa do Brasil de 1988",
+                "locator": "Art. 165",
+                "retrieved_at": "2026-11-01T12:00:00Z",
+                "sha256": null
+            }],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null,
+            "review_event_id": "22222222-2222-4222-8222-222222222222",
+            "trust_level": "SERVER_VERIFIED"
+        },
+        "scope": "CURRENT_KNOWLEDGE",
+        "context_date": null
+    });
+    question_contracts::validate(&open).unwrap();
+
+    // T04 / T24: Numeric-only score change updates content_revision & grading_revision, NOT semantic_revision
+    let mut numeric_only = open.clone();
+    numeric_only["grading"]["max_score"] = json!(10);
+    numeric_only["grading"]["pass_score"] = json!(6);
+    let crit_len = numeric_only["grading"]["rubric"]["criteria"]
+        .as_array()
+        .unwrap()
+        .len();
+    let orig_max = open["grading"]["max_score"].as_f64().unwrap();
+    for i in 0..crit_len {
+        let old_pts = open["grading"]["rubric"]["criteria"][i]["max_points"]
+            .as_f64()
+            .unwrap();
+        numeric_only["grading"]["rubric"]["criteria"][i]["max_points"] =
+            json!((old_pts / orig_max) * 10.0);
+    }
+    question_contracts::populate_v2_1_hashes(&mut numeric_only).unwrap();
+    assert_ne!(numeric_only["content_revision"], orig_content);
+    assert_ne!(numeric_only["grading_revision"], orig_grading);
+    assert_eq!(numeric_only["semantic_revision"], orig_semantic);
+    question_contracts::validate(&numeric_only).unwrap();
+
+    let eval_date = chrono::NaiveDate::from_ymd_opt(2026, 11, 15).unwrap();
+    let trusted = TrustedReviewContext {
+        require_server_verified: false,
+        verified_review_event_ids: Some(std::collections::HashSet::from([
+            "22222222-2222-4222-8222-222222222222".to_string(),
+        ])),
+    };
+    let elig_numeric = evaluate_question_eligibility(
+        &numeric_only,
+        &question_contracts::catalog_ref(),
+        None,
+        eval_date,
+        &trusted,
+        EligibilityMode::DiscursiveExplicit,
+    );
+    assert!(
+        elig_numeric.eligible,
+        "T24: numeric-only grading change must remain eligible: {:?}",
+        elig_numeric.reason_codes
+    );
+
+    // T05: Modifying expected_responses changes semantic_revision and invalidates CURRENT validity
+    let mut altered_expected = numeric_only.clone();
+    altered_expected["grading"]["expected_responses"] =
+        json!(["Gabarito discursivo substancialmente diferente."]);
+    question_contracts::populate_v2_1_hashes(&mut altered_expected).unwrap();
+    assert_ne!(altered_expected["semantic_revision"], orig_semantic);
+    assert_eq!(
+        question_contracts::validate(&altered_expected)
+            .unwrap_err()
+            .error_code(),
+        "SEMANTIC_REVISION_MISMATCH"
+    );
+    let elig_stale = evaluate_question_eligibility(
+        &altered_expected,
+        &question_contracts::catalog_ref(),
+        None,
+        eval_date,
+        &trusted,
+        EligibilityMode::DiscursiveExplicit,
+    );
+    assert!(!elig_stale.eligible);
+    assert!(elig_stale.reason_codes.contains(&"SEMANTIC_REVISION_MISMATCH"));
+    assert!(elig_stale.reason_codes.contains(&"QUESTION_NOT_ELIGIBLE"));
+}

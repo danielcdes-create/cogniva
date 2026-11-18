@@ -181,9 +181,21 @@ pub async fn prepare_question(
         .checked_add(1)
         .ok_or_else(|| AppError::BadRequest("Revisão inválida".into()))?);
     let new_content_revision = question_contracts::hash(&body.document)?;
+    let new_semantic_revision = question_contracts::semantic_hash(&body.document)?;
+    let new_grading_revision = question_contracts::grading_hash(&body.document)?;
     body.document["content_revision"] = json!(&new_content_revision);
+    body.document["semantic_revision"] = json!(&new_semantic_revision);
+    body.document["semantic_hash_version"] = json!(question_contracts::SEMANTIC_HASH_VERSION);
+    body.document["grading_revision"] = json!(&new_grading_revision);
+    body.document["grading_hash_version"] = json!(question_contracts::GRADING_HASH_VERSION);
 
+    let old_semantic_revision = old["semantic_revision"]
+        .as_str()
+        .map(str::to_string)
+        .or_else(|| question_contracts::semantic_hash(&old).ok());
     let changed = body.document["content_revision"] != old["content_revision"];
+    let semantic_changed =
+        Some(new_semantic_revision.as_str()) != old_semantic_revision.as_deref();
     let incoming_status = body.document["validity"]["status"]
         .as_str()
         .unwrap_or("UNDER_REVIEW")
@@ -191,8 +203,9 @@ pub async fn prepare_question(
     let explicit_validity_decision =
         body.document["validity"]["status"] != old["validity"]["status"];
 
-    // Content edits without an explicit new validity decision transition to UNDER_REVIEW.
-    if changed && !legacy && !explicit_validity_decision {
+    // Substantive semantic edits without an explicit new validity decision transition to UNDER_REVIEW.
+    // Operational-only grading changes (e.g. max_score/pass_score/engine) preserve verified normative validity.
+    if semantic_changed && !legacy && !explicit_validity_decision {
         body.document["validity"] = json!({
             "revision": old["validity"]["revision"].as_i64().unwrap_or(0) + 1,
             "status": "UNDER_REVIEW",
@@ -201,6 +214,8 @@ pub async fn prepare_question(
             "review_due_on": null,
             "reason_codes": ["REVIEW_REQUESTED"],
             "evaluated_content_revision": null,
+            "evaluated_semantic_revision": null,
+            "evaluation_mode": null,
             "decision": null,
             "scope": old["validity"]["scope"],
             "context_date": old["validity"]["context_date"]
@@ -237,12 +252,15 @@ pub async fn prepare_question(
                     body.document["validity"]["review_due_on"] = json!(due);
                 }
                 body.document["validity"]["reason_codes"] = json!([]);
-                if body.document["validity"]["evaluated_content_revision"].as_str()
-                    != Some(new_content_revision.as_str())
-                    || !body.document["validity"]["decision"].is_object()
-                {
+                let needs_new_decision = semantic_changed
+                    || body.document["validity"]["evaluated_content_revision"].is_null()
+                    || !body.document["validity"]["decision"].is_object();
+                if needs_new_decision {
                     body.document["validity"]["evaluated_content_revision"] =
                         json!(&new_content_revision);
+                    body.document["validity"]["evaluated_semantic_revision"] =
+                        json!(&new_semantic_revision);
+                    body.document["validity"]["evaluation_mode"] = json!("SEMANTIC");
                     let mut decision = human_provenance(
                         user.user_id,
                         "Validade atual confirmada manualmente pelo administrador.",
@@ -251,6 +269,15 @@ pub async fn prepare_question(
                         decision["evidence"] = json!([fallback_evidence]);
                     }
                     body.document["validity"]["decision"] = decision;
+                } else if body.document["validity"]
+                    .get("evaluated_semantic_revision")
+                    .is_none_or(Value::is_null)
+                {
+                    // Deterministic upgrade from legacy content-bound validity to semantic-bound validity
+                    // while preserving original evaluated_content_revision and original decision provenance.
+                    body.document["validity"]["evaluated_semantic_revision"] =
+                        json!(&new_semantic_revision);
+                    body.document["validity"]["evaluation_mode"] = json!("SEMANTIC");
                 }
             }
             "OBSOLETE" => {
@@ -272,12 +299,15 @@ pub async fn prepare_question(
                 } else {
                     json!(valid_codes)
                 };
-                if body.document["validity"]["evaluated_content_revision"].as_str()
-                    != Some(new_content_revision.as_str())
-                    || !body.document["validity"]["decision"].is_object()
-                {
+                let needs_new_decision = semantic_changed
+                    || body.document["validity"]["evaluated_content_revision"].is_null()
+                    || !body.document["validity"]["decision"].is_object();
+                if needs_new_decision {
                     body.document["validity"]["evaluated_content_revision"] =
                         json!(&new_content_revision);
+                    body.document["validity"]["evaluated_semantic_revision"] =
+                        json!(&new_semantic_revision);
+                    body.document["validity"]["evaluation_mode"] = json!("SEMANTIC");
                     let mut decision = human_provenance(
                         user.user_id,
                         "Questão marcada como obsoleta na revisão administrativa.",
@@ -286,10 +316,19 @@ pub async fn prepare_question(
                         decision["evidence"] = json!([fallback_evidence]);
                     }
                     body.document["validity"]["decision"] = decision;
+                } else if body.document["validity"]
+                    .get("evaluated_semantic_revision")
+                    .is_none_or(Value::is_null)
+                {
+                    body.document["validity"]["evaluated_semantic_revision"] =
+                        json!(&new_semantic_revision);
+                    body.document["validity"]["evaluation_mode"] = json!("SEMANTIC");
                 }
             }
             "UNDER_REVIEW" => {
                 body.document["validity"]["evaluated_content_revision"] = Value::Null;
+                body.document["validity"]["evaluated_semantic_revision"] = Value::Null;
+                body.document["validity"]["evaluation_mode"] = Value::Null;
                 body.document["validity"]["decision"] = Value::Null;
                 body.document["validity"]["reference_date"] = Value::Null;
                 let has_codes = body.document["validity"]["reason_codes"]
@@ -301,6 +340,8 @@ pub async fn prepare_question(
             }
             "UNKNOWN" => {
                 body.document["validity"]["evaluated_content_revision"] = Value::Null;
+                body.document["validity"]["evaluated_semantic_revision"] = Value::Null;
+                body.document["validity"]["evaluation_mode"] = Value::Null;
                 body.document["validity"]["decision"] = Value::Null;
                 body.document["validity"]["reference_date"] = Value::Null;
                 body.document["validity"]["review_due_on"] = Value::Null;
@@ -315,7 +356,7 @@ pub async fn prepare_question(
     );
     if let Some(links) = body.document["classification"]["links"].as_array_mut() {
         for link in links {
-            if changed || !link["provenance"].is_object() {
+            if semantic_changed || !link["provenance"].is_object() {
                 link["provenance"] = class_prov.clone();
             }
             if !link["link_id"].is_string() {
@@ -337,15 +378,17 @@ pub async fn prepare_question(
             json!(old[block]["revision"].as_i64().unwrap_or(0) + i64::from(a != b));
     }
     question_contracts::validate(&body.document)?;
+    let reviewer = question_storage::ReviewerContext::from_session(user);
     let request = question_storage::SaveRequest {
         operation_id: body.operation_id.clone(),
         expected_revision: body.expected_revision,
         dry_run: true,
         document: body.document.clone(),
     };
-    question_storage::save(&state.db, user.user_id, request).await?;
+    question_storage::save_with_reviewer(&state.db, &reviewer, request).await?;
     Ok(Json(json!({
         "content_changed": changed,
+        "semantic_changed": semantic_changed,
         "command": {
             "operation_id": body.operation_id,
             "expected_revision": body.expected_revision,

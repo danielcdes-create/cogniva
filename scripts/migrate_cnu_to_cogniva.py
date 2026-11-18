@@ -595,9 +595,58 @@ def _resolve_objective_answers(raw: dict) -> tuple[str, list[str], list[int], li
         norm_idx = 0 if is_correct_true else 1
         return "TRUE_FALSE", norm_answers, [norm_idx], [norm_answers[norm_idx]]
 
-    if len(answers) not in (4, 5):
+    if len(answers) != 5:
         raise ValueError(f"unsupported multiple-choice option count: {len(answers)}")
     return "MULTIPLE_CHOICE", answers, [correct_idx], [answers[correct_idx]]
+
+
+def is_sub5_multiple_choice_doc(doc: dict) -> bool:
+    if not isinstance(doc, dict):
+        return False
+    qtype = doc.get("question_type")
+    if qtype in ("TRUE_FALSE", "OPEN_ENDED"):
+        return False
+    answers = doc.get("answers")
+    if not isinstance(answers, list):
+        return False
+    if qtype == "MULTIPLE_CHOICE":
+        return len(answers) < 5
+    # Legacy untyped document: ignore empty (OPEN_ENDED/corrupt) and 2-option TRUE_FALSE pairs
+    if len(answers) == 0:
+        return False
+    if len(answers) == 2 and all(isinstance(a, str) for a in answers):
+        norm_pair = [kc.normalized(a) for a in answers]
+        tf_true = {"certo", "verdadeiro", "c", "v"}
+        tf_false = {"errado", "falso", "e", "f"}
+        if (norm_pair[0] in tf_true and norm_pair[1] in tf_false) or (
+            norm_pair[0] in tf_false and norm_pair[1] in tf_true
+        ):
+            return False
+    return len(answers) < 5
+
+
+def purge_sub5_multiple_choice_questions(tgt_db) -> int:
+    if "todasQuestoes" not in set(tgt_db.list_collection_names()):
+        return 0
+    coll = tgt_db.get_collection("todasQuestoes")
+    ids_to_delete = []
+    hex_ids = []
+    for raw in coll.find({}, {"_id": 1, "question_type": 1, "answers": 1}):
+        if is_sub5_multiple_choice_doc(raw) and "_id" in raw:
+            ids_to_delete.append(raw["_id"])
+            hex_ids.append(str(raw["_id"]))
+    if not ids_to_delete:
+        return 0
+    del_res = coll.delete_many({"_id": {"$in": ids_to_delete}})
+    existing_colls = set(tgt_db.list_collection_names())
+    for sat in (
+        "question_classification_suggestions",
+        "question_exam_compatibility",
+        "reportedQuestoes",
+    ):
+        if sat in existing_colls:
+            tgt_db.get_collection(sat).delete_many({"question_id": {"$in": hex_ids}})
+    return int(del_res.deleted_count)
 
 
 def _clean_optional_str(val, max_len: int = 20000) -> str | None:
@@ -1172,7 +1221,7 @@ def normalize_question_to_v2(
         "plausibilityMarkdown": _clean_optional_str(raw_doc.get("plausibilityMarkdown"), 20000),
         "contextualHint": hints,
     }
-    normalized_doc["content_revision"] = qc.content_revision(normalized_doc)
+    qc.populate_v2_1_hashes(normalized_doc)
     qc.validate_question(normalized_doc, catalog)
     return normalized_doc
 
@@ -1836,7 +1885,8 @@ def run_mongo_migration(
                 seeded_templates += 1
         stats["exam_templates_seeded"] = seeded_templates
 
-        # 5. Upsert validated Schema v2 questions
+        # 5. Purge legacy/existing <5-option MULTIPLE_CHOICE questions and upsert validated Schema v2 questions
+        stats["purged_sub5_multiple_choice"] = purge_sub5_multiple_choice_questions(tgt_db)
         if migrated:
             ops = []
             for v2 in migrated:

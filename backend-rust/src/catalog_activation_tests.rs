@@ -628,7 +628,7 @@ async fn validator_migration_upgrades_v2_0_0_receipts_without_rewriting_document
         "retrieved_at": "2026-11-02T15:00:00Z",
         "sha256": null
     }]);
-    let mut question_doc = Bson::try_from(fixture)
+    let mut question_doc = Bson::try_from(fixture.clone())
         .unwrap()
         .as_document()
         .unwrap()
@@ -639,9 +639,70 @@ async fn validator_migration_upgrades_v2_0_0_receipts_without_rewriting_document
         .await
         .unwrap();
 
+    // Seed a legacy 4-option MULTIPLE_CHOICE (valid under v2.0.0/v2.0.1, purged on v2.0.2 upgrade)
+    // alongside a TRUE_FALSE (2 options) and OPEN_ENDED (0 options) that must NEVER be purged.
+    let sub5_qid = ObjectId::new();
+    let mut sub5_fixture = fixture.clone();
+    sub5_fixture["_id"] = json!({ "$oid": sub5_qid.to_hex() });
+    sub5_fixture["answers"] = json!(["3", "4", "5", "6"]);
+    let sub5_hash = services::question_contracts::hash(&sub5_fixture).unwrap();
+    sub5_fixture["content_revision"] = json!(sub5_hash);
+    sub5_fixture["validity"]["evaluated_content_revision"] = json!(sub5_hash);
+    let mut sub5_doc = Bson::try_from(sub5_fixture)
+        .unwrap()
+        .as_document()
+        .unwrap()
+        .clone();
+    sub5_doc.insert("_id", sub5_qid);
+    db.collection::<Document>("todasQuestoes")
+        .insert_one(sub5_doc.clone())
+        .await
+        .unwrap();
+    db.collection::<Document>("reportedQuestoes")
+        .insert_one(doc! { "_id": ObjectId::new(), "question_id": sub5_qid.to_hex() })
+        .await
+        .unwrap();
+
+    let tf_qid = ObjectId::new();
+    let mut tf_fixture: Value = serde_json::from_str(include_str!(
+        "../../shared/examples/question-contracts/question-true-false.json"
+    ))
+    .unwrap();
+    tf_fixture["_id"] = json!({ "$oid": tf_qid.to_hex() });
+    tf_fixture["schema_version"] = json!(2);
+    let mut tf_doc = Bson::try_from(tf_fixture)
+        .unwrap()
+        .as_document()
+        .unwrap()
+        .clone();
+    tf_doc.insert("_id", tf_qid);
+    db.collection::<Document>("todasQuestoes")
+        .insert_one(tf_doc)
+        .await
+        .unwrap();
+
+    let open_qid = ObjectId::new();
+    let mut open_fixture: Value = serde_json::from_str(include_str!(
+        "../../shared/examples/question-contracts/question-open-manual.json"
+    ))
+    .unwrap();
+    open_fixture["_id"] = json!({ "$oid": open_qid.to_hex() });
+    open_fixture["schema_version"] = json!(2);
+    let mut open_doc = Bson::try_from(open_fixture)
+        .unwrap()
+        .as_document()
+        .unwrap()
+        .clone();
+    open_doc.insert("_id", open_qid);
+    db.collection::<Document>("todasQuestoes")
+        .insert_one(open_doc)
+        .await
+        .unwrap();
+
     let first_prepare = question_storage::prepare(&db).await.unwrap();
     assert_eq!(first_prepare["validators_migrated"], json!(4));
     assert_eq!(first_prepare["question_documents_rewritten"], json!(0));
+    assert_eq!(first_prepare["legacy_sub5_multiple_choice_purged"], json!(1));
 
     let after_doc = db
         .collection::<Document>("todasQuestoes")
@@ -650,6 +711,38 @@ async fn validator_migration_upgrades_v2_0_0_receipts_without_rewriting_document
         .unwrap()
         .unwrap();
     assert_eq!(after_doc, question_doc);
+    assert!(
+        db.collection::<Document>("todasQuestoes")
+            .find_one(doc! { "_id": sub5_qid })
+            .await
+            .unwrap()
+            .is_none(),
+        "4-option MULTIPLE_CHOICE must be purged during v2.0.2 validator migration"
+    );
+    assert!(
+        db.collection::<Document>("reportedQuestoes")
+            .find_one(doc! { "question_id": sub5_qid.to_hex() })
+            .await
+            .unwrap()
+            .is_none(),
+        "dangling reports for purged 4-option MULTIPLE_CHOICE must be removed"
+    );
+    assert!(
+        db.collection::<Document>("todasQuestoes")
+            .find_one(doc! { "_id": tf_qid })
+            .await
+            .unwrap()
+            .is_some(),
+        "TRUE_FALSE (2 options) must remain untouched"
+    );
+    assert!(
+        db.collection::<Document>("todasQuestoes")
+            .find_one(doc! { "_id": open_qid })
+            .await
+            .unwrap()
+            .is_some(),
+        "OPEN_ENDED (0 options) must remain untouched"
+    );
 
     let q_receipt = receipts
         .find_one(doc! { "_id": "question-v2:todasQuestoes" })
@@ -662,7 +755,17 @@ async fn validator_migration_upgrades_v2_0_0_receipts_without_rewriting_document
     );
     assert_eq!(
         q_receipt.get_str("migration_id").unwrap(),
-        question_storage::VALIDATOR_MIGRATION_V2_0_1
+        question_storage::VALIDATOR_MIGRATION_V2_1_0
+    );
+
+    let mut new_sub5_doc = sub5_doc;
+    new_sub5_doc.insert("_id", ObjectId::new());
+    assert!(
+        db.collection::<Document>("todasQuestoes")
+            .insert_one(new_sub5_doc)
+            .await
+            .is_err(),
+        "upgraded MongoDB validator must reject <5-option MULTIPLE_CHOICE"
     );
 
     let mut bad_year_doc = question_doc.clone();

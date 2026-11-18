@@ -205,10 +205,34 @@ impl QuestionDocument {
             question: self.question.clone(),
             answers: self.answers.clone(),
             correct_answer_indices,
-            disciplina: if self.disciplina.trim().is_empty() {
-                "Disciplina Geral".to_string()
-            } else {
-                self.disciplina.clone()
+            disciplina: {
+                let raw = self.disciplina.trim();
+                let is_generic = raw.is_empty()
+                    || raw.eq_ignore_ascii_case("Disciplina Geral")
+                    || raw.eq_ignore_ascii_case("Geral");
+                if is_generic {
+                    self.canonical_subject_id
+                        .as_deref()
+                        .and_then(|sid| {
+                            crate::services::catalog_runtime::snapshot().current["subjects"]
+                                .as_array()
+                                .and_then(|arr| {
+                                    arr.iter()
+                                        .find(|s| s["subject_id"].as_str() == Some(sid))
+                                        .and_then(|s| s["label"].as_str())
+                                        .map(str::to_string)
+                                })
+                        })
+                        .unwrap_or_else(|| {
+                            if raw.is_empty() {
+                                "Disciplina Geral".to_string()
+                            } else {
+                                self.disciplina.clone()
+                            }
+                        })
+                } else {
+                    self.disciplina.clone()
+                }
             },
             source: self
                 .source
@@ -343,14 +367,14 @@ mod revision_tests {
         let q: QuestionDocument = bson::from_document(doc! {
             "_id": ObjectId::new(),
             "question": "Qual opção contém ação? 🧠",
-            "answers": ["Não", "Ação", "Sem", "Outro"],
+            "answers": ["Não", "Ação", "Sem", "Outro", "Nenhum"],
             "correct_answers": ["Ação"],
             "disciplina": "Teste"
         })
         .unwrap();
         assert_eq!(
             q.revision().unwrap(),
-            "19163f3dda43893f9e0702f684358c43a5b06db4b0451f1f7315adebfa388583"
+            "c337eb8ca0129047d0be82f6c08b53d651b4f21d1304e5dd6a6f9bb9b0c6b510"
         );
 
         let open_raw: Value = serde_json::from_str(include_str!(

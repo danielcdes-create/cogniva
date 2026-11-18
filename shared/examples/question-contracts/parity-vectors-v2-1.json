@@ -1,0 +1,5064 @@
+{
+  "parity_suite_version": "cogniva-question-contracts-parity-2.1.0",
+  "schema_version": 2,
+  "hash_versions": {
+    "content": "question-v2-jcs-sha256",
+    "semantic": "question-v2-semantic-jcs-sha256-v1",
+    "grading": "question-v2-grading-jcs-sha256-v1"
+  },
+  "validation_vectors": [
+    {
+      "id": "valid-legacy-v2-content-mode",
+      "valid": true,
+      "untrusted_input": false,
+      "expected_hashes": {
+        "content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+        "semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+        "grading_revision": "da421e16d4f44888c9d67f3019fddd579c381fffc4baeaf73f279eef51038b90"
+      },
+      "document": {
+        "_id": {
+          "$oid": "000000000000000000000001"
+        },
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Exemplo sintético: quanto é 2 + 2?",
+        "question_type": "MULTIPLE_CHOICE",
+        "answers": [
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "correct_answer_indices": [
+          1
+        ],
+        "correct_answers": [
+          "4"
+        ],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000065",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000c9",
+              "subject_id": "MAT",
+              "topic_id": "MAT_01_001",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null
+        },
+        "grading": {
+          "strategy": "EXACT_OPTION",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [],
+          "rubric": null,
+          "engine": null,
+          "confirmation_policy": "AUTOMATIC_EXACT",
+          "policy_version": "objective-exact/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null
+      }
+    },
+    {
+      "id": "valid-v21-objective-semantic-mode",
+      "valid": true,
+      "untrusted_input": false,
+      "expected_hashes": {
+        "content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+        "semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+        "grading_revision": "da421e16d4f44888c9d67f3019fddd579c381fffc4baeaf73f279eef51038b90"
+      },
+      "document": {
+        "_id": {
+          "$oid": "000000000000000000000001"
+        },
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Exemplo sintético: quanto é 2 + 2?",
+        "question_type": "MULTIPLE_CHOICE",
+        "answers": [
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "correct_answer_indices": [
+          1
+        ],
+        "correct_answers": [
+          "4"
+        ],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000065",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "11111111-1111-4111-8111-111111111111",
+              "trust_level": "SERVER_VERIFIED"
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000c9",
+              "subject_id": "MAT",
+              "topic_id": "MAT_01_001",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null,
+                "review_event_id": "22222222-2222-4222-8222-222222222222",
+                "trust_level": "SERVER_VERIFIED"
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null,
+            "review_event_id": "33333333-3333-4333-8333-333333333333",
+            "trust_level": "SERVER_VERIFIED"
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null,
+          "evaluated_semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+          "evaluation_mode": "SEMANTIC"
+        },
+        "grading": {
+          "strategy": "EXACT_OPTION",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [],
+          "rubric": null,
+          "engine": null,
+          "confirmation_policy": "AUTOMATIC_EXACT",
+          "policy_version": "objective-exact/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null,
+        "semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+        "semantic_hash_version": "question-v2-semantic-jcs-sha256-v1",
+        "grading_revision": "da421e16d4f44888c9d67f3019fddd579c381fffc4baeaf73f279eef51038b90",
+        "grading_hash_version": "question-v2-grading-jcs-sha256-v1"
+      }
+    },
+    {
+      "id": "valid-v21-open-numeric-score-change-preserves-validity",
+      "valid": true,
+      "untrusted_input": false,
+      "expected_hashes": {
+        "content_revision": "e79064cd2b9c3a0c615beccd3d26126de5792128eb7b135f1ee9d5d4a1446833",
+        "semantic_revision": "7d0974be9082c7bbb59b12b5f5e41a999437934eb85b1ac39e7a3b795c26b7fc",
+        "grading_revision": "0bf76492eb02c72b8bb04f5f391f53506e7b14494c5a7e1f27f56b6a5212ac49"
+      },
+      "document": {
+        "_id": {
+          "$oid": "000000000000000000000003"
+        },
+        "schema_version": 2,
+        "revision": 2,
+        "content_revision": "e79064cd2b9c3a0c615beccd3d26126de5792128eb7b135f1ee9d5d4a1446833",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Exemplo sintético: explique como a coesão contribui para a organização de um texto e apresente um exemplo.",
+        "question_type": "OPEN_ENDED",
+        "answers": [],
+        "correct_answer_indices": [],
+        "correct_answers": [],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000067",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "44444444-4444-4444-8444-444444444444",
+              "trust_level": "SERVER_VERIFIED"
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000cb",
+              "subject_id": "PORT",
+              "topic_id": "PORT_01_002",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null,
+                "review_event_id": "55555555-5555-4555-8555-555555555555",
+                "trust_level": "SERVER_VERIFIED"
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": "3f830e8f6dc35d1f0852f529dbe742bedf6de4dc24f171a592b7a7af873b75d2",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null,
+            "review_event_id": "66666666-6666-4666-8666-666666666666",
+            "trust_level": "SERVER_VERIFIED"
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null,
+          "evaluated_semantic_revision": "7d0974be9082c7bbb59b12b5f5e41a999437934eb85b1ac39e7a3b795c26b7fc",
+          "evaluation_mode": "SEMANTIC"
+        },
+        "grading": {
+          "strategy": "RUBRIC",
+          "max_score": 80,
+          "pass_score": 48.5,
+          "expected_responses": [
+            "A coesão estabelece relações entre partes do texto por mecanismos referenciais e sequenciais. Um pronome pode retomar um substantivo apresentado antes; formulações equivalentes são aceitas."
+          ],
+          "rubric": {
+            "revision": 2,
+            "criteria": [
+              {
+                "criterion_id": "CONCEPT",
+                "description": "Explicar as relações entre partes do texto sem reduzir coesão a repetição de palavras.",
+                "max_points": 40.25,
+                "essential": true
+              },
+              {
+                "criterion_id": "EXAMPLE",
+                "description": "Apresentar um exemplo pertinente de mecanismo coesivo.",
+                "max_points": 39.75,
+                "essential": false
+              }
+            ]
+          },
+          "engine": null,
+          "confirmation_policy": "HUMAN_REVIEW",
+          "policy_version": "open-rubric-human-review/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null,
+        "semantic_revision": "7d0974be9082c7bbb59b12b5f5e41a999437934eb85b1ac39e7a3b795c26b7fc",
+        "semantic_hash_version": "question-v2-semantic-jcs-sha256-v1",
+        "grading_revision": "0bf76492eb02c72b8bb04f5f391f53506e7b14494c5a7e1f27f56b6a5212ac49",
+        "grading_hash_version": "question-v2-grading-jcs-sha256-v1"
+      }
+    },
+    {
+      "id": "valid-jcs-unicode-nfc-emoji",
+      "valid": true,
+      "untrusted_input": false,
+      "expected_hashes": {
+        "content_revision": "6ab36d848bf238897b6ce549c3e7e931cb31d4ab5ba2efe583a602f38443aeca",
+        "semantic_revision": "92949aed51ba200310ed49d064d14856e36e56966a10600041f640e638d7d80e",
+        "grading_revision": "da421e16d4f44888c9d67f3019fddd579c381fffc4baeaf73f279eef51038b90"
+      },
+      "document": {
+        "_id": {
+          "$oid": "000000000000000000000001"
+        },
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "6ab36d848bf238897b6ce549c3e7e931cb31d4ab5ba2efe583a602f38443aeca",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Questão sobre ação administrativa 🧠⚖️ — alínea §1º",
+        "question_type": "MULTIPLE_CHOICE",
+        "answers": [
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "correct_answer_indices": [
+          1
+        ],
+        "correct_answers": [
+          "4"
+        ],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000065",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "11111111-1111-4111-8111-111111111111",
+              "trust_level": "SERVER_VERIFIED"
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000c9",
+              "subject_id": "MAT",
+              "topic_id": "MAT_01_001",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null,
+                "review_event_id": "22222222-2222-4222-8222-222222222222",
+                "trust_level": "SERVER_VERIFIED"
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": "6ab36d848bf238897b6ce549c3e7e931cb31d4ab5ba2efe583a602f38443aeca",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null,
+            "review_event_id": "33333333-3333-4333-8333-333333333333",
+            "trust_level": "SERVER_VERIFIED"
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null,
+          "evaluated_semantic_revision": "92949aed51ba200310ed49d064d14856e36e56966a10600041f640e638d7d80e",
+          "evaluation_mode": "SEMANTIC"
+        },
+        "grading": {
+          "strategy": "EXACT_OPTION",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [],
+          "rubric": null,
+          "engine": null,
+          "confirmation_policy": "AUTOMATIC_EXACT",
+          "policy_version": "objective-exact/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null,
+        "semantic_revision": "92949aed51ba200310ed49d064d14856e36e56966a10600041f640e638d7d80e",
+        "semantic_hash_version": "question-v2-semantic-jcs-sha256-v1",
+        "grading_revision": "da421e16d4f44888c9d67f3019fddd579c381fffc4baeaf73f279eef51038b90",
+        "grading_hash_version": "question-v2-grading-jcs-sha256-v1"
+      }
+    },
+    {
+      "id": "valid-jcs-unicode-nfd-distinct-from-nfc",
+      "valid": true,
+      "untrusted_input": false,
+      "expected_hashes": {
+        "content_revision": "7e71a34bf4ac0a90ea6db861fbeebdfc87d70ede401dbfe15165f922a969f7b3",
+        "semantic_revision": "ce599e779d546a33d0a417c749ab822c004bc77ca3a40974654b658d09920d23",
+        "grading_revision": "da421e16d4f44888c9d67f3019fddd579c381fffc4baeaf73f279eef51038b90"
+      },
+      "document": {
+        "_id": {
+          "$oid": "000000000000000000000001"
+        },
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "7e71a34bf4ac0a90ea6db861fbeebdfc87d70ede401dbfe15165f922a969f7b3",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Questão sobre ação administrativa 🧠⚖️ — alínea §1º",
+        "question_type": "MULTIPLE_CHOICE",
+        "answers": [
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "correct_answer_indices": [
+          1
+        ],
+        "correct_answers": [
+          "4"
+        ],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000065",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "11111111-1111-4111-8111-111111111111",
+              "trust_level": "SERVER_VERIFIED"
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000c9",
+              "subject_id": "MAT",
+              "topic_id": "MAT_01_001",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null,
+                "review_event_id": "22222222-2222-4222-8222-222222222222",
+                "trust_level": "SERVER_VERIFIED"
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": "7e71a34bf4ac0a90ea6db861fbeebdfc87d70ede401dbfe15165f922a969f7b3",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null,
+            "review_event_id": "33333333-3333-4333-8333-333333333333",
+            "trust_level": "SERVER_VERIFIED"
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null,
+          "evaluated_semantic_revision": "ce599e779d546a33d0a417c749ab822c004bc77ca3a40974654b658d09920d23",
+          "evaluation_mode": "SEMANTIC"
+        },
+        "grading": {
+          "strategy": "EXACT_OPTION",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [],
+          "rubric": null,
+          "engine": null,
+          "confirmation_policy": "AUTOMATIC_EXACT",
+          "policy_version": "objective-exact/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null,
+        "semantic_revision": "ce599e779d546a33d0a417c749ab822c004bc77ca3a40974654b658d09920d23",
+        "semantic_hash_version": "question-v2-semantic-jcs-sha256-v1",
+        "grading_revision": "da421e16d4f44888c9d67f3019fddd579c381fffc4baeaf73f279eef51038b90",
+        "grading_hash_version": "question-v2-grading-jcs-sha256-v1"
+      }
+    },
+    {
+      "id": "invalid-oid-malformed-hex",
+      "valid": false,
+      "untrusted_input": false,
+      "expected_code": "INVALID_OBJECT_ID",
+      "expected_field": "_id",
+      "document": {
+        "_id": {
+          "$oid": "xyz"
+        },
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Exemplo sintético: quanto é 2 + 2?",
+        "question_type": "MULTIPLE_CHOICE",
+        "answers": [
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "correct_answer_indices": [
+          1
+        ],
+        "correct_answers": [
+          "4"
+        ],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000065",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "11111111-1111-4111-8111-111111111111",
+              "trust_level": "SERVER_VERIFIED"
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000c9",
+              "subject_id": "MAT",
+              "topic_id": "MAT_01_001",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null,
+                "review_event_id": "22222222-2222-4222-8222-222222222222",
+                "trust_level": "SERVER_VERIFIED"
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null,
+            "review_event_id": "33333333-3333-4333-8333-333333333333",
+            "trust_level": "SERVER_VERIFIED"
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null,
+          "evaluated_semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+          "evaluation_mode": "SEMANTIC"
+        },
+        "grading": {
+          "strategy": "EXACT_OPTION",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [],
+          "rubric": null,
+          "engine": null,
+          "confirmation_policy": "AUTOMATIC_EXACT",
+          "policy_version": "objective-exact/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null,
+        "semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+        "semantic_hash_version": "question-v2-semantic-jcs-sha256-v1",
+        "grading_revision": "da421e16d4f44888c9d67f3019fddd579c381fffc4baeaf73f279eef51038b90",
+        "grading_hash_version": "question-v2-grading-jcs-sha256-v1"
+      }
+    },
+    {
+      "id": "invalid-oid-plain-string",
+      "valid": false,
+      "untrusted_input": false,
+      "expected_code": "INVALID_OBJECT_ID",
+      "expected_field": "_id",
+      "document": {
+        "_id": "000000000000000000000001",
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Exemplo sintético: quanto é 2 + 2?",
+        "question_type": "MULTIPLE_CHOICE",
+        "answers": [
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "correct_answer_indices": [
+          1
+        ],
+        "correct_answers": [
+          "4"
+        ],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000065",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "11111111-1111-4111-8111-111111111111",
+              "trust_level": "SERVER_VERIFIED"
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000c9",
+              "subject_id": "MAT",
+              "topic_id": "MAT_01_001",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null,
+                "review_event_id": "22222222-2222-4222-8222-222222222222",
+                "trust_level": "SERVER_VERIFIED"
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null,
+            "review_event_id": "33333333-3333-4333-8333-333333333333",
+            "trust_level": "SERVER_VERIFIED"
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null,
+          "evaluated_semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+          "evaluation_mode": "SEMANTIC"
+        },
+        "grading": {
+          "strategy": "EXACT_OPTION",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [],
+          "rubric": null,
+          "engine": null,
+          "confirmation_policy": "AUTOMATIC_EXACT",
+          "policy_version": "objective-exact/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null,
+        "semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+        "semantic_hash_version": "question-v2-semantic-jcs-sha256-v1",
+        "grading_revision": "da421e16d4f44888c9d67f3019fddd579c381fffc4baeaf73f279eef51038b90",
+        "grading_hash_version": "question-v2-grading-jcs-sha256-v1"
+      }
+    },
+    {
+      "id": "invalid-int-revision-float",
+      "valid": false,
+      "untrusted_input": false,
+      "expected_code": "INVALID_INTEGER",
+      "expected_field": "revision",
+      "document": {
+        "_id": {
+          "$oid": "000000000000000000000001"
+        },
+        "schema_version": 2,
+        "revision": 1.0,
+        "content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Exemplo sintético: quanto é 2 + 2?",
+        "question_type": "MULTIPLE_CHOICE",
+        "answers": [
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "correct_answer_indices": [
+          1
+        ],
+        "correct_answers": [
+          "4"
+        ],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000065",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "11111111-1111-4111-8111-111111111111",
+              "trust_level": "SERVER_VERIFIED"
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000c9",
+              "subject_id": "MAT",
+              "topic_id": "MAT_01_001",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null,
+                "review_event_id": "22222222-2222-4222-8222-222222222222",
+                "trust_level": "SERVER_VERIFIED"
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null,
+            "review_event_id": "33333333-3333-4333-8333-333333333333",
+            "trust_level": "SERVER_VERIFIED"
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null,
+          "evaluated_semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+          "evaluation_mode": "SEMANTIC"
+        },
+        "grading": {
+          "strategy": "EXACT_OPTION",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [],
+          "rubric": null,
+          "engine": null,
+          "confirmation_policy": "AUTOMATIC_EXACT",
+          "policy_version": "objective-exact/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null,
+        "semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+        "semantic_hash_version": "question-v2-semantic-jcs-sha256-v1",
+        "grading_revision": "da421e16d4f44888c9d67f3019fddd579c381fffc4baeaf73f279eef51038b90",
+        "grading_hash_version": "question-v2-grading-jcs-sha256-v1"
+      }
+    },
+    {
+      "id": "invalid-int-schema-version-float",
+      "valid": false,
+      "untrusted_input": false,
+      "expected_code": "INVALID_INTEGER",
+      "expected_field": "schema_version",
+      "document": {
+        "_id": {
+          "$oid": "000000000000000000000001"
+        },
+        "schema_version": 2.0,
+        "revision": 1,
+        "content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Exemplo sintético: quanto é 2 + 2?",
+        "question_type": "MULTIPLE_CHOICE",
+        "answers": [
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "correct_answer_indices": [
+          1
+        ],
+        "correct_answers": [
+          "4"
+        ],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000065",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "11111111-1111-4111-8111-111111111111",
+              "trust_level": "SERVER_VERIFIED"
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000c9",
+              "subject_id": "MAT",
+              "topic_id": "MAT_01_001",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null,
+                "review_event_id": "22222222-2222-4222-8222-222222222222",
+                "trust_level": "SERVER_VERIFIED"
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null,
+            "review_event_id": "33333333-3333-4333-8333-333333333333",
+            "trust_level": "SERVER_VERIFIED"
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null,
+          "evaluated_semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+          "evaluation_mode": "SEMANTIC"
+        },
+        "grading": {
+          "strategy": "EXACT_OPTION",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [],
+          "rubric": null,
+          "engine": null,
+          "confirmation_policy": "AUTOMATIC_EXACT",
+          "policy_version": "objective-exact/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null,
+        "semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+        "semantic_hash_version": "question-v2-semantic-jcs-sha256-v1",
+        "grading_revision": "da421e16d4f44888c9d67f3019fddd579c381fffc4baeaf73f279eef51038b90",
+        "grading_hash_version": "question-v2-grading-jcs-sha256-v1"
+      }
+    },
+    {
+      "id": "invalid-int-answer-index-float",
+      "valid": false,
+      "untrusted_input": false,
+      "expected_code": "INVALID_INTEGER",
+      "expected_field": "correct_answer_indices.0",
+      "document": {
+        "_id": {
+          "$oid": "000000000000000000000001"
+        },
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Exemplo sintético: quanto é 2 + 2?",
+        "question_type": "MULTIPLE_CHOICE",
+        "answers": [
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "correct_answer_indices": [
+          1.0
+        ],
+        "correct_answers": [
+          "4"
+        ],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000065",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "11111111-1111-4111-8111-111111111111",
+              "trust_level": "SERVER_VERIFIED"
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000c9",
+              "subject_id": "MAT",
+              "topic_id": "MAT_01_001",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null,
+                "review_event_id": "22222222-2222-4222-8222-222222222222",
+                "trust_level": "SERVER_VERIFIED"
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null,
+            "review_event_id": "33333333-3333-4333-8333-333333333333",
+            "trust_level": "SERVER_VERIFIED"
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null,
+          "evaluated_semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+          "evaluation_mode": "SEMANTIC"
+        },
+        "grading": {
+          "strategy": "EXACT_OPTION",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [],
+          "rubric": null,
+          "engine": null,
+          "confirmation_policy": "AUTOMATIC_EXACT",
+          "policy_version": "objective-exact/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null,
+        "semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+        "semantic_hash_version": "question-v2-semantic-jcs-sha256-v1",
+        "grading_revision": "da421e16d4f44888c9d67f3019fddd579c381fffc4baeaf73f279eef51038b90",
+        "grading_hash_version": "question-v2-grading-jcs-sha256-v1"
+      }
+    },
+    {
+      "id": "invalid-int-exam-year-float",
+      "valid": false,
+      "untrusted_input": false,
+      "expected_code": "INVALID_INTEGER",
+      "expected_field": "exam_year",
+      "document": {
+        "_id": {
+          "$oid": "000000000000000000000001"
+        },
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Exemplo sintético: quanto é 2 + 2?",
+        "question_type": "MULTIPLE_CHOICE",
+        "answers": [
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "correct_answer_indices": [
+          1
+        ],
+        "correct_answers": [
+          "4"
+        ],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000065",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "11111111-1111-4111-8111-111111111111",
+              "trust_level": "SERVER_VERIFIED"
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000c9",
+              "subject_id": "MAT",
+              "topic_id": "MAT_01_001",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null,
+                "review_event_id": "22222222-2222-4222-8222-222222222222",
+                "trust_level": "SERVER_VERIFIED"
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null,
+            "review_event_id": "33333333-3333-4333-8333-333333333333",
+            "trust_level": "SERVER_VERIFIED"
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null,
+          "evaluated_semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+          "evaluation_mode": "SEMANTIC"
+        },
+        "grading": {
+          "strategy": "EXACT_OPTION",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [],
+          "rubric": null,
+          "engine": null,
+          "confirmation_policy": "AUTOMATIC_EXACT",
+          "policy_version": "objective-exact/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null,
+        "semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+        "semantic_hash_version": "question-v2-semantic-jcs-sha256-v1",
+        "grading_revision": "da421e16d4f44888c9d67f3019fddd579c381fffc4baeaf73f279eef51038b90",
+        "grading_hash_version": "question-v2-grading-jcs-sha256-v1",
+        "exam_year": 2025.0
+      }
+    },
+    {
+      "id": "invalid-int-origin-exam-year-float",
+      "valid": false,
+      "untrusted_input": false,
+      "expected_code": "INVALID_INTEGER",
+      "expected_field": "origins.0.exam_year",
+      "document": {
+        "_id": {
+          "$oid": "000000000000000000000001"
+        },
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Exemplo sintético: quanto é 2 + 2?",
+        "question_type": "MULTIPLE_CHOICE",
+        "answers": [
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "correct_answer_indices": [
+          1
+        ],
+        "correct_answers": [
+          "4"
+        ],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000065",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": 2025.0,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "11111111-1111-4111-8111-111111111111",
+              "trust_level": "SERVER_VERIFIED"
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000c9",
+              "subject_id": "MAT",
+              "topic_id": "MAT_01_001",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null,
+                "review_event_id": "22222222-2222-4222-8222-222222222222",
+                "trust_level": "SERVER_VERIFIED"
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null,
+            "review_event_id": "33333333-3333-4333-8333-333333333333",
+            "trust_level": "SERVER_VERIFIED"
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null,
+          "evaluated_semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+          "evaluation_mode": "SEMANTIC"
+        },
+        "grading": {
+          "strategy": "EXACT_OPTION",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [],
+          "rubric": null,
+          "engine": null,
+          "confirmation_policy": "AUTOMATIC_EXACT",
+          "policy_version": "objective-exact/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null,
+        "semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+        "semantic_hash_version": "question-v2-semantic-jcs-sha256-v1",
+        "grading_revision": "da421e16d4f44888c9d67f3019fddd579c381fffc4baeaf73f279eef51038b90",
+        "grading_hash_version": "question-v2-grading-jcs-sha256-v1"
+      }
+    },
+    {
+      "id": "invalid-int-rubric-revision-float",
+      "valid": false,
+      "untrusted_input": false,
+      "expected_code": "INVALID_INTEGER",
+      "expected_field": "grading.rubric.revision",
+      "document": {
+        "_id": {
+          "$oid": "000000000000000000000003"
+        },
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "3f830e8f6dc35d1f0852f529dbe742bedf6de4dc24f171a592b7a7af873b75d2",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Exemplo sintético: explique como a coesão contribui para a organização de um texto e apresente um exemplo.",
+        "question_type": "OPEN_ENDED",
+        "answers": [],
+        "correct_answer_indices": [],
+        "correct_answers": [],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000067",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "44444444-4444-4444-8444-444444444444",
+              "trust_level": "SERVER_VERIFIED"
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000cb",
+              "subject_id": "PORT",
+              "topic_id": "PORT_01_002",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null,
+                "review_event_id": "55555555-5555-4555-8555-555555555555",
+                "trust_level": "SERVER_VERIFIED"
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": "3f830e8f6dc35d1f0852f529dbe742bedf6de4dc24f171a592b7a7af873b75d2",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null,
+            "review_event_id": "66666666-6666-4666-8666-666666666666",
+            "trust_level": "SERVER_VERIFIED"
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null,
+          "evaluated_semantic_revision": "7d0974be9082c7bbb59b12b5f5e41a999437934eb85b1ac39e7a3b795c26b7fc",
+          "evaluation_mode": "SEMANTIC"
+        },
+        "grading": {
+          "strategy": "RUBRIC",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [
+            "A coesão estabelece relações entre partes do texto por mecanismos referenciais e sequenciais. Um pronome pode retomar um substantivo apresentado antes; formulações equivalentes são aceitas."
+          ],
+          "rubric": {
+            "revision": 1.0,
+            "criteria": [
+              {
+                "criterion_id": "CONCEPT",
+                "description": "Explicar as relações entre partes do texto sem reduzir coesão a repetição de palavras.",
+                "max_points": 50,
+                "essential": true
+              },
+              {
+                "criterion_id": "EXAMPLE",
+                "description": "Apresentar um exemplo pertinente de mecanismo coesivo.",
+                "max_points": 50,
+                "essential": false
+              }
+            ]
+          },
+          "engine": null,
+          "confirmation_policy": "HUMAN_REVIEW",
+          "policy_version": "open-rubric-human-review/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null,
+        "semantic_revision": "7d0974be9082c7bbb59b12b5f5e41a999437934eb85b1ac39e7a3b795c26b7fc",
+        "semantic_hash_version": "question-v2-semantic-jcs-sha256-v1",
+        "grading_revision": "8f7bc9f07e933d38b573a082ff462af93fe35a546ed8c5cd8ef6cffdbe0e571f",
+        "grading_hash_version": "question-v2-grading-jcs-sha256-v1"
+      }
+    },
+    {
+      "id": "invalid-content-revision-mismatch",
+      "valid": false,
+      "untrusted_input": false,
+      "expected_code": "CONTENT_REVISION_MISMATCH",
+      "expected_field": "content_revision",
+      "document": {
+        "_id": {
+          "$oid": "000000000000000000000001"
+        },
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "0000000000000000000000000000000000000000000000000000000000000000",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Exemplo sintético: quanto é 2 + 2?",
+        "question_type": "MULTIPLE_CHOICE",
+        "answers": [
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "correct_answer_indices": [
+          1
+        ],
+        "correct_answers": [
+          "4"
+        ],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000065",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "11111111-1111-4111-8111-111111111111",
+              "trust_level": "SERVER_VERIFIED"
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000c9",
+              "subject_id": "MAT",
+              "topic_id": "MAT_01_001",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null,
+                "review_event_id": "22222222-2222-4222-8222-222222222222",
+                "trust_level": "SERVER_VERIFIED"
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null,
+            "review_event_id": "33333333-3333-4333-8333-333333333333",
+            "trust_level": "SERVER_VERIFIED"
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null,
+          "evaluated_semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+          "evaluation_mode": "SEMANTIC"
+        },
+        "grading": {
+          "strategy": "EXACT_OPTION",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [],
+          "rubric": null,
+          "engine": null,
+          "confirmation_policy": "AUTOMATIC_EXACT",
+          "policy_version": "objective-exact/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null,
+        "semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+        "semantic_hash_version": "question-v2-semantic-jcs-sha256-v1",
+        "grading_revision": "da421e16d4f44888c9d67f3019fddd579c381fffc4baeaf73f279eef51038b90",
+        "grading_hash_version": "question-v2-grading-jcs-sha256-v1"
+      }
+    },
+    {
+      "id": "invalid-semantic-revision-mismatch",
+      "valid": false,
+      "untrusted_input": false,
+      "expected_code": "SEMANTIC_REVISION_MISMATCH",
+      "expected_field": "semantic_revision",
+      "document": {
+        "_id": {
+          "$oid": "000000000000000000000001"
+        },
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Exemplo sintético: quanto é 2 + 2?",
+        "question_type": "MULTIPLE_CHOICE",
+        "answers": [
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "correct_answer_indices": [
+          1
+        ],
+        "correct_answers": [
+          "4"
+        ],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000065",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "11111111-1111-4111-8111-111111111111",
+              "trust_level": "SERVER_VERIFIED"
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000c9",
+              "subject_id": "MAT",
+              "topic_id": "MAT_01_001",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null,
+                "review_event_id": "22222222-2222-4222-8222-222222222222",
+                "trust_level": "SERVER_VERIFIED"
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null,
+            "review_event_id": "33333333-3333-4333-8333-333333333333",
+            "trust_level": "SERVER_VERIFIED"
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null,
+          "evaluated_semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+          "evaluation_mode": "SEMANTIC"
+        },
+        "grading": {
+          "strategy": "EXACT_OPTION",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [],
+          "rubric": null,
+          "engine": null,
+          "confirmation_policy": "AUTOMATIC_EXACT",
+          "policy_version": "objective-exact/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null,
+        "semantic_revision": "0000000000000000000000000000000000000000000000000000000000000000",
+        "semantic_hash_version": "question-v2-semantic-jcs-sha256-v1",
+        "grading_revision": "da421e16d4f44888c9d67f3019fddd579c381fffc4baeaf73f279eef51038b90",
+        "grading_hash_version": "question-v2-grading-jcs-sha256-v1"
+      }
+    },
+    {
+      "id": "invalid-grading-revision-mismatch",
+      "valid": false,
+      "untrusted_input": false,
+      "expected_code": "GRADING_REVISION_MISMATCH",
+      "expected_field": "grading_revision",
+      "document": {
+        "_id": {
+          "$oid": "000000000000000000000001"
+        },
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Exemplo sintético: quanto é 2 + 2?",
+        "question_type": "MULTIPLE_CHOICE",
+        "answers": [
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "correct_answer_indices": [
+          1
+        ],
+        "correct_answers": [
+          "4"
+        ],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000065",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "11111111-1111-4111-8111-111111111111",
+              "trust_level": "SERVER_VERIFIED"
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000c9",
+              "subject_id": "MAT",
+              "topic_id": "MAT_01_001",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null,
+                "review_event_id": "22222222-2222-4222-8222-222222222222",
+                "trust_level": "SERVER_VERIFIED"
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null,
+            "review_event_id": "33333333-3333-4333-8333-333333333333",
+            "trust_level": "SERVER_VERIFIED"
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null,
+          "evaluated_semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+          "evaluation_mode": "SEMANTIC"
+        },
+        "grading": {
+          "strategy": "EXACT_OPTION",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [],
+          "rubric": null,
+          "engine": null,
+          "confirmation_policy": "AUTOMATIC_EXACT",
+          "policy_version": "objective-exact/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null,
+        "semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+        "semantic_hash_version": "question-v2-semantic-jcs-sha256-v1",
+        "grading_revision": "0000000000000000000000000000000000000000000000000000000000000000",
+        "grading_hash_version": "question-v2-grading-jcs-sha256-v1"
+      }
+    },
+    {
+      "id": "invalid-stale-semantic-validity-on-stem-edit",
+      "valid": false,
+      "untrusted_input": false,
+      "expected_code": "SEMANTIC_REVISION_MISMATCH",
+      "expected_field": "validity.evaluated_semantic_revision",
+      "document": {
+        "_id": {
+          "$oid": "000000000000000000000001"
+        },
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "0ec4f6bfa08ecbcc23cc5cd3f78df977453d153de9d13a47eac3f254133ac4da",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Enunciado alterado substancialmente: quanto é 3 + 3?",
+        "question_type": "MULTIPLE_CHOICE",
+        "answers": [
+          "5",
+          "6",
+          "7",
+          "8",
+          "9"
+        ],
+        "correct_answer_indices": [
+          1
+        ],
+        "correct_answers": [
+          "6"
+        ],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000065",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "11111111-1111-4111-8111-111111111111",
+              "trust_level": "SERVER_VERIFIED"
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000c9",
+              "subject_id": "MAT",
+              "topic_id": "MAT_01_001",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null,
+                "review_event_id": "22222222-2222-4222-8222-222222222222",
+                "trust_level": "SERVER_VERIFIED"
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null,
+            "review_event_id": "33333333-3333-4333-8333-333333333333",
+            "trust_level": "SERVER_VERIFIED"
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null,
+          "evaluated_semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+          "evaluation_mode": "SEMANTIC"
+        },
+        "grading": {
+          "strategy": "EXACT_OPTION",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [],
+          "rubric": null,
+          "engine": null,
+          "confirmation_policy": "AUTOMATIC_EXACT",
+          "policy_version": "objective-exact/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null,
+        "semantic_revision": "8554fa79a5d16ff91a21b3d38b5456792e28ad9ef9ca767e9db778c16779fbb0",
+        "semantic_hash_version": "question-v2-semantic-jcs-sha256-v1",
+        "grading_revision": "da421e16d4f44888c9d67f3019fddd579c381fffc4baeaf73f279eef51038b90",
+        "grading_hash_version": "question-v2-grading-jcs-sha256-v1"
+      }
+    },
+    {
+      "id": "invalid-stale-semantic-validity-on-expected-response-edit",
+      "valid": false,
+      "untrusted_input": false,
+      "expected_code": "SEMANTIC_REVISION_MISMATCH",
+      "expected_field": "validity.evaluated_semantic_revision",
+      "document": {
+        "_id": {
+          "$oid": "000000000000000000000003"
+        },
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "1d7ff513f9d68e4d7562151b949d3e4c26c15ab8d6fe466fa7c8683a0a7ec227",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Exemplo sintético: explique como a coesão contribui para a organização de um texto e apresente um exemplo.",
+        "question_type": "OPEN_ENDED",
+        "answers": [],
+        "correct_answer_indices": [],
+        "correct_answers": [],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000067",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "44444444-4444-4444-8444-444444444444",
+              "trust_level": "SERVER_VERIFIED"
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000cb",
+              "subject_id": "PORT",
+              "topic_id": "PORT_01_002",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null,
+                "review_event_id": "55555555-5555-4555-8555-555555555555",
+                "trust_level": "SERVER_VERIFIED"
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": "3f830e8f6dc35d1f0852f529dbe742bedf6de4dc24f171a592b7a7af873b75d2",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null,
+            "review_event_id": "66666666-6666-4666-8666-666666666666",
+            "trust_level": "SERVER_VERIFIED"
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null,
+          "evaluated_semantic_revision": "7d0974be9082c7bbb59b12b5f5e41a999437934eb85b1ac39e7a3b795c26b7fc",
+          "evaluation_mode": "SEMANTIC"
+        },
+        "grading": {
+          "strategy": "RUBRIC",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [
+            "Nova resposta esperada completamente distinta que altera o gabarito."
+          ],
+          "rubric": {
+            "revision": 1,
+            "criteria": [
+              {
+                "criterion_id": "CONCEPT",
+                "description": "Explicar as relações entre partes do texto sem reduzir coesão a repetição de palavras.",
+                "max_points": 50,
+                "essential": true
+              },
+              {
+                "criterion_id": "EXAMPLE",
+                "description": "Apresentar um exemplo pertinente de mecanismo coesivo.",
+                "max_points": 50,
+                "essential": false
+              }
+            ]
+          },
+          "engine": null,
+          "confirmation_policy": "HUMAN_REVIEW",
+          "policy_version": "open-rubric-human-review/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null,
+        "semantic_revision": "582a7b5b17686adaced95fabf7e07caca6557c2cefe51696790b14f22db74a10",
+        "semantic_hash_version": "question-v2-semantic-jcs-sha256-v1",
+        "grading_revision": "0c4dd9ff774529270bb4fe32953d93f084456bf8450a8096e7a66941ec0017af",
+        "grading_hash_version": "question-v2-grading-jcs-sha256-v1"
+      }
+    },
+    {
+      "id": "invalid-stale-legacy-validity-content-mode",
+      "valid": false,
+      "untrusted_input": false,
+      "expected_code": "CONTENT_REVISION_MISMATCH",
+      "expected_field": "validity.evaluated_content_revision",
+      "document": {
+        "_id": {
+          "$oid": "000000000000000000000001"
+        },
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Exemplo sintético: quanto é 2 + 2?",
+        "question_type": "MULTIPLE_CHOICE",
+        "answers": [
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "correct_answer_indices": [
+          1
+        ],
+        "correct_answers": [
+          "4"
+        ],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000065",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000c9",
+              "subject_id": "MAT",
+              "topic_id": "MAT_01_001",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": "0000000000000000000000000000000000000000000000000000000000000000",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null
+        },
+        "grading": {
+          "strategy": "EXACT_OPTION",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [],
+          "rubric": null,
+          "engine": null,
+          "confirmation_policy": "AUTOMATIC_EXACT",
+          "policy_version": "objective-exact/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null
+      }
+    },
+    {
+      "id": "invalid-official-exam-confirmed-without-human",
+      "valid": false,
+      "untrusted_input": false,
+      "expected_code": "HUMAN_REVIEW_REQUIRED",
+      "expected_field": "origins.0.provenance",
+      "document": {
+        "_id": {
+          "$oid": "000000000000000000000001"
+        },
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Exemplo sintético: quanto é 2 + 2?",
+        "question_type": "MULTIPLE_CHOICE",
+        "answers": [
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "correct_answer_indices": [
+          1
+        ],
+        "correct_answers": [
+          "4"
+        ],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000065",
+            "kind": "OFFICIAL_EXAM",
+            "verification": "CONFIRMED",
+            "source_exam_code": "BCB-2026",
+            "institution": "BCB",
+            "organizer": "CEBRASPE",
+            "exam_year": 2026,
+            "question_number": null,
+            "source_reference": {
+              "uri": "https://example.org/prova.pdf",
+              "title": "Prova Oficial",
+              "locator": "Q1",
+              "retrieved_at": "2026-11-02T15:00:00Z",
+              "sha256": null
+            },
+            "provenance": {
+              "actor": {
+                "type": "AI",
+                "id": "xai"
+              },
+              "method": "AI_SUGGESTION",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": null,
+              "trust_level": null
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000c9",
+              "subject_id": "MAT",
+              "topic_id": "MAT_01_001",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null,
+                "review_event_id": "22222222-2222-4222-8222-222222222222",
+                "trust_level": "SERVER_VERIFIED"
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null,
+            "review_event_id": "33333333-3333-4333-8333-333333333333",
+            "trust_level": "SERVER_VERIFIED"
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null,
+          "evaluated_semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+          "evaluation_mode": "SEMANTIC"
+        },
+        "grading": {
+          "strategy": "EXACT_OPTION",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [],
+          "rubric": null,
+          "engine": null,
+          "confirmation_policy": "AUTOMATIC_EXACT",
+          "policy_version": "objective-exact/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null,
+        "semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+        "semantic_hash_version": "question-v2-semantic-jcs-sha256-v1",
+        "grading_revision": "da421e16d4f44888c9d67f3019fddd579c381fffc4baeaf73f279eef51038b90",
+        "grading_hash_version": "question-v2-grading-jcs-sha256-v1"
+      }
+    },
+    {
+      "id": "invalid-classification-without-human",
+      "valid": false,
+      "untrusted_input": false,
+      "expected_code": "HUMAN_REVIEW_REQUIRED",
+      "expected_field": "classification.links.0.provenance",
+      "document": {
+        "_id": {
+          "$oid": "000000000000000000000001"
+        },
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Exemplo sintético: quanto é 2 + 2?",
+        "question_type": "MULTIPLE_CHOICE",
+        "answers": [
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "correct_answer_indices": [
+          1
+        ],
+        "correct_answers": [
+          "4"
+        ],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000065",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "11111111-1111-4111-8111-111111111111",
+              "trust_level": "SERVER_VERIFIED"
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000c9",
+              "subject_id": "MAT",
+              "topic_id": "MAT_01_001",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "SYSTEM",
+                  "id": "auto"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null,
+                "review_event_id": null,
+                "trust_level": null
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null,
+            "review_event_id": "33333333-3333-4333-8333-333333333333",
+            "trust_level": "SERVER_VERIFIED"
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null,
+          "evaluated_semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+          "evaluation_mode": "SEMANTIC"
+        },
+        "grading": {
+          "strategy": "EXACT_OPTION",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [],
+          "rubric": null,
+          "engine": null,
+          "confirmation_policy": "AUTOMATIC_EXACT",
+          "policy_version": "objective-exact/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null,
+        "semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+        "semantic_hash_version": "question-v2-semantic-jcs-sha256-v1",
+        "grading_revision": "da421e16d4f44888c9d67f3019fddd579c381fffc4baeaf73f279eef51038b90",
+        "grading_hash_version": "question-v2-grading-jcs-sha256-v1"
+      }
+    },
+    {
+      "id": "invalid-validity-without-manual-review",
+      "valid": false,
+      "untrusted_input": false,
+      "expected_code": "HUMAN_REVIEW_REQUIRED",
+      "expected_field": "validity.decision",
+      "document": {
+        "_id": {
+          "$oid": "000000000000000000000001"
+        },
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Exemplo sintético: quanto é 2 + 2?",
+        "question_type": "MULTIPLE_CHOICE",
+        "answers": [
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "correct_answer_indices": [
+          1
+        ],
+        "correct_answers": [
+          "4"
+        ],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000065",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "11111111-1111-4111-8111-111111111111",
+              "trust_level": "SERVER_VERIFIED"
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000c9",
+              "subject_id": "MAT",
+              "topic_id": "MAT_01_001",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null,
+                "review_event_id": "22222222-2222-4222-8222-222222222222",
+                "trust_level": "SERVER_VERIFIED"
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "AI_SUGGESTION",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null,
+            "review_event_id": null,
+            "trust_level": null
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null,
+          "evaluated_semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+          "evaluation_mode": "SEMANTIC"
+        },
+        "grading": {
+          "strategy": "EXACT_OPTION",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [],
+          "rubric": null,
+          "engine": null,
+          "confirmation_policy": "AUTOMATIC_EXACT",
+          "policy_version": "objective-exact/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null,
+        "semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+        "semantic_hash_version": "question-v2-semantic-jcs-sha256-v1",
+        "grading_revision": "da421e16d4f44888c9d67f3019fddd579c381fffc4baeaf73f279eef51038b90",
+        "grading_hash_version": "question-v2-grading-jcs-sha256-v1"
+      }
+    },
+    {
+      "id": "invalid-client-spoofed-review-event-id",
+      "valid": false,
+      "untrusted_input": true,
+      "expected_code": "REVIEW_ACTOR_UNTRUSTED",
+      "expected_field": "origins.0.provenance.review_event_id",
+      "document": {
+        "_id": {
+          "$oid": "000000000000000000000001"
+        },
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Exemplo sintético: quanto é 2 + 2?",
+        "question_type": "MULTIPLE_CHOICE",
+        "answers": [
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "correct_answer_indices": [
+          1
+        ],
+        "correct_answers": [
+          "4"
+        ],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000065",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "11111111-1111-4111-8111-111111111111",
+              "trust_level": "SERVER_VERIFIED"
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000c9",
+              "subject_id": "MAT",
+              "topic_id": "MAT_01_001",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null,
+                "review_event_id": "22222222-2222-4222-8222-222222222222",
+                "trust_level": "SERVER_VERIFIED"
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null,
+            "review_event_id": "33333333-3333-4333-8333-333333333333",
+            "trust_level": "SERVER_VERIFIED"
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null,
+          "evaluated_semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+          "evaluation_mode": "SEMANTIC"
+        },
+        "grading": {
+          "strategy": "EXACT_OPTION",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [],
+          "rubric": null,
+          "engine": null,
+          "confirmation_policy": "AUTOMATIC_EXACT",
+          "policy_version": "objective-exact/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null,
+        "semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+        "semantic_hash_version": "question-v2-semantic-jcs-sha256-v1",
+        "grading_revision": "da421e16d4f44888c9d67f3019fddd579c381fffc4baeaf73f279eef51038b90",
+        "grading_hash_version": "question-v2-grading-jcs-sha256-v1"
+      }
+    }
+  ],
+  "eligibility_vectors": [
+    {
+      "id": "eligible-direct",
+      "evaluation_date": "2026-11-15",
+      "exam_context": {
+        "owner_user_id": 123,
+        "exam_id": "bcb-2026",
+        "exam_revision": 1,
+        "component_id": "MAT",
+        "allowed_topic_ids": [
+          "MAT_01_001"
+        ],
+        "require_explicit_compatibility": false,
+        "compatibility_records": []
+      },
+      "trusted_review_context": {
+        "require_server_verified": false
+      },
+      "expected": {
+        "eligible": true,
+        "reason_codes": [],
+        "coverage_mode": "DIRECT",
+        "is_borrowed_analogous": false
+      },
+      "question": {
+        "_id": {
+          "$oid": "000000000000000000000001"
+        },
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Exemplo sintético: quanto é 2 + 2?",
+        "question_type": "MULTIPLE_CHOICE",
+        "answers": [
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "correct_answer_indices": [
+          1
+        ],
+        "correct_answers": [
+          "4"
+        ],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000065",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "11111111-1111-4111-8111-111111111111",
+              "trust_level": "SERVER_VERIFIED"
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000c9",
+              "subject_id": "MAT",
+              "topic_id": "MAT_01_001",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null,
+                "review_event_id": "22222222-2222-4222-8222-222222222222",
+                "trust_level": "SERVER_VERIFIED"
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null,
+            "review_event_id": "33333333-3333-4333-8333-333333333333",
+            "trust_level": "SERVER_VERIFIED"
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null,
+          "evaluated_semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+          "evaluation_mode": "SEMANTIC"
+        },
+        "grading": {
+          "strategy": "EXACT_OPTION",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [],
+          "rubric": null,
+          "engine": null,
+          "confirmation_policy": "AUTOMATIC_EXACT",
+          "policy_version": "objective-exact/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null,
+        "semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+        "semantic_hash_version": "question-v2-semantic-jcs-sha256-v1",
+        "grading_revision": "da421e16d4f44888c9d67f3019fddd579c381fffc4baeaf73f279eef51038b90",
+        "grading_hash_version": "question-v2-grading-jcs-sha256-v1"
+      }
+    },
+    {
+      "id": "eligible-analogous",
+      "evaluation_date": "2026-11-15",
+      "exam_context": {
+        "owner_user_id": 123,
+        "exam_id": "bcb-2026",
+        "exam_revision": 1,
+        "component_id": "PORT",
+        "allowed_topic_ids": [
+          "PORT_01_001"
+        ],
+        "require_explicit_compatibility": false,
+        "compatibility_records": [
+          {
+            "_id": "77777777-7777-4777-8777-777777777777",
+            "schema_version": 1,
+            "owner_user_id": 123,
+            "exam_id": "bcb-2026",
+            "exam_revision": 1,
+            "component_id": "PORT",
+            "question_id": "000000000000000000000001",
+            "question_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+            "question_semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+            "catalog_version": 2,
+            "relation": "ANALOGOUS",
+            "status": "CONFIRMED",
+            "matched_topic_ids": [],
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "123"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Conteúdo análogo explicitamente aprovado para treino complementar.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "88888888-8888-4888-8888-888888888888",
+              "trust_level": "SERVER_VERIFIED"
+            },
+            "revision": 1
+          }
+        ]
+      },
+      "trusted_review_context": {
+        "require_server_verified": false
+      },
+      "expected": {
+        "eligible": true,
+        "reason_codes": [],
+        "coverage_mode": "ANALOGOUS",
+        "is_borrowed_analogous": true
+      },
+      "question": {
+        "_id": {
+          "$oid": "000000000000000000000001"
+        },
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Exemplo sintético: quanto é 2 + 2?",
+        "question_type": "MULTIPLE_CHOICE",
+        "answers": [
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "correct_answer_indices": [
+          1
+        ],
+        "correct_answers": [
+          "4"
+        ],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000065",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "11111111-1111-4111-8111-111111111111",
+              "trust_level": "SERVER_VERIFIED"
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000c9",
+              "subject_id": "MAT",
+              "topic_id": "MAT_01_001",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null,
+                "review_event_id": "22222222-2222-4222-8222-222222222222",
+                "trust_level": "SERVER_VERIFIED"
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null,
+            "review_event_id": "33333333-3333-4333-8333-333333333333",
+            "trust_level": "SERVER_VERIFIED"
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null,
+          "evaluated_semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+          "evaluation_mode": "SEMANTIC"
+        },
+        "grading": {
+          "strategy": "EXACT_OPTION",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [],
+          "rubric": null,
+          "engine": null,
+          "confirmation_policy": "AUTOMATIC_EXACT",
+          "policy_version": "objective-exact/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null,
+        "semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+        "semantic_hash_version": "question-v2-semantic-jcs-sha256-v1",
+        "grading_revision": "da421e16d4f44888c9d67f3019fddd579c381fffc4baeaf73f279eef51038b90",
+        "grading_hash_version": "question-v2-grading-jcs-sha256-v1"
+      }
+    },
+    {
+      "id": "blocked-archived",
+      "evaluation_date": "2026-11-15",
+      "exam_context": {
+        "owner_user_id": 123,
+        "exam_id": "bcb-2026",
+        "exam_revision": 1,
+        "component_id": "MAT",
+        "allowed_topic_ids": [
+          "MAT_01_001"
+        ],
+        "require_explicit_compatibility": false,
+        "compatibility_records": []
+      },
+      "trusted_review_context": {
+        "require_server_verified": false
+      },
+      "expected": {
+        "eligible": false,
+        "reason_codes": [
+          "QUESTION_ARCHIVED",
+          "QUESTION_NOT_ELIGIBLE"
+        ],
+        "coverage_mode": null,
+        "is_borrowed_analogous": false
+      },
+      "question": {
+        "_id": {
+          "$oid": "000000000000000000000001"
+        },
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ARCHIVED",
+        "question": "Exemplo sintético: quanto é 2 + 2?",
+        "question_type": "MULTIPLE_CHOICE",
+        "answers": [
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "correct_answer_indices": [
+          1
+        ],
+        "correct_answers": [
+          "4"
+        ],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000065",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "11111111-1111-4111-8111-111111111111",
+              "trust_level": "SERVER_VERIFIED"
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000c9",
+              "subject_id": "MAT",
+              "topic_id": "MAT_01_001",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null,
+                "review_event_id": "22222222-2222-4222-8222-222222222222",
+                "trust_level": "SERVER_VERIFIED"
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null,
+            "review_event_id": "33333333-3333-4333-8333-333333333333",
+            "trust_level": "SERVER_VERIFIED"
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null,
+          "evaluated_semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+          "evaluation_mode": "SEMANTIC"
+        },
+        "grading": {
+          "strategy": "EXACT_OPTION",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [],
+          "rubric": null,
+          "engine": null,
+          "confirmation_policy": "AUTOMATIC_EXACT",
+          "policy_version": "objective-exact/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null,
+        "semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+        "semantic_hash_version": "question-v2-semantic-jcs-sha256-v1",
+        "grading_revision": "da421e16d4f44888c9d67f3019fddd579c381fffc4baeaf73f279eef51038b90",
+        "grading_hash_version": "question-v2-grading-jcs-sha256-v1"
+      }
+    },
+    {
+      "id": "blocked-unclassified",
+      "evaluation_date": "2026-11-15",
+      "exam_context": {
+        "owner_user_id": 123,
+        "exam_id": "bcb-2026",
+        "exam_revision": 1,
+        "component_id": "MAT",
+        "allowed_topic_ids": [
+          "MAT_01_001"
+        ],
+        "require_explicit_compatibility": false,
+        "compatibility_records": []
+      },
+      "trusted_review_context": {
+        "require_server_verified": false
+      },
+      "expected": {
+        "eligible": false,
+        "reason_codes": [
+          "CLASSIFICATION_NOT_CONFIRMED",
+          "VALIDITY_NOT_CONFIRMED",
+          "EXAM_COMPATIBILITY_MISSING",
+          "QUESTION_NOT_ELIGIBLE"
+        ],
+        "coverage_mode": null,
+        "is_borrowed_analogous": false
+      },
+      "question": {
+        "_id": {
+          "$oid": "000000000000000000000007"
+        },
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Exemplo sintético: quanto é 2 + 2?",
+        "question_type": "MULTIPLE_CHOICE",
+        "answers": [
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "correct_answer_indices": [
+          1
+        ],
+        "correct_answers": [
+          "4"
+        ],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-00000000006b",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null
+            }
+          }
+        ],
+        "classification": {
+          "revision": 0,
+          "catalog_version": 2,
+          "state": "UNCLASSIFIED",
+          "links": []
+        },
+        "validity": {
+          "revision": 0,
+          "status": "UNKNOWN",
+          "basis": "LEGAL",
+          "reference_date": null,
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": null,
+          "decision": null,
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null
+        },
+        "grading": {
+          "strategy": "EXACT_OPTION",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [],
+          "rubric": null,
+          "engine": null,
+          "confirmation_policy": "AUTOMATIC_EXACT",
+          "policy_version": "objective-exact/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null
+      }
+    },
+    {
+      "id": "blocked-partial",
+      "evaluation_date": "2026-11-15",
+      "exam_context": {
+        "owner_user_id": 123,
+        "exam_id": "bcb-2026",
+        "exam_revision": 1,
+        "component_id": "MAT",
+        "allowed_topic_ids": [
+          "MAT_01_001"
+        ],
+        "require_explicit_compatibility": false,
+        "compatibility_records": []
+      },
+      "trusted_review_context": {
+        "require_server_verified": false
+      },
+      "expected": {
+        "eligible": false,
+        "reason_codes": [
+          "CLASSIFICATION_NOT_CONFIRMED",
+          "QUESTION_NOT_ELIGIBLE"
+        ],
+        "coverage_mode": null,
+        "is_borrowed_analogous": false
+      },
+      "question": {
+        "_id": {
+          "$oid": "000000000000000000000001"
+        },
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Exemplo sintético: quanto é 2 + 2?",
+        "question_type": "MULTIPLE_CHOICE",
+        "answers": [
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "correct_answer_indices": [
+          1
+        ],
+        "correct_answers": [
+          "4"
+        ],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000065",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "11111111-1111-4111-8111-111111111111",
+              "trust_level": "SERVER_VERIFIED"
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "PARTIAL",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000c9",
+              "subject_id": "MAT",
+              "topic_id": "MAT_01_001",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null,
+                "review_event_id": "22222222-2222-4222-8222-222222222222",
+                "trust_level": "SERVER_VERIFIED"
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null,
+            "review_event_id": "33333333-3333-4333-8333-333333333333",
+            "trust_level": "SERVER_VERIFIED"
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null,
+          "evaluated_semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+          "evaluation_mode": "SEMANTIC"
+        },
+        "grading": {
+          "strategy": "EXACT_OPTION",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [],
+          "rubric": null,
+          "engine": null,
+          "confirmation_policy": "AUTOMATIC_EXACT",
+          "policy_version": "objective-exact/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null,
+        "semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+        "semantic_hash_version": "question-v2-semantic-jcs-sha256-v1",
+        "grading_revision": "da421e16d4f44888c9d67f3019fddd579c381fffc4baeaf73f279eef51038b90",
+        "grading_hash_version": "question-v2-grading-jcs-sha256-v1"
+      }
+    },
+    {
+      "id": "blocked-unknown-validity",
+      "evaluation_date": "2026-11-15",
+      "exam_context": {
+        "owner_user_id": 123,
+        "exam_id": "bcb-2026",
+        "exam_revision": 1,
+        "component_id": "MAT",
+        "allowed_topic_ids": [
+          "MAT_01_001"
+        ],
+        "require_explicit_compatibility": false,
+        "compatibility_records": []
+      },
+      "trusted_review_context": {
+        "require_server_verified": false
+      },
+      "expected": {
+        "eligible": false,
+        "reason_codes": [
+          "VALIDITY_NOT_CONFIRMED",
+          "QUESTION_NOT_ELIGIBLE"
+        ],
+        "coverage_mode": null,
+        "is_borrowed_analogous": false
+      },
+      "question": {
+        "_id": {
+          "$oid": "000000000000000000000001"
+        },
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Exemplo sintético: quanto é 2 + 2?",
+        "question_type": "MULTIPLE_CHOICE",
+        "answers": [
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "correct_answer_indices": [
+          1
+        ],
+        "correct_answers": [
+          "4"
+        ],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000065",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "11111111-1111-4111-8111-111111111111",
+              "trust_level": "SERVER_VERIFIED"
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000c9",
+              "subject_id": "MAT",
+              "topic_id": "MAT_01_001",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null,
+                "review_event_id": "22222222-2222-4222-8222-222222222222",
+                "trust_level": "SERVER_VERIFIED"
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 0,
+          "status": "UNKNOWN",
+          "basis": "LEGAL",
+          "reference_date": null,
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": null,
+          "evaluated_semantic_revision": null,
+          "evaluation_mode": null,
+          "decision": null,
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null
+        },
+        "grading": {
+          "strategy": "EXACT_OPTION",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [],
+          "rubric": null,
+          "engine": null,
+          "confirmation_policy": "AUTOMATIC_EXACT",
+          "policy_version": "objective-exact/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null,
+        "semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+        "semantic_hash_version": "question-v2-semantic-jcs-sha256-v1",
+        "grading_revision": "da421e16d4f44888c9d67f3019fddd579c381fffc4baeaf73f279eef51038b90",
+        "grading_hash_version": "question-v2-grading-jcs-sha256-v1"
+      }
+    },
+    {
+      "id": "blocked-obsolete",
+      "evaluation_date": "2026-11-15",
+      "exam_context": {
+        "owner_user_id": 123,
+        "exam_id": "bcb-2026",
+        "exam_revision": 1,
+        "component_id": "MAT",
+        "allowed_topic_ids": [
+          "MAT_01_001"
+        ],
+        "require_explicit_compatibility": false,
+        "compatibility_records": []
+      },
+      "trusted_review_context": {
+        "require_server_verified": false
+      },
+      "expected": {
+        "eligible": false,
+        "reason_codes": [
+          "VALIDITY_NOT_CONFIRMED",
+          "QUESTION_NOT_ELIGIBLE"
+        ],
+        "coverage_mode": null,
+        "is_borrowed_analogous": false
+      },
+      "question": {
+        "_id": {
+          "$oid": "000000000000000000000006"
+        },
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "1d26ad1e985ac0aedbb7e4b48ec9d03e7428b38b9c0dbde63bf5510fa6316f14",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Exemplo sintético: conforme a norma fictícia R-1 vigente, qual é o prazo, em dias, para a providência X?",
+        "question_type": "MULTIPLE_CHOICE",
+        "answers": [
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "correct_answer_indices": [
+          1
+        ],
+        "correct_answers": [
+          "4"
+        ],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-00000000006a",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000ce",
+              "subject_id": "MAT",
+              "topic_id": "MAT_01_001",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "OBSOLETE",
+          "basis": "LEGAL",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [
+            "LAW_REPEALED"
+          ],
+          "evaluated_content_revision": "1d26ad1e985ac0aedbb7e4b48ec9d03e7428b38b9c0dbde63bf5510fa6316f14",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [
+              {
+                "uri": "https://example.invalid/synthetic-repeal",
+                "title": "Referência fictícia, sem valor normativo",
+                "locator": "Fixture de teste",
+                "retrieved_at": "2026-11-02T15:00:00Z",
+                "sha256": null
+              }
+            ],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null
+        },
+        "grading": {
+          "strategy": "EXACT_OPTION",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [],
+          "rubric": null,
+          "engine": null,
+          "confirmation_policy": "AUTOMATIC_EXACT",
+          "policy_version": "objective-exact/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null
+      }
+    },
+    {
+      "id": "blocked-review-expired",
+      "evaluation_date": "2026-11-15",
+      "exam_context": {
+        "owner_user_id": 123,
+        "exam_id": "bcb-2026",
+        "exam_revision": 1,
+        "component_id": "MAT",
+        "allowed_topic_ids": [
+          "MAT_01_001"
+        ],
+        "require_explicit_compatibility": false,
+        "compatibility_records": []
+      },
+      "trusted_review_context": {
+        "require_server_verified": false
+      },
+      "expected": {
+        "eligible": false,
+        "reason_codes": [
+          "VALIDITY_REVIEW_EXPIRED",
+          "QUESTION_NOT_ELIGIBLE"
+        ],
+        "coverage_mode": null,
+        "is_borrowed_analogous": false
+      },
+      "question": {
+        "_id": {
+          "$oid": "000000000000000000000001"
+        },
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Exemplo sintético: quanto é 2 + 2?",
+        "question_type": "MULTIPLE_CHOICE",
+        "answers": [
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "correct_answer_indices": [
+          1
+        ],
+        "correct_answers": [
+          "4"
+        ],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000065",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "11111111-1111-4111-8111-111111111111",
+              "trust_level": "SERVER_VERIFIED"
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000c9",
+              "subject_id": "MAT",
+              "topic_id": "MAT_01_001",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null,
+                "review_event_id": "22222222-2222-4222-8222-222222222222",
+                "trust_level": "SERVER_VERIFIED"
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": "2026-11-10",
+          "reason_codes": [],
+          "evaluated_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null,
+            "review_event_id": "33333333-3333-4333-8333-333333333333",
+            "trust_level": "SERVER_VERIFIED"
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null,
+          "evaluated_semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+          "evaluation_mode": "SEMANTIC"
+        },
+        "grading": {
+          "strategy": "EXACT_OPTION",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [],
+          "rubric": null,
+          "engine": null,
+          "confirmation_policy": "AUTOMATIC_EXACT",
+          "policy_version": "objective-exact/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null,
+        "semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+        "semantic_hash_version": "question-v2-semantic-jcs-sha256-v1",
+        "grading_revision": "da421e16d4f44888c9d67f3019fddd579c381fffc4baeaf73f279eef51038b90",
+        "grading_hash_version": "question-v2-grading-jcs-sha256-v1"
+      }
+    },
+    {
+      "id": "blocked-open-ended",
+      "evaluation_date": "2026-11-15",
+      "exam_context": null,
+      "trusted_review_context": {
+        "require_server_verified": false
+      },
+      "expected": {
+        "eligible": false,
+        "reason_codes": [
+          "OPEN_ENDED_EXCLUDED_FROM_OBJECTIVE_PRACTICE",
+          "QUESTION_NOT_ELIGIBLE"
+        ],
+        "coverage_mode": null,
+        "is_borrowed_analogous": false
+      },
+      "question": {
+        "_id": {
+          "$oid": "000000000000000000000003"
+        },
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "3f830e8f6dc35d1f0852f529dbe742bedf6de4dc24f171a592b7a7af873b75d2",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Exemplo sintético: explique como a coesão contribui para a organização de um texto e apresente um exemplo.",
+        "question_type": "OPEN_ENDED",
+        "answers": [],
+        "correct_answer_indices": [],
+        "correct_answers": [],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000067",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "44444444-4444-4444-8444-444444444444",
+              "trust_level": "SERVER_VERIFIED"
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000cb",
+              "subject_id": "PORT",
+              "topic_id": "PORT_01_002",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null,
+                "review_event_id": "55555555-5555-4555-8555-555555555555",
+                "trust_level": "SERVER_VERIFIED"
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": "3f830e8f6dc35d1f0852f529dbe742bedf6de4dc24f171a592b7a7af873b75d2",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null,
+            "review_event_id": "66666666-6666-4666-8666-666666666666",
+            "trust_level": "SERVER_VERIFIED"
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null,
+          "evaluated_semantic_revision": "7d0974be9082c7bbb59b12b5f5e41a999437934eb85b1ac39e7a3b795c26b7fc",
+          "evaluation_mode": "SEMANTIC"
+        },
+        "grading": {
+          "strategy": "RUBRIC",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [
+            "A coesão estabelece relações entre partes do texto por mecanismos referenciais e sequenciais. Um pronome pode retomar um substantivo apresentado antes; formulações equivalentes são aceitas."
+          ],
+          "rubric": {
+            "revision": 1,
+            "criteria": [
+              {
+                "criterion_id": "CONCEPT",
+                "description": "Explicar as relações entre partes do texto sem reduzir coesão a repetição de palavras.",
+                "max_points": 50,
+                "essential": true
+              },
+              {
+                "criterion_id": "EXAMPLE",
+                "description": "Apresentar um exemplo pertinente de mecanismo coesivo.",
+                "max_points": 50,
+                "essential": false
+              }
+            ]
+          },
+          "engine": null,
+          "confirmation_policy": "HUMAN_REVIEW",
+          "policy_version": "open-rubric-human-review/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null,
+        "semantic_revision": "7d0974be9082c7bbb59b12b5f5e41a999437934eb85b1ac39e7a3b795c26b7fc",
+        "semantic_hash_version": "question-v2-semantic-jcs-sha256-v1",
+        "grading_revision": "8f7bc9f07e933d38b573a082ff462af93fe35a546ed8c5cd8ef6cffdbe0e571f",
+        "grading_hash_version": "question-v2-grading-jcs-sha256-v1"
+      }
+    },
+    {
+      "id": "blocked-compatibility-excluded",
+      "evaluation_date": "2026-11-15",
+      "exam_context": {
+        "owner_user_id": 123,
+        "exam_id": "bcb-2026",
+        "exam_revision": 1,
+        "component_id": "MAT",
+        "allowed_topic_ids": [
+          "MAT_01_001"
+        ],
+        "require_explicit_compatibility": false,
+        "compatibility_records": [
+          {
+            "_id": "77777777-7777-4777-8777-777777777777",
+            "schema_version": 1,
+            "owner_user_id": 123,
+            "exam_id": "bcb-2026",
+            "exam_revision": 1,
+            "component_id": "MAT",
+            "question_id": "000000000000000000000001",
+            "question_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+            "question_semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+            "catalog_version": 2,
+            "relation": "EXCLUDED",
+            "status": "CONFIRMED",
+            "matched_topic_ids": [],
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "123"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Conteúdo análogo explicitamente aprovado para treino complementar.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "88888888-8888-4888-8888-888888888888",
+              "trust_level": "SERVER_VERIFIED"
+            },
+            "revision": 1
+          }
+        ]
+      },
+      "trusted_review_context": {
+        "require_server_verified": false
+      },
+      "expected": {
+        "eligible": false,
+        "reason_codes": [
+          "EXAM_COMPATIBILITY_EXCLUDED",
+          "QUESTION_NOT_ELIGIBLE"
+        ],
+        "coverage_mode": null,
+        "is_borrowed_analogous": false
+      },
+      "question": {
+        "_id": {
+          "$oid": "000000000000000000000001"
+        },
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Exemplo sintético: quanto é 2 + 2?",
+        "question_type": "MULTIPLE_CHOICE",
+        "answers": [
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "correct_answer_indices": [
+          1
+        ],
+        "correct_answers": [
+          "4"
+        ],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000065",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "11111111-1111-4111-8111-111111111111",
+              "trust_level": "SERVER_VERIFIED"
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000c9",
+              "subject_id": "MAT",
+              "topic_id": "MAT_01_001",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null,
+                "review_event_id": "22222222-2222-4222-8222-222222222222",
+                "trust_level": "SERVER_VERIFIED"
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null,
+            "review_event_id": "33333333-3333-4333-8333-333333333333",
+            "trust_level": "SERVER_VERIFIED"
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null,
+          "evaluated_semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+          "evaluation_mode": "SEMANTIC"
+        },
+        "grading": {
+          "strategy": "EXACT_OPTION",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [],
+          "rubric": null,
+          "engine": null,
+          "confirmation_policy": "AUTOMATIC_EXACT",
+          "policy_version": "objective-exact/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null,
+        "semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+        "semantic_hash_version": "question-v2-semantic-jcs-sha256-v1",
+        "grading_revision": "da421e16d4f44888c9d67f3019fddd579c381fffc4baeaf73f279eef51038b90",
+        "grading_hash_version": "question-v2-grading-jcs-sha256-v1"
+      }
+    },
+    {
+      "id": "blocked-compatibility-missing",
+      "evaluation_date": "2026-11-15",
+      "exam_context": {
+        "owner_user_id": 123,
+        "exam_id": "bcb-2026",
+        "exam_revision": 1,
+        "component_id": "PORT",
+        "allowed_topic_ids": [
+          "PORT_01_001"
+        ],
+        "require_explicit_compatibility": false,
+        "compatibility_records": []
+      },
+      "trusted_review_context": {
+        "require_server_verified": false
+      },
+      "expected": {
+        "eligible": false,
+        "reason_codes": [
+          "EXAM_COMPATIBILITY_MISSING",
+          "QUESTION_NOT_ELIGIBLE"
+        ],
+        "coverage_mode": null,
+        "is_borrowed_analogous": false
+      },
+      "question": {
+        "_id": {
+          "$oid": "000000000000000000000001"
+        },
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Exemplo sintético: quanto é 2 + 2?",
+        "question_type": "MULTIPLE_CHOICE",
+        "answers": [
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "correct_answer_indices": [
+          1
+        ],
+        "correct_answers": [
+          "4"
+        ],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000065",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "11111111-1111-4111-8111-111111111111",
+              "trust_level": "SERVER_VERIFIED"
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000c9",
+              "subject_id": "MAT",
+              "topic_id": "MAT_01_001",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null,
+                "review_event_id": "22222222-2222-4222-8222-222222222222",
+                "trust_level": "SERVER_VERIFIED"
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null,
+            "review_event_id": "33333333-3333-4333-8333-333333333333",
+            "trust_level": "SERVER_VERIFIED"
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null,
+          "evaluated_semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+          "evaluation_mode": "SEMANTIC"
+        },
+        "grading": {
+          "strategy": "EXACT_OPTION",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [],
+          "rubric": null,
+          "engine": null,
+          "confirmation_policy": "AUTOMATIC_EXACT",
+          "policy_version": "objective-exact/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null,
+        "semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+        "semantic_hash_version": "question-v2-semantic-jcs-sha256-v1",
+        "grading_revision": "da421e16d4f44888c9d67f3019fddd579c381fffc4baeaf73f279eef51038b90",
+        "grading_hash_version": "question-v2-grading-jcs-sha256-v1"
+      }
+    },
+    {
+      "id": "blocked-unverified-legacy",
+      "evaluation_date": "2026-11-15",
+      "exam_context": {
+        "owner_user_id": 123,
+        "exam_id": "bcb-2026",
+        "exam_revision": 1,
+        "component_id": "MAT",
+        "allowed_topic_ids": [
+          "MAT_01_001"
+        ],
+        "require_explicit_compatibility": false,
+        "compatibility_records": []
+      },
+      "trusted_review_context": {
+        "require_server_verified": false
+      },
+      "expected": {
+        "eligible": false,
+        "reason_codes": [
+          "HUMAN_REVIEW_REQUIRED",
+          "QUESTION_NOT_ELIGIBLE"
+        ],
+        "coverage_mode": null,
+        "is_borrowed_analogous": false
+      },
+      "question": {
+        "_id": {
+          "$oid": "000000000000000000000001"
+        },
+        "schema_version": 2,
+        "revision": 1,
+        "content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+        "content_hash_version": "question-v2-jcs-sha256",
+        "status": "ACTIVE",
+        "question": "Exemplo sintético: quanto é 2 + 2?",
+        "question_type": "MULTIPLE_CHOICE",
+        "answers": [
+          "3",
+          "4",
+          "5",
+          "6",
+          "7"
+        ],
+        "correct_answer_indices": [
+          1
+        ],
+        "correct_answers": [
+          "4"
+        ],
+        "origins": [
+          {
+            "origin_id": "00000000-0000-0000-0000-000000000065",
+            "kind": "AUTHOR_CREATED",
+            "verification": "CONFIRMED",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": null,
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
+            "provenance": {
+              "actor": {
+                "type": "HUMAN",
+                "id": "synthetic-fixture-reviewer"
+              },
+              "method": "MANUAL_REVIEW",
+              "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+              "recorded_at": "2026-11-02T15:00:00Z",
+              "evidence": [],
+              "model": null,
+              "prompt_id": null,
+              "prompt_version": null,
+              "source_suggestion_id": null,
+              "review_event_id": "11111111-1111-4111-8111-111111111111",
+              "trust_level": "SERVER_VERIFIED"
+            }
+          }
+        ],
+        "classification": {
+          "revision": 1,
+          "catalog_version": 2,
+          "state": "CONFIRMED",
+          "links": [
+            {
+              "link_id": "00000000-0000-0000-0000-0000000000c9",
+              "subject_id": "MAT",
+              "topic_id": "MAT_01_001",
+              "role": "PRIMARY",
+              "coverage": "DIRECT",
+              "provenance": {
+                "actor": {
+                  "type": "HUMAN",
+                  "id": "synthetic-fixture-reviewer"
+                },
+                "method": "MANUAL_REVIEW",
+                "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+                "recorded_at": "2026-11-02T15:00:00Z",
+                "evidence": [],
+                "model": null,
+                "prompt_id": null,
+                "prompt_version": null,
+                "source_suggestion_id": null,
+                "review_event_id": "22222222-2222-4222-8222-222222222222",
+                "trust_level": "SERVER_VERIFIED"
+              }
+            }
+          ]
+        },
+        "validity": {
+          "revision": 1,
+          "status": "CURRENT",
+          "basis": "TIMELESS",
+          "reference_date": "2026-11-02",
+          "review_due_on": null,
+          "reason_codes": [],
+          "evaluated_content_revision": "b37c608a9c8362afa20792f7a0665996cfc25c6603fa34c63120766e05936e59",
+          "decision": {
+            "actor": {
+              "type": "HUMAN",
+              "id": "synthetic-fixture-reviewer"
+            },
+            "method": "MANUAL_REVIEW",
+            "rationale": "Exemplo sintético para validar contratos; não é uma decisão sobre o acervo real.",
+            "recorded_at": "2026-11-02T15:00:00Z",
+            "evidence": [],
+            "model": null,
+            "prompt_id": null,
+            "prompt_version": null,
+            "source_suggestion_id": null,
+            "review_event_id": null,
+            "trust_level": "UNVERIFIED_LEGACY"
+          },
+          "scope": "CURRENT_KNOWLEDGE",
+          "context_date": null,
+          "evaluated_semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+          "evaluation_mode": "SEMANTIC"
+        },
+        "grading": {
+          "strategy": "EXACT_OPTION",
+          "max_score": 100,
+          "pass_score": 60,
+          "expected_responses": [],
+          "rubric": null,
+          "engine": null,
+          "confirmation_policy": "AUTOMATIC_EXACT",
+          "policy_version": "objective-exact/1"
+        },
+        "explanation": null,
+        "contextualHint": [],
+        "mnemonico": null,
+        "semantic_revision": "4617715ff19d14bbd5ce6358a19185d9c6aec17df555d2e86ce24d34dc925ac3",
+        "semantic_hash_version": "question-v2-semantic-jcs-sha256-v1",
+        "grading_revision": "da421e16d4f44888c9d67f3019fddd579c381fffc4baeaf73f279eef51038b90",
+        "grading_hash_version": "question-v2-grading-jcs-sha256-v1"
+      }
+    }
+  ]
+}

@@ -10,12 +10,14 @@ fun questionSessionPreviewFixture(): QuestionDto = QuestionDto(
     id = "q-preview-1",
     question = "Qual é o prazo prescricional da pretensão punitiva?",
     questionType = QuestionType.MULTIPLE_CHOICE,
-    answers = listOf("2 anos", "5 anos", "10 anos", "Imprescritível"),
+    answers = listOf("2 anos", "5 anos", "10 anos", "15 anos", "Imprescritível"),
     correctAnswerIndices = listOf(1),
     disciplina = "Direito Administrativo",
     source = "Cebraspe",
     examYear = 2024,
-    level = "Média"
+    level = "Média",
+    canonicalSubjectId = "DIR_ADM",
+    canonicalTopicId = "DIR_ADM_01_001"
 )
 
 @Composable

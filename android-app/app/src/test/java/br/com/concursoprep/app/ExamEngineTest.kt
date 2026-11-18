@@ -452,4 +452,27 @@ class ExamEngineTest {
         assertTrue(br.com.concursoprep.app.domain.exam.ExamCatalog.allSubjects().size > br.com.concursoprep.app.domain.exam.ExamCatalog.subjectsForTrunk("engenharia").size)
     }
 
+    @org.junit.Test
+    fun questionHeaderMetaResolvesCanonicalSubjectAndTopicBreadcrumbWithoutDifficulty() {
+        val question = br.com.concursoprep.app.domain.model.QuestionDto(
+            id = "93439b5be942606722b541bc",
+            question = "Questão sobre movimentos na estrutura a termo",
+            answers = listOf("Certo", "Errado"),
+            correctAnswerIndices = listOf(0),
+            disciplina = "Disciplina Geral",
+            source = "Cebraspe",
+            examYear = 2024,
+            level = "Difícil",
+            canonicalSubjectId = "DIR_ADM",
+            canonicalTopicId = "DIR_ADM_01_001"
+        )
+        val meta = br.com.concursoprep.app.domain.exam.ExamCatalog.resolveQuestionHeaderMeta(question)
+        assertEquals("Direito Administrativo", meta.disciplineLabel)
+        assertEquals(
+            "Atos administrativos e licitações › Elementos e atributos dos atos administrativos",
+            meta.topicBreadcrumb
+        )
+        assertEquals("Direito Administrativo · Cebraspe · 2024", meta.disciplineAndSourceLine)
+        assertFalse(meta.disciplineAndSourceLine.contains("Difícil"))
+    }
 }

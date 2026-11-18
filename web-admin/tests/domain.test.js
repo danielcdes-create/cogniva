@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   parseQuestions,
   verifyReceipt,
+  buildImportCommitPayload,
   blankExam,
   newComponent,
   validateExamDraft,
@@ -132,5 +133,29 @@ test('legacy conversion leaves missing, ambiguous, or conflicting answer keys fo
   for(const raw of [{answers:['A','B']},{answers:['A','A'],correct_answers:['A']},{answers:['A','B'],correct_answers:['B'],correct_answer_indices:[0]},{answers:['A','B'],correct_answer_indices:[-1]},{answers:['A','B'],correct_answer_indices:[0,1]}]){
     const q=legacyQuestionDraft(raw,{catalog_version:2},'123','origin');assert.deepEqual(q.correct_answer_indices,[]);assert.deepEqual(q.correct_answers,[]);
   }
-  assert.deepEqual(legacyQuestionDraft({answers:['A','B'],correct_answer_indices:[1]},{catalog_version:2},'123','origin').correct_answer_indices,[1]);
+  const normalized=legacyQuestionDraft({answers:['A','B'],correct_answer_indices:[1]},{catalog_version:2},'123','origin');
+  assert.deepEqual(normalized.correct_answer_indices,[1]);
+  assert.equal(normalized.validity.evaluated_semantic_revision,null);
+  assert.equal(normalized.validity.evaluation_mode,null);
+});
+
+test('import commit payload forwards idempotency_key, payload_digest, and duplicate acknowledgement',()=>{
+  const cmd={operation_id:'op-1',expected_revision:0,dry_run:false,document:{_id:{$oid:'65f000000000000000000001'}}};
+  const preview={
+    ready:true,
+    idempotency_key:'batch-uuid-1',
+    payload_digest:'a'.repeat(64),
+    items:[{valid:true,command:cmd}],
+    duplicate_warnings:[{index:0,code:'POTENTIAL_DUPLICATE',kind:'EXACT_CONTENT',message:'Duplicidade detectada'}]
+  };
+  const body=buildImportCommitPayload(preview);
+  assert.deepEqual(body,{
+    reviewed:true,
+    idempotency_key:'batch-uuid-1',
+    payload_digest:'a'.repeat(64),
+    acknowledge_duplicates:true,
+    commands:[cmd]
+  });
+  const cleanBody=buildImportCommitPayload({ready:true,idempotency_key:'batch-uuid-2',payload_digest:'b'.repeat(64),items:[{valid:true,command:cmd}],duplicate_warnings:[]});
+  assert.equal(cleanBody.acknowledge_duplicates,undefined);
 });

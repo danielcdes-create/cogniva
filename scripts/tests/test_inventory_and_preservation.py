@@ -29,8 +29,18 @@ class InventoryTest(unittest.TestCase):
         opened = read(ROOT / "shared/examples/question-contracts/question-open-manual.json")
         self.assertEqual(inventory.classify_document(opened, self.catalog), "v2_confirmed")
         broken = read(ROOT / "shared/examples/question-contracts/question-multiple-choice.json")
-        broken["answers"] = ["A", "B"]
+        broken["answers"] = ["A", "B", "C", "D"]
         self.assertEqual(inventory.classify_document(broken, self.catalog), "invalid_ambiguous")
+        self.assertEqual(
+            inventory.classify_document(document(answers=["A", "B", "C", "D"]), self.catalog),
+            "invalid_ambiguous",
+        )
+        self.assertEqual(
+            inventory.classify_document(
+                document(answers=["Certo", "Errado"], correct_answers=["Certo"]), self.catalog
+            ),
+            "legacy_needs_migration",
+        )
 
     def test_each_state_is_distinct(self):
         confirmed = read(ROOT / "shared/examples/question-contracts/question-multiple-choice.json")

@@ -28,8 +28,12 @@ No **Cogniva `2.0.0`**, toda a taxonomia pedagógica e editorial está consolida
    - Desativar uma disciplina ou tópico utiliza `status: "DEPRECATED"`, removendo-o de novas associações sem apagar questões, classificações históricas ou evidências de estudo já registradas.
 2. **Separação Clara de Conceitos Próximos:**
    - Disciplinas como *Administração Financeira e Orçamentária (AFO)* e *Finanças Públicas*, ou *Contabilidade Geral* e *Contabilidade Pública*, mantêm identidades distintas, declarando interseções explícitas por meio de `relations` (`OVERLAPS_WITH`, `RELATED_TO`) sem transferir domínio automaticamente.
-3. **Ativação em Execução sem Recompilação:**
-   - Novas revisões (`catalog_version + 1`) podem ser propostas, validadas e ativadas pelo painel [`/admin/`](ADMIN-WEB.md), gravando snapshots imutáveis em `knowledge_catalog_versions` e atualizando `knowledge_catalog_head` com invalidação imediata do cache em memória no `cogniva-api`.
+3. **Hierarquia Estrita de 2 Níveis (`TOPIC → SUBTOPIC`):**
+   - Todo assunto raiz (`kind: "TOPIC"`, `parent_topic_id: null`) **deve possuir ao menos um subassunto filho** (`kind: "SUBTOPIC"`, `parent_topic_id: "<TOPIC_ID>"`). Tópicos de edital sem subdivisões explícitas devem ser modelados com um `TOPIC` pai e um `SUBTOPIC` folha correspondente, classificando-se as questões sempre no `SUBTOPIC` folha.
+   - A unicidade normalizada (NFKD) de `label` e `aliases` é verificada globalmente entre disciplinas, por `(subject_id, null)` entre `TOPIC`s raiz e por `(subject_id, parent_topic_id)` entre `SUBTOPIC`s irmãos.
+4. **Ativação em Execução sem Recompilação (Preservando o Baseline `v2`):**
+   - O arquivo [`shared/knowledge-catalog.json`](../shared/knowledge-catalog.json) (`catalog_version: 2`) permanece como raiz imutável da cadeia de ativação embutida no binário.
+   - Novas revisões em produção (`catalog_version + 1`: `v3`, `v4`, `v5`...) são propostas, validadas e ativadas pelo painel [`/admin/`](ADMIN-WEB.md) ou via [`scripts/cogniva_import.py`](../scripts/cogniva_import.py) (veja [`PACOTES-QUESTOES.md`](PACOTES-QUESTOES.md)), gravando snapshots imutáveis em `knowledge_catalog_versions` e atualizando `knowledge_catalog_head` com invalidação imediata do cache em memória no `cogniva-api`.
 
 ---
 

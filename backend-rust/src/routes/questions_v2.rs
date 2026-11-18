@@ -41,7 +41,8 @@ pub async fn import_commit(
     Extension(user): Extension<SessionUser>,
     Json(body): Json<crate::services::question_import::CommitRequest>,
 ) -> Result<Json<Value>, AppError> {
-    crate::services::question_import::commit(&state, user.user_id, body)
+    let reviewer = question_storage::ReviewerContext::from_session(user);
+    crate::services::question_import::commit_with_reviewer(&state, &reviewer, body)
         .await
         .map(Json)
 }
@@ -61,7 +62,8 @@ pub async fn save(
     Extension(user): Extension<SessionUser>,
     Json(r): Json<question_storage::SaveRequest>,
 ) -> Result<Json<Value>, AppError> {
-    question_storage::save(&state.db, user.user_id, r)
+    let reviewer = question_storage::ReviewerContext::from_session(user);
+    question_storage::save_with_reviewer(&state.db, &reviewer, r)
         .await
         .map(Json)
 }

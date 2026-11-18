@@ -349,14 +349,16 @@ class RepositoryContractTest {
         val store=Store();val q=question().copy(explanation="ANSWER_REFERENCE_DO_NOT_REVEAL")
         store.questions[q.id]=QuestionCacheMapping.toEntity(q,json)
         val repo=store.repository()
-        for(kind in listOf("contextual-hint","child-friendly-pre"))assertFalse(repo.requestAiTutor(q.id,kind).contains("ANSWER_REFERENCE_DO_NOT_REVEAL"))
-        assertTrue(repo.requestAiTutor(q.id,"explanation").contains("ANSWER_REFERENCE_DO_NOT_REVEAL"))
+        for(kind in listOf("contextual-hint","child-friendly-pre","dr-sincero"))assertFalse(repo.requestAiTutor(q.id,kind).contains("ANSWER_REFERENCE_DO_NOT_REVEAL"))
+        for(kind in listOf("explanation","extra-concepts","child-friendly-post"))assertTrue(repo.requestAiTutor(q.id,kind).contains("ANSWER_REFERENCE_DO_NOT_REVEAL"))
         val backendReason="Erro ao consultar provedor de IA: xAI indisponível (HTTP 403): limite de créditos atingido"
         val body="""{"error":true,"message":"$backendReason"}"""
         val httpRepo=store.repository(aiTutor={_,_,_->throw retrofit2.HttpException(retrofit2.Response.error<AiAssistResponseDto>(502,body.toResponseBody("application/json".toMediaType())))})
-        val hintError=httpRepo.requestAiTutor(q.id,"contextual-hint")
-        assertTrue(hintError.contains(backendReason))
-        assertFalse(hintError.contains("ANSWER_REFERENCE_DO_NOT_REVEAL"))
+        for(kind in listOf("contextual-hint","child-friendly-pre","dr-sincero")) {
+            val preError=httpRepo.requestAiTutor(q.id,kind)
+            assertTrue(preError.contains(backendReason))
+            assertFalse(preError.contains("ANSWER_REFERENCE_DO_NOT_REVEAL"))
+        }
         val explanationError=httpRepo.requestAiTutor(q.id,"explanation")
         assertTrue(explanationError.contains(backendReason))
         assertTrue(explanationError.contains("ANSWER_REFERENCE_DO_NOT_REVEAL"))
@@ -367,7 +369,7 @@ class RepositoryContractTest {
         for(status in listOf(403,429,502,503)) {
             val reason="Motivo do servidor $status"
             val repo=store.repository(aiTutor={_,_,_->throw retrofit2.HttpException(retrofit2.Response.error<AiAssistResponseDto>(status,"""{"message":"$reason"}""".toResponseBody("application/json".toMediaType())))})
-            for(kind in listOf("contextual-hint","child-friendly-pre")) {
+            for(kind in listOf("contextual-hint","child-friendly-pre","dr-sincero")) {
                 val message=repo.requestAiTutor(q.id,kind);assertTrue(message.contains(reason));assertFalse(message.contains(q.explanation!!));assertFalse(message.contains("quando houver conexão"))
             }
         }
@@ -375,7 +377,7 @@ class RepositoryContractTest {
         assertTrue(store.repository(aiTutor={_,_,_->throw IOException()}).requestAiTutor(noCached.id,"explanation").contains("conexão"))
         val processing=store.repository(aiTutor={_,_,_->throw IllegalStateException()})
         assertTrue(processing.requestAiTutor(noCached.id,"explanation").contains("processar"));assertFalse(processing.requestAiTutor(noCached.id,"explanation").contains("conexão"))
-        for(kind in listOf("contextual-hint","child-friendly-pre"))assertFalse(processing.requestAiTutor(q.id,kind).contains(q.explanation!!))
+        for(kind in listOf("contextual-hint","child-friendly-pre","dr-sincero"))assertFalse(processing.requestAiTutor(q.id,kind).contains(q.explanation!!))
         for(body in listOf("", "<html>Proxy error</html>", "{}", """{"message":"   "}""", """{"message":null}""")) {
             val repo=store.repository(aiTutor={_,_,_->throw retrofit2.HttpException(retrofit2.Response.error<AiAssistResponseDto>(502,body.toResponseBody("application/json".toMediaType())))})
             assertTrue(repo.requestAiTutor(noCached.id,"explanation").contains("HTTP 502"))

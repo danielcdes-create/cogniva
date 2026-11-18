@@ -4,7 +4,7 @@ Plataforma de estudo de alta performance para concursos públicos, composta por 
 
 ---
 
-## 🚀 Versão Atual: `2.0.1` (`build 26`)
+## 🚀 Versão Atual: `2.1.0` (`build 27`)
 
 - **Contrato de Domínio:** `contract_version: 3` ([`shared/domain-contracts.json`](shared/domain-contracts.json)) e catálogo canônico unificado `catalog_version: 2` ([`shared/knowledge-catalog.json`](shared/knowledge-catalog.json)).
 - **Autenticação Nativa e LGPD (Art. 18):** Modo convidado imediato + contas nativas Cogniva com e-mail, senha `Argon2id`, sessões revogáveis e exclusão física imediata de dados pessoais (`DELETE /api/v1/auth/account` / app Android) preservando 100% do acervo compartilhado ([`PRIVACY.md`](PRIVACY.md)).
@@ -26,7 +26,7 @@ Toda a documentação técnica e operacional ativa está centralizada em [`docs/
 - **[Estrutura de Estudos](docs/ESTRUTURA-ESTUDOS.md):** Relações entre troncos, templates globais, grades pessoais, componentes, disciplinas, assuntos, subassuntos e questões.
 - **[Catálogo Compartilhado de Conhecimentos](docs/CATALOGO-CONHECIMENTOS.md):** Regras normativas de [`shared/knowledge-catalog.json`](shared/knowledge-catalog.json) e [`shared/exam-templates.json`](shared/exam-templates.json). Tabela completa em [`docs/catalogo/CONHECIMENTOS.md`](docs/catalogo/CONHECIMENTOS.md).
 - **[Contratos e Schema de Questões v2](docs/SCHEMA-QUESTOES-V2.md):** Especificação 100% V2, hash canônico JCS/SHA-256 (RFC 8785), validação estrita de URIs `http(s)://`, validade temporal, modo preparatório de discursivas (`OPEN_ENDED`) e compatibilidade por edital.
-- **[Inserção de Questões](docs/INSERCAO-QUESTOES.md):** Cadastro individual e em lote (JSON/JSONL) no `/admin/` e no Android, recibos idempotentes e estruturação assistida por IA.
+- **[Inserção de Questões](docs/INSERCAO-QUESTOES.md) & [Pacotes Prontos](docs/PACOTES-QUESTOES.md):** Cadastro individual e em lote (JSON/JSONL) no `/admin/`, no Android e via `scripts/cogniva_import.py`, recibos idempotentes e guia passo a passo para modelar `Disciplina → Assunto → Subassunto`.
 - **[Integração com IA (xAI)](docs/IA-XAI.md):** Governança via `XAI_MODEL`, delimitação XML contra injeção de prompt, privacidade de cache para notas pessoais, orçamento diário em `UTC-3` e estorno automático em falhas.
 - **[Lições Aprendidas — Pipeline OTA de APK](docs/LICAO-APRENDIDA-OTA-APK.md):** Invariantes de entrega binária sem recompressão gzip intermediária, validação SHA-256 + tamanho no instalador e checklist pós-promoção.
 - **Guias de Módulos:** [`backend-rust/README.md`](backend-rust/README.md) e [`android-app/README.md`](android-app/README.md).

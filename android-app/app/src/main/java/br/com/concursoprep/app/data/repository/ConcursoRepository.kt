@@ -764,17 +764,18 @@ class ConcursoRepository(
     }
 
     suspend fun requestAiTutor(questionId: String, kind: String, hintIndex: Int? = null): String {
+        val isPreAnswer = kind in setOf("contextual-hint", "child-friendly-pre", "dr-sincero")
         return try { auth?.ensureSession(api, ownerUserId); api.requestAiTutor(questionId, kind, hintIndex).contentMarkdown }
         catch (e: CancellationException) { throw e } catch (e: retrofit2.HttpException) {
             val detail = e.backendMessage()
             val reason = detail ?: "Serviço de IA indisponível no momento (HTTP ${e.code()})."
-            if (kind in listOf("contextual-hint", "child-friendly-pre")) "Tutor indisponível ($reason).\n\nA dica não foi gerada; sua resposta continua sem interferência."
+            if (isPreAnswer) "Tutor indisponível ($reason).\n\nA ajuda pré-resposta não foi gerada; sua resposta continua sem interferência."
             else dao.findQuestionById(questionId)?.explanation?.let { "Comentário já disponível ($reason):\n\n$it" } ?: "Tutor indisponível: $reason"
         } catch (_: java.io.IOException) {
-            if (kind in listOf("contextual-hint", "child-friendly-pre")) "Tutor indisponível. A dica não foi gerada; sua resposta continua sem interferência."
+            if (isPreAnswer) "Tutor indisponível. A ajuda pré-resposta não foi gerada; sua resposta continua sem interferência."
             else dao.findQuestionById(questionId)?.explanation?.let { "Comentário já disponível (tutor indisponível):\n\n$it" } ?: "Tutor indisponível. Tente novamente quando houver conexão."
         } catch (_: Exception) {
-            if (kind in listOf("contextual-hint", "child-friendly-pre")) "Tutor indisponível. Não foi possível processar a dica; sua resposta continua sem interferência."
+            if (isPreAnswer) "Tutor indisponível. Não foi possível processar a ajuda pré-resposta; sua resposta continua sem interferência."
             else dao.findQuestionById(questionId)?.explanation?.let { "Comentário já disponível (tutor indisponível):\n\n$it" } ?: "Tutor indisponível. Não foi possível processar a resposta do serviço. Tente novamente."
         }
     }

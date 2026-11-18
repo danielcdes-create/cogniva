@@ -94,6 +94,24 @@ export function verifyReceipt(preview, result) {
   return result;
 }
 
+export function buildImportCommitPayload(preview, acknowledgeDuplicates = false) {
+  if (!preview || !Array.isArray(preview.items)) throw new Error('Prévia de importação ausente.');
+  const body = {
+    reviewed: true,
+    commands: preview.items.map(item => item.command)
+  };
+  if (typeof preview.idempotency_key === 'string' && preview.idempotency_key) {
+    body.idempotency_key = preview.idempotency_key;
+  }
+  if (typeof preview.payload_digest === 'string' && preview.payload_digest) {
+    body.payload_digest = preview.payload_digest;
+  }
+  if (acknowledgeDuplicates || (Array.isArray(preview.duplicate_warnings) && preview.duplicate_warnings.length > 0)) {
+    body.acknowledge_duplicates = true;
+  }
+  return body;
+}
+
 export function blankExam(id, trunk = 'fiscal') {
   return {_id:id,revision:0,title:'',short_name:'',institution:'',role:'',trunk_slug:trunk,status:'RUMOR_PREVISTO',exam_boards:[],target_date:{type:'UNDEFINED'},historical_cutoff_score:0,wrong_answer_penalty:0,is_active_in_ladder:true,ladder_priority:1,subjects:[],sync_status:'SYNCED'};
 }
@@ -276,7 +294,7 @@ export function legacyQuestionDraft(raw,catalog,actor,originId){
   Object.assign(q,{schema_version:2,revision:1,content_hash_version:'question-v2-jcs-sha256',content_revision:'0'.repeat(64),status:raw.status==='ARCHIVED'?'ARCHIVED':'ACTIVE',question:typeof raw.question==='string'?raw.question:'',question_type:kind,answers:kind==='OPEN_ENDED'?[]:answers,correct_answer_indices:kind==='OPEN_ENDED'?[]:indices,correct_answers:kind==='OPEN_ENDED'?[]:indices.map(index=>answers[index]),
     origins:[{origin_id:originId,kind:'LEGACY_IMPORT',verification:'PENDING',source_exam_code:null,institution:null,organizer:null,exam_year:null,question_number:null,source_reference:null,provenance:manualProvenance(actor,'Conversão explícita de registro para o contrato v2, sujeita à conferência humana.')}],
     classification:{revision:0,catalog_version:catalogVersion,state:'UNCLASSIFIED',links:[]},canonical_subject_id:null,canonical_topic_id:null,
-    validity:{revision:0,status:'UNKNOWN',basis:'FACTUAL',reference_date:null,review_due_on:null,reason_codes:[],evaluated_content_revision:null,decision:null,scope:'CURRENT_KNOWLEDGE',context_date:null},
+    validity:{revision:0,status:'UNKNOWN',basis:'FACTUAL',reference_date:null,review_due_on:null,reason_codes:[],evaluated_content_revision:null,evaluated_semantic_revision:null,evaluation_mode:null,decision:null,scope:'CURRENT_KNOWLEDGE',context_date:null},
     grading:kind==='OPEN_ENDED'?(raw.grading || null):{strategy:'EXACT_OPTION',max_score:100,pass_score:60,expected_responses:[],rubric:null,engine:null,confirmation_policy:'AUTOMATIC_EXACT',policy_version:'objective-exact/1'}});
   delete q.schema_outbox;
   return q;

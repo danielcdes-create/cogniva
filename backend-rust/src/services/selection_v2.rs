@@ -105,7 +105,43 @@ fn apply_anti_repetition_tiers(
     selected
 }
 
-/// Isola reportes abertos por `user_id` (um reporte de um aluno nunca derruba a questão para toda a base).
+fn collect_server_verified_review_ids(doc: &Document, out: &mut Vec<String>) {
+    if let Ok(origins) = doc.get_array("origins") {
+        for o in origins.iter().filter_map(|v| v.as_document()) {
+            if let Ok(p) = o.get_document("provenance") {
+                if p.get_str("trust_level").ok() == Some("SERVER_VERIFIED") {
+                    if let Ok(id) = p.get_str("review_event_id") {
+                        out.push(id.to_string());
+                    }
+                }
+            }
+        }
+    }
+    if let Ok(cls) = doc.get_document("classification") {
+        if let Ok(links) = cls.get_array("links") {
+            for l in links.iter().filter_map(|v| v.as_document()) {
+                if let Ok(p) = l.get_document("provenance") {
+                    if p.get_str("trust_level").ok() == Some("SERVER_VERIFIED") {
+                        if let Ok(id) = p.get_str("review_event_id") {
+                            out.push(id.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if let Ok(val) = doc.get_document("validity") {
+        if let Ok(dec) = val.get_document("decision") {
+            if dec.get_str("trust_level").ok() == Some("SERVER_VERIFIED") {
+                if let Ok(id) = dec.get_str("review_event_id") {
+                    out.push(id.to_string());
+                }
+            }
+        }
+    }
+}
+
+/// Isola reportes abertos por `user_id` e aplica a política centralizada de elegibilidade normativa (Sec. 7).
 pub(crate) async fn pool(
     state: &AppState,
     user_id: i64,
@@ -114,9 +150,10 @@ pub(crate) async fn pool(
 ) -> Result<Vec<QuestionDocument>, AppError> {
     let mut matchers = vec![
         crate::services::question_compatibility::canonical_filter(filter),
-        doc! { "validity.status": { "$nin": ["OBSOLETE", "UNDER_REVIEW"] } },
-        doc! { "question_type": { "$ne": "OPEN_ENDED" } },
-        doc! { "status": { "$ne": "ARCHIVED" } },
+        doc! { "validity.status": "CURRENT" },
+        doc! { "classification.state": "CONFIRMED" },
+        doc! { "question_type": { "$in": ["MULTIPLE_CHOICE", "TRUE_FALSE"] } },
+        doc! { "status": "ACTIVE" },
     ];
     let mut reports = state
         .db
@@ -137,14 +174,56 @@ pub(crate) async fn pool(
         matchers.push(doc! { "_id": { "$nin": excluded } });
     }
     let fetch_cap = limit.clamp(64, 2500) as i64;
-    let mut cursor = state
+    let raw_docs: Vec<Document> = state
         .db
         .collection::<Document>("todasQuestoes")
         .find(doc! { "$and": matchers })
         .limit(fetch_cap)
+        .await?
+        .try_collect()
         .await?;
+
+    let mut candidate_rev_ids = Vec::new();
+    for raw in &raw_docs {
+        collect_server_verified_review_ids(raw, &mut candidate_rev_ids);
+    }
+    candidate_rev_ids.sort();
+    candidate_rev_ids.dedup();
+
+    let mut verified_review_ids = HashSet::new();
+    if !candidate_rev_ids.is_empty() {
+        let mut rev_cursor = state
+            .db
+            .collection::<Document>("question_review_events")
+            .find(doc! { "_id": { "$in": &candidate_rev_ids } })
+            .projection(doc! { "_id": 1 })
+            .await?;
+        while let Some(rev_doc) = rev_cursor.try_next().await? {
+            if let Ok(id) = rev_doc.get_str("_id") {
+                verified_review_ids.insert(id.to_string());
+            }
+        }
+    }
+    let trust_ctx = crate::services::question_eligibility::TrustedReviewContext {
+        require_server_verified: false,
+        verified_review_event_ids: Some(verified_review_ids),
+    };
+    let catalog = crate::services::question_contracts::catalog_ref();
+    let eval_date = study_today();
+
     let mut result = Vec::new();
-    while let Some(raw) = cursor.try_next().await? {
+    for raw in raw_docs {
+        let elig = crate::services::question_eligibility::evaluate_bson_question_for_practice(
+            &raw,
+            &catalog,
+            None,
+            eval_date,
+            &trust_ctx,
+            crate::services::question_eligibility::EligibilityMode::StandardObjective,
+        );
+        if !elig.eligible {
+            continue;
+        }
         match crate::services::question_compatibility::decode(raw) {
             Ok(q) if q.answer_indices().is_ok() => result.push(q),
             _ => tracing::warn!(
@@ -223,40 +302,39 @@ pub async fn generate(
             .filter(|t| t.diff_status != CanonicalTopicStatus::Arquivado)
             .map(|t| t.canonical_topic_id.clone())
             .collect();
-        let mut subjects: Vec<_> = exam
-            .subjects
-            .iter()
-            .filter(|s| {
-                s.topics
-                    .iter()
-                    .any(|t| t.diff_status != CanonicalTopicStatus::Arquivado)
-            })
-            .map(|s| s.display_name.clone())
-            .collect();
-        let catalog = canonical_subjects();
-        for subject in exam.subjects.iter().filter(|s| {
-            s.topics
+        let mut or_clauses = vec![doc! { "canonical_topic_id": { "$in": topics } }];
+        if req.mode != QuizMode::Simulado {
+            let active_comp_ids: Vec<String> = exam
+                .subjects
                 .iter()
-                .any(|t| t.diff_status != CanonicalTopicStatus::Arquivado)
-        }) {
-            if let Some(known) = catalog
-                .iter()
-                .find(|s| s.canonical_subject_id == subject.canonical_subject_id)
-            {
-                subjects.extend(known.aliases.clone());
-                subjects.push(known.name.clone());
+                .map(|s| s.local_subject_id.clone())
+                .collect();
+            let mut compat_cursor = state
+                .db
+                .collection::<Document>("question_exam_compatibility")
+                .find(doc! {
+                    "owner_user_id": req.user_id,
+                    "exam_id": &exam.id,
+                    "exam_revision": exam.revision,
+                    "component_id": { "$in": active_comp_ids },
+                    "status": "CONFIRMED",
+                    "relation": { "$in": ["DIRECT", "ANALOGOUS"] }
+                })
+                .projection(doc! { "question_id": 1 })
+                .await?;
+            let mut compat_oids = Vec::new();
+            while let Some(c_row) = compat_cursor.try_next().await? {
+                if let Ok(qid_str) = c_row.get_str("question_id") {
+                    if let Ok(oid) = ObjectId::parse_str(qid_str) {
+                        compat_oids.push(oid);
+                    }
+                }
+            }
+            if !compat_oids.is_empty() {
+                or_clauses.push(doc! { "_id": { "$in": compat_oids } });
             }
         }
-        subjects.sort();
-        subjects.dedup();
-        // Migrated questions with normalized `disciplina` remain playable in Discipline/Free study until topic V2 curation completes.
-        filter.insert(
-            "$or",
-            vec![
-                doc! { "canonical_topic_id": { "$in": topics } },
-                doc! { "canonical_topic_id": bson::Bson::Null, "disciplina": { "$in": subjects } },
-            ],
-        );
+        filter.insert("$or", or_clauses);
     }
 
     if let Some(disc) = req.disciplina.as_ref().filter(|d| !d.is_empty()) {
@@ -274,23 +352,7 @@ pub async fn generate(
                 || s.aliases.iter().any(|a| a == trimmed || a == base)
         });
         if let Some(subject) = known {
-            let mut labels = subject.aliases;
-            labels.push(subject.name);
-            if base != trimmed {
-                labels.push(trimmed.to_string());
-                labels.push(base.to_string());
-            }
-            labels.sort();
-            labels.dedup();
-            filter.insert(
-                "$and",
-                vec![doc! {
-                    "$or": [
-                        { "canonical_subject_id": subject.canonical_subject_id },
-                        { "canonical_topic_id": bson::Bson::Null, "disciplina": { "$in": labels } }
-                    ]
-                }],
-            );
+            filter.insert("canonical_subject_id", subject.canonical_subject_id);
         } else if base != trimmed {
             filter.insert("disciplina", doc! { "$in": [trimmed, base] });
         } else {
@@ -309,6 +371,7 @@ pub async fn generate(
     }
 
     let mut components = HashMap::new();
+    let mut analogous_ids = HashSet::new();
     let questions = match req.mode {
         QuizMode::Shuffle => {
             let candidates = pool(state, req.user_id, filter, 2000).await?;
@@ -448,10 +511,18 @@ pub async fn generate(
                         })
                         .cloned()
                         .collect();
-                    for q in
-                        crate::services::practice_context::filter(state, req.user_id, exam, None, scoped)
-                            .await?
-                    {
+                    let (filtered, borrowed) =
+                        crate::services::practice_context::filter_with_mode(
+                            state,
+                            req.user_id,
+                            exam,
+                            None,
+                            scoped,
+                            true,
+                        )
+                        .await?;
+                    analogous_ids.extend(borrowed);
+                    for q in filtered {
                         allowed.insert(q.id);
                     }
                 }
@@ -554,9 +625,16 @@ pub async fn generate(
 
     let questions = if req.mode != QuizMode::Simulado {
         if let Some(exam) = exam {
-            let mut q =
-                crate::services::practice_context::filter(state, req.user_id, exam, None, questions)
-                    .await?;
+            let (mut q, borrowed) = crate::services::practice_context::filter_with_mode(
+                state,
+                req.user_id,
+                exam,
+                None,
+                questions,
+                true,
+            )
+            .await?;
+            analogous_ids.extend(borrowed);
             q.truncate(quantity);
             q
         } else {
@@ -572,6 +650,9 @@ pub async fn generate(
             .component_id
             .clone()
             .or_else(|| components.get(&q.id).cloned());
+        if analogous_ids.contains(&q.id) {
+            q.is_borrowed_analogous = true;
+        }
     }
     Ok(result)
 }

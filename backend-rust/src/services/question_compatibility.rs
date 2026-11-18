@@ -14,7 +14,7 @@ pub fn canonical_filter(filter: Document) -> Document {
             let mut link = doc! { "role": "PRIMARY", "coverage": "DIRECT" };
             link.insert(leaf, value);
             clauses.push(doc! {
-                "classification.state": { "$in": ["CONFIRMED", "PARTIAL"] },
+                "classification.state": "CONFIRMED",
                 "classification.links": { "$elemMatch": link }
             });
         } else if ["$and", "$or", "$nor"].contains(&key.as_str()) {

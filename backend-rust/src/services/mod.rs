@@ -9,6 +9,7 @@ pub mod knowledge;
 pub mod practice_context;
 pub mod question_compatibility;
 pub mod question_contracts;
+pub mod question_eligibility;
 pub mod question_import;
 pub mod question_storage;
 pub mod quiz_selector;

@@ -267,6 +267,62 @@ pub fn content_revision_of(raw: &Document) -> Result<String, AppError> {
     Ok(computed)
 }
 
+pub fn semantic_revision_of(raw: &Document) -> Result<String, AppError> {
+    let view = content_view(raw)?;
+    let computed = contracts::semantic_hash(&view)?;
+    if let Ok(stored) = raw.get_str("semantic_revision") {
+        if stored != computed {
+            return Err(conflict(
+                "Assinatura semântica divergente do enunciado atual",
+            ));
+        }
+    }
+    Ok(computed)
+}
+
+pub fn grading_revision_of(raw: &Document) -> Result<String, AppError> {
+    let view = content_view(raw)?;
+    let computed = contracts::grading_hash(&view)?;
+    if let Ok(stored) = raw.get_str("grading_revision") {
+        if stored != computed {
+            return Err(conflict(
+                "Assinatura de correção divergente da rubrica atual",
+            ));
+        }
+    }
+    Ok(computed)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_custom_review_event(
+    seed: &str,
+    user: i64,
+    action: &str,
+    decision: &str,
+    resource_id: &str,
+    resource_revision: i64,
+    content_revision: &str,
+    semantic_revision: &str,
+) -> Result<(String, Document), AppError> {
+    let review_event_id = question_storage::deterministic_review_event_uuid(seed);
+    let ev_json = json!({
+        "_id": review_event_id,
+        "schema_version": 1,
+        "review_event_id": review_event_id,
+        "principal_id": user.to_string(),
+        "actor_user_id": user,
+        "action": action,
+        "resource_id": resource_id,
+        "resource_revision": resource_revision.max(1),
+        "content_revision": content_revision,
+        "semantic_revision": semantic_revision,
+        "reviewed_at": now_z(),
+        "decision": decision
+    });
+    contracts::shape("review_event", &ev_json)?;
+    Ok((review_event_id, as_doc(ev_json)?))
+}
+
 fn classification_revision(raw: &Document) -> i64 {
     raw.get_document("classification")
         .ok()
@@ -406,6 +462,7 @@ fn build_suggestion(
     id: &str,
     question_id: &str,
     content: &str,
+    semantic: &str,
     class_rev: i64,
     links: &Value,
     model: &str,
@@ -415,6 +472,7 @@ fn build_suggestion(
         "schema_version": 1,
         "question_id": question_id,
         "question_content_revision": content,
+        "question_semantic_revision": semantic,
         "expected_classification_revision": class_rev,
         "catalog_version": contracts::catalog_ref()["catalog_version"].as_i64().unwrap(),
         "status": "PENDING",
@@ -428,7 +486,9 @@ fn build_suggestion(
             "model": model,
             "prompt_id": PROMPT_ID,
             "prompt_version": generation_version(),
-            "source_suggestion_id": null
+            "source_suggestion_id": null,
+            "review_event_id": null,
+            "trust_level": null
         },
         "resolution": null
     });
@@ -772,10 +832,12 @@ pub(crate) async fn generate_one(
             return Err(error);
         }
     };
+    let semantic = semantic_revision_of(&raw)?;
     let mut suggestion = build_suggestion(
         &suggestion_key,
         question_id,
         &content,
+        &semantic,
         class_rev,
         &parsed,
         &model,
@@ -833,7 +895,12 @@ pub(crate) async fn generate_one(
     Ok(json!({"status":"proposed","provider_call":true,"suggestion": suggestion}))
 }
 
-fn human_provenance(user: i64, suggestion_id: &str, reason: &str) -> Value {
+fn human_provenance(
+    user: i64,
+    suggestion_id: Option<&str>,
+    reason: &str,
+    review_event_id: &str,
+) -> Value {
     json!({
         "actor": {"type":"HUMAN","id": user.to_string()},
         "method": "MANUAL_REVIEW",
@@ -843,7 +910,9 @@ fn human_provenance(user: i64, suggestion_id: &str, reason: &str) -> Value {
         "model": null,
         "prompt_id": null,
         "prompt_version": null,
-        "source_suggestion_id": suggestion_id
+        "source_suggestion_id": suggestion_id,
+        "review_event_id": review_event_id,
+        "trust_level": "SERVER_VERIFIED"
     })
 }
 
@@ -852,6 +921,7 @@ fn applied_links(
     user: i64,
     suggestion_id: &str,
     reason: &str,
+    review_event_id: &str,
 ) -> Result<Vec<Value>, AppError> {
     let mut links = Vec::new();
     for link in source
@@ -864,7 +934,7 @@ fn applied_links(
             "topic_id": link["topic_id"],
             "role": link["role"],
             "coverage": link["coverage"],
-            "provenance": human_provenance(user, suggestion_id, reason)
+            "provenance": human_provenance(user, Some(suggestion_id), reason, review_event_id)
         }));
     }
     let wrapped =
@@ -876,9 +946,27 @@ fn applied_links(
 }
 
 pub async fn decide(db: &Database, user: i64, request: &Value) -> Result<Value, AppError> {
-    for forbidden in ["reviewer_id", "actor", "reviewer", "user_id"] {
+    if user <= 0 {
+        return Err(AppError::forbidden_code(
+            "REVIEW_ACTOR_UNTRUSTED",
+            None::<String>,
+            "Decisão de classificação exige sessão autenticada válida no servidor",
+        ));
+    }
+    for forbidden in [
+        "reviewer_id",
+        "actor",
+        "reviewer",
+        "user_id",
+        "review_event_id",
+        "trust_level",
+    ] {
         if request.get(forbidden).is_some() {
-            return Err(bad("O revisor é atribuído pela sessão, não pelo corpo"));
+            return Err(AppError::bad_request_code(
+                "REVIEW_ACTOR_UNTRUSTED",
+                Some(forbidden),
+                "O revisor e a prova de revisão são atribuídos pelo servidor, não pelo corpo",
+            ));
         }
     }
     let operation = request["operation_id"]
@@ -1021,13 +1109,22 @@ pub async fn decide(db: &Database, user: i64, request: &Value) -> Result<Value, 
     question_storage::flush_audit(db, oid).await?;
     let (_, raw) = load_question(db, &question_id).await?;
     let content = content_revision_of(&raw)?;
+    let semantic = semantic_revision_of(&raw)?;
+    let grading = grading_revision_of(&raw)?;
     let class_rev = classification_revision(&raw);
     let catalog_version = contracts::catalog_ref()["catalog_version"]
         .as_i64()
         .unwrap();
+    let suggestion_matches_question = if let Some(s_sem) =
+        suggestion_json.get("question_semantic_revision").and_then(Value::as_str)
+    {
+        s_sem == semantic
+    } else {
+        suggestion_json["question_content_revision"].as_str() == Some(content.as_str())
+    };
     let current = content == expected_content
         && class_rev == expected_class
-        && suggestion_json["question_content_revision"].as_str() == Some(content.as_str())
+        && suggestion_matches_question
         && suggestion_json["expected_classification_revision"].as_i64() == Some(class_rev)
         && suggestion_json["catalog_version"].as_i64() == Some(catalog_version);
     if !current {
@@ -1060,14 +1157,39 @@ pub async fn decide(db: &Database, user: i64, request: &Value) -> Result<Value, 
         return Ok(receipt);
     }
     if action == "reject" {
-        let resolution = json!({"decided_at": now_z(), "actor": {"type":"HUMAN","id": user.to_string()}, "reason": reason, "resulting_classification_revision": null});
+        let (rej_rev_id, rej_ev_doc) = build_custom_review_event(
+            &format!("suggestion-reject:{user}:{operation}"),
+            user,
+            "SUGGESTION_REJECT",
+            "REJECTED",
+            &suggestion_id,
+            document_revision(&raw).unwrap_or(1).max(1),
+            &content,
+            &semantic,
+        )?;
+        question_storage::persist_review_event_idempotent(db, None, &rej_ev_doc).await?;
+        let resolution = json!({
+            "decided_at": now_z(),
+            "actor": {"type":"HUMAN","id": user.to_string()},
+            "reason": reason,
+            "resulting_classification_revision": null,
+            "review_event_id": rej_rev_id
+        });
         suggestions
             .update_one(
                 doc! {"_id": &suggestion_id, "status": "PENDING"},
                 doc! {"$set": {"status": "REJECTED", "resolution": as_doc(resolution)?}},
             )
             .await?;
-        let receipt = json!({"status":"rejected","operation_id":operation,"suggestion_id":suggestion_id,"classification_revision":class_rev,"reviewer_id":user.to_string(),"classification_changed":false});
+        let receipt = json!({
+            "status":"rejected",
+            "operation_id":operation,
+            "suggestion_id":suggestion_id,
+            "classification_revision":class_rev,
+            "reviewer_id":user.to_string(),
+            "review_event_id": rej_rev_id,
+            "classification_changed":false
+        });
         commands
             .update_one(
                 doc! {"_id": &command_id},
@@ -1087,7 +1209,22 @@ pub async fn decide(db: &Database, user: i64, request: &Value) -> Result<Value, 
     } else {
         suggestion_json["proposed_links"].clone()
     };
-    let links = applied_links(&source, user, &suggestion_id, reason)?;
+    let new_document_revision = document_revision(&raw)
+        .unwrap_or(0)
+        .checked_add(1)
+        .filter(|n| *n < i64::MAX)
+        .ok_or_else(|| conflict("Revisão esgotada"))?;
+    let (accept_rev_id, accept_ev_doc) = build_custom_review_event(
+        &format!("suggestion-accept:{user}:{operation}"),
+        user,
+        "SUGGESTION_ACCEPT",
+        "APPROVED",
+        &question_id,
+        new_document_revision,
+        &content,
+        &semantic,
+    )?;
+    let links = applied_links(&source, user, &suggestion_id, reason, &accept_rev_id)?;
     let primary = links
         .iter()
         .find(|link| link["role"] == "PRIMARY")
@@ -1113,12 +1250,19 @@ pub async fn decide(db: &Database, user: i64, request: &Value) -> Result<Value, 
             "Classificação parcial não pode ser apresentada como confirmação",
         ));
     }
-    let new_document_revision = document_revision(&raw)
-        .unwrap_or(0)
-        .checked_add(1)
-        .filter(|n| *n < i64::MAX)
-        .ok_or_else(|| conflict("Revisão esgotada"))?;
-    let receipt = json!({"status":"applied","operation_id":operation,"suggestion_id":suggestion_id,"question_id":question_id,"classification_revision":new_class,"document_revision":new_document_revision,"content_revision":content,"reviewer_id":user.to_string(),"topic_id":primary["topic_id"]});
+    let receipt = json!({
+        "status":"applied",
+        "operation_id":operation,
+        "suggestion_id":suggestion_id,
+        "question_id":question_id,
+        "classification_revision":new_class,
+        "document_revision":new_document_revision,
+        "content_revision":content,
+        "semantic_revision":semantic,
+        "reviewer_id":user.to_string(),
+        "review_event_id":accept_rev_id,
+        "topic_id":primary["topic_id"]
+    });
     let previous = raw.clone();
     let event = doc! {
         "_id": &command_id,
@@ -1130,9 +1274,11 @@ pub async fn decide(db: &Database, user: i64, request: &Value) -> Result<Value, 
         "payload_sha256": &payload_hash,
         "actor_user_id": user,
         "suggestion_id": &suggestion_id,
+        "review_event_ids": [&accept_rev_id],
+        "review_events": [Bson::Document(accept_ev_doc)],
         "recorded_at": bson::DateTime::now(),
-        "previous": previous
-        ,"decision_receipt": as_doc(receipt.clone())?
+        "previous": previous,
+        "decision_receipt": as_doc(receipt.clone())?
     };
     question_storage::flush_audit(db, oid).await?;
     let mut filter = doc! {"_id": oid, "schema_outbox": {"$exists": false}, "question": raw.get_str("question").unwrap_or_default()};
@@ -1166,7 +1312,7 @@ pub async fn decide(db: &Database, user: i64, request: &Value) -> Result<Value, 
                 .unwrap_or_else(|| Bson::Document(doc! {"$exists":false})),
         );
     }
-    let update = doc! {
+    let mut update = doc! {
         "revision": new_document_revision,
         "classification": as_doc(classification)?,
         "canonical_subject_id": primary["subject_id"].as_str().unwrap(),
@@ -1175,6 +1321,12 @@ pub async fn decide(db: &Database, user: i64, request: &Value) -> Result<Value, 
         "content_hash_version": "question-v2-jcs-sha256",
         "schema_outbox": event
     };
+    if i64_of(&raw, "schema_version") == Some(2) {
+        update.insert("semantic_revision", &semantic);
+        update.insert("semantic_hash_version", contracts::SEMANTIC_HASH_VERSION);
+        update.insert("grading_revision", &grading);
+        update.insert("grading_hash_version", contracts::GRADING_HASH_VERSION);
+    }
     let result = question_storage::collection(db, "todasQuestoes")
         .update_one(filter, doc! {"$set": update})
         .await?;
@@ -1203,9 +1355,17 @@ pub async fn decide(db: &Database, user: i64, request: &Value) -> Result<Value, 
         )));
     }
     let receipt = json!({
-        "status":"applied","operation_id":operation,"suggestion_id":suggestion_id,"question_id":question_id,
-        "classification_revision": new_class, "document_revision": new_document_revision, "content_revision": content,
-        "reviewer_id": user.to_string(), "topic_id": primary["topic_id"]
+        "status":"applied",
+        "operation_id":operation,
+        "suggestion_id":suggestion_id,
+        "question_id":question_id,
+        "classification_revision": new_class,
+        "document_revision": new_document_revision,
+        "content_revision": content,
+        "semantic_revision": semantic,
+        "reviewer_id": user.to_string(),
+        "review_event_id": accept_rev_id,
+        "topic_id": primary["topic_id"]
     });
     commands
         .update_one(
@@ -1279,7 +1439,8 @@ async fn finish_decision(
             "decided_at": now_z(),
             "actor": {"type":"HUMAN","id": user.to_string()},
             "reason": "Aceite humano da proposta após comprovação dos vínculos aplicados.",
-            "resulting_classification_revision": receipt["classification_revision"]
+            "resulting_classification_revision": receipt["classification_revision"],
+            "review_event_id": receipt.get("review_event_id").cloned().unwrap_or(Value::Null)
         });
         let write = suggestions
             .update_one(
@@ -1373,8 +1534,21 @@ pub async fn decide_compatibility(
     user: i64,
     request: &Value,
 ) -> Result<Value, AppError> {
-    if request.get("owner_user_id").is_some() || request.get("actor").is_some() {
-        return Err(bad("Proprietário e revisor vêm da sessão"));
+    if user <= 0 {
+        return Err(AppError::forbidden_code(
+            "REVIEW_ACTOR_UNTRUSTED",
+            None::<String>,
+            "Decisão de compatibilidade exige sessão autenticada válida no servidor",
+        ));
+    }
+    for forbidden in ["owner_user_id", "actor", "review_event_id", "trust_level"] {
+        if request.get(forbidden).is_some() {
+            return Err(AppError::bad_request_code(
+                "REVIEW_ACTOR_UNTRUSTED",
+                Some(forbidden),
+                "Proprietário, revisor e prova de revisão vêm exclusivamente da sessão do servidor",
+            ));
+        }
     }
     let operation = request["operation_id"]
         .as_str()
@@ -1387,13 +1561,20 @@ pub async fn decide_compatibility(
     let commands = question_storage::collection(&state.db, "question_commands");
     if let Some(command) = commands.find_one(doc! {"_id":&command_id}).await? {
         if command.get_str("payload_sha256").ok() != Some(payload_hash.as_str()) {
-            return Err(conflict("Operação de compatibilidade divergente"));
+            return Err(AppError::conflict_code(
+                "IDEMPOTENCY_KEY_CONFLICT",
+                Some("operation_id"),
+                "Operação de compatibilidade divergente",
+            ));
         }
         if let Ok(receipt) = command.get_document("receipt") {
             return Ok(json_of(receipt));
         }
         if let Ok(plan) = command.get_document("document") {
             let plan = plan.clone();
+            if let Ok(rev_ev) = command.get_document("review_event") {
+                question_storage::persist_review_event_idempotent(&state.db, None, rev_ev).await?;
+            }
             question_storage::collection(&state.db, "question_exam_compatibility")
                 .update_one(
                     doc! {"_id":plan.get_str("_id").unwrap()},
@@ -1413,6 +1594,7 @@ pub async fn decide_compatibility(
     let question_id = request["question_id"]
         .as_str()
         .ok_or_else(|| bad("Questão ausente"))?;
+    contracts::validate_api_question_id(question_id, "question_id")?;
     let exam_id = request["exam_id"]
         .as_str()
         .ok_or_else(|| bad("Concurso ausente"))?;
@@ -1448,12 +1630,14 @@ pub async fn decide_compatibility(
     let (oid, raw) = load_question(&state.db, question_id).await?;
     let _ = oid;
     let content = content_revision_of(&raw)?;
+    let semantic = semantic_revision_of(&raw)?;
     supersede_stale(
         &state.db,
         user,
         exam_id,
         question_id,
         &content,
+        &semantic,
         exam.revision,
     )
     .await?;
@@ -1499,24 +1683,6 @@ pub async fn decide_compatibility(
         return Err(bad("Tópico fora do componente indicado"));
     }
     let compatibility_id = suggestion_id(&format!("compatibility:{user}:{operation}"), 1);
-    let mut document = json!({
-        "_id": compatibility_id,
-        "schema_version": 1,
-        "owner_user_id": user,
-        "exam_id": exam_id,
-        "exam_revision": exam.revision,
-        "component_id": component_id,
-        "question_id": question_id,
-        "question_content_revision": content,
-        "catalog_version": contracts::catalog_ref()["catalog_version"].as_i64().unwrap(),
-        "relation": relation,
-        "status": "CONFIRMED",
-        "matched_topic_ids": matched,
-        "provenance": human_provenance(user, &compatibility_id, reason),
-        "revision": 1
-    });
-    document["provenance"]["source_suggestion_id"] = Value::Null;
-    contracts::shape("compatibility", &document)?;
     let collection = question_storage::collection(&state.db, "question_exam_compatibility");
     if let Err(error) = commands
         .insert_one(doc! {"_id":&command_id,"payload_sha256":&payload_hash,"status":"started"})
@@ -1530,7 +1696,11 @@ pub async fn decide_compatibility(
             .await?
             .is_none()
         {
-            return Err(conflict("Operação divergente"));
+            return Err(AppError::conflict_code(
+                "IDEMPOTENCY_KEY_CONFLICT",
+                Some("operation_id"),
+                "Operação divergente",
+            ));
         }
     }
     let counter = format!("compat-sequence:{user}:{exam_id}:{component_id}:{question_id}");
@@ -1547,11 +1717,43 @@ pub async fn decide_compatibility(
         .await?
         .unwrap();
     let revision = i64_of(&sequence, "sequence").ok_or_else(|| conflict("Sequência inválida"))?;
-    document["revision"] = json!(revision);
+    let review_action = if relation == "EXCLUDED" {
+        "COMPATIBILITY_EXCLUDE"
+    } else {
+        "COMPATIBILITY_CONFIRM"
+    };
+    let (compat_rev_id, compat_ev_doc) = build_custom_review_event(
+        &format!("compat-review:{user}:{operation}"),
+        user,
+        review_action,
+        "APPROVED",
+        &compatibility_id,
+        revision,
+        &content,
+        &semantic,
+    )?;
+    let document = json!({
+        "_id": compatibility_id,
+        "schema_version": 1,
+        "owner_user_id": user,
+        "exam_id": exam_id,
+        "exam_revision": exam.revision,
+        "component_id": component_id,
+        "question_id": question_id,
+        "question_content_revision": content,
+        "question_semantic_revision": semantic,
+        "catalog_version": contracts::catalog_ref()["catalog_version"].as_i64().unwrap(),
+        "relation": relation,
+        "status": "CONFIRMED",
+        "matched_topic_ids": matched,
+        "provenance": human_provenance(user, None, reason, &compat_rev_id),
+        "revision": revision
+    });
+    contracts::shape("compatibility", &document)?;
     commands
         .update_one(
             doc! {"_id":&command_id,"document":{"$exists":false}},
-            doc! {"$set":{"document":as_doc(document)?}},
+            doc! {"$set":{"document":as_doc(document)?,"review_event":compat_ev_doc.clone()}},
         )
         .await?;
     let command = commands.find_one(doc! {"_id":&command_id}).await?.unwrap();
@@ -1559,6 +1761,11 @@ pub async fn decide_compatibility(
         .get_document("document")
         .map_err(|_| conflict("Plano ausente"))?
         .clone();
+    let planned_ev = command
+        .get_document("review_event")
+        .cloned()
+        .unwrap_or(compat_ev_doc);
+    question_storage::persist_review_event_idempotent(&state.db, None, &planned_ev).await?;
     collection
         .update_one(
             doc! {"_id":&compatibility_id},
@@ -1581,15 +1788,20 @@ async fn supersede_stale(
     exam_id: &str,
     question_id: &str,
     content: &str,
+    semantic: &str,
     exam_revision: i64,
 ) -> Result<(), AppError> {
     let collection = question_storage::collection(db, "question_exam_compatibility");
     let mut cursor = collection.find(doc! {"owner_user_id": user, "exam_id": exam_id, "question_id": question_id, "status": "CONFIRMED"}).await?;
     while let Some(row) = cursor.try_next().await? {
-        let same_content = row.get_str("question_content_revision").ok() == Some(content);
+        let same_question_version = if let Ok(stored_sem) = row.get_str("question_semantic_revision") {
+            !semantic.is_empty() && stored_sem == semantic
+        } else {
+            row.get_str("question_content_revision").ok() == Some(content)
+        };
         let same_exam = i64_of(&row, "exam_revision") == Some(exam_revision);
-        let same_catalog =i64_of(&row,"catalog_version").is_some_and(super::catalog_runtime::version_known);
-        if !(same_content && same_exam && same_catalog) {
+        let same_catalog = i64_of(&row, "catalog_version").is_some_and(super::catalog_runtime::version_known);
+        if !(same_question_version && same_exam && same_catalog) {
             let id = row.get_str("_id").unwrap_or("").to_owned();
             collection
                 .update_one(
@@ -1642,6 +1854,7 @@ pub async fn current_compatibility(
 ) -> Result<Value, AppError> {
     let (_, raw) = load_question(&state.db, question_id).await?;
     let content = content_revision_of(&raw).unwrap_or_default();
+    let semantic = semantic_revision_of(&raw).unwrap_or_default();
     let exam = crate::services::exam_store::get(state, user, exam_id).await?;
     supersede_stale(
         &state.db,
@@ -1649,6 +1862,7 @@ pub async fn current_compatibility(
         exam_id,
         question_id,
         &content,
+        &semantic,
         exam.revision,
     )
     .await?;

@@ -535,9 +535,9 @@ function sampleV2Question(id = '65f000000000000000000001', revision = 1, kind = 
     status: 'ACTIVE',
     question: `Enunciado original rev ${revision}`,
     question_type: kind,
-    answers: kind === 'OPEN_ENDED' ? [] : ['Opção A', 'Opção B'],
+    answers: kind === 'OPEN_ENDED' ? [] : kind === 'TRUE_FALSE' ? ['Certo', 'Errado'] : ['Opção A', 'Opção B', 'Opção C', 'Opção D', 'Opção E'],
     correct_answer_indices: kind === 'OPEN_ENDED' ? [] : [0],
-    correct_answers: kind === 'OPEN_ENDED' ? [] : ['Opção A'],
+    correct_answers: kind === 'OPEN_ENDED' ? [] : kind === 'TRUE_FALSE' ? ['Certo'] : ['Opção A'],
     origins: [{origin_id: 'o1', kind: 'OFFICIAL_EXAM', verification: 'CONFIRMED', exam_year: 2025, provenance: {actor: {type: 'HUMAN', id: '1'}, method: 'MANUAL_REVIEW', rationale: 'ok', recorded_at: '2026-01-01T00:00:00Z', evidence: []}}],
     classification: {revision: 1, catalog_version: 2, state: 'CONFIRMED', links: [{link_id: 'l1', subject_id: 'DIR_TRIB', topic_id: 'TRIB_CRED', role: 'PRIMARY', coverage: 'DIRECT', provenance: {actor: {type: 'HUMAN', id: '1'}, method: 'MANUAL_REVIEW', rationale: 'ok', recorded_at: '2026-01-01T00:00:00Z', evidence: []}}]},
     validity: {revision: 1, status: 'CURRENT', basis: 'LEGAL', reference_date: '2026-01-01', review_due_on: null, reason_codes: [], evaluated_content_revision: 'a'.repeat(64), decision: null, scope: 'CURRENT_KNOWLEDGE', context_date: null},
@@ -1164,4 +1164,93 @@ test('help center includes LGPD Art. 18 privacy and AI governance guidance and m
   const guideMd = readFileSync(new URL('../../docs/GUIA-ADMINISTRACAO.md', import.meta.url), 'utf8');
   assert.ok(guideMd.includes('## Privacidade (LGPD Art. 18) e Governança de IA'));
   assert.equal(helpTopics.length >= 17, true);
+});
+
+// --- 9. V2.1 Contract Hardening: Batch Idempotency, Duplicate Warnings & Semantic vs Grading Preview ---
+
+test('import commit forwards V2.1 idempotency_key + payload_digest + duplicate acknowledgement, and questionView distinguishes grading-only from semantic changes', async () => {
+  let capturedCommitBody = null;
+  const cmdDoc = sampleV2Question('65f000000000000000000088', 1);
+  const cmd = {operation_id: 'op-v21-1', expected_revision: 0, dry_run: false, document: cmdDoc};
+
+  const {doc} = setupEnv(async (url, options) => {
+    if (url === '/api/v1/admin/questions/import/commit') {
+      capturedCommitBody = JSON.parse(options.body);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          complete: true,
+          idempotent_replay: true,
+          items: [{index: 0, operation_id: 'op-v21-1', id: {$oid: cmdDoc._id.$oid}, saved: true, receipt: {status: 'already_applied', revision: 1}}]
+        })
+      };
+    }
+    if (url === '/api/v1/admin/summary') {
+      return {ok: true, status: 200, json: async () => ({questions: 121})};
+    }
+    return {ok: true, status: 200, json: async () => ({})};
+  });
+
+  const imp = freshImport('op-batch', 'ai-batch');
+  imp.preview = {
+    ready: true,
+    idempotency_key: '11111111-1111-4111-8111-111111111111',
+    payload_digest: 'c'.repeat(64),
+    duplicate_warnings: [{index: 0, code: 'POTENTIAL_DUPLICATE', kind: 'EXACT_CONTENT', message: 'Conteúdo canônico idêntico detectado no acervo.'}],
+    items: [{
+      index: 0,
+      valid: true,
+      command: cmd,
+      duplicate_warning: {index: 0, code: 'POTENTIAL_DUPLICATE', kind: 'EXACT_CONTENT', message: 'Conteúdo canônico idêntico detectado no acervo.'}
+    }]
+  };
+
+  const editQ = sampleV2Question('65f000000000000000000077', 1, 'OPEN_ENDED');
+  setAppStateForTest({
+    me: {user_id: '12', profile: {display_name: 'Admin'}},
+    data: sampleBaseData(),
+    ws: {
+      exams: {},
+      import: imp,
+      questionEdits: {
+        [editQ._id.$oid]: {
+          original: structuredClone(editQ),
+          text: JSON.stringify(editQ, null, 2),
+          operationId: 'op-edit-77',
+          preview: {
+            content_changed: true,
+            semantic_changed: false,
+            command: {operation_id: 'op-edit-77', expected_revision: 1, dry_run: false, document: editQ}
+          },
+          submitted: false,
+          result: null
+        }
+      },
+      archives: []
+    },
+    selectedQuestion: editQ._id.$oid
+  });
+
+  navigate('import');
+  let view = doc.getElementById('view');
+  assert.match(view.textContent, /Possível duplicidade/);
+  assert.match(view.textContent, /Conteúdo canônico idêntico detectado no acervo/);
+
+  const reviewCheck = view.querySelectorAll('input[type="checkbox"]').at(-1);
+  reviewCheck.checked = true;
+  reviewCheck.dispatchEvent({type: 'change', bubbles: true});
+
+  findButton(view, 'Confirmar inserção').click();
+  await flush();
+  await flush();
+  assert.ok(capturedCommitBody);
+  assert.equal(capturedCommitBody.idempotency_key, '11111111-1111-4111-8111-111111111111');
+  assert.equal(capturedCommitBody.payload_digest, 'c'.repeat(64));
+  assert.equal(capturedCommitBody.acknowledge_duplicates, true);
+  assert.equal(capturedCommitBody.reviewed, true);
+
+  navigate('question');
+  view = doc.getElementById('view');
+  assert.match(view.textContent, /Correção alterada \(semântica preservada\)/);
 });
