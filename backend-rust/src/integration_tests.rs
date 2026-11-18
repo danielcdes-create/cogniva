@@ -2089,7 +2089,7 @@ async fn nt_cogniva_questions_002_provenance_idempotency_concurrency_and_eligibi
             &secret,
             None,
             "POST",
-            "/api/v1/admin/questions/save",
+            "/api/v1/admin/questions/v2",
             save_body.clone()
         )
         .await
@@ -2101,7 +2101,7 @@ async fn nt_cogniva_questions_002_provenance_idempotency_concurrency_and_eligibi
         &secret,
         Some(456),
         "POST",
-        "/api/v1/admin/questions/save",
+        "/api/v1/admin/questions/v2",
         save_body,
     )
     .await;
@@ -2117,7 +2117,7 @@ async fn nt_cogniva_questions_002_provenance_idempotency_concurrency_and_eligibi
         &secret,
         Some(123),
         "POST",
-        "/api/v1/admin/questions/save",
+        "/api/v1/admin/questions/v2",
         json!({
             "operation_id": uuid::Uuid::new_v4().to_string(),
             "expected_revision": 0,
@@ -2139,7 +2139,7 @@ async fn nt_cogniva_questions_002_provenance_idempotency_concurrency_and_eligibi
         &secret,
         Some(123),
         "POST",
-        "/api/v1/admin/questions/save",
+        "/api/v1/admin/questions/v2",
         json!({
             "operation_id": uuid::Uuid::new_v4().to_string(),
             "expected_revision": 0,
@@ -2321,31 +2321,56 @@ async fn nt_cogniva_questions_002_provenance_idempotency_concurrency_and_eligibi
     assert_eq!(conflict_st, StatusCode::CONFLICT);
     assert_eq!(conflict_err["code"], "IDEMPOTENCY_KEY_CONFLICT");
 
-    // T24: Operational grading edit via admin PUT preserves CURRENT validity, mnemonico cache, and practice eligibility
-    let (_, edit_out) = request(
+    // T24: Operational grading edit via admin prepare-edit + save preserves CURRENT validity, mnemonico cache, and practice eligibility
+    let (get_st, mut current_eligible_doc) = request(
         &app,
         &secret,
         Some(123),
-        "PUT",
-        &format!("/api/v1/admin/questions/{eligible_oid}"),
+        "GET",
+        &format!("/api/v1/admin/questions/v2/{eligible_oid}"),
+        json!({}),
+    )
+    .await;
+    assert_eq!(get_st, StatusCode::OK);
+    if let Some(obj) = current_eligible_doc.as_object_mut() {
+        obj.remove("schema_outbox");
+    }
+    current_eligible_doc["grading"] = json!({
+        "strategy": "EXACT_OPTION",
+        "max_score": 10,
+        "pass_score": 6,
+        "expected_responses": [],
+        "rubric": null,
+        "engine": null,
+        "confirmation_policy": "AUTOMATIC_EXACT",
+        "policy_version": "objective-exact/2"
+    });
+    let (prep_st, edit_out) = request(
+        &app,
+        &secret,
+        Some(123),
+        "POST",
+        &format!("/api/v1/admin/questions/{eligible_oid}/prepare-edit"),
         json!({
             "operation_id": uuid::Uuid::new_v4().to_string(),
             "expected_revision": 1,
-            "dry_run": false,
-            "grading": {
-                "strategy": "EXACT_OPTION",
-                "max_score": 10,
-                "pass_score": 6,
-                "expected_responses": [],
-                "rubric": null,
-                "engine": null,
-                "confirmation_policy": "AUTOMATIC_EXACT",
-                "policy_version": "objective-exact/2"
-            }
+            "document": current_eligible_doc
         }),
     )
     .await;
+    assert_eq!(prep_st, StatusCode::OK, "{edit_out}");
+    assert_eq!(edit_out["content_changed"], true);
     assert_eq!(edit_out["semantic_changed"], false);
+    let (save_edit_st, save_edit_res) = request(
+        &app,
+        &secret,
+        Some(123),
+        "POST",
+        "/api/v1/admin/questions/v2",
+        edit_out["command"].clone(),
+    )
+    .await;
+    assert_eq!(save_edit_st, StatusCode::OK, "{save_edit_res}");
     let updated_eligible = db
         .collection::<Document>("todasQuestoes")
         .find_one(doc! { "_id": eligible_oid })
@@ -2427,10 +2452,10 @@ async fn nt_cogniva_questions_002_provenance_idempotency_concurrency_and_eligibi
         }),
     )
     .await;
-    assert!(!cache_res["items"][0]["question"].is_null());
-    assert!(cache_res["items"][1]["question"].is_null());
-    assert!(cache_res["items"][2]["question"].is_null());
-    assert!(cache_res["items"][3]["question"].is_null());
+    assert!(!cache_res["questions"][0]["question"].is_null());
+    assert!(cache_res["questions"][1]["question"].is_null());
+    assert!(cache_res["questions"][2]["question"].is_null());
+    assert!(cache_res["questions"][3]["question"].is_null());
 
     let (_, quiz_res) = request(
         &app,
