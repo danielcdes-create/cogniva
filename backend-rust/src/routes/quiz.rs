@@ -16,6 +16,10 @@ use bson::{doc, oid::ObjectId};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+fn is_false(v: &bool) -> bool {
+    !*v
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnswerAttemptItem {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -27,8 +31,11 @@ pub struct AnswerAttemptItem {
     pub client_answered_at: Option<String>,
     pub question_revision: String,
     pub question_id: String,
+    #[serde(default)]
     pub chosen_index: usize,
+    #[serde(default)]
     pub chosen_text: String,
+    #[serde(default)]
     pub is_correct: bool,
     pub time_spent_seconds: i32,
     /// 0 = Nenhuma Ideia, 1 = Chute, 2 = Sei Mais ou Menos, 3 = Dominei!
@@ -42,6 +49,18 @@ pub struct AnswerAttemptItem {
     pub canonical_subject_id: Option<String>,
     #[serde(default)]
     pub canonical_topic_id: Option<String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub is_blank: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub confidence_explicit: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selected_evidence_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position_in_session: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub elapsed_session_seconds: Option<i32>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub session_interrupted: bool,
 }
 
 impl AnswerAttemptItem {

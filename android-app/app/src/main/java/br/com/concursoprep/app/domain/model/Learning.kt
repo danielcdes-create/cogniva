@@ -16,7 +16,8 @@ data class LearningEvent(
     @SerialName("is_correct") val isCorrect: Boolean,
     @SerialName("confidence_level") val confidenceLevel: Int,
     @SerialName("time_spent_seconds") val timeSpentSeconds: Int,
-    @SerialName("question_revision") val questionRevision:String?=null
+    @SerialName("question_revision") val questionRevision: String? = null,
+    @SerialName("is_blank") val isBlank: Boolean = false
 )
 @Serializable data class KnowledgeEvidence(
     @SerialName("canonical_subject_id") val canonicalSubjectId:String,
@@ -94,7 +95,7 @@ object LearningProjection {
         if(!question.knowledgeBindingVerified || subject==null || topic==null || br.com.concursoprep.app.domain.exam.ExamCatalog.catalogTopics(subject).none { it.canonicalTopicId==topic } || !br.com.concursoprep.app.data.local.QuestionCacheMapping.withinReviewDate(question,java.time.LocalDate.now(studyZone)))return history.copy(knowledgeProjectionVersion=1,knowledgeEvidence=null)
         val previous=base?.knowledgeEvidence?.takeIf { it.questionRevision==question.questionRevision }
         val confirmed=base?.events.orEmpty().map { it.attemptId }.toSet()
-        val fresh=pending.filter { it.attemptId !in confirmed && it.questionRevision==question.questionRevision }.distinctBy { it.attemptId }.sortedWith(compareBy<LearningEvent> { Instant.parse(it.occurredAt) }.thenBy { it.attemptId })
+        val fresh=pending.filter { !it.isBlank && it.attemptId !in confirmed && it.questionRevision==question.questionRevision }.distinctBy { it.attemptId }.sortedWith(compareBy<LearningEvent> { Instant.parse(it.occurredAt) }.thenBy { it.attemptId })
         val attempts=(previous?.attempts?:0)+fresh.size
         if(attempts==0)return history.copy(knowledgeProjectionVersion=1,knowledgeEvidence=null)
         val correct=(previous?.correct?:0)+fresh.count { it.isCorrect }
@@ -104,7 +105,7 @@ object LearningProjection {
     }
     private fun projectHistory(base: LearningRecord?, question: QuestionDto, pending: List<LearningEvent>): LearningRecord {
         val confirmed = base?.events.orEmpty().map { it.attemptId }.toSet()
-        val fresh = pending.filter { it.attemptId !in confirmed }.distinctBy { it.attemptId }
+        val fresh = pending.filter { !it.isBlank && it.attemptId !in confirmed }.distinctBy { it.attemptId }
         if (fresh.isEmpty() && base != null) return base
         val events = (base?.events.orEmpty() + fresh).sortedWith(compareBy<LearningEvent> { Instant.parse(it.occurredAt) }.thenBy { it.attemptId })
         val attempts = (base?.attempts ?: 0) + fresh.size

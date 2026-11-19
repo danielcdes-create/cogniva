@@ -39,7 +39,8 @@ pub fn project(activity: &Document, question: &Document) -> Option<Evidence> {
         .iter()
         .filter_map(|v| v.as_document())
         .filter(|e| {
-            e.get_str("question_revision").ok() == Some(revision.as_str())
+            !e.get_bool("is_blank").unwrap_or(false)
+                && e.get_str("question_revision").ok() == Some(revision.as_str())
                 && e.get_bool("status").is_ok()
                 && e.get_str("attempt_id")
                     .ok()
@@ -103,6 +104,160 @@ pub fn project(activity: &Document, question: &Document) -> Option<Evidence> {
             .and_then(|v| v["review_due_on"].as_str())
             .map(str::to_string),
     })
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct UnitQuestionObservation {
+    pub unit_id: String,
+    pub canonical_subject_id: String,
+    pub canonical_topic_id: String,
+    pub concept_id: Option<String>,
+    pub question_id: String,
+    pub non_blank_attempts: usize,
+    pub correct_attempts: usize,
+    pub last_is_correct: bool,
+    pub last_confidence: i32,
+    pub had_prior_verified_correct: bool,
+    pub has_spaced_retention: bool,
+    pub evidence_challenge_passed: Option<bool>,
+    pub last_answered_ms: i64,
+    pub avg_seconds: f64,
+}
+
+/// Projeta observações verificáveis em todos os vínculos confirmados (`PRIMARY` e `SECONDARY`)
+/// da questão, resolvendo `unit_id = concept_id ?? topic_id`.
+pub fn project_units(activity: &Document, question: &Document) -> Vec<UnitQuestionObservation> {
+    let Ok(q) = question_compatibility::decode(question.clone()) else {
+        return Vec::new();
+    };
+    if !q.knowledge_binding_verified {
+        return Vec::new();
+    }
+    let Ok(revision) = q.revision() else {
+        return Vec::new();
+    };
+    let Some(sessions) = activity.get_array("pastSessions").ok() else {
+        return Vec::new();
+    };
+    let mut seen = HashSet::new();
+    let mut events: Vec<_> = sessions
+        .iter()
+        .filter_map(|v| v.as_document())
+        .filter(|e| {
+            !e.get_bool("is_blank").unwrap_or(false)
+                && e.get_str("question_revision").ok() == Some(revision.as_str())
+                && e.get_bool("status").is_ok()
+                && e.get_str("attempt_id")
+                    .ok()
+                    .is_some_and(|id| !id.is_empty() && seen.insert(id.to_owned()))
+        })
+        .collect();
+    events.sort_by_key(|e| {
+        (
+            e.get_datetime("data")
+                .map(|t| t.timestamp_millis())
+                .unwrap_or(0),
+            e.get_str("attempt_id").unwrap_or(""),
+        )
+    });
+    if events.is_empty() {
+        return Vec::new();
+    }
+
+    let correct_attempts = events
+        .iter()
+        .filter(|e| e.get_bool("status").ok() == Some(true))
+        .count();
+    let last = events.last().unwrap();
+    let last_is_correct = last.get_bool("status").unwrap_or(false);
+    let last_confidence = last.get_i32("nivel_confianca").unwrap_or(0).clamp(0, 3);
+    let last_answered_ms = last
+        .get_datetime("data")
+        .map(|t| t.timestamp_millis())
+        .unwrap_or(0);
+    let first_ms = events[0]
+        .get_datetime("data")
+        .map(|t| t.timestamp_millis())
+        .unwrap_or(last_answered_ms);
+    let had_prior_verified_correct = events[..events.len().saturating_sub(1)]
+        .iter()
+        .any(|e| e.get_bool("status").ok() == Some(true) && e.get_i32("nivel_confianca").unwrap_or(0) >= 2);
+    let has_spaced_retention = events.iter().any(|e| {
+        e.get_bool("status").ok() == Some(true)
+            && e.get_i32("nivel_confianca").unwrap_or(0) >= 2
+            && e.get_datetime("data")
+                .map(|t| t.timestamp_millis() - first_ms >= 86_400_000)
+                .unwrap_or(false)
+    });
+    let total_secs: i64 = events
+        .iter()
+        .map(|e| e.get_i32("tempo_gasto_segundos").unwrap_or(45).max(1) as i64)
+        .sum();
+    let avg_seconds = (total_secs as f64) / (events.len() as f64);
+
+    let evidence_challenge_passed = match (
+        last.get_str("selected_evidence_id").ok(),
+        q.evidence_challenge.as_ref(),
+    ) {
+        (Some(sel), Some(ch)) if !sel.trim().is_empty() => {
+            Some(sel.trim() == ch.correct_evidence_id)
+        }
+        _ => None,
+    };
+
+    let mut targets: Vec<(String, String, Option<String>)> = Vec::new();
+    if let Ok(cls) = question.get_document("classification") {
+        if matches!(cls.get_str("state").ok(), Some("CONFIRMED" | "PARTIAL")) {
+            if let Ok(links) = cls.get_array("links") {
+                for l in links.iter().filter_map(|v| v.as_document()) {
+                    let (Ok(subj), Ok(top)) = (l.get_str("subject_id"), l.get_str("topic_id")) else {
+                        continue;
+                    };
+                    if !super::question_contracts::known_topic(subj, top) {
+                        continue;
+                    }
+                    let cid = l
+                        .get_str("concept_id")
+                        .ok()
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .map(str::to_string);
+                    targets.push((subj.to_string(), top.to_string(), cid));
+                }
+            }
+        }
+    }
+    if targets.is_empty() {
+        if let (Some(subj), Some(top)) = (&q.canonical_subject_id, &q.canonical_topic_id) {
+            if super::question_contracts::known_topic(subj, top) {
+                targets.push((subj.clone(), top.clone(), None));
+            }
+        }
+    }
+
+    let qid_hex = q.id.to_hex();
+    targets
+        .into_iter()
+        .map(|(subj, top, cid)| {
+            let unit_id = super::diagnostic_engine::resolve_unit_id(cid.as_deref(), &top);
+            UnitQuestionObservation {
+                unit_id,
+                canonical_subject_id: subj,
+                canonical_topic_id: top,
+                concept_id: cid,
+                question_id: qid_hex.clone(),
+                non_blank_attempts: events.len(),
+                correct_attempts,
+                last_is_correct,
+                last_confidence,
+                had_prior_verified_correct,
+                has_spaced_retention,
+                evidence_challenge_passed,
+                last_answered_ms,
+                avg_seconds,
+            }
+        })
+        .collect()
 }
 
 pub async fn questions(

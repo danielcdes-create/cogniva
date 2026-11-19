@@ -5,7 +5,7 @@ use serde_json::Value;
 fn both_runtimes_share_utf8_mastery_weighted_score_srs_and_calendar_fixtures() {
     let f: Value =
         serde_json::from_str(include_str!("../../shared/domain-contracts.json")).unwrap();
-    assert_eq!(f["contract_version"].as_i64(), Some(3));
+    assert_eq!(f["contract_version"].as_i64(), Some(4));
 
     let catalog = question_contracts::catalog();
     assert_eq!(catalog["schema_version"].as_i64(), Some(2));
@@ -75,6 +75,114 @@ fn both_runtimes_share_utf8_mastery_weighted_score_srs_and_calendar_fixtures() {
             study_date(instant.with_timezone(&chrono::Utc)).to_string(),
             v["day"].as_str().unwrap()
         );
+    }
+
+    // Contract v4 parity suites across all 5 decision engines + Holdout 20%
+    for v in f["holdout"].as_array().unwrap() {
+        let actual = crate::services::strategy_engine::is_holdout_reserved(
+            v["user_id"].as_i64().unwrap(),
+            v["question_id"].as_str().unwrap(),
+            v["pool_size"].as_u64().unwrap() as usize,
+        );
+        assert_eq!(actual, v["reserved"].as_bool().unwrap());
+    }
+    for v in f["diagnostics"].as_array().unwrap() {
+        let actual = crate::services::diagnostic_engine::classify_diagnostic(
+            &crate::services::diagnostic_engine::DiagnosticInputs {
+                distinct_questions: v["distinct_questions"].as_u64().unwrap() as usize,
+                non_blank_attempts: v["non_blank_attempts"].as_u64().unwrap() as usize,
+                correct_attempts: v["correct_attempts"].as_u64().unwrap() as usize,
+                last_is_correct: v["last_is_correct"].as_bool().unwrap(),
+                last_confidence: v["last_confidence"].as_i64().unwrap() as i32,
+                had_prior_verified_correct: v["had_prior_verified_correct"].as_bool().unwrap(),
+                has_spaced_retention: v["has_spaced_retention"].as_bool().unwrap(),
+                evidence_challenge_passed: v["evidence_challenge_passed"].as_bool(),
+            },
+        );
+        assert_eq!(actual.as_str(), v["expected"].as_str().unwrap());
+    }
+    for v in f["retention"].as_array().unwrap() {
+        let ps = v["prior_stability"].as_f64().unwrap();
+        let pd = v["prior_difficulty"].as_f64().unwrap();
+        let el = v["elapsed_days"].as_f64().unwrap();
+        let r = crate::services::retention_engine::retrievability(el, ps);
+        assert!((r - v["retrievability_at_elapsed"].as_f64().unwrap()).abs() < 1e-8);
+        let upd = crate::services::retention_engine::update_retention(
+            ps,
+            pd,
+            v["is_correct"].as_bool().unwrap(),
+            v["confidence"].as_i64().unwrap() as i32,
+            el,
+            v["response_seconds"].as_i64().unwrap() as i32,
+            v["expected_seconds"].as_f64().unwrap(),
+        );
+        assert!((upd.next_stability - v["next_stability"].as_f64().unwrap()).abs() < 1e-6);
+        assert!((upd.next_difficulty - v["next_difficulty"].as_f64().unwrap()).abs() < 1e-6);
+        assert_eq!(
+            upd.next_interval_days as i64,
+            v["next_interval_days"].as_i64().unwrap()
+        );
+    }
+    for v in f["prioritization"].as_array().unwrap() {
+        let u = crate::services::prioritization_engine::priority_utility(
+            &crate::services::prioritization_engine::PrioritizationInputs {
+                edital_weight: v["edital_weight"].as_f64().unwrap(),
+                incidence_weight: v["incidence_weight"].as_f64().unwrap(),
+                retrievability: v["retrievability"].as_f64().unwrap(),
+                verified_competence: v["verified_competence"].as_bool().unwrap(),
+                distinct_questions: v["distinct_questions"].as_u64().unwrap() as usize,
+                avg_seconds: v["avg_seconds"].as_f64().unwrap(),
+                unmet_prerequisites_count: v["unmet_prerequisites_count"].as_u64().unwrap()
+                    as usize,
+                dependent_count: v["dependent_count"].as_u64().unwrap() as usize,
+            },
+        );
+        assert!((u - v["expected_utility"].as_f64().unwrap()).abs() < 1e-8);
+    }
+    for v in f["calibration"].as_array().unwrap() {
+        let cell = crate::services::calibration_engine::calibrated_probability(
+            v["question_type"].as_str().unwrap(),
+            v["confidence_band"].as_i64().unwrap() as i32,
+            v["correct"].as_u64().unwrap() as u32,
+            v["attempts"].as_u64().unwrap() as u32,
+        );
+        assert!((cell.calibrated_mean - v["expected_mean"].as_f64().unwrap()).abs() < 1e-8);
+        assert!((cell.credible_sd - v["expected_sd"].as_f64().unwrap()).abs() < 1e-8);
+    }
+    for v in f["strategy"].as_array().unwrap() {
+        let dec = crate::services::strategy_engine::evaluate_strategy(
+            v["p_calibrated"].as_f64().unwrap(),
+            v["penalty"].as_f64().unwrap(),
+            v["cutoff_pct"].as_f64().unwrap(),
+            v["current_projected_pct"].as_f64().unwrap(),
+            v["remaining_fraction"].as_f64().unwrap(),
+        );
+        assert!((dec.expected_value - v["expected_ev"].as_f64().unwrap()).abs() < 1e-8);
+        assert!((dec.risk_neutral_threshold - v["expected_p_star"].as_f64().unwrap()).abs() < 1e-8);
+        assert!(
+            (dec.effective_threshold - v["expected_effective_threshold"].as_f64().unwrap()).abs()
+                < 1e-8
+        );
+        let posture_str = serde_json::to_value(dec.posture).unwrap();
+        let action_str = serde_json::to_value(dec.recommended_action).unwrap();
+        assert_eq!(posture_str.as_str().unwrap(), v["expected_posture"].as_str().unwrap());
+        assert_eq!(action_str.as_str().unwrap(), v["expected_action"].as_str().unwrap());
+    }
+    for v in f["fatigue"].as_array().unwrap() {
+        let rep = crate::services::fatigue_engine::evaluate_fatigue(
+            v["qualifying_sessions"].as_u64().unwrap() as u32,
+            v["early_correct"].as_u64().unwrap() as u32,
+            v["early_total"].as_u64().unwrap() as u32,
+            v["late_correct"].as_u64().unwrap() as u32,
+            v["late_total"].as_u64().unwrap() as u32,
+        );
+        let status_str = serde_json::to_value(rep.status).unwrap();
+        assert_eq!(status_str.as_str().unwrap(), v["expected_status"].as_str().unwrap());
+        match (rep.shrunk_accuracy_delta, v["expected_shrunk_delta"].as_f64()) {
+            (None, None) => {}
+            (Some(a), Some(b)) => assert!((a - b).abs() < 1e-8),
+            other => panic!("fatigue delta mismatch: {other:?}"),
+        }
     }
 }
 

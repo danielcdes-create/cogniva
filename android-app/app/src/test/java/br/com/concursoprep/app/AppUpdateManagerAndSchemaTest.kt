@@ -189,27 +189,31 @@ class AppUpdateManagerAndSchemaTest {
     }
 
     @Test
-    fun roomSchemaV6ExportAndMigrationChainAreComplete() {
+    fun roomSchemaV7ExportAndMigrationChainAreComplete() {
         val migrations = listOf(
             ExamMigrations.MIGRATION_1_2,
             ExamMigrations.MIGRATION_2_3,
             ExamMigrations.MIGRATION_3_4,
             ExamMigrations.MIGRATION_4_5,
-            ExamMigrations.MIGRATION_5_6
+            ExamMigrations.MIGRATION_5_6,
+            ExamMigrations.MIGRATION_6_7
         )
-        assertEquals(listOf(1 to 2, 2 to 3, 3 to 4, 4 to 5, 5 to 6), migrations.map { it.startVersion to it.endVersion })
+        assertEquals(
+            listOf(1 to 2, 2 to 3, 3 to 4, 4 to 5, 5 to 6, 6 to 7),
+            migrations.map { it.startVersion to it.endVersion }
+        )
 
         val schemaCandidates = listOf(
-            File("schemas/br.com.concursoprep.app.data.local.AppDatabase/6.json"),
-            File("app/schemas/br.com.concursoprep.app.data.local.AppDatabase/6.json")
+            File("schemas/br.com.concursoprep.app.data.local.AppDatabase/7.json"),
+            File("app/schemas/br.com.concursoprep.app.data.local.AppDatabase/7.json")
         )
         val schemaFile = schemaCandidates.firstOrNull { it.exists() }
-        assertTrue("Room v6 exported schema 6.json must exist at ${schemaCandidates.map { it.path }}", schemaFile != null)
+        assertTrue("Room v7 exported schema 7.json must exist at ${schemaCandidates.map { it.path }}", schemaFile != null)
 
         val root = Json.parseToJsonElement(schemaFile!!.readText()).jsonObject
         assertEquals(1, root["formatVersion"]!!.jsonPrimitive.int)
         val dbObj = root["database"]!!.jsonObject
-        assertEquals(6, dbObj["version"]!!.jsonPrimitive.int)
+        assertEquals(7, dbObj["version"]!!.jsonPrimitive.int)
         val entitiesByName = dbObj["entities"]!!.jsonArray.associate {
             val obj = it.jsonObject
             obj["tableName"]!!.jsonPrimitive.content to obj
@@ -235,6 +239,22 @@ class AppUpdateManagerAndSchemaTest {
         assertTrue(
             userExamFields.containsAll(
                 listOf("templateSourceId", "templateRevisionSynced", "isCustomized", "upstreamUpdateAvailable")
+            )
+        )
+
+        val pendingAttemptFields = entitiesByName.getValue("pending_attempts")["fields"]!!.jsonArray
+            .map { it.jsonObject["columnName"]!!.jsonPrimitive.content }
+            .toSet()
+        assertTrue(
+            pendingAttemptFields.containsAll(
+                listOf(
+                    "isBlank",
+                    "confidenceExplicit",
+                    "selectedEvidenceId",
+                    "positionInSession",
+                    "elapsedSessionSeconds",
+                    "sessionInterrupted"
+                )
             )
         )
     }

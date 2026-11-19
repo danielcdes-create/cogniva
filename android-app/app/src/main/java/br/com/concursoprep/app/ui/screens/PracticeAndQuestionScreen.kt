@@ -144,6 +144,16 @@ fun PracticeHubScreen(
             }
 
             PracticeModeCard(
+                title = "Treinamento Adaptativo (Rota 40/40/20)",
+                description = "Intercala revisões próximas do esquecimento, lacunas diagnósticas e tópicos novos de alto impacto no edital.",
+                onClick = { onLaunchSession(QuizMode.ADAPTIVE_LOOP, selectedQuantity) }
+            )
+            PracticeModeCard(
+                title = "Estratégia de Prova (Decisão sob Pressão)",
+                description = "Bateria curta com regras reais de correção e omissão estratégica (VE), priorizando reserva de validação.",
+                onClick = { onLaunchSession(QuizMode.STRATEGY_BATTERY, selectedQuantity) }
+            )
+            PracticeModeCard(
                 title = "Revisão Espaçada (SRS)",
                 description = "Prioridade máxima: questões com curva de esquecimento ativa para retenção de longo prazo.",
                 onClick = { onLaunchSession(QuizMode.SRS_REVIEW, selectedQuantity) }
@@ -234,7 +244,13 @@ fun QuestionSessionScreen(
     onUpdateSession: (SessionSnapshot) -> Unit = {},
     onCompleteSession: () -> Unit = onExitSession,
     onSubmitSimuladoBatch: (suspend (Map<String, UserAttemptState>) -> Boolean)? = null,
-    snackbarState: androidx.compose.material3.SnackbarHostState? = null
+    snackbarState: androidx.compose.material3.SnackbarHostState? = null,
+    requireExplicitConfidence: Boolean = false,
+    allowBlankAnswer: Boolean = false,
+    isSmartEntrySession: Boolean = false,
+    onContinueAdaptiveRoute: () -> Unit = {},
+    onSelectEvidence: (questionId: String, evidenceId: String) -> Unit = { _, _ -> },
+    onSubmitExtendedAnswer: (suspend (question: QuestionDto, chosenIndex: Int, confidenceLevel: Int, timeSpentSeconds: Int, isBlank: Boolean, confidenceExplicit: Boolean) -> Boolean)? = null
 ) {
     var currentIndex by rememberSaveable(snapshot?.sessionId) { mutableIntStateOf(snapshot?.currentIndex ?: initialIndex) }
     val userAnswers = remember(snapshot?.sessionId) { mutableStateMapOf<String, UserAttemptState>().apply { putAll(snapshot?.answers.orEmpty()) } }
@@ -305,7 +321,14 @@ fun QuestionSessionScreen(
                         for ((id, answer) in pendingSnapshot) {
                             if (!answer.submitted) {
                                 val q = questions.firstOrNull { it.id == id } ?: continue
-                                if (onSubmitAnswer(q, answer.chosenIndex, answer.confidenceLevel, answer.timeSpentSeconds)) {
+                                val ok = if (onSubmitExtendedAnswer != null) {
+                                    onSubmitExtendedAnswer(q, answer.chosenIndex, answer.confidenceLevel, answer.timeSpentSeconds, answer.isBlank, answer.confidenceExplicit)
+                                } else if (!answer.isBlank) {
+                                    onSubmitAnswer(q, answer.chosenIndex, answer.confidenceLevel, answer.timeSpentSeconds)
+                                } else {
+                                    true
+                                }
+                                if (ok) {
                                     userAnswers[id] = answer.copy(submitted = true)
                                 }
                             }
@@ -332,7 +355,7 @@ fun QuestionSessionScreen(
             val userAttempt = userAnswers[q.id]
             val correctIndex = q.correctAnswerIndices.singleOrNull() ?: -1
 
-            if (userAttempt == null) {
+            if (userAttempt == null || userAttempt.isBlank) {
                 blankCount += 1
                 disciplineMap[q.disciplina] = Pair(existing.first, existing.second + 1)
             } else if (userAttempt.chosenIndex == correctIndex) {
@@ -346,8 +369,8 @@ fun QuestionSessionScreen(
 
         fun weight(q:QuestionDto):Double = snapshot?.exam?.subjects?.firstOrNull { if(q.examComponentId!=null)it.localSubjectId==q.examComponentId else it.canonicalSubjectId==q.canonicalSubjectId || it.displayName==q.disciplina }?.weight ?: 1.0
         val outcomes=questions.groupBy { it.examComponentId ?: it.canonicalSubjectId ?: it.disciplina }.values.map { group ->
-            val correct=group.count { q->userAnswers[q.id]?.chosenIndex in q.correctAnswerIndices }
-            val wrong=group.count { q->userAnswers[q.id]!=null&&userAnswers[q.id]?.chosenIndex !in q.correctAnswerIndices }
+            val correct=group.count { q -> val ua=userAnswers[q.id]; ua!=null && !ua.isBlank && ua.chosenIndex in q.correctAnswerIndices }
+            val wrong=group.count { q -> val ua=userAnswers[q.id]; ua!=null && !ua.isBlank && ua.chosenIndex !in q.correctAnswerIndices }
             br.com.concursoprep.app.domain.exam.SubjectOutcome(weight(group.first()),correct,group.size,wrong,penalty)
         }
         val netScorePct=br.com.concursoprep.app.domain.exam.ExamEngine.weightedNetScore(outcomes)
@@ -377,10 +400,22 @@ fun QuestionSessionScreen(
     val question = questions.getOrNull(currentIndex) ?: return
     val currentAttempt = userAnswers[question.id]
     var selectedOptionIndex by remember(question.id, isSimuladoReviewMode) {
-        mutableStateOf(currentAttempt?.chosenIndex ?: initialSelectedOptionIndex)
+        mutableStateOf(
+            if (currentAttempt?.isBlank == true) null
+            else (currentAttempt?.chosenIndex?.takeIf { it >= 0 } ?: initialSelectedOptionIndex)
+        )
+    }
+    var isMarkedBlank by remember(question.id, isSimuladoReviewMode) {
+        mutableStateOf(currentAttempt?.isBlank == true)
     }
     var selectedConfidence by remember(question.id, isSimuladoReviewMode) {
         mutableIntStateOf(currentAttempt?.confidenceLevel ?: 2)
+    }
+    var confidenceExplicitlySelected by remember(question.id, isSimuladoReviewMode) {
+        mutableStateOf(currentAttempt?.confidenceExplicit == true || currentAttempt?.submitted == true)
+    }
+    var selectedEvidenceId by remember(question.id) {
+        mutableStateOf(currentAttempt?.selectedEvidenceId)
     }
     var isAnswerSubmitted by remember(question.id, isSimuladoReviewMode) {
         mutableStateOf(currentAttempt?.submitted == true || isSimuladoReviewMode)
@@ -392,8 +427,8 @@ fun QuestionSessionScreen(
     }
 
     val correctIndex = question.correctAnswerIndices.singleOrNull() ?: -1
-    val isBlankAnswer = isSimuladoReviewMode && selectedOptionIndex == null
-    val isUserCorrect = selectedOptionIndex != null && selectedOptionIndex == correctIndex
+    val isBlankAnswer = isMarkedBlank || (isSimuladoReviewMode && selectedOptionIndex == null)
+    val isUserCorrect = !isBlankAnswer && selectedOptionIndex != null && selectedOptionIndex == correctIndex
     val isHighConfidenceError = isAnswerSubmitted && !isBlankAnswer && !isUserCorrect && selectedConfidence >= 2
     val hideFeedback = isSimuladoMode && !isSimuladoReviewMode
     val ext = LocalExtendedColors.current
@@ -616,17 +651,30 @@ fun QuestionSessionScreen(
                                 onClick = {
                                     val chosen = selectedOptionIndex ?: return@Button
                                     val elapsed = computeElapsedSeconds()
+                                    val explicitFlag = !requireExplicitConfidence || confidenceExplicitlySelected
                                     actionScope.launch {
                                         saving=true
                                         try {
-                                            if(onSubmitAnswer(question,chosen,selectedConfidence,elapsed)) {
+                                            val ok = if (onSubmitExtendedAnswer != null) {
+                                                onSubmitExtendedAnswer(question, chosen, selectedConfidence, elapsed, false, explicitFlag)
+                                            } else {
+                                                onSubmitAnswer(question, chosen, selectedConfidence, elapsed)
+                                            }
+                                            if (ok) {
                                                 isAnswerSubmitted=true
-                                                userAnswers[question.id]=UserAttemptState(chosen,selectedConfidence,elapsed,true)
+                                                userAnswers[question.id]=UserAttemptState(
+                                                    chosenIndex = chosen,
+                                                    confidenceLevel = selectedConfidence,
+                                                    timeSpentSeconds = elapsed,
+                                                    submitted = true,
+                                                    isBlank = false,
+                                                    confidenceExplicit = explicitFlag
+                                                )
                                             }
                                         }finally{saving=false}
                                     }
                                 },
-                                enabled = selectedOptionIndex != null && !saving && correctIndex>=0,
+                                enabled = selectedOptionIndex != null && (!requireExplicitConfidence || confidenceExplicitlySelected) && !saving && correctIndex>=0,
                                 modifier = Modifier
                                     .testTag("confirm_answer_cta")
                                     .weight(if (currentIndex > 0) 1.15f else 1f)
@@ -835,8 +883,15 @@ fun QuestionSessionScreen(
                                     onClick = {
                                         if (!isAnswerSubmitted || hideFeedback) {
                                             selectedOptionIndex = idx
+                                            isMarkedBlank = false
                                             val elapsed = computeElapsedSeconds()
-                                            val attempt = UserAttemptState(idx, selectedConfidence, elapsed)
+                                            val attempt = UserAttemptState(
+                                                chosenIndex = idx,
+                                                confidenceLevel = selectedConfidence,
+                                                timeSpentSeconds = elapsed,
+                                                isBlank = false,
+                                                confidenceExplicit = confidenceExplicitlySelected
+                                            )
                                             userAnswers[question.id] = attempt
                                             persistSessionNow(currentIndex, isSimuladoFinished, isSimuladoReviewMode)
                                         }
@@ -885,8 +940,15 @@ fun QuestionSessionScreen(
                             onClick = {
                                 if (!isAnswerSubmitted || hideFeedback) {
                                     selectedOptionIndex = idx
+                                    isMarkedBlank = false
                                     val elapsed = computeElapsedSeconds()
-                                    val attempt = UserAttemptState(idx, selectedConfidence, elapsed)
+                                    val attempt = UserAttemptState(
+                                        chosenIndex = idx,
+                                        confidenceLevel = selectedConfidence,
+                                        timeSpentSeconds = elapsed,
+                                        isBlank = false,
+                                        confidenceExplicit = confidenceExplicitlySelected
+                                    )
                                     userAnswers[question.id] = attempt
                                     persistSessionNow(currentIndex, isSimuladoFinished, isSimuladoReviewMode)
                                 }
@@ -895,15 +957,84 @@ fun QuestionSessionScreen(
                     }
                 }
 
+                if (allowBlankAnswer && (!isAnswerSubmitted || hideFeedback)) {
+                    item(key = "strategic_omit_button") {
+                        OutlinedButton(
+                            onClick = {
+                                val elapsed = computeElapsedSeconds()
+                                if (hideFeedback) {
+                                    selectedOptionIndex = null
+                                    isMarkedBlank = true
+                                    userAnswers[question.id] = UserAttemptState(
+                                        chosenIndex = -1,
+                                        confidenceLevel = 0,
+                                        timeSpentSeconds = elapsed,
+                                        isBlank = true,
+                                        confidenceExplicit = true
+                                    )
+                                    persistSessionNow(currentIndex, isSimuladoFinished, isSimuladoReviewMode)
+                                } else {
+                                    actionScope.launch {
+                                        saving = true
+                                        try {
+                                            val ok = onSubmitExtendedAnswer?.invoke(question, -1, 0, elapsed, true, true) ?: true
+                                            if (ok) {
+                                                selectedOptionIndex = null
+                                                isMarkedBlank = true
+                                                isAnswerSubmitted = true
+                                                userAnswers[question.id] = UserAttemptState(
+                                                    chosenIndex = -1,
+                                                    confidenceLevel = 0,
+                                                    timeSpentSeconds = elapsed,
+                                                    submitted = true,
+                                                    isBlank = true,
+                                                    confidenceExplicit = true
+                                                )
+                                            }
+                                        } finally {
+                                            saving = false
+                                        }
+                                    }
+                                }
+                            },
+                            border = BorderStroke(
+                                width = if (isMarkedBlank) 2.dp else 1.dp,
+                                color = if (isMarkedBlank) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(
+                                text = if (isMarkedBlank) {
+                                    "Questão marcada para deixar em branco (0 pt)"
+                                } else {
+                                    "Deixar em Branco (Omitir · 0 pt)"
+                                },
+                                fontWeight = if (isMarkedBlank) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    }
+                }
+
                 if (selectedOptionIndex != null && (!isAnswerSubmitted || hideFeedback)) {
                     item(key = "confidence_grid") {
                         ConfidenceSelectorGrid(
                             selectedConfidence = selectedConfidence,
+                            hasExplicitSelection = !requireExplicitConfidence || confidenceExplicitlySelected,
                             onSelectConfidence = { level ->
                                 selectedConfidence = level
+                                confidenceExplicitlySelected = true
                                 if (selectedOptionIndex != null) {
                                     val elapsed = computeElapsedSeconds()
-                                    val attempt = UserAttemptState(selectedOptionIndex!!, level, elapsed)
+                                    val attempt = UserAttemptState(
+                                        chosenIndex = selectedOptionIndex!!,
+                                        confidenceLevel = level,
+                                        timeSpentSeconds = elapsed,
+                                        isBlank = false,
+                                        confidenceExplicit = true
+                                    )
                                     userAnswers[question.id] = attempt
                                     persistSessionNow(currentIndex, isSimuladoFinished, isSimuladoReviewMode)
                                 }
@@ -996,6 +1127,128 @@ fun QuestionSessionScreen(
                                         onClick = { onRequestAiTutor(question.id, "child-friendly-post", "Explicação Infantil (ELI10)", null) },
                                         label = { Text("Explicação Simples") }
                                     )
+                                }
+                            }
+                        }
+                    }
+
+                    val challenge = question.evidenceChallenge
+                    if (!isUserCorrect && !isBlankAnswer && challenge != null && challenge.options.isNotEmpty()) {
+                        item(key = "evidence_challenge") {
+                            Card(
+                                shape = RoundedCornerShape(14.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surface,
+                                    contentColor = MaterialTheme.colorScheme.onSurface
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = "Diagnóstico de Evidência (Opcional)",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = challenge.prompt,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    challenge.options.forEach { opt ->
+                                        val isPicked = selectedEvidenceId == opt.evidenceId
+                                        val isRightEv = opt.evidenceId == challenge.correctEvidenceId
+                                        Surface(
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = when {
+                                                selectedEvidenceId != null && isRightEv -> ext.correctContainer
+                                                isPicked && !isRightEv -> ext.errorContainer
+                                                else -> MaterialTheme.colorScheme.surfaceContainerLow
+                                            },
+                                            contentColor = when {
+                                                selectedEvidenceId != null && isRightEv -> ext.onCorrectContainer
+                                                isPicked && !isRightEv -> ext.onErrorContainer
+                                                else -> MaterialTheme.colorScheme.onSurface
+                                            },
+                                            border = BorderStroke(
+                                                1.dp,
+                                                if (isPicked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+                                            ),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable(enabled = selectedEvidenceId == null) {
+                                                    selectedEvidenceId = opt.evidenceId
+                                                    onSelectEvidence(question.id, opt.evidenceId)
+                                                }
+                                        ) {
+                                            Text(
+                                                text = opt.text,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                modifier = Modifier.padding(12.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (isSmartEntrySession && questions.size == 1) {
+                        item(key = "smart_entry_continuation") {
+                            Card(
+                                shape = RoundedCornerShape(14.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = "02 · Seguir para Treinamento Adaptativo (5–45 min)",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "Primeira resposta registrada! Você pode encerrar agora sem penalidade ou continuar em uma rota curta intercalando revisões pendentes, lacunas e avanço.",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Button(
+                                            onClick = onContinueAdaptiveRoute,
+                                            modifier = Modifier
+                                                .weight(1.3f)
+                                                .heightIn(min = 48.dp),
+                                            shape = RoundedCornerShape(12.dp)
+                                        ) {
+                                            Text(
+                                                text = "Seguir Rota (12 questões)",
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                        OutlinedButton(
+                                            onClick = onCompleteSession,
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .heightIn(min = 48.dp),
+                                            shape = RoundedCornerShape(12.dp)
+                                        ) {
+                                            Text(
+                                                text = "Encerrar",
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }

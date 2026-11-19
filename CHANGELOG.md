@@ -4,6 +4,37 @@ Todas as mudanças arquiteturais, de segurança, acessibilidade e operacionais r
 
 ---
 
+## [2.2.0] - 2026-11-18 (build 28)
+
+Evolução estrutural do Cogniva para um **sistema inteligente de preparação orientado por evidência de aprendizagem**, implantando o Grafo de Conceitos e Fontes Normativas Versionadas, os **5 Motores Simétricos de Decisão** (`contract_version: 4`), a reserva determinística **Holdout 20%**, o **Fallback Cross-Banca** em simulados e o **Core Loop Diário de 60 Minutos** em Rust, Python, Web Admin e Android (`Room v7`).
+
+### Grafo de Conhecimento, Contratos `v4` e Validador `2.2.0` (`shared/`, `scripts/`, `question_storage.rs`)
+- **Conceitos com Pré-Requisitos (DAG) e Fontes Normativas Versionadas (`shared/knowledge-catalog.schema.json`, `shared/knowledge-concepts-seed.json`, `scripts/knowledge_catalog.py`, `services/catalog_editor.rs`, `services/catalog_runtime.rs`):**
+  - Preservação integral do hash gênese `af2d711b...` de [`shared/knowledge-catalog.json`](shared/knowledge-catalog.json) na cadeia `knowledge_catalog_activations` em produção, combinada ao seed canônico de `concepts[]` e `normative_sources[]` (`content_sha256` para rastreamento de impacto normativo) e validação topológica de Kahn impedindo ciclos em `prerequisite_concept_ids[]`.
+  - Extensão de [`shared/schemas/question-contracts.schema.json`](shared/schemas/question-contracts.schema.json) e migração explícita `question-v2-validator-2.2.0` (`CURRENT_VALIDATOR_REVISION = 5`) suportando `concept_id` opcional em `classification.links[]` (com fallback automático transparente `concept_id ?? topic_id`) e `evidence_challenge` opcional (`prompt`, `options`, `correct_evidence_id`) fora do hash `content_revision`.
+- **Paridade Matemática Multi-Runtime (`shared/domain-contracts.json` `contract_version: 4`):**
+  - Novos vetores determinísticos compartilhados entre Python, Rust e Kotlin para `holdout`, `diagnostics`, `retention`, `prioritization`, `calibration`, `strategy` e `fatigue`.
+
+### Cinco Motores de Decisão, Endpoint `next-action` e Blindagem RAG (`backend-rust/`, `web-admin/`)
+- **Motores Simétricos em `O(1)`/`O(N)` compatíveis com o limite de `192 MB` de RAM (`backend-rust/src/services/*_engine.rs` & `PerformanceEngines.kt`):**
+  - **Diagnóstico (`diagnostic_engine`):** exige `distinct_questions >= 3` + retenção espaçada para `VERIFIED_COMPETENCE`, diferenciando `OVERCONFIDENCE_ERROR`, `CONCEPTUAL_ERROR`, `RETRIEVAL_FAILURE` e `INSUFFICIENT_EVIDENCE` sobre vínculos `PRIMARY` e `SECONDARY`.
+  - **Retenção Contínua (`retention_engine`):** curva $R(t,S) = (1 + \frac{19}{81}\frac{t}{S})^{-0{,}5}$ com proteção anti-chute (`confidence <= 1` limita $S \le 1{,}5$ dia), integrada a `attempts.rs` e `scheduler.rs`.
+  - **Priorização e Intercalação (`prioritization_engine`):** utilidade marginal por minuto ponderada pelo edital, impulso suave não-punitivo de pré-requisitos (`0.55^k`) e intercalação 40/40/20 (`ADAPTIVE_LOOP`).
+  - **Calibração Beta-Binomial e Estratégia (`calibration_engine`, `strategy_engine`):** calibração empírica por formato (`TRUE_FALSE` vs `MULTIPLE_CHOICE`) e faixa de confiança (`1..3`), cálculo de $VE = (1+\lambda)\hat{p} - \lambda$, limiar $p^* = \frac{\lambda}{1+\lambda}$, postura próxima à nota de corte (`PROTECT_MARGIN` / `CALCULATED_RISK` / `MAXIMIZE_EV`), partição determinística **Holdout 20%** (`SHA-256`) e **Fallback Cross-Banca** automático em simulados (`selection_v2.rs`).
+  - **Fadiga com Guarda Estrita (`fatigue_engine`):** permanece em `INSUFFICIENT_EVIDENCE` até acumular `>= 3` simulados longos contínuos sem interrupção e `>= 120` itens cronometrados.
+- **Rota `GET /api/v1/study/next-action`, Tutoria Normativa e Curadoria (`/admin/`):**
+  - Novo endpoint [`routes/study_loop.rs`](backend-rust/src/routes/study_loop.rs) retornando a questão de Entrada Inteligente, diagnóstico consolidado do edital, células Beta-Binomial, recomendação de estratégia e relatório de fadiga.
+  - Injeção automática de fontes normativas vigentes do catálogo e diretriz `NORMATIVE_GROUNDING_GUARDRAIL_PT_BR` nos tutores pós-resposta em `ai_tutor.rs`; helpers de conceitos e detecção de impacto por `content_sha256` em `web-admin/domain.js`.
+
+### Core Loop Diário de 60 Minutos e Room `v7` no Android (`android-app` `2.2.0` / `build 28`)
+- **Migração Room `6 → 7` (`AppDatabase.kt`, `ExamLocal.kt`, `schemas/.../7.json`):** Adicionadas colunas de telemetria e decisão em `pending_attempts` (`isBlank`, `confidenceExplicit`, `selectedEvidenceId`, `positionInSession`, `elapsedSessionSeconds`, `sessionInterrupted`) preservando 100% da fila offline.
+- **Jornada Diária sem Atrito e sem Punição (`TodayScreen.kt`, `PracticeAndQuestionScreen.kt`, `ProgressScreen.kt`):**
+  - **01 · Entrada Inteligente (0–5 min):** card superior *"Comece com uma questão. Você pode encerrar após responder."* com justificativa concreta da prioridade e painel *"O que falta demonstrar até a prova"*.
+  - **02 · Treinamento Adaptativo (5–45 min):** transição fluida pós-1ª questão para rota intercalada (`ADAPTIVE_LOOP`), seleção explícita obrigatória de confiança nas sessões ao vivo e card opcional **Diagnóstico de Evidência** pós-erro.
+  - **03 · Estratégia de Prova (45–60 min) & Progresso:** modalidade `STRATEGY_BATTERY`, botão explícito **Deixar em Branco (Omitir · 0 pt)** sem distorcer acurácia/streak, e cards de **Calibração Empírica ($VE$ / $p^*$)** e **Resistência em Provas Prolongadas** em **Progresso**. Documentação completa em [`docs/MOTORES-DECISAO-CORE-LOOP.md`](docs/MOTORES-DECISAO-CORE-LOOP.md).
+
+---
+
 ## [2.1.0] - 2026-11-17 (build 27)
 
 ### Contratos de Questões V2.1, Pacotes Prontos e Cabeçalho de Estudo no Android

@@ -1,13 +1,13 @@
-# Contratos e Schema de Questões V2 (Cogniva 2.1 — Compatível `schema_version = 2`)
+# Contratos e Schema de Questões V2 (Cogniva 2.2 — Compatível `schema_version = 2`)
 
-No **Cogniva `2.1.0`** (`NT-COGNIVA-QUESTIONS-002`), 100% do acervo em `cogniva.todasQuestoes` preserva `schema_version = 2` com endurecimento completo de proveniência autenticada, separação entre identidade semântica e política de correção, idempotência transacional, elegibilidade centralizada e validação estrita de `ObjectId` e inteiros.
+No **Cogniva `2.2.0`** (`NT-COGNIVA-QUESTIONS-002` + Grafo de Conceitos), 100% do acervo em `cogniva.todasQuestoes` preserva `schema_version = 2` com endurecimento completo de proveniência autenticada, separação entre identidade semântica e política de correção, vínculo opcional a conceitos (`concept_id`) e desafio de evidência pós-erro (`evidence_challenge`), idempotência transacional, elegibilidade centralizada e validação estrita de `ObjectId` e inteiros.
 
 Os contratos formais residem em:
 - Schema JSON canônico: [`shared/schemas/question-contracts.schema.json`](../shared/schemas/question-contracts.schema.json)
 - Vetores de paridade Rust/Python: [`shared/examples/question-contracts/parity-vectors-v2-1.json`](../shared/examples/question-contracts/parity-vectors-v2-1.json)
 - Validador e avaliador em Rust: [`backend-rust/src/services/question_contracts.rs`](../backend-rust/src/services/question_contracts.rs) e [`backend-rust/src/services/question_eligibility.rs`](../backend-rust/src/services/question_eligibility.rs)
 - Validador e avaliador em Python: [`scripts/question_contracts.py`](../scripts/question_contracts.py)
-- Persistência, CAS e validadores MongoDB: [`backend-rust/src/services/question_storage.rs`](../backend-rust/src/services/question_storage.rs) (`question-v2-validator-2.1.0`, `validator_revision = 4`)
+- Persistência, CAS e validadores MongoDB: [`backend-rust/src/services/question_storage.rs`](../backend-rust/src/services/question_storage.rs) (`question-v2-validator-2.2.0`, `validator_revision = 5`)
 
 ---
 

@@ -247,7 +247,8 @@ fun QuestionActionChips(
 fun ConfidenceSelectorGrid(
     selectedConfidence: Int,
     onSelectConfidence: (Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    hasExplicitSelection: Boolean = true
 ) {
     Card(
         shape = RoundedCornerShape(14.dp),
@@ -264,7 +265,11 @@ fun ConfidenceSelectorGrid(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text(
-                text = "Nível de confiança nesta resposta:",
+                text = if (hasExplicitSelection) {
+                    "Nível de confiança nesta resposta:"
+                } else {
+                    "Selecione sua confiança antes de confirmar:"
+                },
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurface
             )
@@ -283,13 +288,13 @@ fun ConfidenceSelectorGrid(
             ) {
                 ConfidenceButton(
                     label = options[0].second,
-                    selected = selectedConfidence == options[0].first,
+                    selected = hasExplicitSelection && selectedConfidence == options[0].first,
                     onClick = { onSelectConfidence(options[0].first) },
                     modifier = Modifier.weight(1f)
                 )
                 ConfidenceButton(
                     label = options[1].second,
-                    selected = selectedConfidence == options[1].first,
+                    selected = hasExplicitSelection && selectedConfidence == options[1].first,
                     onClick = { onSelectConfidence(options[1].first) },
                     modifier = Modifier.weight(1f)
                 )
@@ -302,13 +307,13 @@ fun ConfidenceSelectorGrid(
             ) {
                 ConfidenceButton(
                     label = options[2].second,
-                    selected = selectedConfidence == options[2].first,
+                    selected = hasExplicitSelection && selectedConfidence == options[2].first,
                     onClick = { onSelectConfidence(options[2].first) },
                     modifier = Modifier.weight(1f)
                 )
                 ConfidenceButton(
                     label = options[3].second,
-                    selected = selectedConfidence == options[3].first,
+                    selected = hasExplicitSelection && selectedConfidence == options[3].first,
                     onClick = { onSelectConfidence(options[3].first) },
                     modifier = Modifier.weight(1f)
                 )

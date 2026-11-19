@@ -342,6 +342,10 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         )
         .route("/api/v1/learning/state", get(routes::learning::get_state))
         .route(
+            "/api/v1/study/next-action",
+            get(routes::study_loop::get_next_action),
+        )
+        .route(
             "/api/v1/quiz/generate",
             post(routes::quiz::handle_generate_quiz),
         )
@@ -395,7 +399,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
                     "service": "cogniva-api",
                     "version": env!("CARGO_PKG_VERSION"),
                     "revision": option_env!("BUILD_REVISION").unwrap_or("local"),
-                    "contract_version": 3
+                    "contract_version": 4
                 }))
             }),
         )
@@ -449,7 +453,7 @@ async fn readiness(
         Ok(Ok(_)) => Ok(Json(json!({
             "status": "ready",
             "service": "cogniva-api",
-            "contract_version": 3,
+            "contract_version": 4,
             "revision": option_env!("BUILD_REVISION").unwrap_or("local")
         }))),
         Ok(Err(err)) => {

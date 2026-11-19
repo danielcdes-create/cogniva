@@ -86,6 +86,13 @@ class RepositoryContractTest {
             "insertQuestions"->{(args[0] as List<*>).filterIsInstance<CachedQuestionEntity>().forEach{questions[it.id]=it};Unit}
             "clearCachedQuestions"->{questions.clear();Unit}
             "updateLearningFlags"->Unit
+            "updateAttemptEvidence"->{
+                val sessId=args[0] as String;val qId=args[1] as String;val evId=args[2] as String
+                pending.values.find { it.sessionUuid==sessId && it.questionId==qId }?.let {
+                    pending[it.attemptId]=it.copy(selectedEvidenceId=evId)
+                }
+                Unit
+            }
             else->error("Unexpected DAO operation $method")
         }}
         val exams=fake<ExamDao>{method,args->when(method){
@@ -170,6 +177,7 @@ class RepositoryContractTest {
                 "saveOnboardingPreferences"->saveOnboarding(args[0] as OnboardingPayload)
                 "profile"->UserProfileDto(123,displayName="Estudante",isGuest=true)
                 "getApkInfo"->{throw IOException("Synthetic offline APK check")}
+                "getNextAction"->{throw IOException("Synthetic offline next-action")}
                 "deleteAccount"->deleteAccount(args[0] as DeleteAccountRequest)
                 else->error("Unexpected API operation $method")
             }}
@@ -671,5 +679,66 @@ class RepositoryContractTest {
         assertEquals(listOf("EXCLUIR", "EXCLUIR"), capturedConfirm)
         assertTrue(store.pending.isEmpty())
         assertNull(store.metadata["pending_profile"])
+    }
+
+    @Test fun holdoutPartitionCrossBoardSimuladoFallbackAndBlankOmitWorkOffline() = runBlocking {
+        val store = Store()
+        val template = ExamCatalog.systemExams().find { it.examId == "CPNU" }!!
+        val finComponent = template.subjects.first { it.canonicalSubjectId == "FIN_PUB" }.copy(
+            questionCount = 2,
+            topics = listOf(StoredTopic("t1", "FIN_PUB_01", "FIN_PUB", "Orçamento Público", "OFICIAL_CONFIRMADO"))
+        )
+        store.putExam(template.copy(examBoards = listOf("Cebraspe"), subjects = listOf(finComponent), isActiveInLadder = true))
+
+        // Populate 10 questions on FIN_PUB_01 from FGV (different board than Cebraspe!) so Cross-Board Fallback is exercised
+        val generatedIds = (1..10).map { idx ->
+            val q = question("%024x".format(100 + idx)).copy(
+                source = "FGV",
+                canonicalSubjectId = "FIN_PUB",
+                canonicalTopicId = "FIN_PUB_01",
+                syllabusTopicIds = listOf("FIN_PUB_01")
+            )
+            store.questions[q.id] = QuestionCacheMapping.toEntity(q, json)
+            q.id
+        }
+        val repo = store.repository()
+
+        // 1. Cross-Board Fallback fills Simulado quota instead of throwing insufficient cache error
+        val simQuestions = repo.fetchOrGetOfflineQuiz(123, QuizMode.SIMULADO, 2, contestId = "CPNU")
+        assertEquals(2, simQuestions.size)
+        assertTrue("Borrowed cross-board questions should be marked analogous", simQuestions.all { it.isBorrowedAnalogous })
+
+        // 2. ADAPTIVE_LOOP excludes Holdout 20% questions when pool >= 5
+        val holdoutIds = generatedIds.filter { StrategyEngine.isHoldoutReserved(123, it, generatedIds.size) }.toSet()
+        val adaptiveQuestions = repo.fetchOrGetOfflineQuiz(123, QuizMode.ADAPTIVE_LOOP, 4, contestId = "CPNU")
+        assertEquals(4, adaptiveQuestions.size)
+        assertTrue(adaptiveQuestions.none { it.id in holdoutIds })
+
+        // 3. Strategic omit (isBlank = true) does not increment non-blank attempts in LearningProjection
+        val qBlank = QuestionCacheMapping.toDto(store.questions.getValue(generatedIds.first()), json)
+        val blankAttempt = PendingAttemptEntity(
+            localId = 99,
+            questionId = qBlank.id,
+            chosenIndex = -1,
+            chosenText = "",
+            isCorrect = false,
+            timeSpentSeconds = 12,
+            confidenceLevel = 0,
+            sessionUuid = "sess-omit",
+            quizMode = "STRATEGY_BATTERY",
+            examBlock = null,
+            contestId = "CPNU",
+            userNote = null,
+            ownerUserId = 123L,
+            attemptId = UUID.randomUUID().toString(),
+            questionRevision = qBlank.questionRevision,
+            isBlank = true,
+            confidenceExplicit = true,
+            positionInSession = 1,
+            elapsedSessionSeconds = 12
+        )
+        repo.recordAttemptOfflineFirst(123L, blankAttempt)
+        assertEquals(0, repo.getProgressAnalytics(123L).totalQuestionsPracticed)
+        assertEquals(FatigueStatus.INSUFFICIENT_EVIDENCE, repo.getProgressAnalytics(123L).fatigueReport.status)
     }
 }

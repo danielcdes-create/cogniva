@@ -323,6 +323,13 @@ class MainViewModel(
             val dashboard=repository.getTodayDashboard(uid,profile.dailyQuestionsTarget,profile.activeContestIds)
             _todayDashboard.value=overlayLadder(dashboard,stored,_focusedTrunks.value,repository.canonicalMasteryBySubject())
             _analytics.value=repository.getProgressAnalytics(uid)
+            val nextAction=repository.fetchNextAction(uid,selected)
+            _todayDashboard.value=_todayDashboard.value?.copy(nextAction=nextAction)
+            _analytics.value=_analytics.value?.copy(
+                calibrationCells=nextAction.calibrationCells,
+                strategyGuidance=nextAction.strategyGuidance,
+                fatigueReport=nextAction.fatigueReport
+            )
             if(_activeSession.value==null){
                 val paused=repository.pausedSession()
                 val savedActiveId=savedStateHandle?.get<String>(KEY_ACTIVE_SESSION_ID)
@@ -388,9 +395,72 @@ class MainViewModel(
         feedbackMessage?.let { _userFeedbackMessage.emit(it) }
     }}
     fun applyEditalDiffUpdate(id:String){operation {val before=_storedExams.value.find{it.examId==id}?.revision;repository.syncPendingAttempts(repository.ownerUserId);refreshAllData();_userFeedbackMessage.emit(if(repository.loadStoredExams().find{it.examId==id}?.revision!=before)"Nova revisão de edital salva. Histórico preservado."else"Nenhuma revisão nova de edital foi publicada para este concurso.")}}
+    fun startSmartEntryQuestion(){
+        startJob?.cancel()
+        val cid=_selectedContestId.value.takeIf { it.isNotBlank() }
+        val nextAct=_todayDashboard.value?.nextAction
+        startJob=operation {
+            _isStartingQuiz.value=true
+            try {
+                val preloaded=nextAct?.entryQuestion?.let { listOf(it) }.orEmpty()
+                val questions=preloaded.ifEmpty {
+                    val scoped=runCatching {
+                        repository.fetchOrGetOfflineQuiz(
+                            repository.ownerUserId,
+                            QuizMode.ADAPTIVE_LOOP,
+                            1,
+                            cid,
+                            syllabusTopicId=nextAct?.priorityTopicId
+                        )
+                    }.getOrDefault(emptyList())
+                    scoped.ifEmpty {
+                        repository.fetchOrGetOfflineQuiz(repository.ownerUserId,QuizMode.ADAPTIVE_LOOP,1,null)
+                    }
+                }
+                if(questions.isEmpty()){
+                    _userFeedbackMessage.emit("Nenhuma questão disponível agora. Conecte-se para sincronizar o acervo.")
+                    return@operation
+                }
+                val exam=repository.loadStoredExams().find { it.examId==cid }
+                val session=SessionSnapshot(
+                    sessionId=UUID.randomUUID().toString(),
+                    ownerUserId=repository.ownerUserId,
+                    questions=questions.take(1),
+                    mode=QuizMode.ADAPTIVE_LOOP,
+                    exam=exam,
+                    deadlineEpochMs=null,
+                    isSmartEntry=true
+                )
+                repository.createSession(session)
+                showSession(session)
+            } finally {
+                _isStartingQuiz.value=false
+            }
+        }
+    }
+
+    fun continueAdaptiveRouteFromEntry(){
+        operation {
+            val current=_activeSession.value
+            if(current!=null){
+                withContext(NonCancellable){
+                    repository.withMutationLock {
+                        repository.saveSession(current)
+                        repository.completeSession(current.sessionId)
+                    }
+                }
+            }
+            startQuizSession(
+                mode=QuizMode.ADAPTIVE_LOOP,
+                quantity=12,
+                contestId=_selectedContestId.value.takeIf { it.isNotBlank() }
+            )
+        }
+    }
+
     fun startQuizSession(mode:QuizMode,quantity:Int,contestId:String?=null,disciplina:String?=null,componentId:String?=null,syllabusTopicId:String?=null){
         startJob?.cancel()
-        val id=PracticeScope.contest(mode,if(mode==QuizMode.SIMULADO)contestId?:_selectedContestId.value else contestId)
+        val id=PracticeScope.contest(mode,if(mode in listOf(QuizMode.SIMULADO,QuizMode.ADAPTIVE_LOOP,QuizMode.STRATEGY_BATTERY))contestId?:_selectedContestId.value else contestId)
         startJob=operation {
             _isStartingQuiz.value=true
             try{
@@ -405,7 +475,12 @@ class MainViewModel(
                     });return@operation
                 }
                 val exam=repository.loadStoredExams().find{it.examId==id}
-                val session=SessionSnapshot(UUID.randomUUID().toString(),repository.ownerUserId,questions,mode,exam,if(mode==QuizMode.SIMULADO)System.currentTimeMillis()+questions.size*180000L else null)
+                val deadlineMs=when(mode){
+                    QuizMode.SIMULADO->System.currentTimeMillis()+questions.size*180000L
+                    QuizMode.STRATEGY_BATTERY->System.currentTimeMillis()+(questions.size*90000L).coerceAtMost(900000L)
+                    else->null
+                }
+                val session=SessionSnapshot(UUID.randomUUID().toString(),repository.ownerUserId,questions,mode,exam,deadlineMs)
                 repository.createSession(session);showSession(session)
             }finally{_isStartingQuiz.value=false}
         }
@@ -416,7 +491,7 @@ class MainViewModel(
         savedStateHandle?.set(KEY_ACTIVE_SESSION_INDEX,session.currentIndex)
         _activeSession.value=session
         _activeQuizQuestions.value=session.questions
-        _isSimuladoSession.value=session.mode==QuizMode.SIMULADO
+        _isSimuladoSession.value=session.mode in listOf(QuizMode.SIMULADO,QuizMode.STRATEGY_BATTERY)
         _pausedDiscipline.value=session.questions.firstOrNull()?.disciplina
     }
     fun resumeSession(){operation {repository.pausedSession()?.let(::showSession)?:_userFeedbackMessage.emit("Não há sessão pausada neste aparelho.")}}
@@ -437,21 +512,92 @@ class MainViewModel(
             }
         }
     }
-    suspend fun submitAnswer(question:QuestionDto,chosenIndex:Int,confidenceLevel:Int,timeSpentSeconds:Int=60):Boolean{
-        return try{
-            require(chosenIndex in question.answers.indices&&question.correctAnswerIndices.size==1)
-            val saved=repository.withMutationLock {
-                val session=_activeSession.value?:return@withMutationLock false
-                val attempt=PendingAttemptEntity(questionId=question.id,chosenIndex=chosenIndex,chosenText=question.answers[chosenIndex],isCorrect=chosenIndex in question.correctAnswerIndices,timeSpentSeconds=timeSpentSeconds.coerceIn(1,86400),confidenceLevel=confidenceLevel,sessionUuid=session.sessionId,quizMode=session.mode.name,examBlock=null,contestId=session.exam?.examId,userNote=null,canonicalSubjectId=question.canonicalSubjectId,canonicalTopicId=question.canonicalTopicId,ownerUserId=session.ownerUserId,
-                    attemptId=UUID.nameUUIDFromBytes("${session.sessionId}:${question.id}".toByteArray()).toString(),questionRevision=question.questionRevision,examComponentId=question.examComponentId)
-                val next=session.copy(answers=session.answers+(question.id to SessionAnswer(chosenIndex,confidenceLevel,timeSpentSeconds,true)),revision=session.revision+1)
-                repository.recordAttemptUnlocked(session.ownerUserId,attempt,next)
-                if(_activeSession.value?.sessionId==session.sessionId)_activeSession.value=next
+    fun selectEvidenceForQuestion(questionId: String, evidenceId: String) {
+        operation {
+            val session = _activeSession.value ?: return@operation
+            repository.recordEvidenceSelection(session.ownerUserId, session.sessionId, questionId, evidenceId)
+            val prev = session.answers[questionId]
+            if (prev != null) {
+                val next = session.copy(
+                    answers = session.answers + (questionId to prev.copy(selectedEvidenceId = evidenceId)),
+                    revision = session.revision + 1
+                )
+                _activeSession.value = next
+                repository.saveSession(next)
+            }
+            appContext?.let { OfflineSyncWorker.enqueueNow(it) }
+        }
+    }
+
+    suspend fun submitAnswer(
+        question: QuestionDto,
+        chosenIndex: Int,
+        confidenceLevel: Int,
+        timeSpentSeconds: Int = 60,
+        isBlank: Boolean = false,
+        confidenceExplicit: Boolean = false,
+        selectedEvidenceId: String? = null
+    ): Boolean {
+        return try {
+            require(question.correctAnswerIndices.size == 1 && (isBlank || chosenIndex in question.answers.indices))
+            val saved = repository.withMutationLock {
+                val session = _activeSession.value ?: return@withMutationLock false
+                val pos = session.answers.count { it.value.submitted } + 1
+                val sessionElapsed = ((System.currentTimeMillis() - session.sessionStartedAtEpochMs) / 1000L).toInt().coerceAtLeast(1)
+                val safeIndex = if (isBlank) -1 else chosenIndex
+                val safeText = if (isBlank) "" else question.answers[chosenIndex]
+                val safeCorrect = !isBlank && chosenIndex in question.correctAnswerIndices
+                val attempt = PendingAttemptEntity(
+                    questionId = question.id,
+                    chosenIndex = safeIndex,
+                    chosenText = safeText,
+                    isCorrect = safeCorrect,
+                    timeSpentSeconds = timeSpentSeconds.coerceIn(1, 86400),
+                    confidenceLevel = confidenceLevel,
+                    sessionUuid = session.sessionId,
+                    quizMode = session.mode.name,
+                    examBlock = null,
+                    contestId = session.exam?.examId,
+                    userNote = null,
+                    canonicalSubjectId = question.canonicalSubjectId,
+                    canonicalTopicId = question.canonicalTopicId,
+                    ownerUserId = session.ownerUserId,
+                    attemptId = UUID.nameUUIDFromBytes("${session.sessionId}:${question.id}".toByteArray()).toString(),
+                    questionRevision = question.questionRevision,
+                    examComponentId = question.examComponentId,
+                    isBlank = isBlank,
+                    confidenceExplicit = confidenceExplicit,
+                    selectedEvidenceId = selectedEvidenceId,
+                    positionInSession = pos,
+                    elapsedSessionSeconds = sessionElapsed,
+                    sessionInterrupted = session.interrupted
+                )
+                val next = session.copy(
+                    answers = session.answers + (
+                        question.id to SessionAnswer(
+                            chosenIndex = safeIndex,
+                            confidenceLevel = confidenceLevel,
+                            timeSpentSeconds = timeSpentSeconds,
+                            submitted = true,
+                            isBlank = isBlank,
+                            confidenceExplicit = confidenceExplicit,
+                            selectedEvidenceId = selectedEvidenceId
+                        )
+                    ),
+                    revision = session.revision + 1
+                )
+                repository.recordAttemptUnlocked(session.ownerUserId, attempt, next)
+                if (_activeSession.value?.sessionId == session.sessionId) _activeSession.value = next
                 true
             }
-            if(!saved)return false
-            localStats();appContext?.let{OfflineSyncWorker.enqueueNow(it)};true
-        }catch(e:CancellationException){throw e}catch(e:Exception){_userFeedbackMessage.emit(e.message?:"A resposta não foi salva. Tente novamente antes de sair.");false}
+            if (!saved) return false
+            localStats(); appContext?.let { OfflineSyncWorker.enqueueNow(it) }; true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _userFeedbackMessage.emit(e.message ?: "A resposta não foi salva. Tente novamente antes de sair.")
+            false
+        }
     }
 
     /**
@@ -467,16 +613,20 @@ class MainViewModel(
                         val questionsById = session.questions.associateBy { it.id }
                         val mergedAnswers = session.answers.toMutableMap()
                         val attemptsToRecord = mutableListOf<PendingAttemptEntity>()
+                        val sessionElapsed = ((System.currentTimeMillis() - session.sessionStartedAtEpochMs) / 1000L).toInt().coerceAtLeast(1)
+                        var orderIdx = 0
                         for ((qId, ans) in answersSnapshot) {
                             val question = questionsById[qId] ?: continue
-                            if (ans.chosenIndex !in question.answers.indices || question.correctAnswerIndices.size != 1) continue
+                            if (question.correctAnswerIndices.size != 1) continue
+                            if (!ans.isBlank && ans.chosenIndex !in question.answers.indices) continue
+                            orderIdx += 1
                             val safeTime = ans.timeSpentSeconds.coerceIn(1, 86400)
                             if (mergedAnswers[qId]?.submitted != true) {
                                 attemptsToRecord += PendingAttemptEntity(
                                     questionId = question.id,
-                                    chosenIndex = ans.chosenIndex,
-                                    chosenText = question.answers[ans.chosenIndex],
-                                    isCorrect = ans.chosenIndex in question.correctAnswerIndices,
+                                    chosenIndex = if (ans.isBlank) -1 else ans.chosenIndex,
+                                    chosenText = if (ans.isBlank) "" else question.answers[ans.chosenIndex],
+                                    isCorrect = !ans.isBlank && ans.chosenIndex in question.correctAnswerIndices,
                                     timeSpentSeconds = safeTime,
                                     confidenceLevel = ans.confidenceLevel,
                                     sessionUuid = session.sessionId,
@@ -489,7 +639,13 @@ class MainViewModel(
                                     ownerUserId = session.ownerUserId,
                                     attemptId = UUID.nameUUIDFromBytes("${session.sessionId}:${question.id}".toByteArray()).toString(),
                                     questionRevision = question.questionRevision,
-                                    examComponentId = question.examComponentId
+                                    examComponentId = question.examComponentId,
+                                    isBlank = ans.isBlank,
+                                    confidenceExplicit = ans.confidenceExplicit,
+                                    selectedEvidenceId = ans.selectedEvidenceId,
+                                    positionInSession = session.questions.indexOfFirst { it.id == qId }.takeIf { it >= 0 }?.plus(1) ?: orderIdx,
+                                    elapsedSessionSeconds = sessionElapsed,
+                                    sessionInterrupted = session.interrupted
                                 )
                             }
                             mergedAnswers[qId] = ans.copy(timeSpentSeconds = safeTime, submitted = true)
@@ -527,8 +683,13 @@ class MainViewModel(
         val closed=withContext(NonCancellable){
             repository.withMutationLock {
                 val current=_activeSession.value?:return@withMutationLock false
-                repository.saveSession(current)
-                if(completed)repository.completeSession(current.sessionId)
+                val savedSession=if(!completed && !current.finished && current.mode==QuizMode.SIMULADO){
+                    current.copy(interrupted=true,revision=current.revision+1)
+                }else{
+                    current
+                }
+                repository.saveSession(savedSession)
+                if(completed)repository.completeSession(savedSession.sessionId)
                 _activeSession.value=null;_activeQuizQuestions.value=null;_isSimuladoSession.value=false
                 true
             }

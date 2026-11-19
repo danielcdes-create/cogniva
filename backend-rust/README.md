@@ -1,8 +1,8 @@
-# 🦀 Cogniva Backend (`cogniva-api` `2.0.1`)
+# 🦀 Cogniva Backend (`cogniva-api` `2.2.0`)
 
-Serviço HTTP assíncrono em **Rust (`Axum 0.7` + `Tokio` + `MongoDB 3.1`)** responsável pela API REST `/api/v1/*`, pelo servidor estático incorporado do painel administrativo `/admin/`, pela distribuição OTA do APK Android e pelas rotinas agendadas de manutenção pedagógica sobre o banco **`cogniva`**.
+Serviço HTTP assíncrono em **Rust (`Axum 0.7` + `Tokio` + `MongoDB 3.1`)** responsável pela API REST `/api/v1/*`, pelos **5 Motores de Decisão** (`contract_version: 4`), pelo servidor estático incorporado do painel administrativo `/admin/`, pela distribuição OTA do APK Android e pelas rotinas agendadas de manutenção pedagógica sobre o banco **`cogniva`**.
 
-Para a visão integrada do sistema, consulte [`docs/ARQUITETURA.md`](../docs/ARQUITETURA.md), [`docs/OPERACAO.md`](../docs/OPERACAO.md), [`PRIVACY.md`](../PRIVACY.md) e [`SECURITY.md`](../SECURITY.md).
+Para a visão integrada do sistema, consulte [`docs/ARQUITETURA.md`](../docs/ARQUITETURA.md), [`docs/MOTORES-DECISAO-CORE-LOOP.md`](../docs/MOTORES-DECISAO-CORE-LOOP.md), [`docs/OPERACAO.md`](../docs/OPERACAO.md), [`PRIVACY.md`](../PRIVACY.md) e [`SECURITY.md`](../SECURITY.md).
 
 ---
 
@@ -14,9 +14,10 @@ Para a visão integrada do sistema, consulte [`docs/ARQUITETURA.md`](../docs/ARQ
 - **Catálogo em Execução e Templates Globais (`services/catalog_runtime.rs`, `routes/exams.rs`, `services/exam_store.rs`):**
   - Snapshot do catálogo canônico (`shared/knowledge-catalog.json` v2) mantido em cache `RwLock` com TTL de 10 segundos e invalidação instantânea após `POST /api/v1/admin/catalog/activate`.
   - Separação estrita entre `exam_templates` (globais, geridos no `/admin/`) e `user_exams` (grades individuais dos alunos), com detecção automática de `upstream_update_available` e adoção explícita via `POST /api/v1/exams/:id/adopt-template`.
-- **Acervo 100% V2, SRS Cronológico e Sincronização (`services/question_storage.rs`, `services/attempts.rs`, `services/srs_engine.rs`):**
-  - Validação estrita contra o contrato V2 (incluindo URIs `^https?://`, `exam_year` `1900..=2200`, `concursos <= 50` e conversão inteira verificada), hash canônico JCS SHA-256 (RFC 8785) e outbox de auditoria.
-  - Replay cronológico de lotes offline fora de ordem (`client_answered_at`), bônus de intervalo SRS baseado em `streak_atual` e isolamento de reportes abertos (`reportedQuestoes`).
+- **Acervo 100% V2.2, 5 Motores de Decisão e Sincronização (`services/question_storage.rs`, `services/attempts.rs`, `services/*_engine.rs`, `routes/study_loop.rs`):**
+  - Validação estrita contra o contrato V2.2 (`question-v2-validator-2.2.0`, `CURRENT_VALIDATOR_REVISION = 5`), hash canônico JCS SHA-256 (RFC 8785), suporte a `concept_id` e `evidence_challenge`, e outbox de auditoria.
+  - Motores modulares de **Diagnóstico**, **Retenção Contínua** ($R(t,S)$), **Priorização** (40/40/20 + DAG), **Calibração Beta-Binomial / Estratégia** ($VE$ + Holdout 20% + Fallback Cross-Banca), **Fadiga** (guarda de amostra mínima) e endpoint `GET /api/v1/study/next-action`.
+  - Replay cronológico de lotes offline fora de ordem (`client_answered_at`), tratamento dedicado de omissões estratégicas (`is_blank = true`) e isolamento de reportes abertos (`reportedQuestoes`).
 - **Governança xAI, Bússola Pré-Resposta e Privacidade de Cache (`services/ai_tutor.rs`, `services/classification.rs`, `services/question_import.rs`, `services/rate_limit.rs`):**
   - Delimitação XML `<untrusted_student_input>` / `<untrusted_raw_source>` contra injeção indireta de prompt, não-persistência em cache compartilhado quando há `user_note`/resposta pessoal, cota diária em `America/Sao_Paulo` (`UTC-3`) com teto reduzido para convidados (`5/dia`) e estorno automático em falhas.
   - Tutores pedagógicos `ai-tutor/3` com separação estrita entre pré-resposta (`child-friendly-pre`, `contextual-hint`, `dr-sincero` — gabarito enviado como `bussola_gabarito_sigiloso_nao_revelar` para zero alucinação, instrução de abstração em perguntas-guia e filtro determinístico `detect_pre_answer_spoiler` com retry corretivo antes do retorno/cache) e pós-resposta (`explanation`, `extra-concepts`, `child-friendly-post`, `mnemonic`, `plausibility` — fundamentação explícita de `correct_answer`).

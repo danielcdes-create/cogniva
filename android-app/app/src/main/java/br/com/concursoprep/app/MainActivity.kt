@@ -269,6 +269,21 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
             },
             onExitSession = {
                 viewModel.exitSession()
+            },
+            requireExplicitConfidence = true,
+            allowBlankAnswer = activeSession?.mode in listOf(QuizMode.SIMULADO, QuizMode.STRATEGY_BATTERY),
+            isSmartEntrySession = activeSession?.isSmartEntry == true,
+            onContinueAdaptiveRoute = { viewModel.continueAdaptiveRouteFromEntry() },
+            onSelectEvidence = { qId, evId -> viewModel.selectEvidenceForQuestion(qId, evId) },
+            onSubmitExtendedAnswer = { question, chosenIndex, confidenceLevel, timeSpentSeconds, isBlank, confidenceExplicit ->
+                viewModel.submitAnswer(
+                    question = question,
+                    chosenIndex = chosenIndex,
+                    confidenceLevel = confidenceLevel,
+                    timeSpentSeconds = timeSpentSeconds,
+                    isBlank = isBlank,
+                    confidenceExplicit = confidenceExplicit
+                )
             }
         )
         return
@@ -332,7 +347,15 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                             viewModel.selectContest(cid)
                             currentTab = BottomTab.CONCURSOS
                         },
-                        onAddExam = { viewModel.openExamBuilder() }
+                        onAddExam = { viewModel.openExamBuilder() },
+                        onStartSmartEntry = { viewModel.startSmartEntryQuestion() },
+                        onStartStrategyBattery = {
+                            viewModel.startQuizSession(
+                                mode = QuizMode.STRATEGY_BATTERY,
+                                quantity = 10,
+                                contestId = selectedContestId
+                            )
+                        }
                     )
                 }
 

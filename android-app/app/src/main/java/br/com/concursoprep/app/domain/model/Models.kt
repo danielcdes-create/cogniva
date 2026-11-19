@@ -45,7 +45,9 @@ enum class QuizMode {
     SRS_REVIEW,
     ERROR_NOTEBOOK,
     COMMON_TRUNK,
-    SINGLE
+    SINGLE,
+    ADAPTIVE_LOOP,
+    STRATEGY_BATTERY
 }
 
 @Serializable
@@ -107,6 +109,37 @@ data class CommonTrunkSuggestion(
 )
 
 @Serializable
+data class ExamGapSummaryDto(
+    @SerialName("exam_id") val examId: String? = null,
+    @SerialName("exam_name") val examName: String? = null,
+    @SerialName("days_until_exam") val daysUntilExam: Long? = null,
+    @SerialName("verified_units") val verifiedUnits: Int = 0,
+    @SerialName("consolidating_units") val consolidatingUnits: Int = 0,
+    @SerialName("insufficient_evidence_units") val insufficientEvidenceUnits: Int = 0,
+    @SerialName("total_units") val totalUnits: Int = 0,
+    @SerialName("wrong_answer_penalty") val wrongAnswerPenalty: Double = 0.0,
+    @SerialName("historical_cutoff_score") val historicalCutoffScore: Double = 0.0
+)
+
+@Serializable
+data class StrategyBandGuidanceDto(
+    @SerialName("confidence_band") val confidenceBand: Int,
+    @SerialName("calibrated_mean") val calibratedMean: Double,
+    val decision: br.com.concursoprep.app.domain.exam.StrategyDecision
+)
+
+@Serializable
+data class NextActionResponseDto(
+    @SerialName("entry_question") val entryQuestion: QuestionDto? = null,
+    @SerialName("entry_reason") val entryReason: String = "Prioridade sugerida: um conceito relevante com retenção pendente.",
+    @SerialName("priority_topic_id") val priorityTopicId: String? = null,
+    @SerialName("exam_gap_summary") val examGapSummary: ExamGapSummaryDto = ExamGapSummaryDto(),
+    @SerialName("calibration_cells") val calibrationCells: List<br.com.concursoprep.app.domain.exam.CalibrationCellDto> = emptyList(),
+    @SerialName("strategy_guidance") val strategyGuidance: List<StrategyBandGuidanceDto> = emptyList(),
+    @SerialName("fatigue_report") val fatigueReport: br.com.concursoprep.app.domain.exam.FatigueReportDto = br.com.concursoprep.app.domain.exam.FatigueEngine.evaluateFatigue(0, 0, 0, 0, 0)
+)
+
+@Serializable
 data class TodayDashboardDto(
     @SerialName("user_id") val userId: Long,
     @SerialName("date_iso") val dateIso: String,
@@ -119,7 +152,8 @@ data class TodayDashboardDto(
     @SerialName("upcoming_exams") val upcomingExams: List<UpcomingExamCard>,
     @SerialName("common_trunk_suggestion") val commonTrunkSuggestion: CommonTrunkSuggestion,
     val lastSyncedAt: String? = null,
-    val syncMessage: String? = null
+    val syncMessage: String? = null,
+    val nextAction: NextActionResponseDto? = null
 )
 
 @Serializable
@@ -181,6 +215,20 @@ data class UserQuestionBriefStats(
 )
 
 @Serializable
+data class EvidenceOptionDto(
+    @SerialName("evidence_id") val evidenceId: String,
+    val text: String,
+    @SerialName("source_id") val sourceId: String? = null
+)
+
+@Serializable
+data class EvidenceChallengeDto(
+    val prompt: String,
+    val options: List<EvidenceOptionDto>,
+    @SerialName("correct_evidence_id") val correctEvidenceId: String
+)
+
+@Serializable
 data class QuestionDto(
     val id: String,
     @SerialName("question_revision") val questionRevision: String = "",
@@ -206,7 +254,9 @@ data class QuestionDto(
     @SerialName("exam_component_id") val examComponentId: String? = null,
     @SerialName("knowledge_projection_version") val knowledgeProjectionVersion: Int = 0,
     @SerialName("practice_review_due_on") val practiceReviewDueOn: String? = null,
-    @SerialName("knowledge_binding_verified") val knowledgeBindingVerified:Boolean=false
+    @SerialName("knowledge_binding_verified") val knowledgeBindingVerified: Boolean = false,
+    @SerialName("concept_ids") val conceptIds: List<String> = emptyList(),
+    @SerialName("evidence_challenge") val evidenceChallenge: EvidenceChallengeDto? = null
 )
 
 @Serializable
@@ -227,7 +277,13 @@ data class AnswerAttemptPayload(
     @SerialName("user_note") val userNote: String? = null,
     @SerialName("canonical_subject_id") val canonicalSubjectId: String? = null,
     @SerialName("canonical_topic_id") val canonicalTopicId: String? = null,
-    @SerialName("exam_component_id") val examComponentId:String?=null
+    @SerialName("exam_component_id") val examComponentId: String? = null,
+    @SerialName("is_blank") val isBlank: Boolean = false,
+    @SerialName("confidence_explicit") val confidenceExplicit: Boolean = false,
+    @SerialName("selected_evidence_id") val selectedEvidenceId: String? = null,
+    @SerialName("position_in_session") val positionInSession: Int? = null,
+    @SerialName("elapsed_session_seconds") val elapsedSessionSeconds: Int? = null,
+    @SerialName("session_interrupted") val sessionInterrupted: Boolean = false
 )
 
 @Serializable
@@ -308,7 +364,11 @@ data class ProgressAnalyticsDto(
     @SerialName("historical_cutoff_reference") val historicalCutoffReference: Double,
     @SerialName("disciplines_sorted_by_weakness") val disciplinesSortedByWeakness: List<DisciplineMasteryBarDto>,
     @SerialName("confidence_matrix") val confidenceMatrix: ConfidenceMatrixSummaryDto,
-    @SerialName("activity_heatmap") val activityHeatmap: List<DailyHeatmapCellDto>
+    @SerialName("activity_heatmap") val activityHeatmap: List<DailyHeatmapCellDto>,
+    val calibrationCells: List<br.com.concursoprep.app.domain.exam.CalibrationCellDto> = emptyList(),
+    val strategyGuidance: List<StrategyBandGuidanceDto> = emptyList(),
+    val fatigueReport: br.com.concursoprep.app.domain.exam.FatigueReportDto = br.com.concursoprep.app.domain.exam.FatigueEngine.evaluateFatigue(0, 0, 0, 0, 0),
+    val wrongAnswerPenalty: Double = 0.0
 )
 
 /**

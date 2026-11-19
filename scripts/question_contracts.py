@@ -253,6 +253,7 @@ def check_provenance_uris(provenance, field="provenance"):
 def taxonomy_links(links, catalog, confirmed):
     topics = {t["topic_id"]: t for t in catalog["topics"]}
     subjects = {s["subject_id"]: s for s in catalog["subjects"]}
+    concepts = {c["concept_id"]: c for c in (catalog.get("concepts") or [])}
     ids = set()
     link_ids = set()
     for idx, link in enumerate(links):
@@ -269,13 +270,31 @@ def taxonomy_links(links, catalog, confirmed):
             "INACTIVE_TAXONOMY_LINK",
             f"classification.links.{idx}",
         )
+        concept_id = link.get("concept_id")
+        if concept_id is not None and concepts:
+            concept = concepts.get(concept_id)
+            require(
+                concept is not None
+                and concept["subject_id"] == link["subject_id"]
+                and concept["topic_id"] == link["topic_id"],
+                "invalid concept link",
+                "INVALID_TAXONOMY_LINK",
+                f"classification.links.{idx}.concept_id",
+            )
+            require(
+                concept["status"] == "ACTIVE",
+                "inactive concept link",
+                "INACTIVE_TAXONOMY_LINK",
+                f"classification.links.{idx}.concept_id",
+            )
+        dedup_key = (link["topic_id"], concept_id)
         require(
-            link["topic_id"] not in ids,
-            "duplicate classified topic",
+            dedup_key not in ids,
+            "duplicate classified topic/concept",
             "DUPLICATE_TAXONOMY_LINK",
             f"classification.links.{idx}.topic_id",
         )
-        ids.add(link["topic_id"])
+        ids.add(dedup_key)
         if link["role"] == "PRIMARY":
             require(
                 link["coverage"] == "DIRECT",
@@ -367,6 +386,22 @@ def validate_question(q, catalog, allow_server_provenance=True):
     for idx, link in enumerate(q["classification"]["links"]):
         check_provenance_uris(link.get("provenance"), f"classification.links.{idx}.provenance")
     check_provenance_uris(q["validity"].get("decision"), "validity.decision")
+
+    ev_challenge = q.get("evidence_challenge")
+    if ev_challenge is not None:
+        ev_ids = [opt["evidence_id"] for opt in ev_challenge["options"]]
+        require(
+            len(set(ev_ids)) == len(ev_ids),
+            "duplicate evidence_id in evidence_challenge",
+            "SCHEMA_VALIDATION_FAILED",
+            "evidence_challenge.options",
+        )
+        require(
+            ev_challenge["correct_evidence_id"] in ev_ids,
+            "correct_evidence_id missing from evidence_challenge options",
+            "SCHEMA_VALIDATION_FAILED",
+            "evidence_challenge.correct_evidence_id",
+        )
 
     require(bool(q["question"].strip()), "empty question", "EMPTY_QUESTION", "question")
     answers = q["answers"]

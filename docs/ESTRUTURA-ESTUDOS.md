@@ -12,7 +12,8 @@ O Cogniva conecta o planejamento individual de concursos por estudante a templat
 | **Disciplina** | Identidade canônica global (`subject_id` no catálogo), compartilhada entre troncos, templates, grades e questões. |
 | **Assunto** | Conteúdo raiz de uma disciplina (`topic_id`, `parent_topic_id = null`). |
 | **Subassunto** | Detalhamento específico subordinado a um assunto da mesma disciplina (`parent_topic_id` preenchido). |
-| **Questão (V2)** | Enunciado, alternativas/gabarito objetivo ou rubrica discursiva, origem documental, classificação canônica confirmada e status de validade. |
+| **Conceito e Fonte Normativa** | Unidade fina opcional (`concept_id` subordinado a um `SUBTOPIC` folha, com pré-requisitos em DAG e `normative_sources[]` versionadas por hash SHA-256). Questões sem `concept_id` operam automaticamente pelo `SUBTOPIC` folha (`concept_id ?? topic_id`). |
+| **Questão (V2)** | Enunciado, alternativas/gabarito objetivo ou rubrica discursiva, origem documental, classificação canônica confirmada (`PRIMARY` + `SECONDARY`), desafio opcional de evidência (`evidence_challenge`) e status de validade. |
 
 ```mermaid
 flowchart TD

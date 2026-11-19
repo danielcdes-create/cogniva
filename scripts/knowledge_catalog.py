@@ -103,10 +103,15 @@ def validate(catalog, registry, schema, templates_doc=None):
         return result
 
     sources = unique(catalog["sources"], "source_id")
+    normative_sources = unique(catalog.get("normative_sources") or [], "source_id")
+    require(not (set(sources) & set(normative_sources)), "duplicate source_id across sources and normative_sources")
+    all_source_ids = set(sources) | set(normative_sources)
     trunks = unique(catalog["trunks"], "trunk_id")
     subjects = unique(catalog["subjects"], "subject_id")
     topics = unique(catalog["topics"], "topic_id")
-    all_ids = list(trunks) + list(subjects) + list(topics)
+    concepts = unique(catalog.get("concepts") or [], "concept_id")
+    protected_ids = list(trunks) + list(subjects) + list(topics)
+    all_ids = protected_ids + list(concepts)
     require(len(all_ids) == len(set(all_ids)), "identity reused between entity types")
     alias_owners = {}
 
@@ -162,6 +167,38 @@ def validate(catalog, registry, schema, templates_doc=None):
         require(key not in relations, "duplicate symmetric relation")
         relations.add(key)
 
+    for cid, concept in concepts.items():
+        require(concept["subject_id"] in subjects, f"unknown concept subject: {cid}")
+        parent_topic = topics.get(concept["topic_id"])
+        require(
+            parent_topic is not None
+            and parent_topic["kind"] == "SUBTOPIC"
+            and parent_topic["subject_id"] == concept["subject_id"],
+            f"concept must bind to same-subject SUBTOPIC: {cid}",
+        )
+        require(set(concept["source_ids"]) <= all_source_ids, f"unknown concept source: {cid}")
+        names(concept, cid, ("CONCEPT", concept["topic_id"]))
+        for prereq in concept["prerequisite_concept_ids"]:
+            require(prereq in concepts and prereq != cid, f"invalid prerequisite concept: {cid}->{prereq}")
+
+    # Topological sort (Kahn's algorithm) proving strict DAG acyclicity on prerequisite_concept_ids
+    if concepts:
+        indegree = {cid: len(c["prerequisite_concept_ids"]) for cid, c in concepts.items()}
+        dependents = {cid: [] for cid in concepts}
+        for cid, c in concepts.items():
+            for prereq in c["prerequisite_concept_ids"]:
+                dependents[prereq].append(cid)
+        queue = [cid for cid, deg in indegree.items() if deg == 0]
+        visited = 0
+        while queue:
+            curr = queue.pop()
+            visited += 1
+            for nxt in dependents[curr]:
+                indegree[nxt] -= 1
+                if indegree[nxt] == 0:
+                    queue.append(nxt)
+        require(visited == len(concepts), "cycle detected in prerequisite_concept_ids")
+
     compat = catalog["compatibility"]
     require(set(compat["legacy_subject_ids"]) <= set(subjects), "legacy subject removed")
     for tid in compat["legacy_topic_ids"]:
@@ -169,7 +206,9 @@ def validate(catalog, registry, schema, templates_doc=None):
 
     require(registry.get("catalog_id") == catalog["catalog_id"], "registry catalog mismatch")
     registered = unique(registry["entries"], "id")
-    require(set(registered) == set(all_ids), "unregistered or removed identity")
+    require(set(registered) >= set(protected_ids), "unregistered or removed identity")
+    extra_registered = set(registered) - set(protected_ids)
+    require(extra_registered <= set(concepts), "unregistered or removed identity")
     for entity, rows in (("TRUNK", trunks), ("SUBJECT", subjects), ("TOPIC", topics)):
         for identity, row in rows.items():
             pin = registered[identity]
@@ -266,6 +305,20 @@ def main():
         read(ROOT / "shared/knowledge-catalog.schema.json"),
         templates,
     )
+    seed_path = ROOT / "shared/knowledge-concepts-seed.json"
+    if seed_path.exists():
+        seed = read(seed_path)
+        merged = dict(catalog)
+        merged["normative_sources"] = [*(catalog.get("normative_sources") or []), *(seed.get("normative_sources") or [])]
+        merged["concepts"] = [*(catalog.get("concepts") or []), *(seed.get("concepts") or [])]
+        validate(
+            merged,
+            read(ROOT / "shared/knowledge-id-registry.json"),
+            read(ROOT / "shared/knowledge-catalog.schema.json"),
+            templates,
+        )
+        summary["seed_normative_sources"] = len(seed.get("normative_sources") or [])
+        summary["seed_concepts"] = len(seed.get("concepts") or [])
     output = ROOT / "docs/catalogo/CONHECIMENTOS.md"
     if a.export:
         output.parent.mkdir(parents=True, exist_ok=True)

@@ -194,17 +194,22 @@ pub fn validator_source_sha256(validator: &Document) -> String {
     )
 }
 
-pub const CURRENT_VALIDATOR_REVISION: i32 = 4;
+pub const CURRENT_VALIDATOR_REVISION: i32 = 5;
 pub const VALIDATOR_MIGRATION_V2_0_1: &str = "question-v2-validator-2.0.1";
 pub const VALIDATOR_MIGRATION_V2_0_2: &str = "question-v2-validator-2.0.2";
 pub const VALIDATOR_MIGRATION_V2_1_0: &str = "question-v2-validator-2.1.0";
+pub const VALIDATOR_MIGRATION_V2_2_0: &str = "question-v2-validator-2.2.0";
 
 pub const QUESTION_VALIDATOR_V2_0_2_SHA256: &str =
     "eadf843691163ff7f6d08ce266484038f4f4499f7d5157b99c3e31d4073aa6c9";
 pub const QUESTION_VALIDATOR_V2_1_0_SHA256: &str =
     "83925ee70854b73c09f6536e8f7a1a080378cb998c5fcaa787819a1c3178577c";
+pub const QUESTION_VALIDATOR_V2_2_0_SHA256: &str =
+    "3531adbb29802f6191f657a2483e10e9f39a010b011f6082cd1b40ee4500fd16";
 pub const SUGGESTION_VALIDATOR_V2_1_0_SHA256: &str =
     "f1204f7bfba57ceebf2603cccfef008f5a65b4e8e26fb799d62e03b5332b4389";
+pub const SUGGESTION_VALIDATOR_V2_2_0_SHA256: &str =
+    "93f772c7262d4a8ed4c5d38f0f212e5681cf74aa33fe9f52d1f788004058a79b";
 pub const COMPATIBILITY_VALIDATOR_V2_1_0_SHA256: &str =
     "e651c77541542f315a69342838312e013381f6b5edd632033c2f158f5847287d";
 pub const EVALUATION_VALIDATOR_V2_1_0_SHA256: &str =
@@ -235,40 +240,88 @@ pub const VALIDATOR_MIGRATIONS: &[ValidatorMigrationStep] = &[
         to_source_sha256: QUESTION_VALIDATOR_V2_0_2_SHA256,
         to_revision: 3,
     },
-    // V2.1.0 migration paths from v2.0.0, v2.0.1, and v2.0.2
     ValidatorMigrationStep {
         migration_id: VALIDATOR_MIGRATION_V2_1_0,
         kind: "question",
         from_source_sha256: "891ab1a222dce8d53dc7fc4cf4335d0e91e45444d2643640f3659a306bc17a9d",
         to_source_sha256: QUESTION_VALIDATOR_V2_1_0_SHA256,
-        to_revision: CURRENT_VALIDATOR_REVISION,
+        to_revision: 4,
     },
     ValidatorMigrationStep {
         migration_id: VALIDATOR_MIGRATION_V2_1_0,
         kind: "question",
         from_source_sha256: "61ef0c9ef5deb4b3868cf22ed668079ce73f87bbef483dfbbc746d12a2140013",
         to_source_sha256: QUESTION_VALIDATOR_V2_1_0_SHA256,
-        to_revision: CURRENT_VALIDATOR_REVISION,
+        to_revision: 4,
     },
     ValidatorMigrationStep {
         migration_id: VALIDATOR_MIGRATION_V2_1_0,
         kind: "question",
         from_source_sha256: QUESTION_VALIDATOR_V2_0_2_SHA256,
         to_source_sha256: QUESTION_VALIDATOR_V2_1_0_SHA256,
-        to_revision: CURRENT_VALIDATOR_REVISION,
+        to_revision: 4,
     },
     ValidatorMigrationStep {
         migration_id: VALIDATOR_MIGRATION_V2_1_0,
         kind: "suggestion",
         from_source_sha256: "fa915882387ab8c1c69b74b501dc3fa4b3ead8afe392b934c554414d56e5c23e",
         to_source_sha256: SUGGESTION_VALIDATOR_V2_1_0_SHA256,
-        to_revision: CURRENT_VALIDATOR_REVISION,
+        to_revision: 4,
     },
     ValidatorMigrationStep {
         migration_id: VALIDATOR_MIGRATION_V2_1_0,
         kind: "suggestion",
         from_source_sha256: "5da194157dc8bd0154fc25eba3dcd3618c99b4d7f16e27ede39ba87e18a66091",
         to_source_sha256: SUGGESTION_VALIDATOR_V2_1_0_SHA256,
+        to_revision: 4,
+    },
+    ValidatorMigrationStep {
+        migration_id: VALIDATOR_MIGRATION_V2_2_0,
+        kind: "question",
+        from_source_sha256: "891ab1a222dce8d53dc7fc4cf4335d0e91e45444d2643640f3659a306bc17a9d",
+        to_source_sha256: QUESTION_VALIDATOR_V2_2_0_SHA256,
+        to_revision: CURRENT_VALIDATOR_REVISION,
+    },
+    ValidatorMigrationStep {
+        migration_id: VALIDATOR_MIGRATION_V2_2_0,
+        kind: "question",
+        from_source_sha256: "61ef0c9ef5deb4b3868cf22ed668079ce73f87bbef483dfbbc746d12a2140013",
+        to_source_sha256: QUESTION_VALIDATOR_V2_2_0_SHA256,
+        to_revision: CURRENT_VALIDATOR_REVISION,
+    },
+    ValidatorMigrationStep {
+        migration_id: VALIDATOR_MIGRATION_V2_2_0,
+        kind: "question",
+        from_source_sha256: QUESTION_VALIDATOR_V2_0_2_SHA256,
+        to_source_sha256: QUESTION_VALIDATOR_V2_2_0_SHA256,
+        to_revision: CURRENT_VALIDATOR_REVISION,
+    },
+    ValidatorMigrationStep {
+        migration_id: VALIDATOR_MIGRATION_V2_2_0,
+        kind: "question",
+        from_source_sha256: QUESTION_VALIDATOR_V2_1_0_SHA256,
+        to_source_sha256: QUESTION_VALIDATOR_V2_2_0_SHA256,
+        to_revision: CURRENT_VALIDATOR_REVISION,
+    },
+    ValidatorMigrationStep {
+        migration_id: VALIDATOR_MIGRATION_V2_2_0,
+        kind: "suggestion",
+        from_source_sha256: "fa915882387ab8c1c69b74b501dc3fa4b3ead8afe392b934c554414d56e5c23e",
+        to_source_sha256: SUGGESTION_VALIDATOR_V2_2_0_SHA256,
+        to_revision: CURRENT_VALIDATOR_REVISION,
+    },
+    ValidatorMigrationStep {
+        migration_id: VALIDATOR_MIGRATION_V2_2_0,
+        kind: "suggestion",
+        from_source_sha256: "5da194157dc8bd0154fc25eba3dcd3618c99b4d7f16e27ede39ba87e18a66091",
+        to_source_sha256: SUGGESTION_VALIDATOR_V2_2_0_SHA256,
+        to_revision: CURRENT_VALIDATOR_REVISION,
+    },
+    ValidatorMigrationStep {
+        migration_id: VALIDATOR_MIGRATION_V2_2_0,
+        kind: "suggestion",
+        from_source_sha256: SUGGESTION_VALIDATOR_V2_1_0_SHA256,
+        to_source_sha256: SUGGESTION_VALIDATOR_V2_2_0_SHA256,
         to_revision: CURRENT_VALIDATOR_REVISION,
     },
     ValidatorMigrationStep {
@@ -2008,11 +2061,33 @@ fn validate_transition(old: Option<&Document>, next: &Value) -> Result<(), AppEr
 }
 
 #[cfg(test)]
-pub fn v2_0_2_schema_bundle() -> Value {
+pub fn v2_1_0_schema_bundle() -> Value {
     let mut bundle: Value = serde_json::from_str(include_str!(
         "../../../shared/schemas/question-contracts.schema.json"
     ))
     .expect("contracts");
+
+    bundle["$defs"]
+        .as_object_mut()
+        .unwrap()
+        .retain(|k, _| k != "evidence_option" && k != "evidence_challenge");
+    for link_def in ["classified_link", "proposed_link"] {
+        bundle["$defs"][link_def]["properties"]
+            .as_object_mut()
+            .unwrap()
+            .retain(|k, _| k != "concept_id");
+    }
+    bundle["$defs"]["question"]["properties"]
+        .as_object_mut()
+        .unwrap()
+        .retain(|k, _| k != "evidence_challenge");
+
+    bundle
+}
+
+#[cfg(test)]
+pub fn v2_0_2_schema_bundle() -> Value {
+    let mut bundle = v2_1_0_schema_bundle();
 
     if let Some(one_of) = bundle["oneOf"].as_array_mut() {
         one_of.retain(|entry| entry["$ref"] != "#/$defs/review_event");
@@ -2152,10 +2227,11 @@ mod tests {
     }
 
     #[test]
-    fn validator_migration_table_matches_v2_0_0_v2_0_1_v2_0_2_and_current_v2_1_0_hashes() {
+    fn validator_migration_table_matches_v2_0_0_v2_0_1_v2_0_2_and_current_v2_2_0_hashes() {
         let old_bundle = v2_0_0_schema_bundle();
         let v2_0_1_bundle = v2_0_1_schema_bundle();
         let v2_0_2_bundle = v2_0_2_schema_bundle();
+        let v2_1_0_bundle = v2_1_0_schema_bundle();
         for kind in ["question", "suggestion", "compatibility", "evaluation"] {
             let old_doc = mongo_schema_from_bundle(&old_bundle, kind);
             let old_hash = validator_source_sha256(&doc! { "$jsonSchema": old_doc });
@@ -2163,33 +2239,49 @@ mod tests {
             let v2_0_1_hash = validator_source_sha256(&doc! { "$jsonSchema": v2_0_1_doc });
             let v2_0_2_doc = mongo_schema_from_bundle(&v2_0_2_bundle, kind);
             let v2_0_2_hash = validator_source_sha256(&doc! { "$jsonSchema": v2_0_2_doc });
+            let v2_1_0_doc = mongo_schema_from_bundle(&v2_1_0_bundle, kind);
+            let v2_1_0_hash = validator_source_sha256(&doc! { "$jsonSchema": v2_1_0_doc });
             let current_doc = mongo_schema(kind);
             assert!(
                 current_doc.contains_key("properties"),
                 "missing properties in {kind}"
             );
             let current_hash = validator_source_sha256(&doc! { "$jsonSchema": current_doc });
+            let expected_mig = if matches!(kind, "question" | "suggestion") {
+                VALIDATOR_MIGRATION_V2_2_0
+            } else {
+                VALIDATOR_MIGRATION_V2_1_0
+            };
             if kind == "question" {
                 assert_eq!(v2_0_2_hash, QUESTION_VALIDATOR_V2_0_2_SHA256);
+                assert_eq!(v2_1_0_hash, QUESTION_VALIDATOR_V2_1_0_SHA256);
                 let step_202 = find_validator_migration(kind, &v2_0_2_hash, &current_hash)
                     .unwrap_or_else(|| {
-                        panic!("missing v2.0.2 -> v2.1.0 migration for {kind}: {v2_0_2_hash} -> {current_hash}")
+                        panic!("missing v2.0.2 -> current migration for {kind}: {v2_0_2_hash} -> {current_hash}")
                     });
-                assert_eq!(step_202.migration_id, VALIDATOR_MIGRATION_V2_1_0);
+                assert_eq!(step_202.migration_id, expected_mig);
                 assert_eq!(step_202.to_revision, CURRENT_VALIDATOR_REVISION);
+            }
+            if matches!(kind, "question" | "suggestion") {
+                let step_210 = find_validator_migration(kind, &v2_1_0_hash, &current_hash)
+                    .unwrap_or_else(|| {
+                        panic!("missing v2.1.0 -> v2.2.0 migration for {kind}: {v2_1_0_hash} -> {current_hash}")
+                    });
+                assert_eq!(step_210.migration_id, VALIDATOR_MIGRATION_V2_2_0);
+                assert_eq!(step_210.to_revision, CURRENT_VALIDATOR_REVISION);
             }
             let step_old = find_validator_migration(kind, &old_hash, &current_hash)
                 .unwrap_or_else(|| {
-                    panic!("missing v2.0.0 -> v2.1.0 migration for {kind}: {old_hash} -> {current_hash}")
+                    panic!("missing v2.0.0 -> current migration for {kind}: {old_hash} -> {current_hash}")
                 });
-            assert_eq!(step_old.migration_id, VALIDATOR_MIGRATION_V2_1_0);
+            assert_eq!(step_old.migration_id, expected_mig);
             assert_eq!(step_old.to_revision, CURRENT_VALIDATOR_REVISION);
 
             let step_201 = find_validator_migration(kind, &v2_0_1_hash, &current_hash)
                 .unwrap_or_else(|| {
-                    panic!("missing v2.0.1 -> v2.1.0 migration for {kind}: {v2_0_1_hash} -> {current_hash}")
+                    panic!("missing v2.0.1 -> current migration for {kind}: {v2_0_1_hash} -> {current_hash}")
                 });
-            assert_eq!(step_201.migration_id, VALIDATOR_MIGRATION_V2_1_0);
+            assert_eq!(step_201.migration_id, expected_mig);
             assert_eq!(step_201.to_revision, CURRENT_VALIDATOR_REVISION);
 
             assert!(

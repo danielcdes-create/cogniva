@@ -190,6 +190,112 @@ fun ProgressScreen(
                 }
             }
 
+            // 2B. Calibração de Confiança (Beta-Binomial) & Estratégia de Prova (VE)
+            if (analytics.strategyGuidance.isNotEmpty()) {
+                item(key = "calibration_strategy") {
+                    Card(
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "Calibração Empírica & Estratégia de Prova",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            val penaltyText = if (analytics.wrongAnswerPenalty > 0.0) {
+                                val pStarPct = (analytics.wrongAnswerPenalty / (1.0 + analytics.wrongAnswerPenalty) * 100.0).toInt()
+                                "Penalidade ativa (-${analytics.wrongAnswerPenalty} por erro) · Limiar de equilíbrio p* = $pStarPct%"
+                            } else {
+                                "Sem penalidade por erro na grade principal · Responder sempre maximiza o valor esperado (VE)"
+                            }
+                            Text(
+                                text = penaltyText,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            analytics.strategyGuidance.forEach { bandItem ->
+                                val bandLabel = when (bandItem.confidenceBand) {
+                                    1 -> "Chute / Baixa (1)"
+                                    2 -> "Dúvida / Média (2)"
+                                    else -> "Certeza / Alta (3)"
+                                }
+                                val recommendOmit = bandItem.decision.recommendedAction == br.com.concursoprep.app.domain.exam.StrategyAction.OMIT
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "$bandLabel: ${(bandItem.calibratedMean * 100.0).toInt()}% calibrado",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Text(
+                                        text = if (recommendOmit) "Recomendado: Omitir" else "Recomendado: Responder",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (recommendOmit) ext.warning else ext.correct
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 2C. Motor de Fadiga (Guarda Epistemológica Estrita)
+            item(key = "fatigue_endurance") {
+                val fatigue = analytics.fatigueReport
+                Card(
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "Resistência em Provas Prolongadas",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        when (fatigue.status) {
+                            br.com.concursoprep.app.domain.exam.FatigueStatus.INSUFFICIENT_EVIDENCE -> {
+                                Text(
+                                    text = "Evidência insuficiente (${fatigue.qualifyingSessions}/${fatigue.requiredSessions} simulados longos sem interrupção · ${fatigue.qualifyingAttempts}/${fatigue.requiredAttempts} questões cronometradas). O Cogniva só estima efeito de fadiga com amostra validada.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            br.com.concursoprep.app.domain.exam.FatigueStatus.FATIGUE_DETECTED -> {
+                                val dropPct = String.format(Locale.forLanguageTag("pt-BR"), "%.1f%%", (fatigue.shrunkAccuracyDelta ?: 0.0) * 100.0)
+                                Text(
+                                    text = "Queda empírica detectada após 45 min ($dropPct regularizado em ${fatigue.qualifyingSessions} simulados).",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = ext.warning
+                                )
+                            }
+                            br.com.concursoprep.app.domain.exam.FatigueStatus.STABLE_ENDURANCE -> {
+                                Text(
+                                    text = "Resistência estável confirmada em ${fatigue.qualifyingSessions} simulados prolongados sem queda estatisticamente significativa.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = ext.correct
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // 3. Heatmap de Consistência Diária
             item {
                 val ptBrLocale = remember { Locale.forLanguageTag("pt-BR") }

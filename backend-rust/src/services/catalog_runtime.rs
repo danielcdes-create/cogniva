@@ -113,6 +113,62 @@ pub fn snapshot() -> Arc<Snapshot> {
     CONTEXT.try_with(Arc::clone).unwrap_or_else(|_| bundled())
 }
 
+pub fn seed_graph() -> &'static Value {
+    static SEED: OnceLock<Value> = OnceLock::new();
+    SEED.get_or_init(|| {
+        serde_json::from_str(include_str!("../../../shared/knowledge-concepts-seed.json"))
+            .expect("validated knowledge-concepts-seed.json")
+    })
+}
+
+pub fn effective_normative_sources(catalog: &Value) -> Vec<Value> {
+    let mut seen = HashSet::new();
+    let mut out = Vec::new();
+    if let Some(arr) = catalog.get("normative_sources").and_then(Value::as_array) {
+        for item in arr {
+            if let Some(id) = item["source_id"].as_str() {
+                if seen.insert(id.to_string()) {
+                    out.push(item.clone());
+                }
+            }
+        }
+    }
+    if let Some(arr) = seed_graph().get("normative_sources").and_then(Value::as_array) {
+        for item in arr {
+            if let Some(id) = item["source_id"].as_str() {
+                if seen.insert(id.to_string()) {
+                    out.push(item.clone());
+                }
+            }
+        }
+    }
+    out
+}
+
+pub fn effective_concepts(catalog: &Value) -> Vec<Value> {
+    let mut seen = HashSet::new();
+    let mut out = Vec::new();
+    if let Some(arr) = catalog.get("concepts").and_then(Value::as_array) {
+        for item in arr {
+            if let Some(id) = item["concept_id"].as_str() {
+                if seen.insert(id.to_string()) {
+                    out.push(item.clone());
+                }
+            }
+        }
+    }
+    if let Some(arr) = seed_graph().get("concepts").and_then(Value::as_array) {
+        for item in arr {
+            if let Some(id) = item["concept_id"].as_str() {
+                if seen.insert(id.to_string()) {
+                    out.push(item.clone());
+                }
+            }
+        }
+    }
+    out
+}
+
 pub async fn scope<T>(catalog: Arc<Snapshot>, future: impl Future<Output = T>) -> T {
     CONTEXT.scope(catalog, future).await
 }

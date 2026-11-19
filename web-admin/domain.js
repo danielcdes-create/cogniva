@@ -166,8 +166,12 @@ export function objectiveDraft(form) {
     if (!Number.isFinite(retrieved.getTime()) || retrieved.toISOString().slice(0,10)!==form.sourceDate) throw new Error('Data de consulta inválida.');
     source = {uri:form.sourceUri.trim(),title:form.sourceTitle.trim(),locator:text(form.sourceLocator),retrieved_at:retrieved.toISOString(),sha256:null};
   }
-  return {question_type:form.kind,question:form.question,answers,correct_answer_indices:open || form.correctIndex === '' ? [] : [Number(form.correctIndex)],grading,origin_kind:form.originKind,subject_id:form.subjectId,topic_id:form.topicId,confirm_classification:form.confirmClassification,
+  const draft = {question_type:form.kind,question:form.question,answers,correct_answer_indices:open || form.correctIndex === '' ? [] : [Number(form.correctIndex)],grading,origin_kind:form.originKind,subject_id:form.subjectId,topic_id:form.topicId,confirm_classification:form.confirmClassification,
     source_exam_code:text(form.sourceExamCode),institution:text(form.institution),organizer:text(form.organizer),exam_year:year?Number(year):null,question_number:text(form.questionNumber),source_reference:source,confirm_origin:!!form.confirmOrigin,explanation:text(form.explanation),level:text(form.level)};
+  if (text(form.conceptId)) {
+    draft.concept_id = text(form.conceptId);
+  }
+  return draft;
 }
 
 export function topicPath(catalog, topic) {
@@ -202,14 +206,50 @@ export function renameEntity(row, label) {
   return result;
 }
 
-export function newCatalogEntity(group, subjectId = '') {
+export function newCatalogEntity(group, subjectId = '', topicId = '') {
   if (group === 'trunks') {
     return {trunk_id:'',label:'',icon_key:'Work',aliases:[],source_ids:['WEB_EDITOR'],status:'ACTIVE'};
   }
   if (group === 'subjects') {
     return {subject_id:'',label:'',aliases:[],scope_note:'',status:'ACTIVE',revision:1,source_ids:['WEB_EDITOR'],trunk_links:[]};
   }
+  if (group === 'concepts') {
+    return {concept_id:'',subject_id:subjectId,topic_id:topicId,label:'',aliases:[],prerequisite_concept_ids:[],source_ids:['WEB_EDITOR'],default_incidence_weight:1.0,status:'ACTIVE',revision:1};
+  }
+  if (group === 'normative_sources') {
+    return {source_id:'',kind:'NORMATIVE_PROVISION',title:'',canonical_uri:'https://',locator:null,excerpt:'',content_sha256:'0'.repeat(64),updated_at:new Date().toISOString().slice(0,10),status:'ACTIVE'};
+  }
   return {topic_id:'',subject_id:subjectId,parent_topic_id:null,kind:'TOPIC',label:'',aliases:[],status:'ACTIVE',revision:1,source_ids:['WEB_EDITOR']};
+}
+
+export function orderedConcepts(catalog, topicId) {
+  const concepts = Array.isArray(catalog?.concepts) ? catalog.concepts : [];
+  return concepts
+    .filter(c => c.topic_id === topicId && c.status === 'ACTIVE')
+    .toSorted((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
+}
+
+export function detectImpactedQuestionsBySourceHash(questions, previousSources, updatedSources, concepts = []) {
+  const prevMap = new Map((previousSources || []).map(s => [s.source_id, s.content_sha256]));
+  const changedSourceIds = new Set();
+  for (const next of (updatedSources || [])) {
+    const oldHash = prevMap.get(next.source_id);
+    if ((oldHash && oldHash !== next.content_sha256) || next.status === 'UNDER_REVIEW' || next.status === 'DEPRECATED') {
+      changedSourceIds.add(next.source_id);
+    }
+  }
+  if (!changedSourceIds.size) return [];
+  const impactedConceptIds = new Set(
+    (concepts || [])
+      .filter(c => Array.isArray(c.source_ids) && c.source_ids.some(sid => changedSourceIds.has(sid)))
+      .map(c => c.concept_id)
+  );
+  return (questions || [])
+    .filter(q => {
+      const links = q?.classification?.links || [];
+      return links.some(l => l?.concept_id && impactedConceptIds.has(l.concept_id));
+    })
+    .map(q => q._id?.$oid || q._id || q.id);
 }
 
 export function freshImport(id, aiId) {

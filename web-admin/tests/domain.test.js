@@ -16,7 +16,9 @@ import {
   validityPresentation,
   legacyQuestionDraft,
   topicPath,
-  orderedTopics
+  orderedTopics,
+  orderedConcepts,
+  detectImpactedQuestionsBySourceHash
 } from '../domain.js';
 
 test('existing question metadata survives workspace restore and preview payload',()=>{
@@ -158,4 +160,22 @@ test('import commit payload forwards idempotency_key, payload_digest, and duplic
   });
   const cleanBody=buildImportCommitPayload({ready:true,idempotency_key:'batch-uuid-2',payload_digest:'b'.repeat(64),items:[{valid:true,command:cmd}],duplicate_warnings:[]});
   assert.equal(cleanBody.acknowledge_duplicates,undefined);
+});
+
+test('concepts catalog helpers and normative source hash change flag dependent questions for review',()=>{
+  const cDraft=newCatalogEntity('concepts','DIR_ADM','DIR_ADM_01_002');
+  assert.equal(cDraft.subject_id,'DIR_ADM');
+  assert.equal(cDraft.topic_id,'DIR_ADM_01_002');
+  const catalog={concepts:[
+    {concept_id:'C2',subject_id:'DIR_ADM',topic_id:'DIR_ADM_01_002',label:'Revogação',status:'ACTIVE',source_ids:['S1']},
+    {concept_id:'C1',subject_id:'DIR_ADM',topic_id:'DIR_ADM_01_002',label:'Anulação',status:'ACTIVE',source_ids:['S2']}
+  ]};
+  assert.deepEqual(orderedConcepts(catalog,'DIR_ADM_01_002').map(c=>c.concept_id),['C1','C2']);
+  const prev=[{source_id:'S1',content_sha256:'a'.repeat(64),status:'ACTIVE'},{source_id:'S2',content_sha256:'b'.repeat(64),status:'ACTIVE'}];
+  const next=[{source_id:'S1',content_sha256:'c'.repeat(64),status:'ACTIVE'},{source_id:'S2',content_sha256:'b'.repeat(64),status:'ACTIVE'}];
+  const questions=[
+    {_id:{$oid:'65f000000000000000000010'},classification:{links:[{concept_id:'C2'}]}},
+    {_id:{$oid:'65f000000000000000000011'},classification:{links:[{concept_id:'C1'}]}}
+  ];
+  assert.deepEqual(detectImpactedQuestionsBySourceHash(questions,prev,next,catalog.concepts),['65f000000000000000000010']);
 });

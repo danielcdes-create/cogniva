@@ -1,12 +1,12 @@
 # Cogniva
 
-Plataforma de estudo de alta performance para concursos públicos, composta por aplicativo nativo Android (**Kotlin / Jetpack Compose / Room v6**), painel administrativo web incorporado (**`/admin/`**) e API **Rust / Axum** (`cogniva-api`). O ecossistema opera em arquitetura *offline-first* com sincronização bidirecional idempotente sobre **MongoDB (`cogniva`)**, conformidade integral **LGPD (Lei 13.709/2018)** e promoção atômica conteinerizada.
+Plataforma inteligente de preparação de alta performance para concursos públicos, composta por aplicativo nativo Android (**Kotlin / Jetpack Compose / Room v7**), painel administrativo web incorporado (**`/admin/`**) e API **Rust / Axum** (`cogniva-api`). O ecossistema transforma evidências auditáveis de aprendizagem em decisões de estudo e estratégia de prova em arquitetura *offline-first* sobre **MongoDB (`cogniva`)**, com conformidade integral **LGPD (Lei 13.709/2018)** e promoção atômica conteinerizada.
 
 ---
 
-## 🚀 Versão Atual: `2.1.0` (`build 27`)
+## 🚀 Versão Atual: `2.2.0` (`build 28`)
 
-- **Contrato de Domínio:** `contract_version: 3` ([`shared/domain-contracts.json`](shared/domain-contracts.json)) e catálogo canônico unificado `catalog_version: 2` ([`shared/knowledge-catalog.json`](shared/knowledge-catalog.json)).
+- **Contrato de Domínio (`v4`) e 5 Motores Simétricos:** `contract_version: 4` ([`shared/domain-contracts.json`](shared/domain-contracts.json)), catálogo canônico unificado ([`shared/knowledge-catalog.json`](shared/knowledge-catalog.json)), grafo de conceitos/fontes versionadas ([`shared/knowledge-concepts-seed.json`](shared/knowledge-concepts-seed.json)) e motores simétricos Rust ↔ Kotlin de **Diagnóstico**, **Retenção Contínua**, **Priorização (40/40/20)**, **Calibração Beta-Binomial / Estratégia ($VE$)** e **Fadiga**, com reserva determinística **Holdout 20%** ([`docs/MOTORES-DECISAO-CORE-LOOP.md`](docs/MOTORES-DECISAO-CORE-LOOP.md)).
 - **Autenticação Nativa e LGPD (Art. 18):** Modo convidado imediato + contas nativas Cogniva com e-mail, senha `Argon2id`, sessões revogáveis e exclusão física imediata de dados pessoais (`DELETE /api/v1/auth/account` / app Android) preservando 100% do acervo compartilhado ([`PRIVACY.md`](PRIVACY.md)).
 - **Saúde e Prontidão:** `GET /api/v1/health` (processo) e `GET /api/v1/ready` (validação MongoDB com retorno `503` em falha, catálogo ativo e revisão).
 - **Distribuição OTA Android:** `GET /api/v1/apk/info`, `GET /api/app/latest-apk` e streaming binário direto em `GET /api/v1/apk/download` (`ETag` / `304`, `Cache-Control: no-store, no-transform`, `proxy_buffering off`), preservando `applicationId = "br.com.concursoprep.app"` para atualização contínua.
@@ -19,6 +19,7 @@ Plataforma de estudo de alta performance para concursos públicos, composta por 
 Toda a documentação técnica e operacional ativa está centralizada em [`docs/`](docs/README.md):
 
 - **[Arquitetura do Ecossistema 2.0](docs/ARQUITETURA.md):** Visão ponta a ponta de autenticação nativa, banco `cogniva` 100% V2, conformidade LGPD, separação `exam_templates` vs. `user_exams`, simetria Rust ↔ Kotlin e governança de IA.
+- **[Motores de Decisão, Grafo de Conceitos e Core Loop Diário](docs/MOTORES-DECISAO-CORE-LOOP.md):** Especificação matemática dos 5 motores (`contract_version: 4`), grafo DAG de conceitos e fontes normativas versionadas, Holdout 20%, Fallback Cross-Banca e jornada diária de 60 minutos.
 - **[Política de Privacidade e LGPD](PRIVACY.md) & [Política de Segurança](SECURITY.md):** Governança de dados pessoais, exclusão Art. 18, invariantes de segurança e relato responsável de vulnerabilidades.
 - **[Manual de Operação e Produção](docs/OPERACAO.md):** Variáveis de ambiente, migração *read-only* `CNU → cogniva`, preparação do MongoDB (`--prepare-storage`), TLS + HSTS + rate limits IPv6 `/64`, promoção atômica, retenção de releases e rollback.
 - **[Administração Web (`/admin/`)](docs/ADMIN-WEB.md):** Login nativo com cookie `HttpOnly` + `Sec-Fetch-Site` + CSRF, acessibilidade WCAG 2.1 AA, gestão de templates globais, edição V2 de questões, **Reportes**, **Classificação IA** e ativação versionada do catálogo.
@@ -41,9 +42,9 @@ Toda a documentação técnica e operacional ativa está centralizada em [`docs/
    - Todas as questões em `cogniva.todasQuestoes` obedecem ao `schema_version = 2` com `content_revision` JCS SHA-256 idêntico entre Python, Rust e Kotlin e validação estrita de URIs `^https?://`.
    - Tentativas e comandos administrativos usam `write_concern: majority` com `journal: true`, recibos idempotentes e replay cronológico de respostas offline fora de ordem.
 3. **Offline-First, Simulados Duráveis e Conformidade LGPD:**
-   - O cliente Android isola dados em bancos Room v6 separados por conta (`cogniva-<userId>.db`), persiste simulados em andamento contra morte de processo e permite exclusão física imediata dos dados pessoais do titular sem afetar o acervo público de questões.
-4. **Simetria Matemática e Acessibilidade WCAG 2.1 AA:**
-   - Pontuação líquida ponderada com penalidade configurável por prova, bônus SRS sobre `streak_atual`, calendário e cotas unificados em `America/Sao_Paulo` (`UTC-3`) e contraste mínimo `>= 4.5:1` auditado automaticamente no Android e no Web Admin.
+   - O cliente Android isola dados em bancos Room v7 separados por conta (`cogniva-<userId>.db`), persiste simulados, omissões estratégicas (`isBlank`) e telemetria de sessão contra morte de processo e permite exclusão física imediata dos dados pessoais do titular sem afetar o acervo público de questões.
+4. **Simetria Matemática (`v4`), Honestidade Epistemológica e Acessibilidade WCAG 2.1 AA:**
+   - Pontuação líquida ponderada, valor esperado de resposta $VE = (1+\lambda)\hat{p} - \lambda$, curva contínua de recuperabilidade $R(t,S)$, exigência de `>= 3` questões distintas para competência comprovada, guarda estrita de amostra mínima para fadiga, calendário/cotas em `America/Sao_Paulo` (`UTC-3`) e contraste mínimo `>= 4.5:1` auditado automaticamente no Android e no Web Admin.
 
 ---
 

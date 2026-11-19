@@ -49,7 +49,13 @@ pub async fn run_daily_reviews_decay_and_countdown(
             continue;
         };
 
+        let retention_due = item.memory_stability_days > 0.0
+            && crate::services::retention_engine::retrievability(
+                (now - item.datas.ultima_sessao).num_hours().max(0) as f64 / 24.0,
+                item.memory_stability_days,
+            ) <= 0.90;
         let needs_review = item.revisao_necessaria
+            || retention_due
             || now
                 >= item.datas.ultima_sessao
                     + chrono::Duration::days(item.spaced_repetition_interval.max(1) as i64);

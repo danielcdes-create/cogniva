@@ -986,9 +986,56 @@ pub fn validate_with_catalog(
         if let Err((code, msg)) = topic_valid_in_catalog(catalog_override, catalog_ver, subj, top) {
             return Err(bad_code(code, Some(&link_field), msg));
         }
-        if !topics.insert(top) {
+        let concept_opt = match l.get("concept_id") {
+            None | Some(Value::Null) => None,
+            Some(Value::String(cid)) => {
+                let active_cat = catalog_override.cloned().unwrap_or_else(catalog);
+                let concepts = super::catalog_runtime::effective_concepts(&active_cat);
+                if !concepts.is_empty() {
+                    let Some(found) = concepts
+                        .iter()
+                        .find(|c| c["concept_id"].as_str() == Some(cid.as_str()))
+                    else {
+                        let f = format!("{link_field}.concept_id");
+                        return Err(bad_code(
+                            "INVALID_TAXONOMY_LINK",
+                            Some(&f),
+                            "Conceito inexistente no catálogo",
+                        ));
+                    };
+                    if found["subject_id"].as_str() != Some(subj)
+                        || found["topic_id"].as_str() != Some(top)
+                    {
+                        let f = format!("{link_field}.concept_id");
+                        return Err(bad_code(
+                            "INVALID_TAXONOMY_LINK",
+                            Some(&f),
+                            "Conceito não pertence à disciplina/subassunto do vínculo",
+                        ));
+                    }
+                    if found["status"].as_str() != Some("ACTIVE") {
+                        let f = format!("{link_field}.concept_id");
+                        return Err(bad_code(
+                            "INACTIVE_TAXONOMY_LINK",
+                            Some(&f),
+                            "Conceito desativado no catálogo",
+                        ));
+                    }
+                }
+                Some(cid.as_str())
+            }
+            Some(_) => {
+                let f = format!("{link_field}.concept_id");
+                return Err(bad_code(
+                    "SCHEMA_VALIDATION_FAILED",
+                    Some(&f),
+                    "Identificador de conceito inválido",
+                ));
+            }
+        };
+        if !topics.insert((top, concept_opt)) {
             let f = format!("{link_field}.topic_id");
-            return Err(bad_code("DUPLICATE_TAXONOMY_LINK", Some(&f), "Tópico repetido"));
+            return Err(bad_code("DUPLICATE_TAXONOMY_LINK", Some(&f), "Tópico/conceito repetido"));
         }
         if l["role"] == "PRIMARY" {
             if l["coverage"] != "DIRECT" {
@@ -1047,6 +1094,31 @@ pub fn validate_with_catalog(
                 "CANONICAL_MIRROR_MISMATCH",
                 Some(old),
                 "Espelho canônico divergente",
+            )?;
+        }
+    }
+    if let Some(ev_ch) = q.get("evidence_challenge").filter(|v| !v.is_null()) {
+        if let Some(opts) = ev_ch.get("options").and_then(Value::as_array) {
+            let mut seen_ev = HashSet::new();
+            for opt in opts {
+                if let Some(eid) = opt.get("evidence_id").and_then(Value::as_str) {
+                    ensure(
+                        seen_ev.insert(eid),
+                        "SCHEMA_VALIDATION_FAILED",
+                        Some("evidence_challenge.options"),
+                        "Identificador de evidência repetido no desafio",
+                    )?;
+                }
+            }
+            let correct_eid = ev_ch
+                .get("correct_evidence_id")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            ensure(
+                seen_ev.contains(correct_eid),
+                "SCHEMA_VALIDATION_FAILED",
+                Some("evidence_challenge.correct_evidence_id"),
+                "Evidência correta ausente entre as opções do desafio",
             )?;
         }
     }

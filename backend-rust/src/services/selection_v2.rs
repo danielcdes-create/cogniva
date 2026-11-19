@@ -105,6 +105,38 @@ fn apply_anti_repetition_tiers(
     selected
 }
 
+/// Preserva os 20% reservados (`Holdout`) fora do treino rotineiro quando o pool elegível
+/// possui ao menos 5 itens e a parte de treino atende à quantidade solicitada.
+fn exclude_holdout_for_practice(
+    user_id: i64,
+    candidates: Vec<QuestionDocument>,
+    min_needed: usize,
+) -> Vec<QuestionDocument> {
+    let pool_len = candidates.len();
+    if pool_len < 5 {
+        return candidates;
+    }
+    let mut practice_pool = Vec::with_capacity(pool_len);
+    let mut reserved_pool = Vec::new();
+    for q in candidates {
+        let hex = q.id.to_hex();
+        if crate::services::strategy_engine::is_holdout_reserved(user_id, &hex, pool_len) {
+            reserved_pool.push(q);
+        } else {
+            practice_pool.push(q);
+        }
+    }
+    if practice_pool.len() < min_needed {
+        for q in reserved_pool {
+            practice_pool.push(q);
+            if practice_pool.len() >= min_needed {
+                break;
+            }
+        }
+    }
+    practice_pool
+}
+
 fn collect_server_verified_review_ids(doc: &Document, out: &mut Vec<String>) {
     if let Ok(origins) = doc.get_array("origins") {
         for o in origins.iter().filter_map(|v| v.as_document()) {
@@ -374,7 +406,11 @@ pub async fn generate(
     let mut analogous_ids = HashSet::new();
     let questions = match req.mode {
         QuizMode::Shuffle => {
-            let candidates = pool(state, req.user_id, filter, 2000).await?;
+            let candidates = exclude_holdout_for_practice(
+                req.user_id,
+                pool(state, req.user_id, filter, 2000).await?,
+                quantity,
+            );
             let recent_window = (quantity * 4).clamp(40, 150);
             let buckets = fetch_user_history_buckets(&state.db, req.user_id, recent_window).await?;
             apply_anti_repetition_tiers(
@@ -401,10 +437,11 @@ pub async fn generate(
                 if count == 0 {
                     continue;
                 }
-                let mut scope = doc! {
+                let base_scope = doc! {
                     "canonical_subject_id": &subject.canonical_subject_id,
-                    "canonical_topic_id": { "$in": topics }
+                    "canonical_topic_id": { "$in": &topics }
                 };
+                let mut scope = base_scope.clone();
                 scope.insert(
                     "_id",
                     doc! { "$nin": selected.iter().map(|q: &QuestionDocument| q.id).collect::<Vec<_>>() },
@@ -415,11 +452,12 @@ pub async fn generate(
                     .filter(|b| b.as_str() != "A definir" && !b.trim().is_empty())
                     .cloned()
                     .collect::<Vec<_>>();
-                if !boards.is_empty() {
+                let has_board_filter = !boards.is_empty();
+                if has_board_filter {
                     if boards.iter().any(|b| b == "Cebraspe") {
                         boards.extend(["CESPE".into(), "CEBRASPE".into()]);
                     }
-                    scope.insert("source", doc! { "$in": boards });
+                    scope.insert("source", doc! { "$in": &boards });
                 }
                 let candidates = pool(state, req.user_id, scope, (count * 8).max(120)).await?;
                 let mut drawn = crate::services::practice_context::filter(
@@ -430,6 +468,43 @@ pub async fn generate(
                     candidates,
                 )
                 .await?;
+                // Prioriza os itens reservados (Holdout 20%) no simulado comparável
+                let drawn_len = drawn.len();
+                drawn.sort_by_key(|q| {
+                    !crate::services::strategy_engine::is_holdout_reserved(
+                        req.user_id,
+                        &q.id.to_hex(),
+                        drawn_len.max(5),
+                    )
+                });
+                // Fallback Cross-Banca automático quando a banca-alvo possui < count itens
+                if drawn.len() < count && has_board_filter {
+                    let needed = count - drawn.len();
+                    let mut exclude_ids: Vec<ObjectId> =
+                        selected.iter().map(|q: &QuestionDocument| q.id).collect();
+                    exclude_ids.extend(drawn.iter().map(|q| q.id));
+                    let mut fallback_scope = base_scope;
+                    fallback_scope.insert("_id", doc! { "$nin": exclude_ids });
+                    if exam.wrong_answer_penalty > 0.0 {
+                        fallback_scope.insert("question_type", "TRUE_FALSE");
+                    }
+                    let fb_candidates =
+                        pool(state, req.user_id, fallback_scope, (needed * 8).max(80)).await?;
+                    let (mut fb_drawn, _) = crate::services::practice_context::filter_with_mode(
+                        state,
+                        req.user_id,
+                        exam,
+                        Some(subject),
+                        fb_candidates,
+                        true,
+                    )
+                    .await?;
+                    fb_drawn.truncate(needed);
+                    for fq in &fb_drawn {
+                        analogous_ids.insert(fq.id.to_hex());
+                    }
+                    drawn.append(&mut fb_drawn);
+                }
                 drawn.truncate(count);
                 if drawn.len() != count {
                     return Err(AppError::BadRequest(format!(
@@ -451,6 +526,73 @@ pub async fn generate(
             }
             selected.shuffle(&mut rand::thread_rng());
             selected
+        }
+        QuizMode::AdaptiveLoop => {
+            let candidates = exclude_holdout_for_practice(
+                req.user_id,
+                pool(state, req.user_id, filter, 2000).await?,
+                quantity,
+            );
+            let mut act_cursor = state
+                .db
+                .collection::<UserActivityDocument>("userActivityLog")
+                .find(doc! { "user_id": req.user_id })
+                .await?;
+            let mut acts_by_id = HashMap::new();
+            let now = chrono::Utc::now();
+            while let Some(row) = act_cursor.try_next().await? {
+                acts_by_id.insert(row.question_id, row);
+            }
+            let mut retention_due = Vec::new();
+            let mut persistent_gaps = Vec::new();
+            let mut new_items = Vec::new();
+            for q in candidates {
+                let hex = q.id.to_hex();
+                if let Some(act) = acts_by_id.get(&q.id) {
+                    if act.error_notebook() || act.high_confidence_error_flag {
+                        persistent_gaps.push((hex, q));
+                    } else if act.review_due(now)
+                        || (act.memory_stability_days > 0.0
+                            && crate::services::retention_engine::retrievability(
+                                (now - act.datas.ultima_sessao).num_hours().max(0) as f64 / 24.0,
+                                act.memory_stability_days,
+                            ) <= 0.90)
+                    {
+                        retention_due.push((hex, q));
+                    } else if !act.dominada {
+                        persistent_gaps.push((hex, q));
+                    }
+                } else {
+                    new_items.push((hex, q));
+                }
+            }
+            crate::services::prioritization_engine::interleave_buckets(
+                &retention_due,
+                &persistent_gaps,
+                &new_items,
+                if exam.is_some() { 2000 } else { quantity },
+                |(hex, _)| hex.as_str(),
+            )
+            .into_iter()
+            .map(|(_, q)| q)
+            .collect()
+        }
+        QuizMode::StrategyBattery => {
+            let mut candidates = pool(state, req.user_id, filter, 2000).await?;
+            let pool_len = candidates.len().max(5);
+            let buckets = fetch_user_history_buckets(&state.db, req.user_id, 80).await?;
+            // Prioriza questões reservadas (Holdout) ainda não respondidas para treino fiel de decisão
+            candidates.sort_by_key(|q| {
+                let reserved = crate::services::strategy_engine::is_holdout_reserved(
+                    req.user_id,
+                    &q.id.to_hex(),
+                    pool_len,
+                );
+                let attempted = buckets.all_attempted_ids.contains(&q.id);
+                (!reserved, attempted)
+            });
+            candidates.truncate(if exam.is_some() { 2000 } else { quantity });
+            candidates
         }
         QuizMode::CommonTrunk => {
             let rows = load_canonical_slices(&state.db, req.user_id).await?;
@@ -612,7 +754,11 @@ pub async fn generate(
             }
         }
         _ => {
-            let candidates = pool(state, req.user_id, filter, 2000).await?;
+            let candidates = exclude_holdout_for_practice(
+                req.user_id,
+                pool(state, req.user_id, filter, 2000).await?,
+                quantity,
+            );
             let recent_window = (quantity * 4).clamp(40, 150);
             let buckets = fetch_user_history_buckets(&state.db, req.user_id, recent_window).await?;
             apply_anti_repetition_tiers(
@@ -694,6 +840,7 @@ mod tests {
             contextual_hint: vec![],
             plausibility_markdown: None,
             plausibility_analysis: None,
+            evidence_challenge: None,
         };
 
         let mut q_recente = q_inedita.clone();
@@ -761,6 +908,8 @@ mod tests {
             user_note: None,
             canonical_subject_id: None,
             canonical_topic_id: None,
+            memory_stability_days: 0.0,
+            memory_difficulty: 5.0,
         };
 
         assert!(!act.error_notebook());
@@ -808,6 +957,12 @@ mod tests {
                 streak_atual: 1,
                 points_session: 0.2,
                 is_revision: false,
+                is_blank: false,
+                confidence_explicit: true,
+                selected_evidence_id: None,
+                position_in_session: None,
+                elapsed_session_seconds: None,
+                session_interrupted: false,
             }],
             quantidade_praticas: 3,
             quantidade_acertos: 1,
@@ -830,6 +985,8 @@ mod tests {
             user_note: None,
             canonical_subject_id: None,
             canonical_topic_id: None,
+            memory_stability_days: 0.0,
+            memory_difficulty: 5.0,
         };
         assert!(!act.error_notebook());
         act.past_sessions[0].nivel_confianca = 0;

@@ -1,13 +1,14 @@
 # Documentação do Ecossistema Cogniva
 
-Este diretório reúne as especificações arquiteturais, contratos normativos, políticas de segurança/privacidade, manuais operacionais e guias de administração da plataforma **Cogniva `2.1.0`** (`build 27`).
+Este diretório reúne as especificações arquiteturais, contratos normativos, políticas de segurança/privacidade, manuais operacionais e guias de administração da plataforma **Cogniva `2.2.0`** (`build 28`).
 
 ---
 
 ## 🗺️ Mapa de Documentação Viva
 
-### 1. Arquitetura, Segurança, Privacidade e Operação
-- **[ARQUITETURA.md](ARQUITETURA.md):** Visão sistêmica da versão `2.1.0` — autenticação nativa (`Argon2id` + sessões revogáveis), banco `cogniva` 100% V2.1, conformidade LGPD Art. 18, simetria Rust ↔ Kotlin e governança xAI.
+### 1. Arquitetura, Motores de Decisão, Segurança e Operação
+- **[ARQUITETURA.md](ARQUITETURA.md):** Visão sistêmica da versão `2.2.0` — autenticação nativa (`Argon2id` + sessões revogáveis), banco `cogniva` 100% V2.2, conformidade LGPD Art. 18, simetria Rust ↔ Kotlin (`contract_version: 4`) e governança xAI.
+- **[MOTORES-DECISAO-CORE-LOOP.md](MOTORES-DECISAO-CORE-LOOP.md):** Especificação matemática dos 5 motores simétricos (Diagnóstico, Retenção Contínua, Priorização 40/40/20, Calibração Beta-Binomial / Estratégia $VE$ e Fadiga), Grafo DAG de Conceitos, Holdout 20% e Core Loop Diário de 60 minutos.
 - **[PRIVACY.md](../PRIVACY.md):** Política de Privacidade e Proteção de Dados Pessoais (LGPD — Lei 13.709/2018), detalhando minimização, transferência internacional controlada e exclusão física imediata de dados pessoais com preservação do acervo compartilhado.
 - **[SECURITY.md](../SECURITY.md):** Política de Segurança, versões suportadas, invariantes criptográficos/operacionais e canal de relato responsável de vulnerabilidades.
 - **[OPERACAO.md](OPERACAO.md):** Runbook de produção — configuração `.env`, concessão administrativa (`ADMIN_EMAILS` / `--grant-admin`), migração *read-only* `CNU → cogniva`, TLS + HSTS + rate limits IPv6 `/64`, promoção atômica, retenção de releases e rollback verificado.

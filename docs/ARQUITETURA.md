@@ -1,6 +1,6 @@
 # Arquitetura do Ecossistema Cogniva 2.0
 
-Este documento descreve a arquitetura unificada do **Cogniva `2.0.1`** (`build 26`), consolidando os contratos compartilhados, o backend Rust (`cogniva-api`), o painel administrativo web (`/admin/`), o aplicativo Android *offline-first*, a governança LGPD e a infraestrutura de entrega contínua.
+Este documento descreve a arquitetura unificada do **Cogniva `2.2.0`** (`build 28`), consolidando os contratos compartilhados (`contract_version: 4`), o backend Rust (`cogniva-api`), os 5 motores simétricos de decisão, o painel administrativo web (`/admin/`), o aplicativo Android *offline-first* (`Room v7`), a governança LGPD e a infraestrutura de entrega contínua.
 
 ---
 
@@ -9,21 +9,21 @@ Este documento descreve a arquitetura unificada do **Cogniva `2.0.1`** (`build 2
 ```mermaid
 flowchart LR
   subgraph Clientes
-    AND["Android App 2.0.1 / build 26 (Kotlin / Compose / Room v6)"]
+    AND["Android App 2.2.0 / build 28 (Kotlin / Compose / Room v7)"]
     ADM["Painel Web /admin/ (ES Modules + CSP + WCAG AA)"]
   end
 
   subgraph Servidor["VPS DigitalOcean"]
     NGX["Nginx TLS + HSTS + Rate Limit IPv6 /64 + Gate 503"]
-    API["cogniva-api 2.0.1 (Rust / Axum / Tokio)"]
+    API["cogniva-api 2.2.0 (Rust / Axum / Tokio · 5 Motores)"]
   end
 
   subgraph Dados["Persistência e Contratos"]
     MDB[("MongoDB Atlas — DB: cogniva")]
-    XAI["API xAI (XAI_MODEL + XML Prompt Fencing)"]
+    XAI["API xAI (XAI_MODEL + XML Prompt Fencing + RAG Normativo)"]
   end
 
-  AND <-->|"HTTPS Bearer + Sync Cronológico"| NGX
+  AND <-->|"HTTPS Bearer + Sync Cronológico + next-action"| NGX
   ADM <-->|"HTTPS Cookie HttpOnly + Sec-Fetch-Site + CSRF"| NGX
   NGX <-->|"127.0.0.1:8001"| API
   API <-->|"Write Concern majority + journal"| MDB
@@ -31,10 +31,10 @@ flowchart LR
 ```
 
 - **Contratos Compartilhados ([`shared/`](../shared/)):** Fonte única de verdade validada em Python, Rust, Node.js e Kotlin:
-  - [`shared/knowledge-catalog.json`](../shared/knowledge-catalog.json): Catálogo canônico unificado (`schema_version: 2`, `catalog_version: 2`) com troncos (`icon_key`), disciplinas (`trunk_links` com `default_weight`), assuntos e subassuntos.
+  - [`shared/knowledge-catalog.json`](../shared/knowledge-catalog.json) & [`shared/knowledge-concepts-seed.json`](../shared/knowledge-concepts-seed.json): Catálogo canônico unificado (`schema_version: 2`, `catalog_version: 2`, hash gênese preservado) estendido com conceitos (`concepts[]` em grafo acíclico DAG) e fontes normativas versionadas (`normative_sources[]` com `content_sha256`).
   - [`shared/exam-templates.json`](../shared/exam-templates.json): Templates globais oficiais de concursos (`CPNU`, `RFB`, `BNDES`, `AFT`).
-  - [`shared/domain-contracts.json`](../shared/domain-contracts.json): Vetores normativos (`contract_version: 3`) de revisão JCS SHA-256, cálculo de domínio, pontuação líquida ponderada, curvas SRS e fuso de estudo (`America/Sao_Paulo`, `UTC-3`).
-  - [`shared/schemas/question-contracts.schema.json`](../shared/schemas/question-contracts.schema.json): Contrato JSON Schema 2020-12 de questões 100% V2 (com validação estrita de URIs `^https?://`, limites `exam_year` `1900..=2200` e `concursos <= 50`), sugestões de classificação, compatibilidade e avaliações discursivas.
+  - [`shared/domain-contracts.json`](../shared/domain-contracts.json): Vetores normativos (`contract_version: 4`) de revisão JCS SHA-256, cálculo de domínio, pontuação líquida ponderada, curvas SRS, fuso de estudo (`America/Sao_Paulo`, `UTC-3`) e paridade dos 5 motores de decisão (`holdout`, `diagnostics`, `retention`, `prioritization`, `calibration`, `strategy`, `fatigue` — detalhados em [`MOTORES-DECISAO-CORE-LOOP.md`](MOTORES-DECISAO-CORE-LOOP.md)).
+  - [`shared/schemas/question-contracts.schema.json`](../shared/schemas/question-contracts.schema.json): Contrato JSON Schema 2020-12 de questões 100% V2 (`question-v2-validator-2.2.0`, `validator_revision = 5`), incluindo `concept_id` opcional em `classification.links[]` e `evidence_challenge` opcional pós-erro.
 
 ---
 
@@ -79,8 +79,8 @@ O Cogniva 2.0 opera com autenticação 100% própria e governança integral de d
    - Python, Rust e Kotlin computam `SHA-256(JCS({question_type, question, answers, correct_answer_indices, grading}))` em conformidade estrita com a RFC 8785.
 2. **Replay Cronológico e SRS Consistente:**
    - O cálculo de intervalo no motor SRS aplica bônus sobre a sequência consecutiva atual (`streak_atual`), e lotes de sincronização offline com `client_answered_at` reordenam e reprocessam transições cronologicamente sem regredir `ultima_resposta_em`.
-3. **Banco Local Room v6, Simulados Duráveis e Troca Segura de Conta:**
-   - Isolamento em bancos SQLite por conta (`cogniva-<userId>.db`, migrações `1 → 6` com schema exportado), consultas em lote (`learningForQuestions`), persistência atômica de simulados em escopo sobrevivente à navegação + rascunho contra morte de processo e isolamento de falhas entre sincronização de perfil e sincronização de tentativas.
+3. **Banco Local Room v7, Motores Simétricos e Troca Segura de Conta:**
+   - Isolamento em bancos SQLite por conta (`cogniva-<userId>.db`, migrações `1 → 7` com schema exportado em `7.json`), execução local simétrica dos 5 motores em `PerformanceEngines.kt`, persistência atômica de simulados + omissões estratégicas (`isBlank`) e telemetria de sessão contra morte de processo e isolamento de falhas entre sincronização de perfil e sincronização de tentativas.
 
 ---
 

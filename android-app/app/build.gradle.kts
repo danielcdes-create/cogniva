@@ -16,8 +16,8 @@ android {
         applicationId = "br.com.concursoprep.app"
         minSdk = 28
         targetSdk = 35
-        versionCode = 27
-        versionName = "2.1.0"
+        versionCode = 28
+        versionName = "2.2.0"
 
         val doApiBaseUrl = (project.findProperty("DO_API_BASE_URL") as? String)
             ?: "https://198.199.65.103/api/v1/"
@@ -79,7 +79,12 @@ ksp {
 
 val syncSharedContracts = tasks.register<Sync>("syncSharedContracts") {
     from(rootProject.file("../shared")) {
-        include("knowledge-catalog.json", "exam-templates.json", "domain-contracts.json")
+        include(
+            "knowledge-catalog.json",
+            "knowledge-concepts-seed.json",
+            "exam-templates.json",
+            "domain-contracts.json",
+        )
     }
     into(layout.buildDirectory.dir("generated/sharedContracts"))
 }

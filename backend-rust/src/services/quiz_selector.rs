@@ -21,6 +21,8 @@ pub enum QuizMode {
     SrsReview,
     ErrorNotebook,
     CommonTrunk,
+    AdaptiveLoop,
+    StrategyBattery,
     Single,
 }
 

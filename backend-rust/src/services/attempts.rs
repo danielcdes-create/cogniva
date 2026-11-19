@@ -88,10 +88,13 @@ fn validate(
     if item.question_revision.is_empty() || item.question_revision != question.revision()? {
         return Err(AppError::Conflict("A questão mudou ou a tentativa antiga não possui versão. Revise o item preservado antes de sincronizar.".into()));
     }
-    if question.answers.get(item.chosen_index) != Some(&item.chosen_text) {
+    if !item.is_blank && question.answers.get(item.chosen_index) != Some(&item.chosen_text) {
         return Err(AppError::Conflict(
             "Alternativa não corresponde à versão da questão".into(),
         ));
+    }
+    if item.selected_evidence_id.as_ref().is_some_and(|s| s.len() > 100) {
+        return Err(AppError::BadRequest("Identificador de evidência fora dos limites".into()));
     }
     // Submitted taxonomy is historical client context, never authority. A
     // review may change it while the exact same content is queued offline.
@@ -144,6 +147,8 @@ fn empty(user_id: i64, question: &QuestionDocument, at: DateTime<Utc>) -> UserAc
         user_note: None,
         canonical_subject_id: question.canonical_subject_id.clone(),
         canonical_topic_id: question.canonical_topic_id.clone(),
+        memory_stability_days: 0.0,
+        memory_difficulty: 5.0,
     }
 }
 
@@ -153,7 +158,7 @@ fn project(
     item: &AnswerAttemptItem,
     at: DateTime<Utc>,
 ) -> Result<(Document, Document, ProcessedAttemptResult), AppError> {
-    let correct = question.answer_indices()?.contains(&item.chosen_index);
+    let correct = !item.is_blank && question.answer_indices()?.contains(&item.chosen_index);
     let prior_had_history =
         !activity.past_sessions.is_empty() || activity.quantidade_praticas > 0;
     let prior_ultima_sessao = prior_had_history.then_some(activity.datas.ultima_sessao);
@@ -162,7 +167,11 @@ fn project(
         attempt_id: item.attempt_id.clone(),
         data: at,
         status: correct,
-        alternativa_escolhida: item.chosen_text.clone(),
+        alternativa_escolhida: if item.is_blank {
+            "EM_BRANCO".to_string()
+        } else {
+            item.chosen_text.clone()
+        },
         tempo_gasto_segundos: item.time_spent_seconds,
         session_uuid: item.session_uuid.clone(),
         modo_sessao: item.quiz_mode.clone(),
@@ -180,6 +189,12 @@ fn project(
         streak_atual: 0,
         points_session: 0.0,
         is_revision: false,
+        is_blank: item.is_blank,
+        confidence_explicit: item.confidence_explicit,
+        selected_evidence_id: item.selected_evidence_id.clone(),
+        position_in_session: item.position_in_session,
+        elapsed_session_seconds: item.elapsed_session_seconds,
+        session_interrupted: item.session_interrupted,
     };
     activity.past_sessions.push(event.clone());
     // Delivery order cannot change the meaning of occurrence order: keep pastSessions chronological.
@@ -187,25 +202,29 @@ fn project(
         .past_sessions
         .sort_by_key(|s| (s.data, s.attempt_id.clone(), s.session_uuid.clone()));
 
-    activity.quantidade_praticas = activity
-        .quantidade_praticas
-        .saturating_add(1)
-        .max(activity.past_sessions.len() as i32);
-    if correct {
-        activity.quantidade_acertos += 1;
-    } else {
-        activity.quantidade_erros += 1;
+    if !item.is_blank {
+        activity.quantidade_praticas = activity
+            .quantidade_praticas
+            .saturating_add(1)
+            .max(activity.past_sessions.iter().filter(|s| !s.is_blank).count() as i32);
+        if correct {
+            activity.quantidade_acertos += 1;
+        } else {
+            activity.quantidade_erros += 1;
+        }
+        activity.percentual_acertos =
+            100.0 * activity.quantidade_acertos as f64 / activity.quantidade_praticas.max(1) as f64;
     }
-    activity.percentual_acertos =
-        100.0 * activity.quantidade_acertos as f64 / activity.quantidade_praticas.max(1) as f64;
     activity.tempos.tempo_total_estudo += item.time_spent_seconds as f64;
+    let total_events_for_time = activity.quantidade_praticas.max(activity.past_sessions.len() as i32).max(1);
     activity.tempos.tempo_medio_resposta =
-        activity.tempos.tempo_total_estudo / activity.quantidade_praticas.max(1) as f64;
+        activity.tempos.tempo_total_estudo / total_events_for_time as f64;
 
     // Replay chronologically across past_sessions so an out-of-order offline attempt
     // never overwrites newer SRS state or corrupts ultima_sessao / ultima_resposta_em backwards.
     let mut running_statuses = Vec::with_capacity(activity.past_sessions.len());
     let mut running_correct = 0i32;
+    let mut running_non_blank = 0i32;
     let mut running_time = 0.0f64;
     let mut prev_session_date: Option<DateTime<Utc>> = None;
     let mut prev_interval: i32 = 0;
@@ -219,20 +238,48 @@ fn project(
     let mut final_streak = calculate_streak_and_points(&[]);
     let mut final_score = 0.0;
     let mut final_interval = 1;
+    let mut running_stability = 0.0f64;
+    let mut running_difficulty = 5.0f64;
 
     let total_sessions_len = activity.past_sessions.len();
     for idx in 0..total_sessions_len {
-        let conf_avg_step = calculate_recent_confidence_avg(&activity.past_sessions[..=idx], 3);
+        let non_blank_prefix: Vec<_> = activity.past_sessions[..=idx]
+            .iter()
+            .filter(|e| !e.is_blank)
+            .cloned()
+            .collect();
+        let conf_avg_step = calculate_recent_confidence_avg(&non_blank_prefix, 3);
         let s = &mut activity.past_sessions[idx];
+        running_time += s.tempo_gasto_segundos as f64;
+        let step_dias_ultima = prev_session_date
+            .map(|p| (s.data - p).num_days().max(0))
+            .unwrap_or(0);
+        if s.is_blank {
+            s.dias_desde_ultima_sessao = step_dias_ultima;
+            s.percentual_acertos_acumulado = if running_non_blank > 0 {
+                100.0 * (running_correct as f64) / (running_non_blank as f64)
+            } else {
+                0.0
+            };
+            s.tempo_medio_acumulado = running_time / ((idx + 1) as f64);
+            s.spaced_repetition_interval = final_interval;
+            s.spaced_repetition_score = final_score;
+            s.streak_atual = final_streak.streak_atual;
+            s.points_session = 0.0;
+            if s.attempt_id == item.attempt_id {
+                event = s.clone();
+            }
+            continue;
+        }
+        running_non_blank += 1;
         running_statuses.push(s.status);
         if s.status {
             running_correct += 1;
             first_correct = Some(first_correct.map_or(s.data, |old| old.min(s.data)));
         }
-        running_time += s.tempo_gasto_segundos as f64;
         let step_streak = calculate_streak_and_points(&running_statuses);
-        let step_count = (idx + 1) as f64;
-        let step_avg_time = running_time / step_count;
+        let step_count = running_non_blank as f64;
+        let step_avg_time = running_time / ((idx + 1) as f64);
         let step_acc = 100.0 * (running_correct as f64) / step_count;
         let avg_for_srs = if idx + 1 == total_sessions_len {
             activity.tempos.tempo_medio_resposta
@@ -247,9 +294,17 @@ fn project(
             s.status,
             true,
         );
-        let step_dias_ultima = prev_session_date
-            .map(|p| (s.data - p).num_days().max(0))
-            .unwrap_or(0);
+        let ret = crate::services::retention_engine::update_retention(
+            running_stability,
+            running_difficulty,
+            s.status,
+            s.nivel_confianca,
+            step_dias_ultima as f64,
+            s.tempo_gasto_segundos,
+            avg_for_srs,
+        );
+        running_stability = ret.next_stability;
+        running_difficulty = ret.next_difficulty;
         let step_is_revision = prev_session_date
             .is_some_and(|p| s.data >= p + Duration::days(prev_interval.max(1) as i64));
         let step_dias_revisao = latest_revision
@@ -312,9 +367,11 @@ fn project(
         is_mastered(activity.points) && activity.nivel_confianca_med_rec.unwrap_or(0) >= 2;
     activity.spaced_repetition_score = final_score;
     activity.spaced_repetition_interval = final_interval;
+    activity.memory_stability_days = running_stability;
+    activity.memory_difficulty = running_difficulty;
     activity.revisao_necessaria =
         Utc::now() >= monotonic_ultima + Duration::days(final_interval as i64);
-    activity.high_confidence_error_flag = !last.status && last.nivel_confianca >= 2;
+    activity.high_confidence_error_flag = !last.is_blank && !last.status && last.nivel_confianca >= 2;
     activity.in_error_notebook = replay_notebook;
     activity.var_alternativa_escolhida = calculate_alternative_variation(&activity.past_sessions);
     activity.frequencia_estudo_mes =
@@ -567,6 +624,12 @@ mod tests {
             user_note: None,
             canonical_subject_id: None,
             canonical_topic_id: None,
+            is_blank: false,
+            confidence_explicit: true,
+            selected_evidence_id: None,
+            position_in_session: None,
+            elapsed_session_seconds: None,
+            session_interrupted: false,
         };
         let (fields, event, ack) =
             project(empty(123, &q, Utc::now()), &q, &item, Utc::now()).unwrap();
@@ -629,6 +692,12 @@ mod tests {
             user_note: None,
             canonical_subject_id: None,
             canonical_topic_id: None,
+            is_blank: false,
+            confidence_explicit: true,
+            selected_evidence_id: None,
+            position_in_session: None,
+            elapsed_session_seconds: None,
+            session_interrupted: false,
         };
         let (_, _, ack) = project(act, &q, &item, now).unwrap();
         assert_eq!(ack.attempts_total, 6);
@@ -672,6 +741,12 @@ mod tests {
             user_note: Some("Nota antiga offline".into()),
             canonical_subject_id: None,
             canonical_topic_id: None,
+            is_blank: false,
+            confidence_explicit: true,
+            selected_evidence_id: None,
+            position_in_session: None,
+            elapsed_session_seconds: None,
+            session_interrupted: false,
         };
         let newer_online_right = AnswerAttemptItem {
             exam_component_id: None,
@@ -692,6 +767,12 @@ mod tests {
             user_note: Some("Nota recente online".into()),
             canonical_subject_id: None,
             canonical_topic_id: None,
+            is_blank: false,
+            confidence_explicit: true,
+            selected_evidence_id: None,
+            position_in_session: None,
+            elapsed_session_seconds: None,
+            session_interrupted: false,
         };
 
         let apply_step = |existing: Option<Document>, item: &AnswerAttemptItem| -> Document {

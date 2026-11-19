@@ -7,4 +7,5 @@ pub mod exams;
 pub mod learning;
 pub mod questions_v2;
 pub mod quiz;
+pub mod study_loop;
 pub mod web_admin;

@@ -71,6 +71,18 @@ pub struct PastSessionEntry {
     pub points_session: f64,
     #[serde(default)]
     pub is_revision: bool,
+    #[serde(default)]
+    pub is_blank: bool,
+    #[serde(default)]
+    pub confidence_explicit: bool,
+    #[serde(default)]
+    pub selected_evidence_id: Option<String>,
+    #[serde(default)]
+    pub position_in_session: Option<u16>,
+    #[serde(default)]
+    pub elapsed_session_seconds: Option<i32>,
+    #[serde(default)]
+    pub session_interrupted: bool,
 }
 
 /// Documento da coleção `userActivityLog` (100% compatível com o banco atual + extensões do App)
@@ -130,6 +142,10 @@ pub struct UserActivityDocument {
     pub canonical_subject_id: Option<String>,
     #[serde(default)]
     pub canonical_topic_id: Option<String>,
+    #[serde(default)]
+    pub memory_stability_days: f64,
+    #[serde(default)]
+    pub memory_difficulty: f64,
 }
 
 impl UserActivityDocument {

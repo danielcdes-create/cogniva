@@ -251,6 +251,80 @@ pub fn validate_against(catalog:&Value,baseline:&Value,registry_base:&Value)->Re
             return Err(bad("Relação simétrica repetida"));
         }
     }
+    let mut normative_source_ids = HashSet::new();
+    if let Some(norm_arr) = catalog.get("normative_sources").and_then(Value::as_array) {
+        for ns in norm_arr {
+            let sid = ns["source_id"]
+                .as_str()
+                .ok_or_else(|| bad("source_id ausente em normative_sources"))?;
+            if sources.contains_key(sid) || !normative_source_ids.insert(sid) {
+                return Err(bad(format!("source_id duplicado: {sid}")));
+            }
+        }
+    }
+    if let Some(concepts_arr) = catalog.get("concepts").and_then(Value::as_array) {
+        let mut concepts_map = HashMap::new();
+        for c in concepts_arr {
+            let cid = c["concept_id"]
+                .as_str()
+                .ok_or_else(|| bad("concept_id ausente"))?;
+            if !all.insert(cid) || concepts_map.insert(cid, c).is_some() {
+                return Err(bad(format!("concept_id repetido ou conflito de ID: {cid}")));
+            }
+            let c_subj = c["subject_id"].as_str().unwrap_or("");
+            let c_top = c["topic_id"].as_str().unwrap_or("");
+            let Some(parent_top) = topics.get(c_top) else {
+                return Err(bad(format!("Subassunto inexistente no conceito: {cid}")));
+            };
+            if parent_top["kind"] != "SUBTOPIC" || parent_top["subject_id"].as_str() != Some(c_subj)
+            {
+                return Err(bad(format!(
+                    "Conceito deve referenciar SUBTOPIC da mesma disciplina: {cid}"
+                )));
+            }
+            for s in c["source_ids"].as_array().unwrap() {
+                let s_id = s.as_str().unwrap_or("");
+                if !sources.contains_key(s_id) && !normative_source_ids.contains(s_id) {
+                    return Err(bad(format!("Fonte desconhecida no conceito {cid}: {s_id}")));
+                }
+            }
+        }
+        let mut indegree: HashMap<&str, usize> = HashMap::new();
+        let mut dependents: HashMap<&str, Vec<&str>> = HashMap::new();
+        for (&cid, c) in &concepts_map {
+            let prereqs = c["prerequisite_concept_ids"].as_array().unwrap();
+            indegree.insert(cid, prereqs.len());
+            dependents.entry(cid).or_default();
+            for p in prereqs {
+                let pid = p.as_str().unwrap_or("");
+                if pid == cid || !concepts_map.contains_key(pid) {
+                    return Err(bad(format!("Pré-requisito inválido em {cid}: {pid}")));
+                }
+                dependents.entry(pid).or_default().push(cid);
+            }
+        }
+        let mut queue: Vec<&str> = indegree
+            .iter()
+            .filter_map(|(&cid, &deg)| (deg == 0).then_some(cid))
+            .collect();
+        let mut visited = 0usize;
+        while let Some(curr) = queue.pop() {
+            visited += 1;
+            if let Some(next_list) = dependents.get(curr) {
+                for &nxt in next_list {
+                    if let Some(deg) = indegree.get_mut(nxt) {
+                        *deg -= 1;
+                        if *deg == 0 {
+                            queue.push(nxt);
+                        }
+                    }
+                }
+            }
+        }
+        if visited != concepts_map.len() {
+            return Err(bad("Ciclo detectado em prerequisite_concept_ids"));
+        }
+    }
     let mut registry: Value =registry_base.clone();
     let mut entries = Vec::new();
     for (entity, rows) in [

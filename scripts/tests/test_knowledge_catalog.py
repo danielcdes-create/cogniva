@@ -112,6 +112,23 @@ class KnowledgeCatalogTest(unittest.TestCase):
         for topic in self.catalog["topics"]:
             self.assertIn(f"`{topic['topic_id']}`", rendered)
 
+    def test_concepts_and_normative_sources_enforce_subtopic_binding_and_dag_acyclicity(self):
+        seed = kc.read(kc.ROOT / "shared/knowledge-concepts-seed.json")
+        self.catalog["normative_sources"] = copy.deepcopy(seed["normative_sources"])
+        self.catalog["concepts"] = copy.deepcopy(seed["concepts"])
+        self.validate()
+
+        # Cycle in prerequisite_concept_ids must be rejected
+        self.catalog["concepts"][1]["prerequisite_concept_ids"] = ["CON_DIR_ADM_AUTOTUTELA_ANULACAO_REVOGACAO"]
+        with self.assertRaisesRegex(ValueError, "cycle detected in prerequisite_concept_ids"):
+            self.validate()
+
+        # Binding to root TOPIC instead of SUBTOPIC must be rejected
+        self.catalog["concepts"] = copy.deepcopy(seed["concepts"])
+        self.catalog["concepts"][0]["topic_id"] = "DIR_CONST_01"
+        with self.assertRaisesRegex(ValueError, "concept must bind to same-subject SUBTOPIC"):
+            self.validate()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -17,6 +17,8 @@ No **Cogniva `2.0.0`**, toda a taxonomia pedagógica e editorial está consolida
   - Define os templates globais oficiais iniciais (`CPNU`, `RFB`, `BNDES`, `AFT`) carregados em `cogniva.exam_templates` e empacotados no Android para uso imediato *offline*.
 - **[`shared/knowledge-id-registry.json`](../shared/knowledge-id-registry.json):**
   - Registro monotônico de reserva de identidades canônicas, garantindo que nenhum `trunk_id`, `subject_id` ou `topic_id` seja reutilizado com significado distinto.
+- **[`shared/knowledge-concepts-seed.json`](../shared/knowledge-concepts-seed.json):**
+  - Camada seed de conceitos reutilizáveis (`concepts[]` subordinados a `SUBTOPIC`s folha com `prerequisite_concept_ids[]` validados como grafo acíclico DAG) e fontes normativas versionadas (`normative_sources[]` com `content_sha256`), mantendo intacto o hash SHA-256 gênese de [`shared/knowledge-catalog.json`](../shared/knowledge-catalog.json). Consulte [`MOTORES-DECISAO-CORE-LOOP.md`](MOTORES-DECISAO-CORE-LOOP.md).
 
 ---
 

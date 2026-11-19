@@ -52,6 +52,21 @@ pub struct PlausibilityAnalysis {
     pub conclusion: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EvidenceOptionDto {
+    pub evidence_id: String,
+    pub text: String,
+    #[serde(default)]
+    pub source_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EvidenceChallengeDto {
+    pub prompt: String,
+    pub options: Vec<EvidenceOptionDto>,
+    pub correct_evidence_id: String,
+}
+
 /// Documento da coleção `todasQuestoes` (Cogniva V2 — revisão única JCS SHA-256).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuestionDocument {
@@ -113,6 +128,8 @@ pub struct QuestionDocument {
     pub plausibility_markdown: Option<String>,
     #[serde(rename = "plausibilityAnalysis", default)]
     pub plausibility_analysis: Option<PlausibilityAnalysis>,
+    #[serde(default)]
+    pub evidence_challenge: Option<EvidenceChallengeDto>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -150,6 +167,10 @@ pub struct QuestionDto {
     pub user_stats: Option<UserQuestionBriefStats>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exam_component_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub concept_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_challenge: Option<EvidenceChallengeDto>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -179,6 +200,25 @@ impl QuestionDocument {
 
     pub fn is_open_ended(&self) -> bool {
         self.effective_question_type() == "OPEN_ENDED"
+    }
+
+    pub fn confirmed_concept_ids(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        if let Some(cls) = &self.classification {
+            if cls.get("state").and_then(Value::as_str) == Some("CONFIRMED") {
+                if let Some(links) = cls.get("links").and_then(Value::as_array) {
+                    for l in links {
+                        if let Some(cid) = l.get("concept_id").and_then(Value::as_str) {
+                            let trimmed = cid.trim();
+                            if !trimmed.is_empty() && !out.iter().any(|x| x == trimmed) {
+                                out.push(trimmed.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        out
     }
 
     pub fn to_dto(&self, user_stats: Option<UserQuestionBriefStats>) -> QuestionDto {
@@ -271,6 +311,8 @@ impl QuestionDocument {
             knowledge_binding_verified: self.knowledge_binding_verified,
             user_stats,
             exam_component_id: None,
+            concept_ids: self.confirmed_concept_ids(),
+            evidence_challenge: self.evidence_challenge.clone(),
         }
     }
 

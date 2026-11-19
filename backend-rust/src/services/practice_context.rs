@@ -269,6 +269,7 @@ mod tests {
             contextual_hint: vec![],
             plausibility_markdown: None,
             plausibility_analysis: None,
+            evidence_challenge: None,
         };
         (exam, q)
     }

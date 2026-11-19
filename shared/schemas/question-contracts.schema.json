@@ -236,6 +236,17 @@
           "type": "string",
           "pattern": "^[A-Z][A-Z0-9_]*$"
         },
+        "concept_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_]*$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "role": {
           "enum": [
             "PRIMARY",
@@ -272,6 +283,17 @@
         "topic_id": {
           "type": "string",
           "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "concept_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_]*$"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "role": {
           "enum": [
@@ -1063,6 +1085,67 @@
         }
       ]
     },
+    "evidence_option": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidence_id",
+        "text",
+        "source_id"
+      ],
+      "properties": {
+        "evidence_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "source_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_]*$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "evidence_challenge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "prompt",
+        "options",
+        "correct_evidence_id"
+      ],
+      "properties": {
+        "prompt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "options": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/evidence_option"
+          }
+        },
+        "correct_evidence_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        }
+      }
+    },
     "question": {
       "type": "object",
       "additionalProperties": true,
@@ -1219,6 +1302,16 @@
         },
         "grading": {
           "$ref": "#/$defs/grading"
+        },
+        "evidence_challenge": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/evidence_challenge"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "explanation": {
           "anyOf": [

@@ -187,6 +187,9 @@ interface ConcursoApiService {
     @GET("learning/state")
     suspend fun learningState(@Query("after") after: String? = null): br.com.concursoprep.app.domain.model.LearningPage
 
+    @GET("study/next-action")
+    suspend fun getNextAction(@Query("contest_id") contestId: String? = null): br.com.concursoprep.app.domain.model.NextActionResponseDto
+
     @POST("exams/{examId}/publish-edital")
     suspend fun publishEdital(@Path("examId") examId: String, @Body payload: PublishEditalPayload): ExamBlueprintPayload
 

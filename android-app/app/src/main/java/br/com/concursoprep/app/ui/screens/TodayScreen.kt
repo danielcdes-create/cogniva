@@ -71,7 +71,9 @@ fun TodayScreen(
     onOpenSettings: () -> Unit = {},
     onStartQuizMode: (QuizMode, String?) -> Unit,
     onOpenContestSyllabus: (String) -> Unit,
-    onAddExam: () -> Unit = {}
+    onAddExam: () -> Unit = {},
+    onStartSmartEntry: () -> Unit = { onStartQuizMode(QuizMode.ADAPTIVE_LOOP, null) },
+    onStartStrategyBattery: () -> Unit = { onStartQuizMode(QuizMode.STRATEGY_BATTERY, null) }
 ) {
     val progressFraction = (dashboard.questionsAnsweredToday.toFloat() /
         dashboard.dailyGoalQuestions.coerceAtLeast(1).toFloat()).coerceIn(0f, 1f)
@@ -114,6 +116,99 @@ fun TodayScreen(
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onBackground
                             )
+                        }
+                    }
+                }
+            }
+
+            // 1B. Entrada Inteligente (0–5 min): Comece com uma questão + O que falta demonstrar
+            item(key = "smart_entry_card") {
+                val nextAction = dashboard.nextAction
+                val gap = nextAction?.examGapSummary
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "SUA PRÓXIMA AÇÃO · 0–5 MIN",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Text(
+                            text = "Comece com uma questão.",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Text(
+                            text = "${nextAction?.entryReason ?: "Prioridade sugerida: um conceito relevante com retenção pendente."} Você pode encerrar após responder.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        if (gap != null && gap.totalUnits > 0) {
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.surface,
+                                contentColor = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = "O que falta demonstrar até a prova${gap.examName?.let { " ($it)" }.orEmpty()}:",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "${gap.verifiedUnits} comprovados · ${gap.consolidatingUnits} em consolidação · ${gap.insufficientEvidenceUnits} sem evidência",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = onStartSmartEntry,
+                                modifier = Modifier
+                                    .weight(1.2f)
+                                    .heightIn(min = 48.dp),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(
+                                    text = "Começar (1 questão)",
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            OutlinedButton(
+                                onClick = onStartStrategyBattery,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(
+                                    text = "Estratégia 15m",
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
                     }
                 }

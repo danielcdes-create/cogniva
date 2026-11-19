@@ -210,6 +210,18 @@ A mesma conta de e-mail pode ser usada no aplicativo Android e no painel adminis
 
 No portal: **Ver rascunhos preservados**.
 
+## Grafo de conceitos, fontes normativas e motores de decisão
+
+O Cogniva 2.2 estende os subassuntos folha com conceitos reutilizáveis entre editais e fontes normativas versionadas que alimentam os 5 motores de decisão.
+
+1. Subordine novos conceitos sempre a um Subassunto folha ativo (SUBTOPIC) e declare pré-requisitos sem ciclos (DAG verificado na validação do catálogo).
+2. Cadastre fontes normativas com hash SHA-256 do texto vigente; ao atualizar o hash de uma lei ou súmula, revise apenas as questões vinculadas aos conceitos impactados.
+3. Ao classificar ou importar questões, vincule opcionalmente concept_id e desafio de evidência pós-erro; questões sem concept_id operam automaticamente pelo subassunto folha.
+
+Todas as questões confirmadas e vigentes alimentam os motores de Diagnóstico, Retenção, Priorização, Calibração/Estratégia e a reserva de validação Holdout de 20%.
+
+No portal: **Abrir revisões do catálogo**.
+
 ## Privacidade (LGPD Art. 18) e Governança de IA
 
 O Cogniva separa estritamente os dados pessoais de estudo do acervo editorial compartilhado e aplica controles rígidos nas chamadas assistidas por IA.

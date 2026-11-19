@@ -58,7 +58,13 @@ data class PendingAttemptEntity(
     @androidx.room.ColumnInfo(defaultValue = "''") val attemptId: String = java.util.UUID.randomUUID().toString(),
     @androidx.room.ColumnInfo(defaultValue = "''") val questionRevision: String = "",
     val syncError: String? = null,
-    val examComponentId:String?=null
+    val examComponentId: String? = null,
+    @androidx.room.ColumnInfo(defaultValue = "0") val isBlank: Boolean = false,
+    @androidx.room.ColumnInfo(defaultValue = "0") val confidenceExplicit: Boolean = false,
+    val selectedEvidenceId: String? = null,
+    val positionInSession: Int? = null,
+    val elapsedSessionSeconds: Int? = null,
+    @androidx.room.ColumnInfo(defaultValue = "0") val sessionInterrupted: Boolean = false
 )
 
 @Dao
@@ -119,6 +125,8 @@ interface ConcursoLocalDao {
     @Query("UPDATE cached_questions SET inErrorNotebook=:error, isMastered=:mastered WHERE id=:id")
     suspend fun updateLearningFlags(id: String, error: Boolean, mastered: Boolean)
 
+    @Query("UPDATE pending_attempts SET selectedEvidenceId = :evidenceId WHERE sessionUuid = :sessionUuid AND questionId = :questionId")
+    suspend fun updateAttemptEvidence(sessionUuid: String, questionId: String, evidenceId: String)
 }
 
 @Database(
@@ -132,7 +140,7 @@ interface ConcursoLocalDao {
         LearningRecordEntity::class, PendingReportEntity::class, QuizSessionEntity::class, LocalMetadataEntity::class,
         CanonicalMasteryEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
