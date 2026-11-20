@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoFixHigh
 import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.outlined.LocalFireDepartment
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -179,7 +180,8 @@ fun QuestionActionChips(
     onHint: () -> Unit,
     onSincereDoctor: () -> Unit,
     onSimplify: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onLookupLayer: (() -> Unit)? = null
 ) {
     FlowRow(
         modifier = modifier.fillMaxWidth(),
@@ -237,6 +239,25 @@ fun QuestionActionChips(
                 )
             }
         )
+        if (onLookupLayer != null) {
+            AssistChip(
+                onClick = onLookupLayer,
+                label = {
+                    Text(
+                        text = "Consultar / Google",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Outlined.Search,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            )
+        }
     }
 }
 

@@ -73,6 +73,7 @@ class MainViewModel(
     private val _activeSession=MutableStateFlow<SessionSnapshot?>(null);val activeSession=_activeSession.asStateFlow()
     private val _activeAiSheetMarkdown=MutableStateFlow<String?>(null);val activeAiSheetMarkdown=_activeAiSheetMarkdown.asStateFlow()
     private val _activeAiSheetTitle=MutableStateFlow<String?>(null);val activeAiSheetTitle=_activeAiSheetTitle.asStateFlow()
+    private val _contextualLookupState=MutableStateFlow<ContextualLookupUiState?>(null);val contextualLookupState=_contextualLookupState.asStateFlow()
     private val _cachedQuestionsCount=MutableStateFlow(0);val cachedQuestionsCount=_cachedQuestionsCount.asStateFlow()
     private val _pendingSyncCount=MutableStateFlow(0);val pendingSyncCount=_pendingSyncCount.asStateFlow()
     private val _userFeedbackMessage=MutableSharedFlow<String>(extraBufferCapacity=16);val userFeedbackMessage=_userFeedbackMessage.asSharedFlow()
@@ -108,7 +109,7 @@ class MainViewModel(
     }
     fun useServerExam(exam:StoredExam){operation {val context=appContext?:return@operation;val file=repository.preserveAndUseServerExam(exam,File(context.cacheDir,"preserved"));refreshAllData();_pendingExport.emit(file);_userFeedbackMessage.emit("Versão do servidor carregada. Sua edição anterior continua preservada e disponível para exportação.")}}
     fun exportPendingReview(){operation{val context=appContext?:return@operation;_pendingExport.emit(repository.exportPending(File(context.cacheDir,"preserved")))}}
-    private var refreshJob:Job?=null;private var syllabusJob:Job?=null;private var startJob:Job?=null;private var aiJob:Job?=null;private var aiGeneration=0L
+    private var refreshJob:Job?=null;private var syllabusJob:Job?=null;private var startJob:Job?=null;private var aiJob:Job?=null;private var lookupJob:Job?=null;private var lookupAiJob:Job?=null;private var aiGeneration=0L
     private fun operation(block:suspend CoroutineScope.()->Unit)=vmScope.launch {
         try{block()}catch(e:CancellationException){throw e}catch(e:Exception){_userFeedbackMessage.emit(e.message?:"Não foi possível concluir. Seus registros foram preservados.")}
     }
@@ -328,7 +329,10 @@ class MainViewModel(
             _analytics.value=_analytics.value?.copy(
                 calibrationCells=nextAction.calibrationCells,
                 strategyGuidance=nextAction.strategyGuidance,
-                fatigueReport=nextAction.fatigueReport
+                fatigueReport=nextAction.fatigueReport,
+                examGapSummary=nextAction.examGapSummary,
+                threeSignalSummary=nextAction.threeSignalSummary,
+                examScenarios=nextAction.examScenarios
             )
             if(_activeSession.value==null){
                 val paused=repository.pausedSession()
@@ -395,26 +399,53 @@ class MainViewModel(
         feedbackMessage?.let { _userFeedbackMessage.emit(it) }
     }}
     fun applyEditalDiffUpdate(id:String){operation {val before=_storedExams.value.find{it.examId==id}?.revision;repository.syncPendingAttempts(repository.ownerUserId);refreshAllData();_userFeedbackMessage.emit(if(repository.loadStoredExams().find{it.examId==id}?.revision!=before)"Nova revisão de edital salva. Histórico preservado."else"Nenhuma revisão nova de edital foi publicada para este concurso.")}}
-    fun startSmartEntryQuestion(){
+    fun recordEntryImpression() {
+        operation {
+            repository.recordEntryScreenImpression(repository.ownerUserId)
+        }
+    }
+
+    fun chooseConsciousRestToday(rested: Boolean = true) {
+        operation {
+            val metrics = repository.setConsciousRestToday(repository.ownerUserId, rested)
+            _todayDashboard.value = _todayDashboard.value?.copy(entryMetrics = metrics)
+            _analytics.value = _analytics.value?.copy(entryMetrics = metrics)
+            if (rested) {
+                _userFeedbackMessage.emit("Sem estudar hoje registrado. Nenhuma punição ou cobrança — o acesso continua livre se mudar de ideia.")
+            }
+        }
+    }
+
+    fun startSmartEntryQuestion(excludeQuestionIds: Set<String> = emptySet()){
         startJob?.cancel()
         val cid=_selectedContestId.value.takeIf { it.isNotBlank() }
         val nextAct=_todayDashboard.value?.nextAction
         startJob=operation {
             _isStartingQuiz.value=true
             try {
-                val preloaded=nextAct?.entryQuestion?.let { listOf(it) }.orEmpty()
+                if (excludeQuestionIds.isEmpty()) {
+                    repository.recordEntryVoluntaryStart(repository.ownerUserId)
+                }
+                val preloaded=nextAct?.entryQuestion
+                    ?.takeIf { it.id !in excludeQuestionIds }
+                    ?.let { listOf(it) }
+                    .orEmpty()
                 val questions=preloaded.ifEmpty {
-                    val scoped=runCatching {
+                    val fetched=runCatching {
                         repository.fetchOrGetOfflineQuiz(
                             repository.ownerUserId,
-                            QuizMode.ADAPTIVE_LOOP,
-                            1,
+                            QuizMode.ENTRY_60S,
+                            4,
                             cid,
                             syllabusTopicId=nextAct?.priorityTopicId
                         )
-                    }.getOrDefault(emptyList())
-                    scoped.ifEmpty {
-                        repository.fetchOrGetOfflineQuiz(repository.ownerUserId,QuizMode.ADAPTIVE_LOOP,1,null)
+                    }.getOrDefault(emptyList()).filter { it.id !in excludeQuestionIds }
+                    fetched.ifEmpty {
+                        repository.fetchOrGetOfflineQuiz(repository.ownerUserId,QuizMode.ENTRY_60S,4,null)
+                            .filter { it.id !in excludeQuestionIds }
+                            .ifEmpty {
+                                repository.fetchOrGetOfflineQuiz(repository.ownerUserId,QuizMode.ADAPTIVE_LOOP,1,null)
+                            }
                     }
                 }
                 if(questions.isEmpty()){
@@ -426,7 +457,7 @@ class MainViewModel(
                     sessionId=UUID.randomUUID().toString(),
                     ownerUserId=repository.ownerUserId,
                     questions=questions.take(1),
-                    mode=QuizMode.ADAPTIVE_LOOP,
+                    mode=QuizMode.ENTRY_60S,
                     exam=exam,
                     deadlineEpochMs=null,
                     isSmartEntry=true
@@ -436,6 +467,22 @@ class MainViewModel(
             } finally {
                 _isStartingQuiz.value=false
             }
+        }
+    }
+
+    fun resolveAnotherSmartEntryQuestion(){
+        operation {
+            val current=_activeSession.value
+            val prevIds=current?.questions?.map { it.id }?.toSet().orEmpty()
+            if(current!=null){
+                withContext(NonCancellable){
+                    repository.withMutationLock {
+                        repository.saveSession(current)
+                        repository.completeSession(current.sessionId)
+                    }
+                }
+            }
+            startSmartEntryQuestion(excludeQuestionIds=prevIds)
         }
     }
 
@@ -452,7 +499,7 @@ class MainViewModel(
             }
             startQuizSession(
                 mode=QuizMode.ADAPTIVE_LOOP,
-                quantity=12,
+                quantity=10,
                 contestId=_selectedContestId.value.takeIf { it.isNotBlank() }
             )
         }
@@ -460,7 +507,7 @@ class MainViewModel(
 
     fun startQuizSession(mode:QuizMode,quantity:Int,contestId:String?=null,disciplina:String?=null,componentId:String?=null,syllabusTopicId:String?=null){
         startJob?.cancel()
-        val id=PracticeScope.contest(mode,if(mode in listOf(QuizMode.SIMULADO,QuizMode.ADAPTIVE_LOOP,QuizMode.STRATEGY_BATTERY))contestId?:_selectedContestId.value else contestId)
+        val id=PracticeScope.contest(mode,if(mode in listOf(QuizMode.SIMULADO,QuizMode.ADAPTIVE_LOOP,QuizMode.STRATEGY_BATTERY,QuizMode.ENTRY_60S,QuizMode.TRANSFER_PROBE))contestId?:_selectedContestId.value else contestId)
         startJob=operation {
             _isStartingQuiz.value=true
             try{
@@ -471,13 +518,13 @@ class MainViewModel(
                         QuizMode.ERROR_NOTEBOOK->"Nenhuma questão válida disponível no caderno de erros. O histórico continua preservado."
                         QuizMode.MOST_BADASS->"Nenhuma questão válida do seu histórico atende ao desafio agora. Use o Shuffle Geral."
                         QuizMode.COMMON_TRUNK->"Nenhuma questão disponível para o tronco das grades ativas. Confira os vínculos ou conecte-se para atualizar o cache."
+                        QuizMode.TRANSFER_PROBE->"Transferência não mensurada: ainda não há questões humanas inéditas de outra banca neste filtro."
                         else->if(disciplina!=null)"Não foi possível obter questões de $disciplina neste filtro. O Shuffle Geral acessa outras matérias disponíveis." else "Nenhuma questão disponível neste filtro. Confira a conexão e o acervo em cache."
                     });return@operation
                 }
                 val exam=repository.loadStoredExams().find{it.examId==id}
                 val deadlineMs=when(mode){
                     QuizMode.SIMULADO->System.currentTimeMillis()+questions.size*180000L
-                    QuizMode.STRATEGY_BATTERY->System.currentTimeMillis()+(questions.size*90000L).coerceAtMost(900000L)
                     else->null
                 }
                 val session=SessionSnapshot(UUID.randomUUID().toString(),repository.ownerUserId,questions,mode,exam,deadlineMs)
@@ -487,11 +534,12 @@ class MainViewModel(
     }
     private fun showSession(session:SessionSnapshot){
         dismissAiSheet()
+        dismissContextualLookup()
         savedStateHandle?.set(KEY_ACTIVE_SESSION_ID,session.sessionId)
         savedStateHandle?.set(KEY_ACTIVE_SESSION_INDEX,session.currentIndex)
         _activeSession.value=session
         _activeQuizQuestions.value=session.questions
-        _isSimuladoSession.value=session.mode in listOf(QuizMode.SIMULADO,QuizMode.STRATEGY_BATTERY)
+        _isSimuladoSession.value=session.mode == QuizMode.SIMULADO
         _pausedDiscipline.value=session.questions.firstOrNull()?.disciplina
     }
     fun resumeSession(){operation {repository.pausedSession()?.let(::showSession)?:_userFeedbackMessage.emit("Não há sessão pausada neste aparelho.")}}
@@ -540,8 +588,10 @@ class MainViewModel(
     ): Boolean {
         return try {
             require(question.correctAnswerIndices.size == 1 && (isBlank || chosenIndex in question.answers.indices))
+            var completedFirstEntryQuestion = false
             val saved = repository.withMutationLock {
                 val session = _activeSession.value ?: return@withMutationLock false
+                val isFirstSubmittedInSession = session.answers.none { it.value.submitted }
                 val pos = session.answers.count { it.value.submitted } + 1
                 val sessionElapsed = ((System.currentTimeMillis() - session.sessionStartedAtEpochMs) / 1000L).toInt().coerceAtLeast(1)
                 val safeIndex = if (isBlank) -1 else chosenIndex
@@ -562,7 +612,7 @@ class MainViewModel(
                     canonicalSubjectId = question.canonicalSubjectId,
                     canonicalTopicId = question.canonicalTopicId,
                     ownerUserId = session.ownerUserId,
-                    attemptId = UUID.nameUUIDFromBytes("${session.sessionId}:${question.id}".toByteArray()).toString(),
+                    attemptId = ConcursoRepository.deterministicAttemptId(session.sessionId, question.id),
                     questionRevision = question.questionRevision,
                     examComponentId = question.examComponentId,
                     isBlank = isBlank,
@@ -588,9 +638,15 @@ class MainViewModel(
                 )
                 repository.recordAttemptUnlocked(session.ownerUserId, attempt, next)
                 if (_activeSession.value?.sessionId == session.sessionId) _activeSession.value = next
+                if (session.isSmartEntry && isFirstSubmittedInSession) {
+                    completedFirstEntryQuestion = true
+                }
                 true
             }
             if (!saved) return false
+            if (completedFirstEntryQuestion) {
+                repository.recordEntryFirstQuestionCompleted(repository.ownerUserId)
+            }
             localStats(); appContext?.let { OfflineSyncWorker.enqueueNow(it) }; true
         } catch (e: CancellationException) {
             throw e
@@ -637,7 +693,7 @@ class MainViewModel(
                                     canonicalSubjectId = question.canonicalSubjectId,
                                     canonicalTopicId = question.canonicalTopicId,
                                     ownerUserId = session.ownerUserId,
-                                    attemptId = UUID.nameUUIDFromBytes("${session.sessionId}:${question.id}".toByteArray()).toString(),
+                                    attemptId = ConcursoRepository.deterministicAttemptId(session.sessionId, question.id),
                                     questionRevision = question.questionRevision,
                                     examComponentId = question.examComponentId,
                                     isBlank = ans.isBlank,
@@ -695,7 +751,7 @@ class MainViewModel(
             }
         }
         if(!closed)return@operation
-        dismissAiSheet();refreshAllData()
+        dismissAiSheet();dismissContextualLookup();refreshAllData()
     }}
     fun reportProblem(id:String,category:String){operation {check(repository.reportQuestionProblem(repository.ownerUserId,id,category)){"O reporte não pôde ser salvo; tente novamente."};appContext?.let{OfflineSyncWorker.enqueueNow(it)};localStats();_userFeedbackMessage.emit("Reporte salvo neste aparelho e aguardando confirmação de envio.")}}
     fun requestAiTutor(id:String,kind:String,title:String,hintIndex:Int?=null){
@@ -703,6 +759,48 @@ class MainViewModel(
         aiJob=operation {val text=repository.requestAiTutor(id,kind,hintIndex);if(aiGeneration==generation&&_activeQuizQuestions.value?.any{it.id==id}==true)_activeAiSheetMarkdown.value=text}
     }
     fun dismissAiSheet(){aiGeneration++;aiJob?.cancel();_activeAiSheetMarkdown.value=null;_activeAiSheetTitle.value=null}
+
+    fun openContextualLookup(question: QuestionDto, rawSelectedText: String) {
+        val cleaned = rawSelectedText.trim().replace(Regex("\\s+"), " ").take(240)
+        if (cleaned.isEmpty()) return
+        lookupJob?.cancel()
+        lookupAiJob?.cancel()
+        _contextualLookupState.value = ContextualLookupUiState(
+            questionId = question.id,
+            selectedText = cleaned,
+            isLoading = true
+        )
+        lookupJob = operation {
+            val result = repository.lookupQuestionContext(question, cleaned)
+            val cur = _contextualLookupState.value
+            if (cur != null && cur.questionId == question.id && cur.selectedText == cleaned) {
+                _contextualLookupState.value = cur.copy(isLoading = false, response = result)
+            }
+        }
+    }
+
+    fun requestContextualLookupAi(questionId: String, selectedText: String, isAnswerSubmitted: Boolean) {
+        val cleaned = selectedText.trim().take(240)
+        if (cleaned.isEmpty()) return
+        lookupAiJob?.cancel()
+        _contextualLookupState.value = _contextualLookupState.value?.copy(
+            isAiLoading = true,
+            aiExplanationMarkdown = null
+        )
+        lookupAiJob = operation {
+            val md = repository.requestAiTermLookup(questionId, cleaned, isAnswerSubmitted)
+            val cur = _contextualLookupState.value
+            if (cur != null && cur.questionId == questionId && cur.selectedText == cleaned) {
+                _contextualLookupState.value = cur.copy(isAiLoading = false, aiExplanationMarkdown = md)
+            }
+        }
+    }
+
+    fun dismissContextualLookup() {
+        lookupJob?.cancel()
+        lookupAiJob?.cancel()
+        _contextualLookupState.value = null
+    }
     fun checkApkUpdate(){operation {
         _apkUpdateState.value=_apkUpdateState.value.copy(isChecking=true)
         try{val remote=repository.fetchRemoteApkInfo();_apkUpdateState.value=_apkUpdateState.value.copy(remoteInfo=remote,hasUpdate=remote!=null&&remote.versionCode>BuildConfig.VERSION_CODE,statusMessage=when{remote==null->"Não foi possível verificar a versão agora.";remote.versionCode>BuildConfig.VERSION_CODE->"Atualização disponível: ${remote.versionName}";else->"Versão instalada atualizada."})}finally{_apkUpdateState.value=_apkUpdateState.value.copy(isChecking=false)}

@@ -17,7 +17,12 @@ data class LearningEvent(
     @SerialName("confidence_level") val confidenceLevel: Int,
     @SerialName("time_spent_seconds") val timeSpentSeconds: Int,
     @SerialName("question_revision") val questionRevision: String? = null,
-    @SerialName("is_blank") val isBlank: Boolean = false
+    @SerialName("is_blank") val isBlank: Boolean = false,
+    @SerialName("selected_evidence_id") val selectedEvidenceId: String? = null,
+    @SerialName("quiz_mode") val quizMode: String? = null,
+    @SerialName("session_uuid") val sessionUuid: String? = null,
+    @SerialName("elapsed_session_seconds") val elapsedSessionSeconds: Int? = null,
+    @SerialName("session_interrupted") val sessionInterrupted: Boolean = false
 )
 @Serializable data class KnowledgeEvidence(
     @SerialName("canonical_subject_id") val canonicalSubjectId:String,

@@ -1146,6 +1146,98 @@
         }
       }
     },
+    "conceptual_error_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "error_id",
+        "label",
+        "description"
+      ],
+      "properties": {
+        "error_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      }
+    },
+    "editorial_card": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "legal_provisions",
+        "tested_rule",
+        "exception_clause",
+        "decisive_stem_excerpt",
+        "official_source_excerpt",
+        "plausible_conceptual_errors"
+      ],
+      "properties": {
+        "legal_provisions": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 15,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "tested_rule": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "exception_clause": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "decisive_stem_excerpt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1500
+        },
+        "official_source_excerpt": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 3000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "plausible_conceptual_errors": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/conceptual_error_item"
+          }
+        }
+      }
+    },
     "question": {
       "type": "object",
       "additionalProperties": true,
@@ -1307,6 +1399,16 @@
           "anyOf": [
             {
               "$ref": "#/$defs/evidence_challenge"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "editorial_card": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/editorial_card"
             },
             {
               "type": "null"

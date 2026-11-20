@@ -1,15 +1,19 @@
 package br.com.concursoprep.app.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -20,6 +24,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,6 +43,9 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import br.com.concursoprep.app.domain.exam.DiagnosticEngine
+import br.com.concursoprep.app.domain.exam.FatigueStatus
+import br.com.concursoprep.app.domain.exam.StrategyAction
 import br.com.concursoprep.app.domain.model.DailyHeatmapCellDto
 import br.com.concursoprep.app.domain.model.ProgressAnalyticsDto
 import br.com.concursoprep.app.domain.model.QuizMode
@@ -48,19 +56,22 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * Tela "Progresso & Analytics":
- * Responde em segundos: "Estou no caminho de passar?"
- * - Índice de Prontidão vs. Nota de Corte Histórica
- * - Matriz Confiança × Acerto (destacando Erros com Alta Confiança)
- * - Barras de desempenho por disciplina ordenadas da mais crítica para a mais forte
- * - Heatmap de atividade
+ * Tela "Progresso & Analytics" (Cogniva 2.3):
+ * - Prontidão & Confiabilidade Epistêmica sob Escassez (< 15 questões humanas)
+ * - Mapa de Transferência Cross-Banca (Conjunto Separado / Transferência Não Mensurada)
+ * - Diagnóstico dos 3 Sinais (Resposta × Confiança × Evidência) + Omissões Estratégicas
+ * - Calibração Empírica Beta-Binomial & Simulador de Decisão sob Incerteza (VE = 2p − 1)
+ * - Modelo Individual Logístico de 300 Minutos p(t) com Controle de Dificuldade
+ * - Métricas Voluntárias do Protocolo de Entrada de 60 Segundos
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ProgressScreen(
     analytics: ProgressAnalyticsDto,
     onPracticeQuizMode: (QuizMode, String?) -> Unit = { _, _ -> }
 ) {
     val ext = LocalExtendedColors.current
+    val ptBrLocale = remember { Locale.forLanguageTag("pt-BR") }
     var selectedHeatmapCell by remember { mutableStateOf<DailyHeatmapCellDto?>(null) }
 
     Surface(
@@ -74,92 +85,184 @@ fun ProgressScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            item {
+            item(key = "progress_header") {
                 CognivaBrandHeader(
-                    ecosystemProduct = "Cogniva Insights",
-                    subtitle = "Analytics, Matriz de Confiança & Diagnóstico"
+                    ecosystemProduct = "Cogniva Insights · Evidências",
+                    subtitle = "Diagnóstico 3 Sinais, Transferência, Decisão & Curva 300 min"
                 )
             }
 
-            // 1. Projeção & Índice de Prontidão vs. Nota de Corte Histórica
-            item {
+            // 1. Prontidão & Confiabilidade Epistêmica (Regra < 15 Questões Humanas)
+            item(key = "epistemic_readiness") {
+                val gap = analytics.examGapSummary
+                val minQ = gap.minQuestionsForMastery.coerceAtLeast(DiagnosticEngine.MIN_QUESTIONS_FOR_MASTERY)
                 Card(
                     shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surface,
                         contentColor = MaterialTheme.colorScheme.onSurface
-                    )
+                    ),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         Text(
-                            text = "Índice de Prontidão vs. Nota de Corte Histórica",
-                            style = MaterialTheme.typography.titleMedium
+                            text = "Prontidão & Confiabilidade sob Escassez",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = if(analytics.historicalCutoffReference>0) "Índice de prontidão ${analytics.readinessIndexScore.toInt()}/100 · Corte de referência cadastrado: ${analytics.historicalCutoffReference.toInt()}/100" else "Índice de prontidão ${analytics.readinessIndexScore.toInt()}/100 · Sem corte de referência validado",
+                            text = if (analytics.historicalCutoffReference > 0) {
+                                "Prontidão ponderada ${analytics.readinessIndexScore.toInt()}/100 · Corte de referência: ${analytics.historicalCutoffReference.toInt()}/100"
+                            } else {
+                                "Prontidão ponderada ${analytics.readinessIndexScore.toInt()}/100 · Sem corte histórico validado"
+                            },
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(modifier = Modifier.height(10.dp))
                         LinearProgressIndicator(
                             progress = { (analytics.readinessIndexScore.toFloat() / 100f).coerceIn(0f, 1f) },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(10.dp)
                                 .clip(RoundedCornerShape(5.dp)),
-                            color = if (analytics.historicalCutoffReference>0 && analytics.readinessIndexScore >= analytics.historicalCutoffReference) ext.correct else ext.warning
+                            color = if (analytics.historicalCutoffReference > 0 && analytics.readinessIndexScore >= analytics.historicalCutoffReference) ext.correct else ext.warning
                         )
-                        Spacer(modifier = Modifier.height(10.dp))
+
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text(
-                                text = "Questões praticadas: ${analytics.totalQuestionsPracticed}",
-                                style = MaterialTheme.typography.labelMedium
+                            MiniStatPill(
+                                label = "Domínio (≥$minQ + transf.)",
+                                value = "${gap.verifiedUnits}",
+                                accent = ext.correct,
+                                modifier = Modifier.weight(1f)
                             )
-                            Text(
-                                text = "Dominadas (SRS): ${analytics.totalMasteredQuestions}",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = ext.correct
+                            MiniStatPill(
+                                label = "Em evidência (<$minQ)",
+                                value = "${gap.evidenceInProgressUnits.coerceAtLeast(gap.consolidatingUnits - gap.activeErrorUnits)}",
+                                accent = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.weight(1f)
                             )
+                            MiniStatPill(
+                                label = "Indícios de erro",
+                                value = "${gap.activeErrorUnits}",
+                                accent = ext.error,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        Text(
+                            text = "Regra epistêmica: com menos de $minQ questões humanas distintas por unidade, o sistema aponta indícios de erro e progresso sem jamais afirmar domínio pleno. Questões praticadas: ${analytics.totalQuestionsPracticed}.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            // 2. Mapa de Transferência entre Bancas (Conjunto de Avaliação Separado)
+            item(key = "cross_board_transfer") {
+                val gap = analytics.examGapSummary
+                Card(
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Transferência Independente entre Bancas",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            MiniStatPill(
+                                label = "Comprovada",
+                                value = "${gap.transferVerifiedUnits}",
+                                accent = ext.correct,
+                                modifier = Modifier.weight(1f)
+                            )
+                            MiniStatPill(
+                                label = "Disponível",
+                                value = "${gap.transferAvailableUnits}",
+                                accent = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.weight(1f)
+                            )
+                            MiniStatPill(
+                                label = "Não mensurada",
+                                value = "${gap.transferUnmeasuredUnits}",
+                                accent = ext.neutral,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        Text(
+                            text = "Quando não existe questão humana inédita de outra banca para o conceito, o sistema registra explicitamente 'Transferência não mensurada' em vez de gerar itens sintéticos.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OutlinedButton(
+                            onClick = { onPracticeQuizMode(QuizMode.TRANSFER_PROBE, null) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 46.dp),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("Avaliar Transferência em Outra Banca")
                         }
                     }
                 }
             }
 
-            // 2. Matriz Metacognitiva: Confiança × Acerto
-            item {
+            // 3. Diagnóstico dos 3 Sinais (Resposta × Confiança × Evidência) & Omissões Estratégicas
+            item(key = "three_signal_diagnostics") {
+                val sig = analytics.threeSignalSummary
                 val cm = analytics.confidenceMatrix
                 Card(
                     shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surface,
                         contentColor = MaterialTheme.colorScheme.onSurface
-                    )
+                    ),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
                         Text(
-                            text = "Matriz Metacognitiva (Confiança × Resultado)",
-                            style = MaterialTheme.typography.titleMedium
+                            text = "Diagnóstico dos 3 Sinais & Matriz Metacognitiva",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
                         )
+
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             QuadrantBox(
-                                title = "Domínio Real",
-                                subtitle = "Acerto c/ Alta Confiança",
+                                title = "Acerto Firme",
+                                subtitle = "Alta confiança (${sig.groundedHits} validados)",
                                 count = cm.highConfidenceCorrect,
                                 color = ext.correct,
                                 modifier = Modifier.weight(1f),
                                 onClick = { onPracticeQuizMode(QuizMode.SRS_REVIEW, null) }
                             )
                             QuadrantBox(
-                                title = "Acerto Frágil",
-                                subtitle = "Acerto no Chute/Dúvida",
-                                count = cm.lowConfidenceCorrect,
+                                title = "Competência Ilusória",
+                                subtitle = "Acerto c/ premissa incorreta",
+                                count = sig.illusoryCompetenceHits,
                                 color = ext.warning,
                                 modifier = Modifier.weight(1f),
                                 onClick = { onPracticeQuizMode(QuizMode.SRS_REVIEW, null) }
@@ -170,27 +273,40 @@ fun ProgressScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             QuadrantBox(
-                                title = "Ponto Cego Crítico",
-                                subtitle = "Erro c/ Alta Confiança (Toque p/ Treinar)",
+                                title = "Excesso de Confiança",
+                                subtitle = "Erro c/ confiança alta (Treinar)",
                                 count = cm.highConfidenceError,
                                 color = ext.error,
                                 modifier = Modifier.weight(1f),
                                 onClick = { onPracticeQuizMode(QuizMode.ERROR_NOTEBOOK, null) }
                             )
                             QuadrantBox(
-                                title = "Lacuna Mapeada",
-                                subtitle = "Erro c/ Baixa Confiança",
+                                title = "Lacuna / Recuperação",
+                                subtitle = "${sig.conceptualErrors} conceituais · ${sig.retrievalFailures} esquecimentos",
                                 count = cm.lowConfidenceError,
                                 color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.weight(1f),
                                 onClick = { onPracticeQuizMode(QuizMode.ERROR_NOTEBOOK, null) }
                             )
                         }
+
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerLow,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            val savedLabel = String.format(ptBrLocale, "%+.2f pt", sig.omissionNetPointsSaved)
+                            Text(
+                                text = "Omissões estratégicas em branco: ${sig.strategicOmissions} · Proteção líquida estimada contra penalidade: $savedLabel · Acertos em dúvida: ${cm.lowConfidenceCorrect}",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
                     }
                 }
             }
 
-            // 2B. Calibração de Confiança (Beta-Binomial) & Estratégia de Prova (VE)
+            // 4. Calibração Beta-Binomial & Simulador de Decisão sob Incerteza (VE = 2p - 1)
             if (analytics.strategyGuidance.isNotEmpty()) {
                 item(key = "calibration_strategy") {
                     Card(
@@ -198,21 +314,23 @@ fun ProgressScreen(
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surface,
                             contentColor = MaterialTheme.colorScheme.onSurface
-                        )
+                        ),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(
                             modifier = Modifier.padding(16.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
-                                text = "Calibração Empírica & Estratégia de Prova",
-                                style = MaterialTheme.typography.titleMedium
+                                text = "Decisão sob Incerteza & Pontuação Líquida",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
                             )
                             val penaltyText = if (analytics.wrongAnswerPenalty > 0.0) {
                                 val pStarPct = (analytics.wrongAnswerPenalty / (1.0 + analytics.wrongAnswerPenalty) * 100.0).toInt()
-                                "Penalidade ativa (-${analytics.wrongAnswerPenalty} por erro) · Limiar de equilíbrio p* = $pStarPct%"
+                                "Penalidade -${analytics.wrongAnswerPenalty} por erro · VE = (1+λ)p − λ (p = 55% gera +0,10 pt em +1/−1; p* = $pStarPct%). Em item binário C/E, 48% em uma opção implica 52% na complementar."
                             } else {
-                                "Sem penalidade por erro na grade principal · Responder sempre maximiza o valor esperado (VE)"
+                                "Sem penalidade por erro na grade ativa · Responder maximiza a pontuação esperada e a chance de atingir a meta."
                             }
                             Text(
                                 text = penaltyText,
@@ -221,34 +339,89 @@ fun ProgressScreen(
                             )
                             analytics.strategyGuidance.forEach { bandItem ->
                                 val bandLabel = when (bandItem.confidenceBand) {
-                                    1 -> "Chute / Baixa (1)"
-                                    2 -> "Dúvida / Média (2)"
-                                    else -> "Certeza / Alta (3)"
+                                    1 -> "Baixa / Chute (1)"
+                                    2 -> "Média / Dúvida (2)"
+                                    else -> "Alta / Certeza (3)"
                                 }
-                                val recommendOmit = bandItem.decision.recommendedAction == br.com.concursoprep.app.domain.exam.StrategyAction.OMIT
+                                val evStr = String.format(ptBrLocale, "%+.2f pt", bandItem.decision.expectedValue)
+                                val recommendOmit = bandItem.decision.recommendedAction == StrategyAction.OMIT
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = "$bandLabel: ${(bandItem.calibratedMean * 100.0).toInt()}% calibrado",
+                                        text = "$bandLabel: ${(bandItem.calibratedMean * 100.0).toInt()}% (VE $evStr)",
                                         style = MaterialTheme.typography.bodyMedium
                                     )
                                     Text(
-                                        text = if (recommendOmit) "Recomendado: Omitir" else "Recomendado: Responder",
-                                        style = MaterialTheme.typography.labelMedium,
+                                        text = if (recommendOmit) "Omitir" else "Responder",
+                                        style = MaterialTheme.typography.labelLarge,
                                         fontWeight = FontWeight.Bold,
                                         color = if (recommendOmit) ext.warning else ext.correct
                                     )
                                 }
+                            }
+
+                            if (analytics.examScenarios.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Cenários de Prova (Confiança Média vs. Objetivo de Pontuação):",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                analytics.examScenarios.forEach { sc ->
+                                    val dec = sc.decisionAtMediumConfidence
+                                    val pAns = String.format(ptBrLocale, "%.0f%%", dec.probGoalIfAnswer * 100.0)
+                                    val pOm = String.format(ptBrLocale, "%.0f%%", dec.probGoalIfOmit * 100.0)
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = sc.label,
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    fontWeight = FontWeight.SemiBold
+                                                )
+                                                Text(
+                                                    text = "P(meta|Resp) $pAns vs. P(meta|Omitir) $pOm",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                            Text(
+                                                text = if (dec.recommendedAction == StrategyAction.OMIT) "Omitir" else "Responder",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (dec.recommendedAction == StrategyAction.OMIT) ext.warning else ext.correct
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            OutlinedButton(
+                                onClick = { onPracticeQuizMode(QuizMode.STRATEGY_BATTERY, null) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 46.dp),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("Treinar no Simulador de Decisão (8–12 min)")
                             }
                         }
                     }
                 }
             }
 
-            // 2C. Motor de Fadiga (Guarda Epistemológica Estrita)
+            // 5. Modelo Individual de 300 Minutos p(t) com Controle de Dificuldade
             item(key = "fatigue_endurance") {
                 val fatigue = analytics.fatigueReport
                 Card(
@@ -256,64 +429,143 @@ fun ProgressScreen(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surface,
                         contentColor = MaterialTheme.colorScheme.onSurface
-                    )
+                    ),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
                         modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = "Resistência em Provas Prolongadas",
-                            style = MaterialTheme.typography.titleMedium
+                            text = "Curva Individual de 300 Minutos · p(t)",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
                         )
                         when (fatigue.status) {
-                            br.com.concursoprep.app.domain.exam.FatigueStatus.INSUFFICIENT_EVIDENCE -> {
+                            FatigueStatus.INSUFFICIENT_EVIDENCE -> {
                                 Text(
-                                    text = "Evidência insuficiente (${fatigue.qualifyingSessions}/${fatigue.requiredSessions} simulados longos sem interrupção · ${fatigue.qualifyingAttempts}/${fatigue.requiredAttempts} questões cronometradas). O Cogniva só estima efeito de fadiga com amostra validada.",
+                                    text = "Calibração longitudinal pendente (${fatigue.qualifyingSessions}/${fatigue.requiredSessions} simulados longos sem interrupção · ${fatigue.qualifyingAttempts}/${fatigue.requiredAttempts} itens cronometrados). Simulações matemáticas não substituem provas prolongadas reais com controle de dificuldade.",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            br.com.concursoprep.app.domain.exam.FatigueStatus.FATIGUE_DETECTED -> {
-                                val dropPct = String.format(Locale.forLanguageTag("pt-BR"), "%.1f%%", (fatigue.shrunkAccuracyDelta ?: 0.0) * 100.0)
+                            FatigueStatus.FATIGUE_DETECTED -> {
+                                val dropPct = String.format(ptBrLocale, "%+.1f%%", (fatigue.shrunkAccuracyDelta ?: 0.0) * 100.0)
+                                val lamStr = String.format(ptBrLocale, "%+.2f", fatigue.estimatedLambda ?: 0.0)
                                 Text(
-                                    text = "Queda empírica detectada após 45 min ($dropPct regularizado em ${fatigue.qualifyingSessions} simulados).",
+                                    text = "Queda controlada por dificuldade detectada ($dropPct · λᵢ = $lamStr em ${fatigue.qualifyingSessions} simulados).",
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     color = ext.warning
                                 )
                             }
-                            br.com.concursoprep.app.domain.exam.FatigueStatus.STABLE_ENDURANCE -> {
+                            FatigueStatus.STABLE_ENDURANCE -> {
+                                val lamStr = String.format(ptBrLocale, "%+.2f", fatigue.estimatedLambda ?: 0.0)
                                 Text(
-                                    text = "Resistência estável confirmada em ${fatigue.qualifyingSessions} simulados prolongados sem queda estatisticamente significativa.",
+                                    text = "Resistência estável ao longo da prova confirmada (λᵢ = $lamStr em ${fatigue.qualifyingSessions} simulados com controle de dificuldade).",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = ext.correct
+                                )
+                            }
+                            FatigueStatus.WARMUP_GAIN_DETECTED -> {
+                                val gainPct = String.format(ptBrLocale, "%+.1f%%", (fatigue.shrunkAccuracyDelta ?: 0.0) * 100.0)
+                                val lamStr = String.format(ptBrLocale, "%+.2f", fatigue.estimatedLambda ?: 0.0)
+                                Text(
+                                    text = "Efeito positivo de aquecimento detectado ao longo da prova ($gainPct · λᵢ = $lamStr em ${fatigue.qualifyingSessions} simulados).",
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     color = ext.correct
                                 )
                             }
                         }
+
+                        if (fatigue.curve300m.isNotEmpty()) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                fatigue.curve300m.forEach { pt ->
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                                    ) {
+                                        Text(
+                                            text = "${pt.minute}m: ${(pt.predictedAccuracy * 100.0).toInt()}%",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
 
-            // 3. Heatmap de Consistência Diária
-            item {
-                val ptBrLocale = remember { Locale.forLanguageTag("pt-BR") }
+            // 6. Métricas Voluntárias do Protocolo 60s + Consistência (Sem Cobrança de Sequência)
+            item(key = "voluntary_habit_metrics") {
+                val em = analytics.entryMetrics
+                val startRatePct = if (em.impressionsCount > 0) {
+                    ((em.voluntaryStartsCount.toDouble() / em.impressionsCount.toDouble()) * 100.0).coerceAtMost(100.0).toInt()
+                } else {
+                    0
+                }
+                val firstCompletionPct = if (em.voluntaryStartsCount > 0) {
+                    ((em.firstQuestionCompletedCount.toDouble() / em.voluntaryStartsCount.toDouble()) * 100.0).coerceAtMost(100.0).toInt()
+                } else {
+                    0
+                }
                 val dayFormatter = remember(ptBrLocale) { DateTimeFormatter.ofPattern("dd/MM (EEE)", ptBrLocale) }
                 val recentCells = remember(analytics.activityHeatmap) { analytics.activityHeatmap.takeLast(14) }
+
                 Card(
                     shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surface,
                         contentColor = MaterialTheme.colorScheme.onSurface
-                    )
+                    ),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
                         Text(
-                            text = "Consistência de Estudo (Últimos 14 dias)",
-                            style = MaterialTheme.typography.titleMedium
+                            text = "Hábito Voluntário · Protocolo de 60s",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
                         )
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            MiniStatPill(
+                                label = "Início voluntário",
+                                value = if (em.impressionsCount > 0) "$startRatePct%" else "—",
+                                accent = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.weight(1f)
+                            )
+                            MiniStatPill(
+                                label = "1ª questão concluída",
+                                value = if (em.voluntaryStartsCount > 0) "$firstCompletionPct%" else "${em.firstQuestionCompletedCount}",
+                                accent = ext.correct,
+                                modifier = Modifier.weight(1f)
+                            )
+                            MiniStatPill(
+                                label = "Retornos espontâneos",
+                                value = "${em.spontaneousReturnDaysCount}",
+                                accent = ext.correct,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        Text(
+                            text = "Dias com estudo voluntário: ${em.activeStudyDaysCount} · Pausas conscientes registradas sem penalidade: ${em.consciousRestDaysCount}.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             modifier = Modifier
@@ -321,7 +573,7 @@ fun ProgressScreen(
                                 .horizontalScroll(rememberScrollState())
                         ) {
                             recentCells.forEach { cell ->
-                                val alpha = (cell.questionsCount.toFloat() / 40f).coerceIn(0.2f, 1f)
+                                val alpha = (cell.questionsCount.toFloat() / 25f).coerceIn(0.18f, 1f)
                                 val isSelected = selectedHeatmapCell?.dateYmd == cell.dateYmd
                                 val formattedDate = runCatching { LocalDate.parse(cell.dateYmd).format(dayFormatter) }.getOrDefault(cell.dateYmd)
                                 val formattedAcc = String.format(ptBrLocale, "%.0f%%", cell.accuracyPct)
@@ -344,9 +596,8 @@ fun ProgressScreen(
                         selectedHeatmapCell?.let { cell ->
                             val formattedDate = runCatching { LocalDate.parse(cell.dateYmd).format(dayFormatter) }.getOrDefault(cell.dateYmd)
                             val formattedAcc = String.format(ptBrLocale, "%.1f%%", cell.accuracyPct)
-                            Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "$formattedDate (${cell.dateYmd}): ${cell.questionsCount} questões respondidas ($formattedAcc de acerto)",
+                                text = "$formattedDate (${cell.dateYmd}): ${cell.questionsCount} questões ($formattedAcc acerto)",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.primary
@@ -356,11 +607,12 @@ fun ProgressScreen(
                 }
             }
 
-            // 4. Desempenho por Disciplina (Ordenado por Pior Desempenho)
-            item {
+            // 7. Raio-X por Disciplina (com Amostra Distinta X/15)
+            item(key = "discipline_header") {
                 Text(
-                    text = "Histórico de acertos por disciplina",
-                    style = MaterialTheme.typography.titleMedium
+                    text = "Evidência Acumulada por Disciplina",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
                 )
             }
 
@@ -372,6 +624,11 @@ fun ProgressScreen(
                     item.accuracyPct < 60.0 -> ext.error
                     item.accuracyPct < 75.0 -> ext.warning
                     else -> ext.correct
+                }
+                val sampleText = if (item.distinctQuestions > 0) {
+                    "${item.distinctQuestions}/${DiagnosticEngine.MIN_QUESTIONS_FOR_MASTERY} questões distintas"
+                } else {
+                    "${item.masteredQuestions} consolidadas"
                 }
                 Card(
                     shape = RoundedCornerShape(12.dp),
@@ -418,12 +675,12 @@ fun ProgressScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "${item.totalAttempts} tentativas · ${item.masteredQuestions} dominadas",
+                                text = "${item.totalAttempts} tentativas · $sampleText",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = "Treinar →",
+                                text = "Praticar →",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
@@ -432,6 +689,38 @@ fun ProgressScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun MiniStatPill(
+    label: String,
+    value: String,
+    accent: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = accent.copy(alpha = 0.12f),
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        modifier = modifier
+    ) {
+        Column(
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = accent
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

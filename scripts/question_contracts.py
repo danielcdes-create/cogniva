@@ -403,6 +403,28 @@ def validate_question(q, catalog, allow_server_provenance=True):
             "evidence_challenge.correct_evidence_id",
         )
 
+    ed_card = q.get("editorial_card")
+    if ed_card is not None:
+        require(
+            bool(ed_card["tested_rule"].strip()),
+            "empty tested_rule in editorial_card",
+            "SCHEMA_VALIDATION_FAILED",
+            "editorial_card.tested_rule",
+        )
+        require(
+            bool(ed_card["decisive_stem_excerpt"].strip()),
+            "empty decisive_stem_excerpt in editorial_card",
+            "SCHEMA_VALIDATION_FAILED",
+            "editorial_card.decisive_stem_excerpt",
+        )
+        err_ids = [item["error_id"] for item in ed_card["plausible_conceptual_errors"]]
+        require(
+            len(set(err_ids)) == len(err_ids),
+            "duplicate error_id in editorial_card.plausible_conceptual_errors",
+            "SCHEMA_VALIDATION_FAILED",
+            "editorial_card.plausible_conceptual_errors",
+        )
+
     require(bool(q["question"].strip()), "empty question", "EMPTY_QUESTION", "question")
     answers = q["answers"]
     require(all(a.strip() for a in answers), "blank answer option", "INVALID_ANSWERS", "answers")

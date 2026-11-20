@@ -55,11 +55,11 @@ class DeployScriptsTest(unittest.TestCase):
         self.assertNotIn('MODE="0666"', workflow)
         self.assertIn('MODE="0660"', workflow)
 
-    def test_package_and_verify_release_use_contract_version_4(self):
+    def test_package_and_verify_release_use_contract_version_5(self):
         pkg = (ROOT / "scripts/package-release.py").read_text(encoding="utf-8")
         verify = (ROOT / "scripts/verify-production-release.py").read_text(encoding="utf-8")
-        self.assertIn("'contract_version': 4", pkg)
-        self.assertIn("== 4", verify)
+        self.assertIn("'contract_version': 5", pkg)
+        self.assertIn("== 5", verify)
         self.assertIn("check_tls_remaining_hours", verify)
 
     def test_nginx_conf_protects_auth_ai_apk_and_sets_security_headers(self):

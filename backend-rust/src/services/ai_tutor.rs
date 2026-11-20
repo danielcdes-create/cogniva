@@ -25,6 +25,8 @@ pub enum AiAssistKind {
     ExtraConcepts,     // campo `explanationExtra`
     Mnemonic,          // campo `mnemonico`
     Plausibility,      // campo `plausibilityMarkdown` / `plausibilityAnalysis`
+    TermLookup,        // consulta contextual pré-resposta sem spoiler (nunca gravada em cache compartilhado)
+    TermLookupPost,    // consulta contextual pós-resposta fundamentada (nunca gravada em cache compartilhado)
 }
 
 impl AiAssistKind {
@@ -38,6 +40,7 @@ impl AiAssistKind {
             Self::ExtraConcepts => "explanationExtra",
             Self::Mnemonic => "mnemonico",
             Self::Plausibility => "plausibilityMarkdown",
+            Self::TermLookup | Self::TermLookupPost => "termLookup",
         }
     }
 
@@ -46,7 +49,7 @@ impl AiAssistKind {
     pub const fn is_pre_answer(&self) -> bool {
         matches!(
             self,
-            Self::ContextualHint | Self::DrSincero | Self::ChildFriendlyPre
+            Self::ContextualHint | Self::DrSincero | Self::ChildFriendlyPre | Self::TermLookup
         )
     }
 }
@@ -317,6 +320,15 @@ pub(crate) fn build_tutor_prompts(
                     prompt,
                 )
             }
+            AiAssistKind::TermLookup => {
+                let prompt = format!(
+                    "{pre_source}{student_context}\n\nO estudante selecionou um termo ou fragmento durante a leitura da questão (enviado em `<untrusted_student_input>`). Explique de modo enciclopédico, objetivo e neutro (em até 160 palavras) o significado conceitual, jurídico ou técnico desse termo dentro da disciplina `{disciplina}`, SEM jamais julgar a assertiva, SEM confirmar nem descartar opções e SEM entregar o gabarito."
+                );
+                (
+                    with_pre_answer_guardrail(PRE_ANSWER_HELP_SYSTEM_INSTRUCTION),
+                    prompt,
+                )
+            }
             _ => unreachable!("Apenas variantes pré-resposta entram neste ramo"),
         }
     } else {
@@ -371,6 +383,12 @@ pub(crate) fn build_tutor_prompts(
                     "{post_source}{student_context}\n\nTomando a resposta correta (`correct_answer`) como referência explícita, analise a plausibilidade de cada alternativa incorreta classificando-a em `Improvável`, `Parcialmente plausível` ou `Plausível`, explicando o raciocínio do distrator e prestando atenção especial a comandos como NÃO, EXCETO, INCORRETA e MENOS."
                 );
                 (PLAUSIBILITY_SYSTEM_INSTRUCTION.to_string(), prompt)
+            }
+            AiAssistKind::TermLookupPost => {
+                let prompt = format!(
+                    "{post_source}{student_context}\n\nO estudante selecionou um trecho após responder à questão (em `<untrusted_student_input>`). Em até 180 palavras, explique o significado técnico/jurídico exato desse trecho, os dispositivos ou conceitos associados e como ele se conecta diretamente ao gabarito oficial (`correct_answer`)."
+                );
+                (EXTRA_CONCEPTS_SYSTEM_INSTRUCTION.to_string(), prompt)
             }
             _ => unreachable!("Variantes pré-resposta já tratadas anteriormente"),
         }
@@ -495,9 +513,17 @@ pub async fn get_or_generate_ai_assist_with_context(
         ));
     }
 
+    if matches!(kind, AiAssistKind::TermLookup | AiAssistKind::TermLookupPost)
+        && clean_note.is_none()
+    {
+        return Err(AppError::BadRequest(
+            "Selecione um trecho ou termo para consulta contextual.".into(),
+        ));
+    }
     // Privacidade de cache (LGPD / AI Gov): quando há anotação pessoal ou resposta aberta do estudante,
     // NUNCA ler nem gravar no cache compartilhado em `todasQuestoes` / `ai_explanations`.
-    let has_personal_student_input = !should_use_shared_ai_cache(user_note, student_answer);
+    let has_personal_student_input = !should_use_shared_ai_cache(user_note, student_answer)
+        || matches!(kind, AiAssistKind::TermLookup | AiAssistKind::TermLookupPost);
 
     let shared_guard = if has_personal_student_input {
         None
@@ -659,6 +685,7 @@ pub async fn get_or_generate_ai_assist_with_context(
                     });
                 }
             }
+            AiAssistKind::TermLookup | AiAssistKind::TermLookupPost => {}
         }
     }
 
@@ -756,6 +783,9 @@ pub async fn get_or_generate_ai_assist_with_context(
         AiAssistKind::ExtraConcepts => doc! { "explanationExtra": &generated_text },
         AiAssistKind::Mnemonic => doc! { "mnemonico": &generated_text },
         AiAssistKind::Plausibility => doc! { "plausibilityMarkdown": &generated_text },
+        AiAssistKind::TermLookup | AiAssistKind::TermLookupPost => {
+            unreachable!("TermLookup nunca é persistido no cache compartilhado")
+        }
     };
     set_doc.insert("ai_resource_meta", ai_meta);
     let update_doc = doc! { "$set": set_doc };

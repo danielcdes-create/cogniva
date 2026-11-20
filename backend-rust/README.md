@@ -1,6 +1,6 @@
-# 🦀 Cogniva Backend (`cogniva-api` `2.2.0`)
+# 🦀 Cogniva Backend (`cogniva-api` `2.3.0`)
 
-Serviço HTTP assíncrono em **Rust (`Axum 0.7` + `Tokio` + `MongoDB 3.1`)** responsável pela API REST `/api/v1/*`, pelos **5 Motores de Decisão** (`contract_version: 4`), pelo servidor estático incorporado do painel administrativo `/admin/`, pela distribuição OTA do APK Android e pelas rotinas agendadas de manutenção pedagógica sobre o banco **`cogniva`**.
+Serviço HTTP assíncrono em **Rust (`Axum 0.7` + `Tokio` + `MongoDB 3.1`)** responsável pela API REST `/api/v1/*`, pelos motores simétricos da arquitetura em 3 camadas (`contract_version: 5`), pela consulta contextual normativa/enciclopédica (`POST /api/v1/questions/:id/lookup`), pelo servidor estático incorporado do painel administrativo `/admin/`, pela distribuição OTA do APK Android e pelas rotinas agendadas de manutenção pedagógica sobre o banco **`cogniva`**.
 
 Para a visão integrada do sistema, consulte [`docs/ARQUITETURA.md`](../docs/ARQUITETURA.md), [`docs/MOTORES-DECISAO-CORE-LOOP.md`](../docs/MOTORES-DECISAO-CORE-LOOP.md), [`docs/OPERACAO.md`](../docs/OPERACAO.md), [`PRIVACY.md`](../PRIVACY.md) e [`SECURITY.md`](../SECURITY.md).
 
@@ -14,9 +14,9 @@ Para a visão integrada do sistema, consulte [`docs/ARQUITETURA.md`](../docs/ARQ
 - **Catálogo em Execução e Templates Globais (`services/catalog_runtime.rs`, `routes/exams.rs`, `services/exam_store.rs`):**
   - Snapshot do catálogo canônico (`shared/knowledge-catalog.json` v2) mantido em cache `RwLock` com TTL de 10 segundos e invalidação instantânea após `POST /api/v1/admin/catalog/activate`.
   - Separação estrita entre `exam_templates` (globais, geridos no `/admin/`) e `user_exams` (grades individuais dos alunos), com detecção automática de `upstream_update_available` e adoção explícita via `POST /api/v1/exams/:id/adopt-template`.
-- **Acervo 100% V2.2, 5 Motores de Decisão e Sincronização (`services/question_storage.rs`, `services/attempts.rs`, `services/*_engine.rs`, `routes/study_loop.rs`):**
-  - Validação estrita contra o contrato V2.2 (`question-v2-validator-2.2.0`, `CURRENT_VALIDATOR_REVISION = 5`), hash canônico JCS SHA-256 (RFC 8785), suporte a `concept_id` e `evidence_challenge`, e outbox de auditoria.
-  - Motores modulares de **Diagnóstico**, **Retenção Contínua** ($R(t,S)$), **Priorização** (40/40/20 + DAG), **Calibração Beta-Binomial / Estratégia** ($VE$ + Holdout 20% + Fallback Cross-Banca), **Fadiga** (guarda de amostra mínima) e endpoint `GET /api/v1/study/next-action`.
+- **Acervo 100% V2.3, Arquitetura em 3 Camadas e Sincronização (`services/question_storage.rs`, `services/attempts.rs`, `services/*_engine.rs`, `routes/study_loop.rs`, `routes/quiz.rs`):**
+  - Validação estrita contra o contrato V2.3 (`question-v2-validator-2.3.0`, `CURRENT_VALIDATOR_REVISION = 6`), hash canônico JCS SHA-256 (RFC 8785), suporte a `concept_id`, `evidence_challenge` e Ficha Editorial Rastreável (`editorial_card`), e outbox de auditoria.
+  - Motores modulares de **Diagnóstico de 3 Sinais** (`< 15` questões humanas + `ILLUSORY_COMPETENCE` + Transferência Cross-Banca `TRANSFER_PROBE` / `TRANSFER_UNMEASURED`), **Retenção Contínua** ($R(t,S)$), **Priorização & Protocolo 60s** (`ENTRY_60S` + `TERÇA · 22H`), **Calibração Beta-Binomial / Decisão sob Incerteza** ($VE = 2p - 1$, complementaridade binária e maximização de $P(S_{\text{final}} \ge S_{\text{meta}})$), **Fadiga de 300 Minutos com Controle de Dificuldade** ($p(t)$ logístico) e endpoints `GET /api/v1/study/next-action`, `POST /api/v1/quiz/attempt-evidence` e `POST /api/v1/questions/:id/lookup`.
   - Replay cronológico de lotes offline fora de ordem (`client_answered_at`), tratamento dedicado de omissões estratégicas (`is_blank = true`) e isolamento de reportes abertos (`reportedQuestoes`).
 - **Governança xAI, Bússola Pré-Resposta e Privacidade de Cache (`services/ai_tutor.rs`, `services/classification.rs`, `services/question_import.rs`, `services/rate_limit.rs`):**
   - Delimitação XML `<untrusted_student_input>` / `<untrusted_raw_source>` contra injeção indireta de prompt, não-persistência em cache compartilhado quando há `user_note`/resposta pessoal, cota diária em `America/Sao_Paulo` (`UTC-3`) com teto reduzido para convidados (`5/dia`) e estorno automático em falhas.

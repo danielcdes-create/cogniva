@@ -20,7 +20,8 @@ O Cogniva **não coleta** localização GPS, agenda de contatos, microfone, câm
 
 ## 2. Uso de Inteligência Artificial e Transferência Internacional (`xAI`)
 
-- Quando o estudante aciona voluntariamente recursos do **Tutor IA** (dicas contextuais, explicações, análise de alternativas, correção discursiva assistida ou modo `dr-sincero`), o enunciado da questão e, quando preenchida pelo titular, a anotação de estudo (`user_note`) ou resposta discursiva são transmitidos sob TLS 1.2/1.3 para a API da **xAI** (`api.x.ai`, localizada no exterior) exclusivamente para gerar o retorno pedagógico solicitado.
+- Quando o estudante aciona voluntariamente recursos do **Tutor IA** (dicas contextuais, explicações, análise de alternativas, consulta contextual de termos/trechos `term-lookup` / `term-lookup-post`, correção discursiva assistida ou modo `dr-sincero`), o enunciado da questão e, quando preenchida pelo titular, a anotação de estudo ou trecho consultado (`user_note`) ou resposta discursiva são transmitidos sob TLS 1.2/1.3 para a API da **xAI** (`api.x.ai`, localizada no exterior) exclusivamente para gerar o retorno pedagógico solicitado.
+- A consulta rápida de trechos (`POST /api/v1/questions/:id/lookup`) prioriza o catálogo normativo local/servidor e síntese aberta da Wikimedia PT sem enviar dados pessoais à xAI; quando o estudante opta pela pesquisa externa em camada (Partial Custom Tab Google / Planalto / STF-STJ), a navegação ocorre diretamente no navegador do aparelho sobreposto à questão.
 - As chamadas utilizam delimitação estrutural contra injeção de prompt (`<untrusted_student_input>`) e respostas personalizadas contendo notas individuais do estudante **jamais são gravadas** no cache compartilhado de explicações (`ai_explanations`).
 - Recomenda-se não inserir dados pessoais sensíveis, senhas ou informações confidenciais em anotações livres de estudo.
 

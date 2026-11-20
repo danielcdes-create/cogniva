@@ -18,7 +18,8 @@ import {
   topicPath,
   orderedTopics,
   orderedConcepts,
-  detectImpactedQuestionsBySourceHash
+  detectImpactedQuestionsBySourceHash,
+  buildEditorialCard
 } from '../domain.js';
 
 test('existing question metadata survives workspace restore and preview payload',()=>{
@@ -178,4 +179,20 @@ test('concepts catalog helpers and normative source hash change flag dependent q
     {_id:{$oid:'65f000000000000000000011'},classification:{links:[{concept_id:'C1'}]}}
   ];
   assert.deepEqual(detectImpactedQuestionsBySourceHash(questions,prev,next,catalog.concepts),['65f000000000000000000010']);
+});
+
+test('editorial card builder validates required rule and decisive excerpt and returns null when empty',()=>{
+  assert.equal(buildEditorialCard({}), null);
+  assert.throws(()=>buildEditorialCard({testedRule:'Regra sem trecho decisivo'}), /trecho decisivo/);
+  const card = buildEditorialCard({
+    legalProvisionsText: 'CF/88, art. 37\nLei 9.784/99, art. 53',
+    testedRule: 'Autotutela exige anulação de ato ilegal.',
+    exceptionClause: 'Salvo decadência quinquenal de boa-fé.',
+    decisiveStemExcerpt: 'eivados de vício de legalidade',
+    officialSourceExcerpt: 'Art. 53. A Administração deve anular...',
+    plausibleConceptualErrors: [{error_id:'E1',label:'Revogação',description:'Confundir mérito com legalidade'}]
+  });
+  assert.deepEqual(card.legal_provisions, ['CF/88, art. 37', 'Lei 9.784/99, art. 53']);
+  assert.equal(card.tested_rule, 'Autotutela exige anulação de ato ilegal.');
+  assert.equal(card.plausible_conceptual_errors.length, 1);
 });

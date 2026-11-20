@@ -61,7 +61,7 @@ def check_tls_remaining_hours(origin_url: str) -> float | None:
 health, health_headers = get_json_with_headers('/api/v1/health')
 ready = get_json('/api/v1/ready')
 assert health['revision'] == ready['revision'] == a.revision
-assert health['contract_version'] == ready['contract_version'] == 4
+assert health['contract_version'] == ready['contract_version'] == 5
 assert health['version'] == a.version_name
 assert 'max-age=' in health_headers.get('strict-transport-security', ''), 'Missing HSTS header'
 assert health_headers.get('x-content-type-options') == 'nosniff', 'Missing X-Content-Type-Options'
@@ -133,7 +133,7 @@ server = json.loads(
 
 manifest = server['manifest']
 assert manifest['revision'] == a.revision
-assert manifest.get('contract_version') == 4
+assert manifest.get('contract_version') == 5
 assert manifest['apk_sha256'] == info['sha256_checksum']
 assert manifest['apk_size_bytes'] == info['size_bytes']
 assert manifest['runtime_size_bytes'] < 50_000_000

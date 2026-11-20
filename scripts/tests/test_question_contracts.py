@@ -412,10 +412,45 @@ class QuestionContractsTest(unittest.TestCase):
 
         # API question_id boundary
         self.assertEqual(qc.validate_api_question_id("000000000000000000000001"), "000000000000000000000001")
-        for bad_api_id in ("00000000000000000000000G", "000000000000000000000001AA", "ABCD00000000000000000001", {"$oid": "000000000000000000000001"}):
+        for bad_api_id in ("00000000000000000000000G", "000000000000000000000001AA", "ABCD00000000000000000001", {"$oid": "00000000000000000000001"}):
             with self.assertRaises(qc.ContractValidationError) as ctx:
                 qc.validate_api_question_id(bad_api_id)
             self.assertEqual(ctx.exception.code, "INVALID_OBJECT_ID")
+
+    def test_editorial_card_validates_and_preserves_canonical_hashes(self):
+        q = fixture("question-multiple-choice")
+        qc.populate_v2_1_hashes(q)
+        orig_content = q["content_revision"]
+        orig_semantic = q["semantic_revision"]
+
+        q_ed = copy.deepcopy(q)
+        q_ed["editorial_card"] = {
+            "legal_provisions": ["CF/88, art. 37, caput", "Lei nº 9.784/1999, art. 53"],
+            "tested_rule": "A Administração deve anular atos ilegais e pode revogar atos convenientes ou oportunos.",
+            "exception_clause": "Respeitados os direitos adquiridos e o prazo decadencial de 5 anos salvo comprovada má-fé.",
+            "decisive_stem_excerpt": "eivados de vício insanável de legalidade",
+            "official_source_excerpt": "Art. 53. A Administração deve anular seus próprios atos, quando eivados de vício de legalidade...",
+            "plausible_conceptual_errors": [
+                {
+                    "error_id": "ERR_REVOGACAO_ILEGALIDADE",
+                    "label": "Confusão entre revogação e anulação",
+                    "description": "Tratar vício de legalidade como hipótese de revogação por mérito administrativo."
+                }
+            ],
+        }
+        qc.populate_v2_1_hashes(q_ed)
+        self.assertEqual(q_ed["content_revision"], orig_content)
+        self.assertEqual(q_ed["semantic_revision"], orig_semantic)
+        qc.validate_question(q_ed, self.catalog)
+
+        bad_dup = copy.deepcopy(q_ed)
+        bad_dup["editorial_card"]["plausible_conceptual_errors"].append(
+            bad_dup["editorial_card"]["plausible_conceptual_errors"][0]
+        )
+        with self.assertRaises(qc.ContractValidationError) as ctx:
+            qc.validate_question(bad_dup, self.catalog)
+        self.assertEqual(ctx.exception.code, "SCHEMA_VALIDATION_FAILED")
+        self.assertEqual(ctx.exception.field, "editorial_card.plausible_conceptual_errors")
 
 
 if __name__ == "__main__":

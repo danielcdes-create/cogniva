@@ -1,5 +1,6 @@
 {
-  "contract_version": 4,
+  "contract_version": 5,
+  "min_questions_for_mastery": 15,
   "question": {
     "question_type": "MULTIPLE_CHOICE",
     "question": "Qual opção contém ação? 🧠",
@@ -131,6 +132,16 @@
       "day": "2026-11-01"
     }
   ],
+  "entry_60s": [
+    {
+      "instant": "2026-11-18T01:00:00Z",
+      "expected_header": "TERÇA · 22H"
+    },
+    {
+      "instant": "2026-11-20T11:30:00Z",
+      "expected_header": "SEXTA · 08H"
+    }
+  ],
   "holdout": [
     {
       "user_id": 42,
@@ -171,8 +182,9 @@
       "last_is_correct": true,
       "last_confidence": 3,
       "had_prior_verified_correct": true,
-      "has_spaced_retention": true,
+      "has_spaced_retention": false,
       "evidence_challenge_passed": null,
+      "has_independent_transfer": false,
       "expected": "INSUFFICIENT_EVIDENCE"
     },
     {
@@ -184,6 +196,7 @@
       "had_prior_verified_correct": true,
       "has_spaced_retention": false,
       "evidence_challenge_passed": null,
+      "has_independent_transfer": false,
       "expected": "OVERCONFIDENCE_ERROR"
     },
     {
@@ -195,29 +208,105 @@
       "had_prior_verified_correct": false,
       "has_spaced_retention": false,
       "evidence_challenge_passed": false,
+      "has_independent_transfer": false,
       "expected": "CONCEPTUAL_ERROR"
     },
     {
-      "distinct_questions": 3,
-      "non_blank_attempts": 4,
-      "correct_attempts": 3,
+      "distinct_questions": 6,
+      "non_blank_attempts": 7,
+      "correct_attempts": 6,
       "last_is_correct": false,
       "last_confidence": 2,
       "had_prior_verified_correct": true,
       "has_spaced_retention": true,
       "evidence_challenge_passed": true,
+      "has_independent_transfer": false,
       "expected": "RETRIEVAL_FAILURE"
     },
     {
-      "distinct_questions": 4,
-      "non_blank_attempts": 5,
-      "correct_attempts": 4,
+      "distinct_questions": 8,
+      "non_blank_attempts": 8,
+      "correct_attempts": 8,
       "last_is_correct": true,
       "last_confidence": 3,
       "had_prior_verified_correct": true,
       "has_spaced_retention": true,
-      "evidence_challenge_passed": null,
+      "evidence_challenge_passed": false,
+      "has_independent_transfer": false,
+      "expected": "ILLUSORY_COMPETENCE"
+    },
+    {
+      "distinct_questions": 14,
+      "non_blank_attempts": 15,
+      "correct_attempts": 14,
+      "last_is_correct": true,
+      "last_confidence": 3,
+      "had_prior_verified_correct": true,
+      "has_spaced_retention": true,
+      "evidence_challenge_passed": true,
+      "has_independent_transfer": true,
+      "expected": "EVIDENCE_IN_PROGRESS"
+    },
+    {
+      "distinct_questions": 16,
+      "non_blank_attempts": 18,
+      "correct_attempts": 16,
+      "last_is_correct": true,
+      "last_confidence": 3,
+      "had_prior_verified_correct": true,
+      "has_spaced_retention": true,
+      "evidence_challenge_passed": true,
+      "has_independent_transfer": false,
+      "expected": "CONSOLIDATED_NO_TRANSFER"
+    },
+    {
+      "distinct_questions": 16,
+      "non_blank_attempts": 18,
+      "correct_attempts": 16,
+      "last_is_correct": true,
+      "last_confidence": 3,
+      "had_prior_verified_correct": true,
+      "has_spaced_retention": true,
+      "evidence_challenge_passed": true,
+      "has_independent_transfer": true,
       "expected": "VERIFIED_COMPETENCE"
+    }
+  ],
+  "transfer": [
+    {
+      "distinct_questions": 10,
+      "available_cross_board_questions": 0,
+      "transfer_attempts": 0,
+      "transfer_correct_grounded": 0,
+      "expected": "TRANSFER_UNMEASURED"
+    },
+    {
+      "distinct_questions": 10,
+      "available_cross_board_questions": 3,
+      "transfer_attempts": 0,
+      "transfer_correct_grounded": 0,
+      "expected": "TRANSFER_AVAILABLE"
+    },
+    {
+      "distinct_questions": 12,
+      "available_cross_board_questions": 2,
+      "transfer_attempts": 2,
+      "transfer_correct_grounded": 2,
+      "expected": "TRANSFER_PROVISIONAL"
+    },
+    {
+      "distinct_questions": 18,
+      "available_cross_board_questions": 3,
+      "transfer_attempts": 2,
+      "transfer_correct_grounded": 0,
+      "expected": "TRANSFER_FAILED"
+    },
+    {
+      "distinct_questions": 18,
+      "available_cross_board_questions": 3,
+      "transfer_attempts": 2,
+      "transfer_correct_grounded": 2,
+      "expected": "TRANSFER_VERIFIED"
     }
   ],
   "retention": [
@@ -300,9 +389,20 @@
     {
       "edital_weight": 0.25,
       "incidence_weight": 1.0,
+      "retrievability": 0.9,
+      "verified_competence": false,
+      "distinct_questions": 5,
+      "avg_seconds": 45.0,
+      "unmet_prerequisites_count": 0,
+      "dependent_count": 0,
+      "expected_utility": 0.268333333
+    },
+    {
+      "edital_weight": 0.25,
+      "incidence_weight": 1.0,
       "retrievability": 0.92,
       "verified_competence": true,
-      "distinct_questions": 4,
+      "distinct_questions": 16,
       "avg_seconds": 45.0,
       "unmet_prerequisites_count": 0,
       "dependent_count": 0,
@@ -333,6 +433,139 @@
       "attempts": 10,
       "expected_mean": 0.2,
       "expected_sd": 0.09701425
+    }
+  ],
+  "performance_300m": [
+    {
+      "p_base": 0.55,
+      "item_difficulty": 0.5,
+      "lambda_i": 0.0,
+      "elapsed_minutes": 150.0,
+      "expected_p0": 0.55,
+      "expected_pt": 0.55
+    },
+    {
+      "p_base": 0.7,
+      "item_difficulty": 0.5,
+      "lambda_i": 0.6,
+      "elapsed_minutes": 240.0,
+      "expected_p0": 0.7,
+      "expected_pt": 0.590805885
+    },
+    {
+      "p_base": 0.6,
+      "item_difficulty": 0.65,
+      "lambda_i": -0.45,
+      "elapsed_minutes": 200.0,
+      "expected_p0": 0.570885556,
+      "expected_pt": 0.642323956
+    }
+  ],
+  "decision_uncertainty": [
+    {
+      "p_base": 0.55,
+      "uncertainty_sd": 0.06,
+      "penalty": 1.0,
+      "item_difficulty": 0.5,
+      "lambda_i": 0.0,
+      "elapsed_minutes": 90.0,
+      "current_net_score": 36.0,
+      "remaining_items": 60,
+      "target_score": 65.0,
+      "minimum_score": 50.0,
+      "baseline_future_p": 0.72,
+      "expected_p0": 0.55,
+      "expected_pt": 0.55,
+      "expected_ev": 0.1,
+      "expected_p_star": 0.5,
+      "expected_prob_goal_if_answer": 0.164547563,
+      "expected_prob_goal_if_omit": 0.158548132,
+      "expected_posture": "MAXIMIZE_EV",
+      "expected_action": "ANSWER"
+    },
+    {
+      "p_base": 0.53,
+      "uncertainty_sd": 0.08,
+      "penalty": 1.0,
+      "item_difficulty": 0.5,
+      "lambda_i": 0.0,
+      "elapsed_minutes": 285.0,
+      "current_net_score": 71.5,
+      "remaining_items": 2,
+      "target_score": 70.0,
+      "minimum_score": 60.0,
+      "baseline_future_p": 0.7,
+      "expected_p0": 0.53,
+      "expected_pt": 0.53,
+      "expected_ev": 0.06,
+      "expected_p_star": 0.5,
+      "expected_prob_goal_if_answer": 0.922665332,
+      "expected_prob_goal_if_omit": 0.98392449,
+      "expected_posture": "PROTECT_MARGIN",
+      "expected_action": "OMIT"
+    },
+    {
+      "p_base": 0.47,
+      "uncertainty_sd": 0.08,
+      "penalty": 1.0,
+      "item_difficulty": 0.5,
+      "lambda_i": 0.0,
+      "elapsed_minutes": 290.0,
+      "current_net_score": 69.5,
+      "remaining_items": 2,
+      "target_score": 70.0,
+      "minimum_score": 60.0,
+      "baseline_future_p": 0.7,
+      "expected_p0": 0.47,
+      "expected_pt": 0.47,
+      "expected_ev": -0.06,
+      "expected_p_star": 0.5,
+      "expected_prob_goal_if_answer": 0.439763131,
+      "expected_prob_goal_if_omit": 0.426102158,
+      "expected_posture": "CALCULATED_RISK",
+      "expected_action": "ANSWER"
+    },
+    {
+      "p_base": 0.56,
+      "uncertainty_sd": 0.07,
+      "penalty": 1.0,
+      "item_difficulty": 0.55,
+      "lambda_i": 0.65,
+      "elapsed_minutes": 270.0,
+      "current_net_score": 52.0,
+      "remaining_items": 30,
+      "target_score": 65.0,
+      "minimum_score": 50.0,
+      "baseline_future_p": 0.72,
+      "expected_p0": 0.550121609,
+      "expected_pt": 0.405201566,
+      "expected_ev": -0.189596867,
+      "expected_p_star": 0.5,
+      "expected_prob_goal_if_answer": 0.314583322,
+      "expected_prob_goal_if_omit": 0.325285672,
+      "expected_posture": "MAXIMIZE_EV",
+      "expected_action": "OMIT"
+    },
+    {
+      "p_base": 0.22,
+      "uncertainty_sd": 0.09,
+      "penalty": 0.0,
+      "item_difficulty": 0.6,
+      "lambda_i": 0.3,
+      "elapsed_minutes": 240.0,
+      "current_net_score": 40.0,
+      "remaining_items": 20,
+      "target_score": 55.0,
+      "minimum_score": 40.0,
+      "baseline_future_p": 0.65,
+      "expected_p0": 0.20657977,
+      "expected_pt": 0.169994482,
+      "expected_ev": 0.169994482,
+      "expected_p_star": 0.0,
+      "expected_prob_goal_if_answer": 0.129440158,
+      "expected_prob_goal_if_omit": 0.110311974,
+      "expected_posture": "MAXIMIZE_EV",
+      "expected_action": "ANSWER"
     }
   ],
   "strategy": [
@@ -392,7 +625,12 @@
       "early_total": 60,
       "late_correct": 40,
       "late_total": 65,
+      "early_avg_difficulty": 0.5,
+      "late_avg_difficulty": 0.5,
+      "early_mean_minutes": 30.0,
+      "late_mean_minutes": 210.0,
       "expected_status": "INSUFFICIENT_EVIDENCE",
+      "expected_lambda": null,
       "expected_shrunk_delta": null
     },
     {
@@ -401,17 +639,41 @@
       "early_total": 80,
       "late_correct": 48,
       "late_total": 80,
+      "early_avg_difficulty": 0.5,
+      "late_avg_difficulty": 0.5,
+      "early_mean_minutes": 30.0,
+      "late_mean_minutes": 210.0,
       "expected_status": "FATIGUE_DETECTED",
-      "expected_shrunk_delta": -0.2
+      "expected_lambda": 0.950442979,
+      "expected_shrunk_delta": -0.197530864
     },
     {
-      "qualifying_sessions": 3,
-      "early_correct": 64,
+      "qualifying_sessions": 4,
+      "early_correct": 60,
       "early_total": 80,
-      "late_correct": 62,
+      "late_correct": 52,
       "late_total": 80,
+      "early_avg_difficulty": 0.25,
+      "late_avg_difficulty": 0.75,
+      "early_mean_minutes": 30.0,
+      "late_mean_minutes": 210.0,
       "expected_status": "STABLE_ENDURANCE",
-      "expected_shrunk_delta": -0.016666667
+      "expected_lambda": 0.050708829,
+      "expected_shrunk_delta": -0.009985695
+    },
+    {
+      "qualifying_sessions": 4,
+      "early_correct": 46,
+      "early_total": 80,
+      "late_correct": 68,
+      "late_total": 80,
+      "early_avg_difficulty": 0.5,
+      "late_avg_difficulty": 0.5,
+      "early_mean_minutes": 30.0,
+      "late_mean_minutes": 210.0,
+      "expected_status": "WARMUP_GAIN_DETECTED",
+      "expected_lambda": -0.88809251,
+      "expected_shrunk_delta": 0.181069959
     }
   ]
 }

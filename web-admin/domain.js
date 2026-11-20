@@ -252,6 +252,44 @@ export function detectImpactedQuestionsBySourceHash(questions, previousSources, 
     .map(q => q._id?.$oid || q._id || q.id);
 }
 
+export function buildEditorialCard(input = {}) {
+  const provisions = String(input.legalProvisionsText ?? '')
+    .split(/\r?\n|;/)
+    .map(s => s.trim())
+    .filter(Boolean)
+    .slice(0, 15);
+  const testedRule = String(input.testedRule ?? '').trim();
+  const exceptionClause = String(input.exceptionClause ?? '').trim() || null;
+  const decisiveStemExcerpt = String(input.decisiveStemExcerpt ?? '').trim();
+  const officialSourceExcerpt = String(input.officialSourceExcerpt ?? '').trim() || null;
+  const existingErrors = Array.isArray(input.plausibleConceptualErrors) ? input.plausibleConceptualErrors : [];
+
+  const hasAny = provisions.length > 0 || testedRule || exceptionClause || decisiveStemExcerpt || officialSourceExcerpt || existingErrors.length > 0;
+  if (!hasAny) return null;
+  if (!testedRule) throw new Error('Ficha editorial: informe a regra cobrada.');
+  if (!decisiveStemExcerpt) throw new Error('Ficha editorial: informe o trecho decisivo do enunciado.');
+
+  const seenIds = new Set();
+  const plausible = existingErrors.map((err, idx) => {
+    const eid = String(err?.error_id || `ERR_${idx + 1}`).trim();
+    const label = String(err?.label ?? '').trim();
+    const desc = String(err?.description ?? '').trim();
+    if (!eid || !label || !desc) throw new Error('Ficha editorial: cada erro conceitual exige identificador, rótulo e descrição.');
+    if (seenIds.has(eid)) throw new Error(`Ficha editorial: identificador de erro repetido (${eid}).`);
+    seenIds.add(eid);
+    return { error_id: eid, label, description: desc };
+  });
+
+  return {
+    legal_provisions: provisions,
+    tested_rule: testedRule,
+    exception_clause: exceptionClause,
+    decisive_stem_excerpt: decisiveStemExcerpt,
+    official_source_excerpt: officialSourceExcerpt,
+    plausible_conceptual_errors: plausible
+  };
+}
+
 export function freshImport(id, aiId) {
   return {mode:'single',operationId:id,aiOperationId:aiId,source:'',assistanceId:null,aiMode:'STRUCTURE',preview:null,result:null,submitted:false,form:{kind:'MULTIPLE_CHOICE',question:'',answers:['','','','',''],correctIndex:'',reference:'',criteria:'',originKind:'LEGACY_IMPORT',sourceExamCode:'',institution:'',organizer:'',examYear:'',questionNumber:'',sourceUri:'',sourceTitle:'',sourceLocator:'',sourceDate:'',confirmOrigin:false,explanation:'',level:'',subjectId:'',topicId:'',confirmClassification:false}};
 }

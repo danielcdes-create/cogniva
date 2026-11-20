@@ -13,6 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
@@ -20,10 +21,28 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
+import java.net.URLEncoder
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+
+@Serializable
+private data class PendingEvidencePatch(
+    val ownerUserId: Long,
+    val attemptId: String,
+    val questionId: String,
+    val selectedEvidenceId: String
+)
+
+@Serializable
+private data class LocalEntryTelemetry(
+    val impressionsCount: Int = 0,
+    val lastImpressionDateIso: String? = null,
+    val voluntaryStartsCount: Int = 0,
+    val firstQuestionCompletedCount: Int = 0,
+    val consciousRestDates: Set<String> = emptySet()
+)
 
 class ConcursoRepository(
     private val api: ConcursoApiService,
@@ -39,6 +58,9 @@ class ConcursoRepository(
         const val SQLITE_BIND_CHUNK_SIZE = 400
         const val SESSION_RETENTION_MS = 30L * 24L * 60L * 60L * 1000L // 30 dias
         const val LGPD_CONFIRM_WORD = "EXCLUIR"
+
+        fun deterministicAttemptId(sessionUuid: String, questionId: String): String =
+            UUID.nameUUIDFromBytes("$sessionUuid:$questionId".toByteArray(Charsets.UTF_8)).toString()
     }
 
     suspend fun questionImportCapabilities(): JsonObject { auth?.ensureSession(api, ownerUserId); return api.questionImportCapabilities() }
@@ -152,6 +174,9 @@ class ConcursoRepository(
                 durable?.pausedSession(ownerUserId)
                     ?.let { durable?.completeSession(it.sessionId, ownerUserId) }
                 durable?.deleteMetadata("pending_profile")
+                durable?.deleteMetadata("pending_evidence_patches")
+                durable?.deleteMetadata("entry_60s_telemetry:$ownerUserId")
+                durable?.deleteMetadata("cached_next_action:GLOBAL")
                 durable?.deleteMetadata("sync_error")
                 durable?.deleteMetadata("last_sync")
             }
@@ -288,13 +313,18 @@ class ConcursoRepository(
     }
 
     private fun PendingAttemptEntity.event() = LearningEvent(
-        attemptId,
-        Instant.ofEpochMilli(createdAtEpochMs).toString(),
-        isCorrect,
-        confidenceLevel,
-        timeSpentSeconds,
-        questionRevision,
-        isBlank = isBlank
+        attemptId = attemptId,
+        occurredAt = Instant.ofEpochMilli(createdAtEpochMs).toString(),
+        isCorrect = isCorrect,
+        confidenceLevel = confidenceLevel,
+        timeSpentSeconds = timeSpentSeconds,
+        questionRevision = questionRevision,
+        isBlank = isBlank,
+        selectedEvidenceId = selectedEvidenceId,
+        quizMode = quizMode,
+        sessionUuid = sessionUuid,
+        elapsedSessionSeconds = elapsedSessionSeconds,
+        sessionInterrupted = sessionInterrupted
     )
 
     suspend fun projectedLearning(): List<LearningRecord> {
@@ -350,6 +380,117 @@ class ConcursoRepository(
         return ContestDiffScreenDto(exam.examId, exam.shortName, exam.examBoards.joinToString(), nodes("OFICIAL_CONFIRMADO"), nodes("OFICIAL_NOVO"), nodes("ARQUIVADO"))
     }
 
+    private suspend fun loadEntryTelemetry(userId: Long): LocalEntryTelemetry =
+        metadata("entry_60s_telemetry:$userId")
+            ?.takeIf { it.isNotBlank() }
+            ?.let { runCatching { json.decodeFromString<LocalEntryTelemetry>(it) }.getOrNull() }
+            ?: LocalEntryTelemetry()
+
+    private suspend fun saveEntryTelemetry(userId: Long, state: LocalEntryTelemetry) {
+        metadata("entry_60s_telemetry:$userId", json.encodeToString(state))
+    }
+
+    suspend fun recordEntryScreenImpression(userId: Long) {
+        owner(userId)
+        mutationMutex.withLock {
+            val today = LocalDate.now(LearningProjection.studyZone).toString()
+            val cur = loadEntryTelemetry(userId)
+            if (cur.lastImpressionDateIso != today) {
+                saveEntryTelemetry(
+                    userId,
+                    cur.copy(
+                        impressionsCount = cur.impressionsCount + 1,
+                        lastImpressionDateIso = today
+                    )
+                )
+            }
+        }
+    }
+
+    suspend fun recordEntryVoluntaryStart(userId: Long) {
+        owner(userId)
+        mutationMutex.withLock {
+            val today = LocalDate.now(LearningProjection.studyZone).toString()
+            val cur = loadEntryTelemetry(userId)
+            val baseImpressions = maxOf(cur.impressionsCount, cur.voluntaryStartsCount + 1)
+            saveEntryTelemetry(
+                userId,
+                cur.copy(
+                    impressionsCount = baseImpressions,
+                    voluntaryStartsCount = cur.voluntaryStartsCount + 1,
+                    consciousRestDates = cur.consciousRestDates - today
+                )
+            )
+        }
+    }
+
+    suspend fun recordEntryFirstQuestionCompleted(userId: Long) {
+        owner(userId)
+        mutationMutex.withLock {
+            val cur = loadEntryTelemetry(userId)
+            saveEntryTelemetry(
+                userId,
+                cur.copy(
+                    firstQuestionCompletedCount = cur.firstQuestionCompletedCount + 1,
+                    voluntaryStartsCount = maxOf(cur.voluntaryStartsCount, cur.firstQuestionCompletedCount + 1),
+                    impressionsCount = maxOf(cur.impressionsCount, cur.firstQuestionCompletedCount + 1)
+                )
+            )
+        }
+    }
+
+    suspend fun setConsciousRestToday(userId: Long, rested: Boolean): EntryProtocolMetricsDto {
+        owner(userId)
+        mutationMutex.withLock {
+            val today = LocalDate.now(LearningProjection.studyZone).toString()
+            val cur = loadEntryTelemetry(userId)
+            val updatedDates = if (rested) cur.consciousRestDates + today else cur.consciousRestDates - today
+            saveEntryTelemetry(
+                userId,
+                cur.copy(
+                    impressionsCount = maxOf(cur.impressionsCount, 1),
+                    consciousRestDates = updatedDates
+                )
+            )
+        }
+        return buildEntryProtocolMetrics(userId, projectedLearning())
+    }
+
+    private suspend fun buildEntryProtocolMetrics(userId: Long, rows: List<LearningRecord>): EntryProtocolMetricsDto {
+        val today = LocalDate.now(LearningProjection.studyZone).toString()
+        val local = loadEntryTelemetry(userId)
+        val studyDates = rows.asSequence()
+            .flatMap { it.events.asSequence() }
+            .filter { !it.isBlank }
+            .map { safeInstant(it.occurredAt).atOffset(LearningProjection.studyZone).toLocalDate() }
+            .distinct()
+            .sorted()
+            .toList()
+        val activeDays = studyDates.size
+        val returnDays = (activeDays - 1).coerceAtLeast(0)
+        return EntryProtocolMetricsDto(
+            impressionsCount = local.impressionsCount,
+            voluntaryStartsCount = local.voluntaryStartsCount,
+            firstQuestionCompletedCount = local.firstQuestionCompletedCount,
+            consciousRestDaysCount = local.consciousRestDates.size,
+            spontaneousReturnDaysCount = returnDays,
+            activeStudyDaysCount = activeDays,
+            restedToday = today in local.consciousRestDates
+        )
+    }
+
+    private fun normalizeBoardKey(raw: String): String {
+        val norm = raw.trim().lowercase()
+        return when {
+            norm.contains("cebraspe") || norm.contains("cespe") -> "cebraspe"
+            norm.contains("fgv") || norm.contains("getulio") || norm.contains("getúlio") -> "fgv"
+            norm.contains("fcc") || norm.contains("carlos chagas") -> "fcc"
+            norm.contains("cesgranrio") -> "cesgranrio"
+            norm.contains("vunesp") -> "vunesp"
+            else -> norm
+        }
+    }
+
     private suspend fun buildLocalDecisionTelemetry(
         userId: Long,
         rows: List<LearningRecord>,
@@ -362,14 +503,29 @@ class ConcursoRepository(
             .minByOrNull { it.ladderPriority }
 
         val today = LocalDate.now(LearningProjection.studyZone)
-        val nowMs = System.currentTimeMillis()
+        val nowInst = Instant.now()
+        val nowMs = nowInst.toEpochMilli()
+        val scheduleHeader = PrioritizationEngine.formatEntry60sHeader(nowInst)
         val byTopic = rows.filter { !it.canonicalTopicId.isNullOrBlank() }.groupBy { it.canonicalTopicId!! }
+
+        val allCached = dao.getCachedQuestions(null, 10000).map { QuestionCacheMapping.toDto(it, json) }
+        val cachedById = allCached.associateBy { it.id }
+        val cachedByTopic = allCached.filter { !it.canonicalTopicId.isNullOrBlank() }.groupBy { it.canonicalTopicId!! }
+        val targetBoardKeys = activeExam?.examBoards.orEmpty()
+            .filter { it.isNotBlank() && it != "A definir" }
+            .map { normalizeBoardKey(it) }
+            .toSet()
 
         var verifiedUnits = 0
         var consolidatingUnits = 0
         var insufficientUnits = 0
+        var evidenceInProgressUnits = 0
+        var activeErrorUnits = 0
+        var transferVerifiedUnits = 0
+        var transferAvailableUnits = 0
+        var transferUnmeasuredUnits = 0
         var bestTopicId: String? = null
-        var bestReason = "Prioridade sugerida: um conceito relevante com retenção pendente."
+        var bestReason = "Assunto familiar com retenção pendente."
         var bestUtility = -1.0
 
         if (activeExam != null) {
@@ -379,7 +535,16 @@ class ConcursoRepository(
                 for (top in subj.topics.filter { it.diffStatus != "ARQUIVADO" }) {
                     val unitRows = byTopic[top.canonicalTopicId].orEmpty()
                     val nonBlankEvents = unitRows.flatMap { it.events }.filter { !it.isBlank }
-                    val lastEv = nonBlankEvents.maxByOrNull { safeInstant(it.occurredAt) }
+                    val lastRowAndEv = unitRows.flatMap { r -> r.events.filter { !it.isBlank }.map { r.questionId to it } }
+                        .maxByOrNull { safeInstant(it.second.occurredAt) }
+                    val lastEv = lastRowAndEv?.second
+                    val lastQuestion = lastRowAndEv?.first?.let { cachedById[it] }
+                    val evChallengePassed = if (lastEv?.selectedEvidenceId != null && lastQuestion != null) {
+                        val ch = lastQuestion.effectiveEvidenceChallenge()
+                        if (ch != null) lastEv.selectedEvidenceId == ch.correctEvidenceId else null
+                    } else {
+                        null
+                    }
                     val nonBlankAttempts = unitRows.sumOf { it.attempts }
                     val correctAttempts = unitRows.sumOf { it.correct }
                     val distinctQuestions = unitRows.count { it.attempts > 0 }
@@ -388,6 +553,48 @@ class ConcursoRepository(
                         val sorted = r.events.filter { !it.isBlank && it.isCorrect }.map { safeInstant(it.occurredAt).toEpochMilli() }.sorted()
                         sorted.size >= 2 && (sorted.last() - sorted.first()) >= 86_400_000L
                     } || unitRows.any { it.isMastered }
+
+                    val topicQuestions = cachedByTopic[top.canonicalTopicId].orEmpty()
+                    val attemptedSet = unitRows.filter { it.attempts > 0 }.map { it.questionId }.toSet()
+                    val availableCrossBoard = topicQuestions.count { q ->
+                        val bk = normalizeBoardKey(q.source)
+                        q.id !in attemptedSet && bk.isNotEmpty() && bk != "origem não informada" &&
+                            (targetBoardKeys.isEmpty() || bk !in targetBoardKeys)
+                    }
+                    var transferAttempts = 0
+                    var transferGrounded = 0
+                    for (r in unitRows) {
+                        val q = cachedById[r.questionId] ?: continue
+                        val bk = normalizeBoardKey(q.source)
+                        val isCross = bk.isNotEmpty() && bk != "origem não informada" &&
+                            (targetBoardKeys.isEmpty() || bk !in targetBoardKeys)
+                        if (!isCross) continue
+                        val ch = q.effectiveEvidenceChallenge()
+                        for (ev in r.events) {
+                            if (ev.isBlank) continue
+                            if (ev.quizMode.equals("TRANSFER_PROBE", ignoreCase = true) || targetBoardKeys.isNotEmpty()) {
+                                transferAttempts++
+                                val badEvidence = ch != null && ev.selectedEvidenceId != null && ev.selectedEvidenceId != ch.correctEvidenceId
+                                if (ev.isCorrect && ev.confidenceLevel >= 2 && !badEvidence) {
+                                    transferGrounded++
+                                }
+                            }
+                        }
+                    }
+                    val transferStatus = DiagnosticEngine.evaluateTransferStatus(
+                        TransferInputs(
+                            distinctQuestions = distinctQuestions,
+                            availableCrossBoardQuestions = availableCrossBoard,
+                            transferAttempts = transferAttempts,
+                            transferCorrectGrounded = transferGrounded
+                        )
+                    )
+                    when (transferStatus) {
+                        TransferStatus.TRANSFER_VERIFIED -> transferVerifiedUnits++
+                        TransferStatus.TRANSFER_AVAILABLE, TransferStatus.TRANSFER_PROVISIONAL -> transferAvailableUnits++
+                        TransferStatus.TRANSFER_UNMEASURED, TransferStatus.TRANSFER_FAILED -> transferUnmeasuredUnits++
+                    }
+
                     val diag = DiagnosticEngine.classifyDiagnostic(
                         DiagnosticInputs(
                             distinctQuestions = distinctQuestions,
@@ -397,11 +604,20 @@ class ConcursoRepository(
                             lastConfidence = lastEv?.confidenceLevel ?: 0,
                             hadPriorVerifiedCorrect = hadPriorCorrect,
                             hasSpacedRetention = hasSpaced,
-                            evidenceChallengePassed = null
+                            evidenceChallengePassed = evChallengePassed,
+                            hasIndependentTransfer = transferStatus == TransferStatus.TRANSFER_VERIFIED
                         )
                     )
                     when {
                         diag == DiagnosticStatus.VERIFIED_COMPETENCE -> verifiedUnits++
+                        diag == DiagnosticStatus.EVIDENCE_IN_PROGRESS || diag == DiagnosticStatus.CONSOLIDATED_NO_TRANSFER -> {
+                            consolidatingUnits++
+                            if (diag == DiagnosticStatus.EVIDENCE_IN_PROGRESS) evidenceInProgressUnits++
+                        }
+                        diag.isErrorIndication -> {
+                            consolidatingUnits++
+                            activeErrorUnits++
+                        }
                         diag == DiagnosticStatus.INSUFFICIENT_EVIDENCE && distinctQuestions == 0 -> insufficientUnits++
                         else -> consolidatingUnits++
                     }
@@ -430,29 +646,73 @@ class ConcursoRepository(
                         bestUtility = u
                         bestTopicId = top.canonicalTopicId
                         bestReason = when (diag) {
-                            DiagnosticStatus.OVERCONFIDENCE_ERROR -> "Excesso de confiança recente em ${top.displayTitle} — revisar fundamento"
-                            DiagnosticStatus.CONCEPTUAL_ERROR -> "Lacuna conceitual prioritária em ${top.displayTitle}"
-                            DiagnosticStatus.RETRIEVAL_FAILURE -> "Retenção pendente em ${top.displayTitle} (recuperar após intervalo)"
-                            DiagnosticStatus.VERIFIED_COMPETENCE -> "Manutenção espaçada em ${top.displayTitle}"
-                            DiagnosticStatus.INSUFFICIENT_EVIDENCE -> "Tópico relevante do edital com evidência pendente: ${top.displayTitle}"
+                            DiagnosticStatus.OVERCONFIDENCE_ERROR -> "Indício de erro c/ alta confiança em ${top.displayTitle}"
+                            DiagnosticStatus.CONCEPTUAL_ERROR -> "Regra/exceção pendente em ${top.displayTitle}"
+                            DiagnosticStatus.RETRIEVAL_FAILURE -> "Assunto familiar c/ retenção pendente: ${top.displayTitle}"
+                            DiagnosticStatus.ILLUSORY_COMPETENCE -> "Revisar fundamento decisivo em ${top.displayTitle}"
+                            DiagnosticStatus.EVIDENCE_IN_PROGRESS -> "${top.displayTitle} (${distinctQuestions}/${DiagnosticEngine.MIN_QUESTIONS_FOR_MASTERY} questões p/ validar domínio)"
+                            DiagnosticStatus.CONSOLIDATED_NO_TRANSFER -> "${top.displayTitle} (testar transferência em outra banca)"
+                            DiagnosticStatus.VERIFIED_COMPETENCE -> "Manutenção leve em ${top.displayTitle}"
+                            DiagnosticStatus.INSUFFICIENT_EVIDENCE -> "Assunto prioritário: ${top.displayTitle}"
                         }
                     }
                 }
             }
         }
 
-        val qTypeById = cachedQuestionsMap(rows.map { it.questionId }).mapValues { it.value.questionType.name }
+        val penalty = activeExam?.wrongAnswerPenalty ?: 0.0
+        val cutoff = activeExam?.historicalCutoffScore ?: 0.0
+
+        var groundedHits = 0
+        var illusoryHits = 0
+        var hesitantHits = 0
+        var overconfErrors = 0
+        var conceptualErrors = 0
+        var retrievalFailures = 0
+        var strategicOmissions = 0
+
         val cellCounts = HashMap<Pair<String, Int>, Pair<Int, Int>>()
         for (row in rows) {
-            val qt = if (qTypeById[row.questionId] == "TRUE_FALSE") "TRUE_FALSE" else "MULTIPLE_CHOICE"
-            for (ev in row.events) {
-                if (ev.isBlank) continue
+            val q = cachedById[row.questionId]
+            val qt = if (q?.questionType == QuestionType.TRUE_FALSE) "TRUE_FALSE" else "MULTIPLE_CHOICE"
+            val correctEvId = q?.effectiveEvidenceChallenge()?.correctEvidenceId
+            var seenCorrectBefore = false
+            for (ev in row.events.sortedBy { safeInstant(it.occurredAt) }) {
+                if (ev.isBlank) {
+                    strategicOmissions++
+                    continue
+                }
                 val band = ev.confidenceLevel.coerceIn(1, 3)
                 val key = qt to band
                 val cur = cellCounts[key] ?: (0 to 0)
                 cellCounts[key] = (cur.first + if (ev.isCorrect) 1 else 0) to (cur.second + 1)
+
+                val evWrong = correctEvId != null && ev.selectedEvidenceId != null && ev.selectedEvidenceId != correctEvId
+                if (ev.isCorrect) {
+                    if (evWrong) {
+                        illusoryHits++
+                    } else if (ev.confidenceLevel >= 2) {
+                        groundedHits++
+                        seenCorrectBefore = true
+                    } else {
+                        hesitantHits++
+                    }
+                } else {
+                    if (ev.confidenceLevel >= 3 || (ev.confidenceLevel >= 2 && evWrong)) {
+                        overconfErrors++
+                    } else if (evWrong || !seenCorrectBefore) {
+                        conceptualErrors++
+                    } else {
+                        retrievalFailures++
+                    }
+                }
             }
         }
+        val pendingUnsyncedBlanks = dao.getAllPendingAttempts().count {
+            it.ownerUserId == userId && it.syncError == null && it.isBlank
+        }
+        strategicOmissions += pendingUnsyncedBlanks
+
         val calibrationCells = buildList {
             for (qt in listOf("TRUE_FALSE", "MULTIPLE_CHOICE")) {
                 for (band in listOf(1, 2, 3)) {
@@ -462,9 +722,15 @@ class ConcursoRepository(
             }
         }
 
-        val penalty = activeExam?.wrongAnswerPenalty ?: 0.0
-        val cutoff = activeExam?.historicalCutoffScore ?: 0.0
         val primaryQt = if (penalty > 0.0) "TRUE_FALSE" else "MULTIPLE_CHOICE"
+        val lowBandCell = calibrationCells.first { it.questionType == primaryQt && it.confidenceBand == 1 }
+        val lowEv = (1.0 + penalty) * lowBandCell.calibratedMean - penalty
+        val omissionSaved = if (penalty > 0.0 && lowEv < 0.0) {
+            kotlin.math.round(strategicOmissions.toDouble() * (-lowEv) * 100.0) / 100.0
+        } else {
+            0.0
+        }
+
         val strategyGuidance = listOf(1, 2, 3).map { band ->
             val cell = calibrationCells.first { it.questionType == primaryQt && it.confidenceBand == band }
             StrategyBandGuidanceDto(
@@ -474,35 +740,109 @@ class ConcursoRepository(
             )
         }
 
-        val pendingSimulado = dao.getAllPendingAttempts()
-            .filter { it.ownerUserId == userId && !it.isBlank && it.quizMode.equals("SIMULADO", ignoreCase = true) && it.elapsedSessionSeconds != null }
-            .groupBy { it.sessionUuid }
+        // Consolida sessões SIMULADO de learning_records + pending_attempts sem duplicar attemptId
+        data class TimedObs(val attemptId: String, val sessionUuid: String, val elapsedSec: Int, val isCorrect: Boolean, val interrupted: Boolean, val difficulty01: Double)
+        val timedByAttempt = LinkedHashMap<String, TimedObs>()
+        for (row in rows) {
+            val itemDiff = ((100.0 - row.accuracyPct).coerceIn(10.0, 90.0)) / 100.0
+            for (ev in row.events) {
+                if (ev.isBlank || !ev.quizMode.equals("SIMULADO", ignoreCase = true)) continue
+                val el = ev.elapsedSessionSeconds ?: continue
+                val sid = ev.sessionUuid ?: continue
+                timedByAttempt[ev.attemptId] = TimedObs(ev.attemptId, sid, el, ev.isCorrect, ev.sessionInterrupted, itemDiff)
+            }
+        }
+        for (p in dao.getAllPendingAttempts()) {
+            if (p.ownerUserId != userId || p.isBlank || !p.quizMode.equals("SIMULADO", ignoreCase = true)) continue
+            val el = p.elapsedSessionSeconds ?: continue
+            timedByAttempt.putIfAbsent(p.attemptId, TimedObs(p.attemptId, p.sessionUuid, el, p.isCorrect, p.sessionInterrupted, 0.50))
+        }
         var qualSessions = 0
         var earlyCorr = 0
         var earlyTot = 0
         var lateCorr = 0
         var lateTot = 0
-        for ((_, list) in pendingSimulado) {
-            val interrupted = list.any { it.sessionInterrupted }
-            val maxEl = list.maxOfOrNull { it.elapsedSessionSeconds ?: 0 } ?: 0
+        var earlyDiffSum = 0.0
+        var lateDiffSum = 0.0
+        var earlyMinSum = 0.0
+        var lateMinSum = 0.0
+        for ((_, list) in timedByAttempt.values.groupBy { it.sessionUuid }) {
+            val interrupted = list.any { it.interrupted }
+            val maxEl = list.maxOfOrNull { it.elapsedSec } ?: 0
             if (interrupted || (maxEl < 5400 && list.size < 40)) continue
             qualSessions++
             for (item in list) {
-                val el = item.elapsedSessionSeconds ?: 0
-                if (el <= 2700) {
+                val mins = (item.elapsedSec.coerceAtLeast(0).toDouble() / 60.0).coerceAtMost(300.0)
+                if (item.elapsedSec <= 2700) {
                     earlyTot++
+                    earlyDiffSum += item.difficulty01
+                    earlyMinSum += mins
                     if (item.isCorrect) earlyCorr++
                 } else {
                     lateTot++
+                    lateDiffSum += item.difficulty01
+                    lateMinSum += mins
                     if (item.isCorrect) lateCorr++
                 }
             }
         }
-        val fatigueReport = FatigueEngine.evaluateFatigue(qualSessions, earlyCorr, earlyTot, lateCorr, lateTot)
+        val localFatigue = FatigueEngine.evaluateFatigueWithDifficulty(
+            qualifyingSessions = qualSessions,
+            earlyCorrect = earlyCorr,
+            earlyTotal = earlyTot,
+            lateCorrect = lateCorr,
+            lateTotal = lateTot,
+            earlyAvgDifficulty = if (earlyTot > 0) earlyDiffSum / earlyTot else 0.50,
+            lateAvgDifficulty = if (lateTot > 0) lateDiffSum / lateTot else 0.50,
+            earlyMeanMinutes = if (earlyTot > 0) earlyMinSum / earlyTot else 30.0,
+            lateMeanMinutes = if (lateTot > 0) lateMinSum / lateTot else 180.0
+        )
+        val cachedRemote = metadata("cached_next_action:${preferredContestId ?: "GLOBAL"}")
+            ?.takeIf { it.isNotBlank() }
+            ?.let { runCatching { json.decodeFromString<NextActionResponseDto>(it) }.getOrNull() }
+        val fatigueReport = if (localFatigue.status == FatigueStatus.INSUFFICIENT_EVIDENCE && cachedRemote != null && cachedRemote.fatigueReport.qualifyingAttempts > localFatigue.qualifyingAttempts) {
+            cachedRemote.fatigueReport
+        } else {
+            localFatigue
+        }
+
+        val mediumCell = calibrationCells.first { it.questionType == primaryQt && it.confidenceBand == 2 }
+        val examScenarios = StrategyEngine.buildExamMomentScenarios(
+            mediumP = mediumCell.calibratedMean,
+            mediumSd = mediumCell.credibleSd,
+            penalty = penalty,
+            cutoffPct = cutoff,
+            lambdaI = fatigueReport.estimatedLambda
+        )
         val daysUntilExam = if (activeExam?.dateType == "EXACT_DATE") ExamEngine.daysUntil(activeExam.exactDateIso, today) else null
 
+        // Seleciona questão curta familiar p/ entrada imediata de 60s mesmo offline
+        val familiarTopics = rows.filter { it.attempts > 0 && !it.canonicalTopicId.isNullOrBlank() }.map { it.canonicalTopicId!! }.toSet()
+        val pendingRetTopics = rows.filter {
+            !it.canonicalTopicId.isNullOrBlank() && (it.reviewRequired || safeInstant(it.nextReviewAt) <= nowInst)
+        }.map { it.canonicalTopicId!! }.toSet()
+        val recentIds = rows.filter { r ->
+            r.events.any { (nowMs - safeInstant(it.occurredAt).toEpochMilli()) in 0..(18L * 3600_000L) }
+        }.map { it.questionId }.toSet()
+        val localEntryCandidate = objectivePracticeQuestions(allCached)
+            .filter {
+                it.correctAnswerIndices.size == 1 &&
+                    it.correctAnswerIndices[0] in it.answers.indices &&
+                    QuestionCacheMapping.withinReviewDate(it, today)
+            }
+            .maxByOrNull { q ->
+                PrioritizationEngine.entry60sQuestionScore(
+                    stemCharLen = q.question.length,
+                    isTrueFalse = q.questionType == QuestionType.TRUE_FALSE,
+                    isFamiliarTopic = q.canonicalTopicId in familiarTopics,
+                    hasPendingRetention = q.canonicalTopicId in pendingRetTopics,
+                    recentlyAnswered = q.id in recentIds
+                )
+            }
+
         return NextActionResponseDto(
-            entryQuestion = null,
+            scheduleHeader = scheduleHeader,
+            entryQuestion = localEntryCandidate,
             entryReason = bestReason,
             priorityTopicId = bestTopicId,
             examGapSummary = ExamGapSummaryDto(
@@ -514,10 +854,27 @@ class ConcursoRepository(
                 insufficientEvidenceUnits = insufficientUnits,
                 totalUnits = verifiedUnits + consolidatingUnits + insufficientUnits,
                 wrongAnswerPenalty = penalty,
-                historicalCutoffScore = cutoff
+                historicalCutoffScore = cutoff,
+                minQuestionsForMastery = DiagnosticEngine.MIN_QUESTIONS_FOR_MASTERY,
+                evidenceInProgressUnits = evidenceInProgressUnits,
+                activeErrorUnits = activeErrorUnits,
+                transferVerifiedUnits = transferVerifiedUnits,
+                transferAvailableUnits = transferAvailableUnits,
+                transferUnmeasuredUnits = transferUnmeasuredUnits
+            ),
+            threeSignalSummary = ThreeSignalSummaryDto(
+                groundedHits = groundedHits,
+                illusoryCompetenceHits = illusoryHits,
+                hesitantHits = hesitantHits,
+                overconfidenceErrors = overconfErrors,
+                conceptualErrors = conceptualErrors,
+                retrievalFailures = retrievalFailures,
+                strategicOmissions = strategicOmissions,
+                omissionNetPointsSaved = omissionSaved
             ),
             calibrationCells = calibrationCells,
             strategyGuidance = strategyGuidance,
+            examScenarios = examScenarios,
             fatigueReport = fatigueReport
         )
     }
@@ -528,6 +885,7 @@ class ConcursoRepository(
         try {
             auth?.ensureSession(api, ownerUserId)
             val remote = api.getNextAction(scope)
+            metadata("cached_next_action:${scope ?: "GLOBAL"}", json.encodeToString(remote))
             val normalizedEntry = remote.entryQuestion?.let(QuestionCacheMapping::withRevision)
             if (normalizedEntry != null && normalizedEntry.questionType != QuestionType.OPEN_ENDED) {
                 dao.insertQuestions(listOf(QuestionCacheMapping.toEntity(normalizedEntry, json)))
@@ -548,6 +906,7 @@ class ConcursoRepository(
         val events = rows.flatMap { it.events }.filter { !it.isBlank && safeInstant(it.occurredAt).atOffset(LearningProjection.studyZone).toLocalDate() == today }
         val actionable = rows.filter { it.practiceAvailable != false }
         val localNextAction = buildLocalDecisionTelemetry(userId, rows, stored, activeContestIds.firstOrNull())
+        val entryMetrics = buildEntryProtocolMetrics(userId, rows)
         return TodayDashboardDto(
             userId, today.toString(), dailyGoalQuestions, events.size,
             if (events.isEmpty()) 0.0 else events.count { it.isCorrect } * 100.0 / events.size,
@@ -556,7 +915,8 @@ class ConcursoRepository(
             actionable.count { it.inErrorNotebook && it.highConfidenceError }.toLong(),
             emptyList(), CommonTrunkSuggestion("", emptyList(), ""),
             lastSyncedAt = metadata("last_sync"), syncMessage = metadata("sync_error"),
-            nextAction = localNextAction
+            nextAction = localNextAction,
+            entryMetrics = entryMetrics
         )
     }
 
@@ -567,19 +927,35 @@ class ConcursoRepository(
         val cutoff = primaryExam?.historicalCutoffScore ?: 0.0
         val penalty = primaryExam?.wrongAnswerPenalty ?: 0.0
         val telemetry = buildLocalDecisionTelemetry(userId, rows, stored, primaryExam?.examId)
+        val entryMetrics = buildEntryProtocolMetrics(userId, rows)
         val since = LocalDate.now(LearningProjection.studyZone).minusDays(89)
         val events = rows.flatMap { it.events }.filter { !it.isBlank && safeInstant(it.occurredAt).atOffset(LearningProjection.studyZone).toLocalDate() >= since }
         val days = events.groupBy { safeInstant(it.occurredAt).atOffset(LearningProjection.studyZone).toLocalDate() }
         return ProgressAnalyticsDto(
             userId, if (attempts == 0) 0.0 else correct * 100.0 / attempts, rows.count { it.attempts > 0 }, rows.count { it.isMastered },
             ExamEngine.readinessForStoredExams(stored, LearningProjection.masteryByTopic(rows)), cutoff,
-            rows.groupBy { it.disciplina }.map { (name, items) -> val count = items.sumOf { it.attempts }; DisciplineMasteryBarDto(name, if (count == 0) 0.0 else items.sumOf { it.correct } * 100.0 / count, count, items.count { it.isMastered }, items.sumOf { it.points }) }.sortedBy { it.accuracyPct },
+            rows.groupBy { it.disciplina }.map { (name, items) ->
+                val count = items.sumOf { it.attempts }
+                val distinctQ = items.count { it.attempts > 0 }
+                DisciplineMasteryBarDto(
+                    discipline = name,
+                    accuracyPct = if (count == 0) 0.0 else items.sumOf { it.correct } * 100.0 / count,
+                    totalAttempts = count,
+                    masteredQuestions = items.count { it.isMastered },
+                    pointsAccumulated = items.sumOf { it.points },
+                    distinctQuestions = distinctQ
+                )
+            }.sortedBy { it.accuracyPct },
             ConfidenceMatrixSummaryDto(events.count { it.isCorrect && it.confidenceLevel >= 2 }, events.count { it.isCorrect && it.confidenceLevel < 2 }, events.count { !it.isCorrect && it.confidenceLevel < 2 }, events.count { !it.isCorrect && it.confidenceLevel >= 2 }),
             (0L..89L).map { offset -> val date = since.plusDays(offset); val daily = days[date].orEmpty(); DailyHeatmapCellDto(date.toString(), daily.size, if (daily.isEmpty()) 0.0 else daily.count { it.isCorrect } * 100.0 / daily.size) },
             calibrationCells = telemetry.calibrationCells,
             strategyGuidance = telemetry.strategyGuidance,
             fatigueReport = telemetry.fatigueReport,
-            wrongAnswerPenalty = penalty
+            wrongAnswerPenalty = penalty,
+            examGapSummary = telemetry.examGapSummary,
+            threeSignalSummary = telemetry.threeSignalSummary,
+            examScenarios = telemetry.examScenarios,
+            entryMetrics = entryMetrics
         )
     }
 
@@ -668,6 +1044,42 @@ class ConcursoRepository(
                     if (boardFilter.isNotEmpty() && q.source !in boardFilter) q.copy(isBorrowedAnalogous = true) else q
                 }
             }
+            QuizMode.ENTRY_60S -> {
+                val nonHoldout = pool.filterNot { StrategyEngine.isHoldoutReserved(userId, it.id, pool.size) }
+                val candidatePool = if (nonHoldout.size >= count) nonHoldout else pool
+                val nowInst = Instant.now()
+                val nowMs = nowInst.toEpochMilli()
+                val familiarTopics = rows.values.filter { it.attempts > 0 && !it.canonicalTopicId.isNullOrBlank() }.map { it.canonicalTopicId!! }.toSet()
+                val pendingRetTopics = rows.values.filter {
+                    !it.canonicalTopicId.isNullOrBlank() && (it.reviewRequired || safeInstant(it.nextReviewAt) <= nowInst)
+                }.map { it.canonicalTopicId!! }.toSet()
+                val recentIds = rows.values.filter { r ->
+                    r.events.any { (nowMs - safeInstant(it.occurredAt).toEpochMilli()) in 0..(18L * 3600_000L) }
+                }.map { it.questionId }.toSet()
+                candidatePool.sortedByDescending { q ->
+                    PrioritizationEngine.entry60sQuestionScore(
+                        stemCharLen = q.question.length,
+                        isTrueFalse = q.questionType == QuestionType.TRUE_FALSE,
+                        isFamiliarTopic = q.canonicalTopicId in familiarTopics,
+                        hasPendingRetention = q.canonicalTopicId in pendingRetTopics,
+                        recentlyAnswered = q.id in recentIds
+                    )
+                }.take(count)
+            }
+            QuizMode.TRANSFER_PROBE -> {
+                val targetKeys = boardFilter.map { normalizeBoardKey(it) }.toSet()
+                baseFiltered.sortedWith(
+                    compareByDescending<QuestionDto> { rows[it.id] == null || rows[it.id]?.attempts == 0 }
+                        .thenByDescending { q ->
+                            val bk = normalizeBoardKey(q.source)
+                            bk.isNotEmpty() && bk != "origem não informada" && (targetKeys.isEmpty() || bk !in targetKeys)
+                        }
+                        .thenByDescending { StrategyEngine.isHoldoutReserved(userId, it.id, baseFiltered.size) }
+                ).take(count).map { q ->
+                    val bk = normalizeBoardKey(q.source)
+                    if (targetKeys.isNotEmpty() && bk !in targetKeys) q.copy(isBorrowedAnalogous = true) else q
+                }
+            }
             QuizMode.SIMULADO -> {
                 if (exam == null) emptyList() else {
                     val expected = exam.subjects.filter { it.topics.any { t -> t.diffStatus != "ARQUIVADO" } }.sumOf { it.questionCount ?: 0 }
@@ -705,8 +1117,38 @@ class ConcursoRepository(
 
     suspend fun recordEvidenceSelection(userId: Long, sessionUuid: String, questionId: String, evidenceId: String) {
         owner(userId)
+        val cleanEvId = evidenceId.trim()
+        if (cleanEvId.isEmpty()) return
         mutationMutex.withLock {
-            dao.updateAttemptEvidence(sessionUuid, questionId, evidenceId)
+            transaction {
+                val pendingRow = dao.findPendingAttemptInSession(sessionUuid, questionId)
+                dao.updateAttemptEvidence(sessionUuid, questionId, cleanEvId)
+                val resolvedAttemptId = pendingRow?.attemptId ?: deterministicAttemptId(sessionUuid, questionId)
+
+                // Atualiza imediatamente o registro local já confirmado (caso o lote tenha sincronizado antes do toque)
+                val state = durable
+                if (state != null) {
+                    val existingMap = learningMapForQuestions(listOf(questionId))
+                    val curRecord = existingMap[questionId]
+                    if (curRecord != null && curRecord.events.any { it.attemptId == resolvedAttemptId }) {
+                        val updatedRecord = curRecord.copy(
+                            events = curRecord.events.map { ev ->
+                                if (ev.attemptId == resolvedAttemptId) ev.copy(selectedEvidenceId = cleanEvId) else ev
+                            }
+                        )
+                        state.putLearning(listOf(LearningRecordEntity(questionId, updatedRecord.revision, json.encodeToString(updatedRecord))))
+                    }
+                    // Enfileira patch idempotente para sincronização com `POST /api/v1/quiz/attempt-evidence`
+                    val priorPatches = metadata("pending_evidence_patches")
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let { runCatching { json.decodeFromString<List<PendingEvidencePatch>>(it) }.getOrDefault(emptyList()) }
+                        .orEmpty()
+                    val nextPatches = priorPatches.filterNot {
+                        it.ownerUserId == userId && it.attemptId == resolvedAttemptId
+                    } + PendingEvidencePatch(userId, resolvedAttemptId, questionId, cleanEvId)
+                    metadata("pending_evidence_patches", json.encodeToString(nextPatches))
+                }
+            }
         }
     }
 
@@ -893,6 +1335,52 @@ class ConcursoRepository(
                 if (transient) break
             }
             if (dao.getAllPendingAttempts().any { it.ownerUserId == userId && it.syncError == null }) transient = true
+
+            // Sincroniza patches tardios de seleção de evidência (`POST /api/v1/quiz/attempt-evidence`)
+            val rawPatches = metadata("pending_evidence_patches")
+                ?.takeIf { it.isNotBlank() }
+                ?.let { runCatching { json.decodeFromString<List<PendingEvidencePatch>>(it) }.getOrDefault(emptyList()) }
+                .orEmpty()
+            if (rawPatches.isNotEmpty()) {
+                val activePendingIds = dao.getAllPendingAttempts().filter { it.ownerUserId == userId }.map { it.attemptId }.toSet()
+                val remainingPatches = mutableListOf<PendingEvidencePatch>()
+                for (patch in rawPatches) {
+                    if (patch.ownerUserId != userId) {
+                        remainingPatches += patch
+                        continue
+                    }
+                    try {
+                        val resp = api.attachAttemptEvidence(
+                            AttachAttemptEvidencePayload(
+                                questionId = patch.questionId,
+                                attemptId = patch.attemptId,
+                                selectedEvidenceId = patch.selectedEvidenceId
+                            )
+                        )
+                        if (resp.status == "applied") {
+                            synced++
+                        } else if (patch.attemptId in activePendingIds) {
+                            remainingPatches += patch
+                            transient = true
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: retrofit2.HttpException) {
+                        if (e.code() == 401) throw e
+                        if (e.code() !in listOf(400, 404, 422)) {
+                            remainingPatches += patch
+                            transient = true
+                        }
+                    } catch (_: Exception) {
+                        remainingPatches += patch
+                        transient = true
+                    }
+                }
+                mutationMutex.withLock {
+                    metadata("pending_evidence_patches", if (remainingPatches.isEmpty()) "" else json.encodeToString(remainingPatches))
+                }
+            }
+
             durable?.reports(userId)?.forEach { report ->
                 if (metadata("report_error:${report.eventId}").isNullOrBlank()) {
                     try {
@@ -1048,7 +1536,7 @@ class ConcursoRepository(
     }
 
     suspend fun requestAiTutor(questionId: String, kind: String, hintIndex: Int? = null): String {
-        val isPreAnswer = kind in setOf("contextual-hint", "child-friendly-pre", "dr-sincero")
+        val isPreAnswer = kind in setOf("contextual-hint", "child-friendly-pre", "dr-sincero", "term-lookup")
         return try { auth?.ensureSession(api, ownerUserId); api.requestAiTutor(questionId, kind, hintIndex).contentMarkdown }
         catch (e: CancellationException) { throw e } catch (e: retrofit2.HttpException) {
             val detail = e.backendMessage()
@@ -1061,6 +1549,66 @@ class ConcursoRepository(
         } catch (_: Exception) {
             if (isPreAnswer) "Tutor indisponível. Não foi possível processar a ajuda pré-resposta; sua resposta continua sem interferência."
             else dao.findQuestionById(questionId)?.explanation?.let { "Comentário já disponível (tutor indisponível):\n\n$it" } ?: "Tutor indisponível. Não foi possível processar a resposta do serviço. Tente novamente."
+        }
+    }
+
+    suspend fun requestAiTermLookup(questionId: String, selectedText: String, isAnswerSubmitted: Boolean): String {
+        val trimmed = selectedText.trim().take(240)
+        if (trimmed.isEmpty()) return "Selecione um termo ou trecho do enunciado para consultar."
+        val kind = if (isAnswerSubmitted) "term-lookup-post" else "term-lookup"
+        val isPreAnswer = !isAnswerSubmitted
+        return try {
+            auth?.ensureSession(api, ownerUserId)
+            api.requestAiTutorWithContext(
+                questionId = questionId,
+                kind = kind,
+                payload = AiAssistRequestPayload(userNote = trimmed)
+            ).contentMarkdown
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: retrofit2.HttpException) {
+            val reason = e.backendMessage() ?: "Serviço de IA indisponível (HTTP ${e.code()})."
+            if (isPreAnswer) "Consulta IA indisponível ($reason). Use os cartões normativos abaixo ou a Pesquisa Google em Camada."
+            else dao.findQuestionById(questionId)?.explanation?.let { "Comentário local disponível ($reason):\n\n$it" }
+                ?: "Consulta IA indisponível ($reason)."
+        } catch (_: Exception) {
+            if (isPreAnswer) "Sem conexão para consulta generativa agora. Use as fontes normativas locais abaixo ou a Pesquisa Google em Camada."
+            else dao.findQuestionById(questionId)?.explanation?.let { "Comentário local disponível (offline):\n\n$it" }
+                ?: "Sem conexão para consulta generativa agora."
+        }
+    }
+
+    suspend fun lookupQuestionContext(question: QuestionDto, selectedText: String): ContextualLookupResponseDto {
+        val trimmed = selectedText.trim().take(240)
+        val disciplina = question.disciplina.trim().ifEmpty { "Concursos Públicos" }
+        val (localNorm, localConcepts) = ExamCatalog.lookupCatalogMatches(trimmed)
+        val contextualQuery = "$trimmed $disciplina"
+        val googleUrl = "https://www.google.com/search?hl=pt-BR&q=" + URLEncoder.encode(contextualQuery, "UTF-8")
+        val planaltoUrl = "https://www.google.com/search?hl=pt-BR&q=" + URLEncoder.encode("site:planalto.gov.br $trimmed", "UTF-8")
+        val jurispUrl = "https://www.google.com/search?hl=pt-BR&q=" + URLEncoder.encode("(STF OR STJ) $trimmed", "UTF-8")
+        val fallback = ContextualLookupResponseDto(
+            questionId = question.id,
+            query = trimmed,
+            disciplina = disciplina,
+            normativeMatches = localNorm,
+            conceptMatches = localConcepts,
+            encyclopedicSummary = null,
+            googleSearchUrl = googleUrl,
+            planaltoSearchUrl = planaltoUrl,
+            jurisprudenceSearchUrl = jurispUrl
+        )
+        if (trimmed.isEmpty()) return fallback
+        return try {
+            auth?.ensureSession(api, ownerUserId)
+            val remote = api.lookupQuestionContext(question.id, ContextualLookupRequestDto(trimmed))
+            remote.copy(
+                normativeMatches = remote.normativeMatches.ifEmpty { localNorm },
+                conceptMatches = remote.conceptMatches.ifEmpty { localConcepts }
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            fallback
         }
     }
 

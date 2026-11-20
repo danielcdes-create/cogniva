@@ -1,6 +1,6 @@
-# Integração com IA (xAI) — Tutores, Classificação, Blindagem e Governança de Cotas
+# Integração com IA (xAI) — Tutores, Consulta Contextual em Camada, Blindagem e Governança de Cotas
 
-O **Cogniva `2.0.1`** integra a API da **xAI** de forma estritamente governada no backend Rust (`cogniva-api`), atendendo aos **8 tutores pedagógicos por questão**, à **assistência de importação de questões** e à **geração de propostas de classificação V2**.
+O **Cogniva `2.3.0`** integra a API da **xAI** de forma estritamente governada no backend Rust (`cogniva-api`), atendendo aos **tutores pedagógicos por questão** (incluindo `term-lookup` e `term-lookup-post` para consulta contextual em camada), à **assistência de importação de questões** e à **geração de propostas de classificação V2**, além da rota gratuita de consulta normativa/enciclopédica `POST /api/v1/questions/:id/lookup`.
 
 ---
 
@@ -42,15 +42,17 @@ Em questões de concursos públicos (FGV, Cebraspe, FCC, divergências STF/STJ),
 Os 3 tutores pré-resposta são:
 1. **Ajuda pré-resposta (`child-friendly-pre` / `ajudaInfantil`):** Estrutura-se em *Contexto do Tema*, *Enunciado Simplificado* (destacando termos de comando como `EXCETO`, `INCORRETA`, `APENAS`, `NÃO`), *Leitura Neutra das Opções* e *Orientação de Raciocínio* com perguntas-guia abertas;
 2. **Dicas contextuais progressivas (`contextual-hint` / `contextualHint`):** Até 3 níveis progressivos alinhados à bússola interna (`#1` contextualização do instituto → `#2` recorte e comando → `#3` critério de análise em forma de pergunta aberta), enviando apenas as dicas anteriores ao índice solicitado;
-3. **Dr. Sincero pré-resposta (`dr-sincero` / `drSincero`):** Alerta ácido e direto sobre pegadinhas clássicas da banca nesse ponto da matéria e armadilhas de leitura apressada, sem resolver a questão pelo candidato.
+3. **Dr. Sincero pré-resposta (`dr-sincero` / `drSincero`):** Alerta ácido e direto sobre pegadinhas clássicas da banca nesse ponto da matéria e armadilhas de leitura apressada, sem resolver a questão pelo candidato;
+4. **Consulta Contextual de Trecho Pré-Resposta (`term-lookup`):** Explica o significado conceitual/normativo de um termo ou trecho selecionado pelo aluno em `<untrusted_student_input>` sob guarda estrita anti-spoiler (`detect_pre_answer_spoiler`), jamais gravando em cache compartilhado.
 
 ### 3.2 Tutores Pós-Resposta (Recebem e Fundamentam `correct_answer`)
 Como o estudante já submeteu sua resposta, o payload inclui explicitamente `correct_answer` e autoriza fundamentar o gabarito oficial (sem depender de letras fixas `A`, `B`, `C`, pois as alternativas são embaralhadas):
-4. **Contexto adicional pós-resposta (`extra-concepts` / `explanationExtra`):** Situa o tema dentro da disciplina real da questão, explica o fundamento da resposta correta (`correct_answer`), aprofunda conceitos-chave e distinções essenciais, apresenta exemplos práticos coerentes com a área e resume como o tópico costuma cair em prova;
-5. **Explicação simples pós-resposta (`child-friendly-post` / `explicacaoInfantil`):** Traduz a ideia central com analogias do cotidiano, demonstra por que `correct_answer` faz sentido e fecha com um resumo de fixação;
-6. **Explicação detalhada por alternativa (`explanation`):** Panorama da questão seguido de análise individual (`✅:` na correta / `❌:` nas incorretas);
-7. **Mnemônico (`mnemonic` / `mnemonico`):** Recurso de memorização ancorado nos requisitos ou conceitos que sustentam `correct_answer`;
-8. **Plausibilidade dos distratores (`plausibility` / `plausibilityMarkdown`):** Classificação das alternativas incorretas (`Improvável`, `Parcialmente plausível`, `Plausível`) em face de `correct_answer` e de comandos como `NÃO`/`EXCETO`.
+5. **Contexto adicional pós-resposta (`extra-concepts` / `explanationExtra`):** Situa o tema dentro da disciplina real da questão, explica o fundamento da resposta correta (`correct_answer`), aprofunda conceitos-chave e distinções essenciais, apresenta exemplos práticos coerentes com a área e resume como o tópico costuma cair em prova;
+6. **Explicação simples pós-resposta (`child-friendly-post` / `explicacaoInfantil`):** Traduz a ideia central com analogias do cotidiano, demonstra por que `correct_answer` faz sentido e fecha com um resumo de fixação;
+7. **Explicação detalhada por alternativa (`explanation`):** Panorama da questão seguido de análise individual (`✅:` na correta / `❌:` nas incorretas);
+8. **Mnemônico (`mnemonic` / `mnemonico`):** Recurso de memorização ancorado nos requisitos ou conceitos que sustentam `correct_answer`;
+9. **Plausibilidade dos distratores (`plausibility` / `plausibilityMarkdown`):** Classificação das alternativas incorretas (`Improvável`, `Parcialmente plausível`, `Plausível`) em face de `correct_answer` e de comandos como `NÃO`/`EXCETO`;
+10. **Consulta Contextual de Trecho Pós-Resposta (`term-lookup-post`):** Explica diretamente o trecho selecionado à luz do gabarito oficial e da Ficha Editorial, sem leitura/escrita em cache compartilhado.
 
 - **Exclusão Mútua por Questão/Recurso:** Solicitações concorrentes impessoais para o mesmo recurso da mesma questão são serializadas em processo e releem o documento antes de chamar a xAI.
 - **Proveniência Estruturada (`ai_resource_meta`):** Toda gravação compartilhada registra metadados conformes a `#/$defs/ai_resource_metadata` (`provider: "xai"`, `model`, versão do prompt, `content_revision` JCS SHA-256 avaliado e timestamp UTC). Se a questão for editada durante a chamada externa, a escrita condicional CAS impede gravar texto gerado sobre enunciado antigo.

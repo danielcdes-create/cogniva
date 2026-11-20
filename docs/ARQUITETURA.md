@@ -1,6 +1,6 @@
 # Arquitetura do Ecossistema Cogniva 2.0
 
-Este documento descreve a arquitetura unificada do **Cogniva `2.2.0`** (`build 28`), consolidando os contratos compartilhados (`contract_version: 4`), o backend Rust (`cogniva-api`), os 5 motores simétricos de decisão, o painel administrativo web (`/admin/`), o aplicativo Android *offline-first* (`Room v7`), a governança LGPD e a infraestrutura de entrega contínua.
+Este documento descreve a arquitetura unificada do **Cogniva `2.3.0`** (`build 29`), consolidando os contratos compartilhados (`contract_version: 5`), o backend Rust (`cogniva-api`), a arquitetura em 3 camadas (Diagnóstico de 3 Sinais sob Escassez `< 15`, Simulador de Decisão sob Incerteza & Curva de 300 min e Protocolo de Entrada de 60s), o painel administrativo web (`/admin/`), o aplicativo Android *offline-first* (`Room v7`), a governança LGPD e a infraestrutura de entrega contínua.
 
 ---
 
@@ -9,13 +9,13 @@ Este documento descreve a arquitetura unificada do **Cogniva `2.2.0`** (`build 2
 ```mermaid
 flowchart LR
   subgraph Clientes
-    AND["Android App 2.2.0 / build 28 (Kotlin / Compose / Room v7)"]
+    AND["Android App 2.3.0 / build 29 (Kotlin / Compose / Room v7)"]
     ADM["Painel Web /admin/ (ES Modules + CSP + WCAG AA)"]
   end
 
   subgraph Servidor["VPS DigitalOcean"]
     NGX["Nginx TLS + HSTS + Rate Limit IPv6 /64 + Gate 503"]
-    API["cogniva-api 2.2.0 (Rust / Axum / Tokio · 5 Motores)"]
+    API["cogniva-api 2.3.0 (Rust / Axum / Tokio · Contract v5)"]
   end
 
   subgraph Dados["Persistência e Contratos"]
@@ -23,7 +23,7 @@ flowchart LR
     XAI["API xAI (XAI_MODEL + XML Prompt Fencing + RAG Normativo)"]
   end
 
-  AND <-->|"HTTPS Bearer + Sync Cronológico + next-action"| NGX
+  AND <-->|"HTTPS Bearer + Sync + next-action + lookup"| NGX
   ADM <-->|"HTTPS Cookie HttpOnly + Sec-Fetch-Site + CSRF"| NGX
   NGX <-->|"127.0.0.1:8001"| API
   API <-->|"Write Concern majority + journal"| MDB
@@ -33,8 +33,8 @@ flowchart LR
 - **Contratos Compartilhados ([`shared/`](../shared/)):** Fonte única de verdade validada em Python, Rust, Node.js e Kotlin:
   - [`shared/knowledge-catalog.json`](../shared/knowledge-catalog.json) & [`shared/knowledge-concepts-seed.json`](../shared/knowledge-concepts-seed.json): Catálogo canônico unificado (`schema_version: 2`, `catalog_version: 2`, hash gênese preservado) estendido com conceitos (`concepts[]` em grafo acíclico DAG) e fontes normativas versionadas (`normative_sources[]` com `content_sha256`).
   - [`shared/exam-templates.json`](../shared/exam-templates.json): Templates globais oficiais de concursos (`CPNU`, `RFB`, `BNDES`, `AFT`).
-  - [`shared/domain-contracts.json`](../shared/domain-contracts.json): Vetores normativos (`contract_version: 4`) de revisão JCS SHA-256, cálculo de domínio, pontuação líquida ponderada, curvas SRS, fuso de estudo (`America/Sao_Paulo`, `UTC-3`) e paridade dos 5 motores de decisão (`holdout`, `diagnostics`, `retention`, `prioritization`, `calibration`, `strategy`, `fatigue` — detalhados em [`MOTORES-DECISAO-CORE-LOOP.md`](MOTORES-DECISAO-CORE-LOOP.md)).
-  - [`shared/schemas/question-contracts.schema.json`](../shared/schemas/question-contracts.schema.json): Contrato JSON Schema 2020-12 de questões 100% V2 (`question-v2-validator-2.2.0`, `validator_revision = 5`), incluindo `concept_id` opcional em `classification.links[]` e `evidence_challenge` opcional pós-erro.
+  - [`shared/domain-contracts.json`](../shared/domain-contracts.json): Vetores normativos (`contract_version: 5`, `min_questions_for_mastery: 15`) de revisão JCS SHA-256, cálculo de domínio, pontuação líquida ponderada, curvas SRS, fuso de estudo (`America/Sao_Paulo`, `UTC-3`), protocolo `entry_60s`, diagnóstico de 3 sinais (`diagnostics`), transferência cross-banca (`transfer`), curva logística de 300 minutos (`performance_300m`), simulador de decisão sob incerteza (`decision_uncertainty`) e fadiga controlada por dificuldade (`fatigue` — detalhados em [`MOTORES-DECISAO-CORE-LOOP.md`](MOTORES-DECISAO-CORE-LOOP.md)).
+  - [`shared/schemas/question-contracts.schema.json`](../shared/schemas/question-contracts.schema.json): Contrato JSON Schema 2020-12 de questões 100% V2 (`question-v2-validator-2.3.0`, `validator_revision = 6`), incluindo `concept_id` opcional, `evidence_challenge` e Ficha Editorial Rastreável (`editorial_card`).
 
 ---
 

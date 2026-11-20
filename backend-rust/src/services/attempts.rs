@@ -599,6 +599,50 @@ pub async fn commit(
     ))
 }
 
+pub async fn attach_evidence(
+    state: &AppState,
+    user_id: i64,
+    question_id: &str,
+    attempt_id: &str,
+    evidence_id: &str,
+) -> Result<bool, AppError> {
+    let qid = ObjectId::parse_str(question_id)?;
+    uuid::Uuid::parse_str(attempt_id)
+        .map_err(|_| AppError::BadRequest("Identificador da tentativa inválido".into()))?;
+    let trimmed = evidence_id.trim();
+    if trimmed.is_empty() || trimmed.len() > 100 {
+        return Err(AppError::BadRequest(
+            "Identificador de evidência fora dos limites".into(),
+        ));
+    }
+    let activities = state.db.collection_with_options::<Document>(
+        "userActivityLog",
+        CollectionOptions::builder()
+            .write_concern(
+                WriteConcern::builder()
+                    .w(mongodb::options::Acknowledgment::Majority)
+                    .journal(true)
+                    .w_timeout(std::time::Duration::from_secs(10))
+                    .build(),
+            )
+            .build(),
+    );
+    let result = activities
+        .update_one(
+            doc! {
+                "user_id": user_id,
+                "question_id": qid,
+                "pastSessions.attempt_id": attempt_id
+            },
+            doc! {
+                "$set": { "pastSessions.$.selected_evidence_id": trimmed },
+                "$inc": { "state_revision": 1_i64 }
+            },
+        )
+        .await?;
+    Ok(result.matched_count > 0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

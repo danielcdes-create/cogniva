@@ -270,6 +270,7 @@ mod tests {
             plausibility_markdown: None,
             plausibility_analysis: None,
             evidence_challenge: None,
+            editorial_card: None,
         };
         (exam, q)
     }

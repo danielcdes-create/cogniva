@@ -1,7 +1,7 @@
 use crate::{
     error::AppError,
     services::ai_tutor::{
-        get_or_generate_ai_assist_with_context, AiAssistKind, AiAssistResponse,
+        get_or_generate_ai_assist_with_context, shared_http_client, AiAssistKind, AiAssistResponse,
     },
     AppState,
 };
@@ -10,8 +10,10 @@ use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
-use serde::Deserialize;
+use bson::{doc, oid::ObjectId, Document};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use unicode_normalization::UnicodeNormalization;
 
 #[derive(Debug, Default, Deserialize)]
 pub struct AiHelpQuery {
@@ -26,9 +28,81 @@ pub struct AiHelpBody {
     pub student_answer: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ContextualLookupRequest {
+    pub selected_text: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct NormativeLookupItemDto {
+    pub source_id: String,
+    pub title: String,
+    pub locator: Option<String>,
+    pub excerpt: String,
+    pub canonical_uri: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ConceptLookupItemDto {
+    pub concept_id: String,
+    pub label: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct EncyclopedicSummaryDto {
+    pub title: String,
+    pub extract: String,
+    pub source_url: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ContextualLookupResponse {
+    pub question_id: String,
+    pub query: String,
+    pub disciplina: String,
+    pub normative_matches: Vec<NormativeLookupItemDto>,
+    pub concept_matches: Vec<ConceptLookupItemDto>,
+    pub encyclopedic_summary: Option<EncyclopedicSummaryDto>,
+    pub google_search_url: String,
+    pub planalto_search_url: String,
+    pub jurisprudence_search_url: String,
+}
+
+fn fold_search_key(input: &str) -> String {
+    input
+        .nfd()
+        .filter(|c| !unicode_normalization::char::is_combining_mark(*c))
+        .collect::<String>()
+        .to_lowercase()
+}
+
+fn percent_encode_query(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len() * 2);
+    for b in raw.as_bytes() {
+        match *b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' => out.push(*b as char),
+            b' ' => out.push('+'),
+            other => out.push_str(&format!("%{other:02X}")),
+        }
+    }
+    out
+}
+
+fn percent_encode_path_segment(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len() * 2);
+    for b in raw.as_bytes() {
+        match *b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' => out.push(*b as char),
+            b' ' => out.push('_'),
+            other => out.push_str(&format!("%{other:02X}")),
+        }
+    }
+    out
+}
+
 /// Endpoint `POST /api/v1/questions/:id/ai/:kind`
 /// Exemplos de `:kind`: `explanation`, `contextual-hint`, `dr-sincero`, `child-friendly-pre`,
-/// `child-friendly-post`, `extra-concepts`, `mnemonic`, `plausibility`
+/// `child-friendly-post`, `extra-concepts`, `mnemonic`, `plausibility`, `term-lookup`, `term-lookup-post`
 pub async fn handle_question_ai_assist(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<crate::security::SessionUser>,
@@ -60,4 +134,155 @@ pub async fn handle_question_ai_assist(
     .await?;
 
     Ok(Json(res))
+}
+
+/// Endpoint `POST /api/v1/questions/:id/lookup` (Custo zero de cota IA):
+/// Retorna instantaneamente correspondências nas fontes normativas e conceitos do catálogo,
+/// síntese enciclopédica aberta (quando disponível) e URLs seguras de busca em camada (Google/Planalto/Jurisprudência).
+pub async fn handle_question_contextual_lookup(
+    State(state): State<Arc<AppState>>,
+    Extension(_user): Extension<crate::security::SessionUser>,
+    Path(question_id): Path<String>,
+    Json(req): Json<ContextualLookupRequest>,
+) -> Result<Json<ContextualLookupResponse>, AppError> {
+    let trimmed = req.selected_text.trim();
+    if trimmed.is_empty() || trimmed.chars().count() > 240 {
+        return Err(AppError::BadRequest(
+            "Selecione um trecho entre 1 e 240 caracteres para consultar.".into(),
+        ));
+    }
+    let oid = ObjectId::parse_str(&question_id)?;
+    let raw_q = state
+        .db
+        .collection::<Document>("todasQuestoes")
+        .find_one(doc! { "_id": oid })
+        .await?
+        .ok_or_else(|| AppError::NotFound("Questão não encontrada.".into()))?;
+    let questao = crate::services::question_compatibility::decode(raw_q)?;
+    let disciplina = if questao.disciplina.trim().is_empty() {
+        "Concursos Públicos".to_string()
+    } else {
+        questao.disciplina.trim().to_string()
+    };
+
+    let folded_query = fold_search_key(trimmed);
+    let terms: Vec<String> = folded_query
+        .split_whitespace()
+        .filter(|t| t.len() >= 3)
+        .take(6)
+        .map(str::to_string)
+        .collect();
+
+    let cat = crate::services::question_contracts::catalog_ref();
+    let norm_sources = crate::services::catalog_runtime::effective_normative_sources(&cat);
+    let concepts = crate::services::catalog_runtime::effective_concepts(&cat);
+
+    let mut normative_matches = Vec::new();
+    for ns in &norm_sources {
+        if ns["status"].as_str() != Some("ACTIVE") {
+            continue;
+        }
+        let title = ns["title"].as_str().unwrap_or("");
+        let locator = ns["locator"].as_str();
+        let excerpt = ns["excerpt"].as_str().unwrap_or("");
+        let uri = ns["canonical_uri"].as_str().unwrap_or("");
+        let hay = fold_search_key(&format!("{title} {} {excerpt}", locator.unwrap_or("")));
+        let hit = hay.contains(&folded_query)
+            || (!terms.is_empty() && terms.iter().filter(|t| hay.contains(t.as_str())).count() >= terms.len().min(2));
+        if hit {
+            normative_matches.push(NormativeLookupItemDto {
+                source_id: ns["source_id"].as_str().unwrap_or("").to_string(),
+                title: title.to_string(),
+                locator: locator.map(str::to_string),
+                excerpt: excerpt.to_string(),
+                canonical_uri: uri.to_string(),
+            });
+            if normative_matches.len() >= 4 {
+                break;
+            }
+        }
+    }
+
+    let mut concept_matches = Vec::new();
+    for c in &concepts {
+        if c["status"].as_str() != Some("ACTIVE") {
+            continue;
+        }
+        let label = c["label"].as_str().unwrap_or("");
+        let hay = fold_search_key(label);
+        if hay.contains(&folded_query)
+            || (!terms.is_empty() && terms.iter().filter(|t| hay.contains(t.as_str())).count() >= terms.len().min(2))
+        {
+            concept_matches.push(ConceptLookupItemDto {
+                concept_id: c["concept_id"].as_str().unwrap_or("").to_string(),
+                label: label.to_string(),
+            });
+            if concept_matches.len() >= 4 {
+                break;
+            }
+        }
+    }
+
+    // Síntese enciclopédica rápida via Wikimedia PT REST API (timeout curto de 2.2s, nunca bloqueia se indisponível)
+    let wiki_seg = percent_encode_path_segment(trimmed);
+    let wiki_url = format!("https://pt.wikipedia.org/api/rest_v1/page/summary/{wiki_seg}");
+    let encyclopedic_summary = match tokio::time::timeout(
+        std::time::Duration::from_millis(2200),
+        shared_http_client()
+            .get(&wiki_url)
+            .header("User-Agent", "Cogniva/2.3 (Educacao Concursos)")
+            .send(),
+    )
+    .await
+    {
+        Ok(Ok(resp)) if resp.status().is_success() => {
+            if let Ok(val) = resp.json::<serde_json::Value>().await {
+                let title = val["title"].as_str().unwrap_or("").trim().to_string();
+                let extract = val["extract"].as_str().unwrap_or("").trim().to_string();
+                let page_url = val["content_urls"]["desktop"]["page"]
+                    .as_str()
+                    .filter(|u| u.starts_with("https://"))
+                    .unwrap_or("https://pt.wikipedia.org")
+                    .to_string();
+                if !title.is_empty() && !extract.is_empty() && val["type"].as_str() != Some("disambiguation") {
+                    Some(EncyclopedicSummaryDto {
+                        title,
+                        extract,
+                        source_url: page_url,
+                    })
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }
+        _ => None,
+    };
+
+    let contextual_q = format!("{trimmed} {disciplina}");
+    let google_search_url = format!(
+        "https://www.google.com/search?hl=pt-BR&q={}",
+        percent_encode_query(&contextual_q)
+    );
+    let planalto_search_url = format!(
+        "https://www.google.com/search?hl=pt-BR&q={}",
+        percent_encode_query(&format!("site:planalto.gov.br {trimmed}"))
+    );
+    let jurisprudence_search_url = format!(
+        "https://www.google.com/search?hl=pt-BR&q={}",
+        percent_encode_query(&format!("(STF OR STJ) {trimmed}"))
+    );
+
+    Ok(Json(ContextualLookupResponse {
+        question_id,
+        query: trimmed.to_string(),
+        disciplina,
+        normative_matches,
+        concept_matches,
+        encyclopedic_summary,
+        google_search_url,
+        planalto_search_url,
+        jurisprudence_search_url,
+    }))
 }

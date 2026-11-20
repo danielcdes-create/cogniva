@@ -23,6 +23,8 @@ pub enum QuizMode {
     CommonTrunk,
     AdaptiveLoop,
     StrategyBattery,
+    Entry60s,
+    TransferProbe,
     Single,
 }
 

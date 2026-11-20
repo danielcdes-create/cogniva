@@ -191,6 +191,46 @@ pub async fn handle_submit_batch(
     }))
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct AttachEvidenceRequest {
+    pub question_id: String,
+    pub attempt_id: String,
+    pub selected_evidence_id: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct AttachEvidenceResponse {
+    pub status: &'static str,
+    pub attempt_id: String,
+    pub selected_evidence_id: String,
+}
+
+/// Endpoint `POST /api/v1/quiz/attempt-evidence`:
+/// Vincula de forma idempotente a evidência opcional pós-resposta a uma tentativa já sincronizada.
+pub async fn handle_attach_attempt_evidence(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<SessionUser>,
+    Json(req): Json<AttachEvidenceRequest>,
+) -> Result<Json<AttachEvidenceResponse>, AppError> {
+    let applied = crate::services::attempts::attach_evidence(
+        &state,
+        user.user_id,
+        &req.question_id,
+        &req.attempt_id,
+        &req.selected_evidence_id,
+    )
+    .await?;
+    Ok(Json(AttachEvidenceResponse {
+        status: if applied {
+            "applied"
+        } else {
+            "pending_parent_attempt"
+        },
+        attempt_id: req.attempt_id,
+        selected_evidence_id: req.selected_evidence_id.trim().to_string(),
+    }))
+}
+
 /// Endpoint `POST /api/v1/questions/:id/report`: Salva reporte isolado por usuário em `reportedQuestoes`
 pub async fn handle_report_problem(
     State(state): State<Arc<AppState>>,

@@ -354,8 +354,16 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             post(routes::quiz::handle_submit_batch),
         )
         .route(
+            "/api/v1/quiz/attempt-evidence",
+            post(routes::quiz::handle_attach_attempt_evidence),
+        )
+        .route(
             "/api/v1/questions/:id/ai/:kind",
             post(routes::ai_help::handle_question_ai_assist),
+        )
+        .route(
+            "/api/v1/questions/:id/lookup",
+            post(routes::ai_help::handle_question_contextual_lookup),
         )
         .route(
             "/api/v1/questions/:id/report",
@@ -399,7 +407,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
                     "service": "cogniva-api",
                     "version": env!("CARGO_PKG_VERSION"),
                     "revision": option_env!("BUILD_REVISION").unwrap_or("local"),
-                    "contract_version": 4
+                    "contract_version": 5
                 }))
             }),
         )
@@ -453,7 +461,7 @@ async fn readiness(
         Ok(Ok(_)) => Ok(Json(json!({
             "status": "ready",
             "service": "cogniva-api",
-            "contract_version": 4,
+            "contract_version": 5,
             "revision": option_env!("BUILD_REVISION").unwrap_or("local")
         }))),
         Ok(Err(err)) => {

@@ -1,5 +1,8 @@
 package br.com.concursoprep.app.domain.model
 
+import br.com.concursoprep.app.domain.exam.ExamCatalog
+import br.com.concursoprep.app.domain.exam.ExamMomentScenarioDto
+import br.com.concursoprep.app.domain.exam.PrioritizationEngine
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -47,7 +50,9 @@ enum class QuizMode {
     COMMON_TRUNK,
     SINGLE,
     ADAPTIVE_LOOP,
-    STRATEGY_BATTERY
+    STRATEGY_BATTERY,
+    ENTRY_60S,
+    TRANSFER_PROBE
 }
 
 @Serializable
@@ -118,7 +123,36 @@ data class ExamGapSummaryDto(
     @SerialName("insufficient_evidence_units") val insufficientEvidenceUnits: Int = 0,
     @SerialName("total_units") val totalUnits: Int = 0,
     @SerialName("wrong_answer_penalty") val wrongAnswerPenalty: Double = 0.0,
-    @SerialName("historical_cutoff_score") val historicalCutoffScore: Double = 0.0
+    @SerialName("historical_cutoff_score") val historicalCutoffScore: Double = 0.0,
+    @SerialName("min_questions_for_mastery") val minQuestionsForMastery: Int = 15,
+    @SerialName("evidence_in_progress_units") val evidenceInProgressUnits: Int = 0,
+    @SerialName("active_error_units") val activeErrorUnits: Int = 0,
+    @SerialName("transfer_verified_units") val transferVerifiedUnits: Int = 0,
+    @SerialName("transfer_available_units") val transferAvailableUnits: Int = 0,
+    @SerialName("transfer_unmeasured_units") val transferUnmeasuredUnits: Int = 0
+)
+
+@Serializable
+data class ThreeSignalSummaryDto(
+    @SerialName("grounded_hits") val groundedHits: Int = 0,
+    @SerialName("illusory_competence_hits") val illusoryCompetenceHits: Int = 0,
+    @SerialName("hesitant_hits") val hesitantHits: Int = 0,
+    @SerialName("overconfidence_errors") val overconfidenceErrors: Int = 0,
+    @SerialName("conceptual_errors") val conceptualErrors: Int = 0,
+    @SerialName("retrieval_failures") val retrievalFailures: Int = 0,
+    @SerialName("strategic_omissions") val strategicOmissions: Int = 0,
+    @SerialName("omission_net_points_saved") val omissionNetPointsSaved: Double = 0.0
+)
+
+@Serializable
+data class EntryProtocolMetricsDto(
+    @SerialName("impressions_count") val impressionsCount: Int = 0,
+    @SerialName("voluntary_starts_count") val voluntaryStartsCount: Int = 0,
+    @SerialName("first_question_completed_count") val firstQuestionCompletedCount: Int = 0,
+    @SerialName("conscious_rest_days_count") val consciousRestDaysCount: Int = 0,
+    @SerialName("spontaneous_return_days_count") val spontaneousReturnDaysCount: Int = 0,
+    @SerialName("active_study_days_count") val activeStudyDaysCount: Int = 0,
+    @SerialName("rested_today") val restedToday: Boolean = false
 )
 
 @Serializable
@@ -130,12 +164,15 @@ data class StrategyBandGuidanceDto(
 
 @Serializable
 data class NextActionResponseDto(
+    @SerialName("schedule_header") val scheduleHeader: String = PrioritizationEngine.formatEntry60sHeader(),
     @SerialName("entry_question") val entryQuestion: QuestionDto? = null,
-    @SerialName("entry_reason") val entryReason: String = "Prioridade sugerida: um conceito relevante com retenção pendente.",
+    @SerialName("entry_reason") val entryReason: String = "Assunto familiar com retenção pendente.",
     @SerialName("priority_topic_id") val priorityTopicId: String? = null,
     @SerialName("exam_gap_summary") val examGapSummary: ExamGapSummaryDto = ExamGapSummaryDto(),
+    @SerialName("three_signal_summary") val threeSignalSummary: ThreeSignalSummaryDto = ThreeSignalSummaryDto(),
     @SerialName("calibration_cells") val calibrationCells: List<br.com.concursoprep.app.domain.exam.CalibrationCellDto> = emptyList(),
     @SerialName("strategy_guidance") val strategyGuidance: List<StrategyBandGuidanceDto> = emptyList(),
+    @SerialName("exam_scenarios") val examScenarios: List<ExamMomentScenarioDto> = emptyList(),
     @SerialName("fatigue_report") val fatigueReport: br.com.concursoprep.app.domain.exam.FatigueReportDto = br.com.concursoprep.app.domain.exam.FatigueEngine.evaluateFatigue(0, 0, 0, 0, 0)
 )
 
@@ -153,7 +190,8 @@ data class TodayDashboardDto(
     @SerialName("common_trunk_suggestion") val commonTrunkSuggestion: CommonTrunkSuggestion,
     val lastSyncedAt: String? = null,
     val syncMessage: String? = null,
-    val nextAction: NextActionResponseDto? = null
+    val nextAction: NextActionResponseDto? = null,
+    val entryMetrics: EntryProtocolMetricsDto = EntryProtocolMetricsDto()
 )
 
 @Serializable
@@ -229,6 +267,84 @@ data class EvidenceChallengeDto(
 )
 
 @Serializable
+data class ConceptualErrorItemDto(
+    @SerialName("error_id") val errorId: String,
+    val label: String,
+    val description: String
+)
+
+@Serializable
+data class EditorialCardDto(
+    @SerialName("legal_provisions") val legalProvisions: List<String> = emptyList(),
+    @SerialName("tested_rule") val testedRule: String,
+    @SerialName("exception_clause") val exceptionClause: String? = null,
+    @SerialName("decisive_stem_excerpt") val decisiveStemExcerpt: String,
+    @SerialName("official_source_excerpt") val officialSourceExcerpt: String? = null,
+    @SerialName("plausible_conceptual_errors") val plausibleConceptualErrors: List<ConceptualErrorItemDto> = emptyList()
+)
+
+@Serializable
+data class NormativeLookupItemDto(
+    @SerialName("source_id") val sourceId: String,
+    val title: String,
+    val locator: String? = null,
+    val excerpt: String,
+    @SerialName("canonical_uri") val canonicalUri: String
+)
+
+@Serializable
+data class ConceptLookupItemDto(
+    @SerialName("concept_id") val conceptId: String,
+    val label: String
+)
+
+@Serializable
+data class EncyclopedicSummaryDto(
+    val title: String,
+    val extract: String,
+    @SerialName("source_url") val sourceUrl: String
+)
+
+@Serializable
+data class ContextualLookupRequestDto(
+    @SerialName("selected_text") val selectedText: String
+)
+
+@Serializable
+data class ContextualLookupResponseDto(
+    @SerialName("question_id") val questionId: String,
+    val query: String,
+    val disciplina: String,
+    @SerialName("normative_matches") val normativeMatches: List<NormativeLookupItemDto> = emptyList(),
+    @SerialName("concept_matches") val conceptMatches: List<ConceptLookupItemDto> = emptyList(),
+    @SerialName("encyclopedic_summary") val encyclopedicSummary: EncyclopedicSummaryDto? = null,
+    @SerialName("google_search_url") val googleSearchUrl: String,
+    @SerialName("planalto_search_url") val planaltoSearchUrl: String,
+    @SerialName("jurisprudence_search_url") val jurisprudenceSearchUrl: String
+)
+
+data class ContextualLookupUiState(
+    val questionId: String,
+    val selectedText: String,
+    val isLoading: Boolean = false,
+    val response: ContextualLookupResponseDto? = null,
+    val aiExplanationMarkdown: String? = null,
+    val isAiLoading: Boolean = false
+)
+
+private val LEGAL_PROVISION_REGEX = Regex(
+    "(?i)\\b(?:art(?:igo)?\\.?\\s*\\d+[º°]?(?:\\s*,\\s*(?:§\\s*\\d+[º°]?|parágrafo\\s+único|inciso\\s+[IVXLCDM]+|[a-z]\\)))?|lei(?:\\s+complementar|\\s+n[º°]?)?\\s*[\\d\\.]+(?:/\\d{2,4})?|cf(?:/88)?|súmula(?:\\s+vinculante)?\\s*(?:n[º°]?\\s*)?\\d+|decreto(?:\\s+n[º°]?)?\\s*[\\d\\.]+(?:/\\d{2,4})?|resolu[çc][ãa]o\\s+(?:cmn|bcb|cvm)?\\s*n?[º°]?\\s*[\\d\\.]+)"
+)
+private val EXCEPTION_MARKER_REGEX = Regex(
+    "(?i)\\b(salvo|exceto|ressalvad[oa]s?|vedad[oa]s?|independentemente|apenas|exclusivamente|somente|sem\\s+preju[íi]zo)\\b"
+)
+
+private fun truncateChars(raw: String, maxChars: Int): String {
+    val t = raw.trim()
+    return if (t.length <= maxChars) t else t.take(maxChars - 1).trimEnd() + "…"
+}
+
+@Serializable
 data class QuestionDto(
     val id: String,
     @SerialName("question_revision") val questionRevision: String = "",
@@ -256,8 +372,118 @@ data class QuestionDto(
     @SerialName("practice_review_due_on") val practiceReviewDueOn: String? = null,
     @SerialName("knowledge_binding_verified") val knowledgeBindingVerified: Boolean = false,
     @SerialName("concept_ids") val conceptIds: List<String> = emptyList(),
-    @SerialName("evidence_challenge") val evidenceChallenge: EvidenceChallengeDto? = null
-)
+    @SerialName("evidence_challenge") val evidenceChallenge: EvidenceChallengeDto? = null,
+    @SerialName("editorial_card") val editorialCard: EditorialCardDto? = null
+) {
+    /**
+     * Retorna a Ficha Editorial Rastreável curada ou sintetizada deterministicamente
+     * a partir das fontes oficiais do catálogo e do gabarito/enunciado (zero alucinação).
+     */
+    fun effectiveEditorialCard(): EditorialCardDto {
+        if (editorialCard != null && editorialCard.testedRule.isNotBlank()) {
+            return editorialCard
+        }
+        val linkedSources = runCatching {
+            ExamCatalog.normativeSourcesForQuestion(canonicalTopicId, conceptIds)
+        }.getOrDefault(emptyList())
+        val combined = "$question\n${explanation.orEmpty()}"
+        val provisions = linkedSources.map { ns ->
+            if (!ns.locator.isNullOrBlank()) "${ns.title} (${ns.locator})" else ns.title
+        }.toMutableList()
+        LEGAL_PROVISION_REGEX.findAll(combined).forEach { m ->
+            val found = m.value.trim()
+            if (found.length >= 3 && provisions.none { it.equals(found, ignoreCase = true) } && provisions.size < 5) {
+                provisions += truncateChars(found, 120)
+            }
+        }
+        val firstExp = explanation?.lineSequence()
+            ?.map { it.trim() }
+            ?.firstOrNull { it.length >= 12 }
+        val testedRule = when {
+            linkedSources.isNotEmpty() -> truncateChars(linkedSources.first().excerpt, 320)
+            !firstExp.isNullOrBlank() -> truncateChars(firstExp, 320)
+            else -> {
+                val cIdx = correctAnswerIndices.firstOrNull() ?: 0
+                val cText = answers.getOrNull(cIdx) ?: "Gabarito oficial"
+                truncateChars("Critério determinante de $disciplina: gabarito oficial \"$cText\".", 320)
+            }
+        }
+        val exceptionClause = combined.split('.', ';', '\n')
+            .map { it.trim() }
+            .firstOrNull { it.length >= 18 && EXCEPTION_MARKER_REGEX.containsMatchIn(it) }
+            ?.let { truncateChars(it, 260) }
+        val decisiveStem = question.split('.', ';', '?', '\n')
+            .map { it.trim() }
+            .filter { it.length >= 16 }
+            .let { clauses ->
+                clauses.firstOrNull { EXCEPTION_MARKER_REGEX.containsMatchIn(it) } ?: clauses.lastOrNull()
+            }
+            ?.let { truncateChars(it, 240) }
+            ?: truncateChars(question, 240)
+
+        val conceptualErrors = if (questionType == QuestionType.TRUE_FALSE) {
+            listOf(
+                ConceptualErrorItemDto(
+                    errorId = "ERR_REGRA_EXCECAO",
+                    label = "Inversão entre regra geral e exceção/ressalva",
+                    description = "Leitura literal da regra geral desconsiderando condicionante, prazo ou vedação expressa no enunciado."
+                )
+            )
+        } else {
+            val cIdx = correctAnswerIndices.firstOrNull() ?: 0
+            answers.mapIndexedNotNull { idx, ans ->
+                if (idx == cIdx) null
+                else ConceptualErrorItemDto(
+                    errorId = "ERR_ALT_${idx + 1}",
+                    label = truncateChars("Premissa incorreta na alternativa ${'A' + idx}", 90),
+                    description = truncateChars(ans, 200)
+                )
+            }.take(2)
+        }
+
+        return EditorialCardDto(
+            legalProvisions = provisions,
+            testedRule = testedRule,
+            exceptionClause = exceptionClause,
+            decisiveStemExcerpt = decisiveStem,
+            officialSourceExcerpt = linkedSources.firstOrNull()?.excerpt?.let { truncateChars(it, 320) },
+            plausibleConceptualErrors = conceptualErrors
+        )
+    }
+
+    /**
+     * Retorna o desafio opcional pós-resposta apontando exclusivamente para fragmentos do enunciado
+     * e da fonte oficial (sem formular outra questão jurídica).
+     */
+    fun effectiveEvidenceChallenge(): EvidenceChallengeDto? {
+        if (evidenceChallenge != null && evidenceChallenge.options.size >= 2) {
+            return evidenceChallenge
+        }
+        val card = effectiveEditorialCard()
+        val correctText = card.officialSourceExcerpt?.let { src ->
+            truncateChars("Trecho decisivo: \"${card.decisiveStemExcerpt}\" · Fonte: $src", 240)
+        } ?: truncateChars("Trecho decisivo: \"${card.decisiveStemExcerpt}\" · ${card.testedRule}", 240)
+
+        val distractors = mutableListOf<EvidenceOptionDto>()
+        card.plausibleConceptualErrors.take(2).forEachIndexed { i, err ->
+            distractors += EvidenceOptionDto(
+                evidenceId = "ev_err_${i + 1}",
+                text = truncateChars("${err.label}: ${err.description}", 220)
+            )
+        }
+        if (distractors.isEmpty()) {
+            distractors += EvidenceOptionDto(
+                evidenceId = "ev_err_1",
+                text = "Interpretação isolada de termo acessório do enunciado, ignorando a regra/exceção principal."
+            )
+        }
+        return EvidenceChallengeDto(
+            prompt = "Opcional: qual fragmento do enunciado ou da fonte oficial determinou sua resposta?",
+            options = listOf(EvidenceOptionDto(evidenceId = "ev_decisive", text = correctText)) + distractors,
+            correctEvidenceId = "ev_decisive"
+        )
+    }
+}
 
 @Serializable
 data class AnswerAttemptPayload(
@@ -336,7 +562,8 @@ data class DisciplineMasteryBarDto(
     @SerialName("accuracy_pct") val accuracyPct: Double,
     @SerialName("total_attempts") val totalAttempts: Int,
     @SerialName("mastered_questions") val masteredQuestions: Int,
-    @SerialName("points_accumulated") val pointsAccumulated: Double
+    @SerialName("points_accumulated") val pointsAccumulated: Double,
+    @SerialName("distinct_questions") val distinctQuestions: Int = 0
 )
 
 @Serializable
@@ -368,7 +595,11 @@ data class ProgressAnalyticsDto(
     val calibrationCells: List<br.com.concursoprep.app.domain.exam.CalibrationCellDto> = emptyList(),
     val strategyGuidance: List<StrategyBandGuidanceDto> = emptyList(),
     val fatigueReport: br.com.concursoprep.app.domain.exam.FatigueReportDto = br.com.concursoprep.app.domain.exam.FatigueEngine.evaluateFatigue(0, 0, 0, 0, 0),
-    val wrongAnswerPenalty: Double = 0.0
+    val wrongAnswerPenalty: Double = 0.0,
+    val examGapSummary: ExamGapSummaryDto = ExamGapSummaryDto(),
+    val threeSignalSummary: ThreeSignalSummaryDto = ThreeSignalSummaryDto(),
+    val examScenarios: List<ExamMomentScenarioDto> = emptyList(),
+    val entryMetrics: EntryProtocolMetricsDto = EntryProtocolMetricsDto()
 )
 
 /**
@@ -424,4 +655,9 @@ data class ApkUpdateUiState(
 )
 
 @Serializable
-data class RejectedAttemptDto(@SerialName("attempt_id") val attemptId: String, @SerialName("question_id") val questionId: String, val message: String, val retryable: Boolean)
+data class RejectedAttemptDto(
+    @SerialName("attempt_id") val attemptId: String,
+    @SerialName("question_id") val questionId: String,
+    val message: String,
+    val retryable: Boolean
+)

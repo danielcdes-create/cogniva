@@ -24,7 +24,8 @@ import {
   isQuestionDraftDirty,
   reconcileQuestionDraft,
   isExamDraftDirty,
-  reconcileExamDrafts
+  reconcileExamDrafts,
+  buildEditorialCard
 } from './domain.js';
 
 const $ = selector => document.querySelector(selector);
@@ -1403,6 +1404,43 @@ function questionView() {
       }),{type:'number',min:1900,max:2200})
     )
   );
+
+  if (parsed.question_type !== 'OPEN_ENDED') {
+    const edCard = parsed.editorial_card || {};
+    const edState = draft.editorialDraft || {
+      legalProvisionsText: Array.isArray(edCard.legal_provisions) ? edCard.legal_provisions.join('\n') : '',
+      testedRule: edCard.tested_rule || '',
+      exceptionClause: edCard.exception_clause || '',
+      decisiveStemExcerpt: edCard.decisive_stem_excerpt || '',
+      officialSourceExcerpt: edCard.official_source_excerpt || ''
+    };
+    const syncEditorial = () => {
+      draft.editorialDraft = edState;
+      try {
+        const built = buildEditorialCard({
+          ...edState,
+          plausibleConceptualErrors: edCard.plausible_conceptual_errors || []
+        });
+        update(q => {
+          if (built) q.editorial_card = built;
+          else delete q.editorial_card;
+        });
+      } catch {
+        persist();
+      }
+    };
+    fields.append(
+      h('details',{'data-panel-key':`editorial-card:${selectedQuestion}`},
+        h('summary',{},'Ficha Editorial Rastreável (Dispositivos, Regra, Exceção e Trecho Decisivo)'),
+        h('p',{class:'muted'},'Opcional e fora do hash semântico: enriquece o diagnóstico de 3 sinais pós-resposta sem invalidar a validade vigente.'),
+        field('Dispositivos legais / normativos envolvidos (1 por linha)',edState.legalProvisionsText,v=>{edState.legalProvisionsText=v;syncEditorial();},{multiline:true,rows:2,maxlength:2000}),
+        field('Regra cobrada',edState.testedRule,v=>{edState.testedRule=v;syncEditorial();},{multiline:true,rows:2,maxlength:2000}),
+        field('Exceção cobrada ou aplicável (opcional)',edState.exceptionClause,v=>{edState.exceptionClause=v;syncEditorial();},{multiline:true,rows:2,maxlength:2000}),
+        field('Trecho decisivo do enunciado',edState.decisiveStemExcerpt,v=>{edState.decisiveStemExcerpt=v;syncEditorial();},{multiline:true,rows:2,maxlength:1500}),
+        field('Fragmento da fonte oficial (opcional)',edState.officialSourceExcerpt,v=>{edState.officialSourceExcerpt=v;syncEditorial();},{multiline:true,rows:2,maxlength:3000})
+      )
+    );
+  }
 
   const primary=parsed.classification.links.find(link=>link.role==='PRIMARY');
   const choice=draft.classificationChoice || {subjectId:primary?.subject_id || '',topicId:primary?.topic_id || '',confirmed:true};

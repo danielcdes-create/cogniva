@@ -4,16 +4,23 @@ use crate::{
     security::SessionUser,
     services::{
         calibration_engine::{calibrated_probability, CalibrationCellDto},
-        diagnostic_engine::{classify_diagnostic, DiagnosticInputs, DiagnosticStatus},
+        diagnostic_engine::{
+            classify_diagnostic, evaluate_transfer_status, DiagnosticInputs, DiagnosticStatus,
+            TransferInputs, TransferStatus, MIN_QUESTIONS_FOR_MASTERY,
+        },
         exam_engine::{days_until, study_today},
         exam_store,
         fatigue_engine::{evaluate_from_activities, FatigueReport},
         knowledge,
-        prioritization_engine::{priority_utility, PrioritizationInputs},
+        prioritization_engine::{
+            format_entry_60s_header, priority_utility, PrioritizationInputs,
+        },
         quiz_selector::{QuizGenerateRequest, QuizMode},
         retention_engine::retrievability,
         selection_v2,
-        strategy_engine::{evaluate_strategy, StrategyDecision},
+        strategy_engine::{
+            build_exam_moment_scenarios, evaluate_strategy, ExamMomentScenarioDto, StrategyDecision,
+        },
     },
     AppState,
 };
@@ -45,6 +52,24 @@ pub struct ExamGapSummaryDto {
     pub total_units: usize,
     pub wrong_answer_penalty: f64,
     pub historical_cutoff_score: f64,
+    pub min_questions_for_mastery: usize,
+    pub evidence_in_progress_units: usize,
+    pub active_error_units: usize,
+    pub transfer_verified_units: usize,
+    pub transfer_available_units: usize,
+    pub transfer_unmeasured_units: usize,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ThreeSignalSummaryDto {
+    pub grounded_hits: u32,
+    pub illusory_competence_hits: u32,
+    pub hesitant_hits: u32,
+    pub overconfidence_errors: u32,
+    pub conceptual_errors: u32,
+    pub retrieval_failures: u32,
+    pub strategic_omissions: u32,
+    pub omission_net_points_saved: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -56,12 +81,15 @@ pub struct StrategyBandGuidanceDto {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct NextActionResponse {
+    pub schedule_header: String,
     pub entry_question: Option<QuestionDto>,
     pub entry_reason: String,
     pub priority_topic_id: Option<String>,
     pub exam_gap_summary: ExamGapSummaryDto,
+    pub three_signal_summary: ThreeSignalSummaryDto,
     pub calibration_cells: Vec<CalibrationCellDto>,
     pub strategy_guidance: Vec<StrategyBandGuidanceDto>,
+    pub exam_scenarios: Vec<ExamMomentScenarioDto>,
     pub fatigue_report: FatigueReport,
 }
 
@@ -70,6 +98,9 @@ pub async fn get_next_action(
     Extension(user): Extension<SessionUser>,
     Query(query): Query<NextActionQuery>,
 ) -> Result<Json<NextActionResponse>, AppError> {
+    let now_utc = chrono::Utc::now();
+    let schedule_header = format_entry_60s_header(now_utc);
+
     let exams = exam_store::list(&state, user.user_id).await?;
     let active_exam = query
         .contest_id
@@ -87,6 +118,23 @@ pub async fn get_next_action(
                 })
                 .min_by_key(|e| e.ladder_priority)
         });
+
+    let target_boards: HashSet<String> = active_exam
+        .map(|e| {
+            e.exam_boards
+                .iter()
+                .filter(|b| b.as_str() != "A definir" && !b.trim().is_empty())
+                .map(|b| {
+                    let low = b.trim().to_lowercase();
+                    if low == "cespe" {
+                        "cebraspe".to_string()
+                    } else {
+                        low
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default();
 
     let raw_rows: Vec<Document> = state
         .db
@@ -109,11 +157,80 @@ pub async fn get_next_action(
         .collect();
     let q_docs = knowledge::questions(&state.db, user.user_id, qids).await?;
 
-    // Consolida diagnóstico por unidade (`concept_id ?? topic_id`)
+    // Disponibilidade de questões humanas cross-banca por tópico ativo para medir TransferStatus
+    let mut cross_board_supply_by_topic: HashMap<String, usize> = HashMap::new();
+    if let Some(exam) = active_exam {
+        let active_topics: Vec<String> = exam
+            .subjects
+            .iter()
+            .flat_map(|s| &s.topics)
+            .filter(|t| t.diff_status != CanonicalTopicStatus::Arquivado)
+            .map(|t| t.canonical_topic_id.clone())
+            .collect();
+        if !active_topics.is_empty() {
+            let mut supply_cursor = state
+                .db
+                .collection::<Document>("todasQuestoes")
+                .find(doc! {
+                    "status": "ACTIVE",
+                    "validity.status": "CURRENT",
+                    "classification.state": "CONFIRMED",
+                    "question_type": { "$in": ["MULTIPLE_CHOICE", "TRUE_FALSE"] },
+                    "canonical_topic_id": { "$in": &active_topics }
+                })
+                .projection(doc! { "canonical_topic_id": 1, "source": 1 })
+                .limit(2500)
+                .await?;
+            let mut boards_per_topic: HashMap<String, HashSet<String>> = HashMap::new();
+            while let Some(doc_row) = supply_cursor.try_next().await? {
+                let Ok(tid) = doc_row.get_str("canonical_topic_id") else {
+                    continue;
+                };
+                let src = doc_row
+                    .get_str("source")
+                    .unwrap_or("")
+                    .trim()
+                    .to_lowercase();
+                let norm_src = if src == "cespe" {
+                    "cebraspe".to_string()
+                } else {
+                    src
+                };
+                if norm_src.is_empty() || norm_src == "origem não informada" {
+                    continue;
+                }
+                if !target_boards.is_empty() {
+                    if !target_boards.contains(&norm_src) {
+                        *cross_board_supply_by_topic
+                            .entry(tid.to_string())
+                            .or_insert(0) += 1;
+                    }
+                } else {
+                    boards_per_topic
+                        .entry(tid.to_string())
+                        .or_default()
+                        .insert(norm_src);
+                }
+            }
+            if target_boards.is_empty() {
+                for (tid, bset) in boards_per_topic {
+                    if bset.len() >= 2 {
+                        cross_board_supply_by_topic.insert(tid, bset.len() - 1);
+                    }
+                }
+            }
+        }
+    }
+
+    // Consolida diagnóstico de 3 sinais e transferência por unidade (`concept_id ?? topic_id`)
     struct UnitAgg {
+        topic_id: String,
         distinct_qids: HashSet<String>,
+        distinct_boards: HashSet<String>,
         non_blank_attempts: usize,
         correct_attempts: usize,
+        transfer_attempts: usize,
+        transfer_correct_grounded: usize,
         last_is_correct: bool,
         last_confidence: i32,
         had_prior_verified_correct: bool,
@@ -144,9 +261,13 @@ pub async fn get_next_action(
             .unwrap_or(0.0);
         for obs in knowledge::project_units(raw, qdoc) {
             let entry = unit_map.entry(obs.unit_id.clone()).or_insert_with(|| UnitAgg {
+                topic_id: obs.canonical_topic_id.clone(),
                 distinct_qids: HashSet::new(),
+                distinct_boards: HashSet::new(),
                 non_blank_attempts: 0,
                 correct_attempts: 0,
+                transfer_attempts: 0,
+                transfer_correct_grounded: 0,
                 last_is_correct: obs.last_is_correct,
                 last_confidence: obs.last_confidence,
                 had_prior_verified_correct: false,
@@ -158,6 +279,26 @@ pub async fn get_next_action(
                 max_stability: 0.0,
             });
             entry.distinct_qids.insert(obs.question_id);
+            let is_cross_board_obs = if !obs.board_key.is_empty() {
+                let was_other = if !target_boards.is_empty() {
+                    !target_boards.contains(&obs.board_key)
+                } else {
+                    !entry.distinct_boards.is_empty() && !entry.distinct_boards.contains(&obs.board_key)
+                };
+                entry.distinct_boards.insert(obs.board_key);
+                was_other
+            } else {
+                false
+            };
+            if is_cross_board_obs {
+                entry.transfer_attempts += 1;
+                if obs.last_is_correct
+                    && obs.last_confidence >= 2
+                    && obs.evidence_challenge_passed != Some(false)
+                {
+                    entry.transfer_correct_grounded += 1;
+                }
+            }
             entry.non_blank_attempts += obs.non_blank_attempts;
             entry.correct_attempts += obs.correct_attempts;
             entry.had_prior_verified_correct |= obs.had_prior_verified_correct;
@@ -174,10 +315,21 @@ pub async fn get_next_action(
         }
     }
 
-    let now_ms = chrono::Utc::now().timestamp_millis();
-    let mut diag_by_unit: HashMap<String, (DiagnosticStatus, f64, usize, f64)> = HashMap::new();
+    let now_ms = now_utc.timestamp_millis();
+    let mut diag_by_unit: HashMap<String, (DiagnosticStatus, TransferStatus, f64, usize, f64)> =
+        HashMap::new();
     for (uid, agg) in &unit_map {
-        let status = classify_diagnostic(&DiagnosticInputs {
+        let avail_cross = cross_board_supply_by_topic
+            .get(&agg.topic_id)
+            .copied()
+            .unwrap_or(0);
+        let t_status = evaluate_transfer_status(&TransferInputs {
+            distinct_questions: agg.distinct_qids.len(),
+            available_cross_board_questions: avail_cross,
+            transfer_attempts: agg.transfer_attempts,
+            transfer_correct_grounded: agg.transfer_correct_grounded,
+        });
+        let d_status = classify_diagnostic(&DiagnosticInputs {
             distinct_questions: agg.distinct_qids.len(),
             non_blank_attempts: agg.non_blank_attempts,
             correct_attempts: agg.correct_attempts,
@@ -186,6 +338,7 @@ pub async fn get_next_action(
             had_prior_verified_correct: agg.had_prior_verified_correct,
             has_spaced_retention: agg.has_spaced_retention,
             evidence_challenge_passed: agg.evidence_challenge_passed,
+            has_independent_transfer: t_status == TransferStatus::TransferVerified,
         });
         let elapsed_days = ((now_ms - agg.last_answered_ms).max(0) as f64) / 86_400_000.0;
         let r = retrievability(elapsed_days, agg.max_stability);
@@ -194,13 +347,18 @@ pub async fn get_next_action(
         } else {
             60.0
         };
-        diag_by_unit.insert(uid.clone(), (status, r, agg.distinct_qids.len(), avg_s));
+        diag_by_unit.insert(uid.clone(), (d_status, t_status, r, agg.distinct_qids.len(), avg_s));
     }
 
     let mut verified_units = 0usize;
     let mut consolidating_units = 0usize;
     let mut insufficient_units = 0usize;
-    let mut best_topic: Option<(f64, String, String)> = None;
+    let mut evidence_in_progress_units = 0usize;
+    let mut active_error_units = 0usize;
+    let mut transfer_verified_units = 0usize;
+    let mut transfer_available_units = 0usize;
+    let mut transfer_unmeasured_units = 0usize;
+    let mut best_entry_topic: Option<(f64, String, String)> = None;
 
     if let Some(exam) = active_exam {
         let total_weight: f64 = exam
@@ -217,16 +375,46 @@ pub async fn get_next_action(
                 .iter()
                 .filter(|t| t.diff_status != CanonicalTopicStatus::Arquivado)
             {
-                let (st, r, dq, avg_s) = diag_by_unit
+                let default_t = if cross_board_supply_by_topic
                     .get(&top.canonical_topic_id)
                     .copied()
-                    .unwrap_or((DiagnosticStatus::InsufficientEvidence, 0.0, 0, 60.0));
+                    .unwrap_or(0)
+                    > 0
+                {
+                    TransferStatus::TransferAvailable
+                } else {
+                    TransferStatus::TransferUnmeasured
+                };
+                let (st, tst, r, dq, avg_s) = diag_by_unit
+                    .get(&top.canonical_topic_id)
+                    .copied()
+                    .unwrap_or((DiagnosticStatus::InsufficientEvidence, default_t, 0.0, 0, 60.0));
                 match st {
                     DiagnosticStatus::VerifiedCompetence => verified_units += 1,
+                    DiagnosticStatus::EvidenceInProgress
+                    | DiagnosticStatus::ConsolidatedNoTransfer => {
+                        consolidating_units += 1;
+                        evidence_in_progress_units += 1;
+                    }
+                    DiagnosticStatus::OverconfidenceError
+                    | DiagnosticStatus::ConceptualError
+                    | DiagnosticStatus::RetrievalFailure
+                    | DiagnosticStatus::IllusoryCompetence => {
+                        consolidating_units += 1;
+                        active_error_units += 1;
+                    }
                     DiagnosticStatus::InsufficientEvidence if dq == 0 => insufficient_units += 1,
-                    _ => consolidating_units += 1,
+                    DiagnosticStatus::InsufficientEvidence => consolidating_units += 1,
                 }
-                let u = priority_utility(&PrioritizationInputs {
+                match tst {
+                    TransferStatus::TransferVerified => transfer_verified_units += 1,
+                    TransferStatus::TransferAvailable | TransferStatus::TransferProvisional => {
+                        transfer_available_units += 1;
+                    }
+                    TransferStatus::TransferUnmeasured => transfer_unmeasured_units += 1,
+                    TransferStatus::TransferFailed => {}
+                }
+                let base_u = priority_utility(&PrioritizationInputs {
                     edital_weight: norm_w,
                     incidence_weight: 1.0,
                     retrievability: r,
@@ -236,39 +424,67 @@ pub async fn get_next_action(
                     unmet_prerequisites_count: 0,
                     dependent_count: 0,
                 });
+                // Protocolo 60s prioriza assunto familiar (`dq >= 1`) com retenção pendente (`r < 0.90`)
+                let entry_boost = if dq >= 1 && r < 0.90 {
+                    1.65
+                } else if dq >= 1 {
+                    1.20
+                } else {
+                    1.0
+                };
+                let u = base_u * entry_boost;
                 let reason = match st {
+                    DiagnosticStatus::IllusoryCompetence => format!(
+                        "Acerto com premissa divergente em {} — conferir fundamento",
+                        top.display_title
+                    ),
                     DiagnosticStatus::OverconfidenceError => format!(
-                        "Excesso de confiança recente em {} — revisar fundamento",
+                        "Indício de excesso de confiança em {}",
                         top.display_title
                     ),
                     DiagnosticStatus::ConceptualError => format!(
-                        "Lacuna conceitual prioritária em {}",
+                        "Indício de erro conceitual em {}",
                         top.display_title
                     ),
                     DiagnosticStatus::RetrievalFailure => format!(
-                        "Retenção pendente em {} (recuperar após intervalo)",
+                        "Assunto familiar com retenção pendente: {}",
+                        top.display_title
+                    ),
+                    DiagnosticStatus::EvidenceInProgress => format!(
+                        "Evidência em construção ({dq}/{MIN_QUESTIONS_FOR_MASTERY} questões): {}",
+                        top.display_title
+                    ),
+                    DiagnosticStatus::ConsolidatedNoTransfer => format!(
+                        "Testar transferência independente em {}",
                         top.display_title
                     ),
                     DiagnosticStatus::VerifiedCompetence => format!(
-                        "Manutenção espaçada em {}",
+                        "Manutenção leve em {}",
+                        top.display_title
+                    ),
+                    DiagnosticStatus::InsufficientEvidence if dq > 0 => format!(
+                        "Assunto familiar com retenção pendente: {}",
                         top.display_title
                     ),
                     DiagnosticStatus::InsufficientEvidence => format!(
-                        "Tópico relevante do edital com evidência pendente: {}",
+                        "Assunto do edital para explorar sem pressa: {}",
                         top.display_title
                     ),
                 };
-                if best_topic.as_ref().is_none_or(|(best_u, _, _)| u > *best_u) {
-                    best_topic = Some((u, top.canonical_topic_id.clone(), reason));
+                if best_entry_topic
+                    .as_ref()
+                    .is_none_or(|(best_u, _, _)| u > *best_u)
+                {
+                    best_entry_topic = Some((u, top.canonical_topic_id.clone(), reason));
                 }
             }
         }
     }
 
-    let priority_topic_id = best_topic.as_ref().map(|(_, tid, _)| tid.clone());
-    let mut entry_reason = best_topic
+    let priority_topic_id = best_entry_topic.as_ref().map(|(_, tid, _)| tid.clone());
+    let mut entry_reason = best_entry_topic
         .map(|(_, _, r)| r)
-        .unwrap_or_else(|| "Prioridade sugerida: conceito relevante com retenção pendente.".into());
+        .unwrap_or_else(|| "Assunto familiar com retenção pendente.".into());
 
     let mut entry_questions = if let Some(tid) = &priority_topic_id {
         selection_v2::generate(
@@ -277,7 +493,7 @@ pub async fn get_next_action(
                 component_id: None,
                 trunk_focus_slugs: Vec::new(),
                 user_id: user.user_id,
-                mode: QuizMode::AdaptiveLoop,
+                mode: QuizMode::Entry60s,
                 quantity: 1,
                 contest_id: active_exam.map(|e| e.id.clone()),
                 block_name: None,
@@ -301,7 +517,7 @@ pub async fn get_next_action(
                 component_id: None,
                 trunk_focus_slugs: Vec::new(),
                 user_id: user.user_id,
-                mode: QuizMode::AdaptiveLoop,
+                mode: QuizMode::Entry60s,
                 quantity: 1,
                 contest_id: None,
                 block_name: None,
@@ -315,18 +531,22 @@ pub async fn get_next_action(
         .await
         .unwrap_or_default();
         if let Some(first) = entry_questions.first() {
-            entry_reason = format!(
-                "Próxima ação de alto impacto em {} — você pode encerrar após responder.",
-                first.disciplina
-            );
+            entry_reason = format!("Questão curta de {}.", first.disciplina);
         }
     }
 
-    // Células Beta-Binomial por modalidade e faixa de confiança
+    // Consolida Matriz dos 3 Sinais + Células Beta-Binomial
+    let penalty = active_exam.map(|e| e.wrong_answer_penalty).unwrap_or(0.0);
+    let cutoff = active_exam
+        .map(|e| e.historical_cutoff_score)
+        .unwrap_or(0.0);
+
+    let mut three_signal = ThreeSignalSummaryDto::default();
     let mut cell_counts: HashMap<(&'static str, i32), (u32, u32)> = HashMap::new();
+
     for act in &typed_activities {
-        let qt = q_docs
-            .get(&act.question_id)
+        let qdoc_opt = q_docs.get(&act.question_id);
+        let qt = qdoc_opt
             .and_then(|d| d.get_str("question_type").ok())
             .unwrap_or("MULTIPLE_CHOICE");
         let qt_norm = if qt.eq_ignore_ascii_case("TRUE_FALSE") {
@@ -334,8 +554,18 @@ pub async fn get_next_action(
         } else {
             "MULTIPLE_CHOICE"
         };
+        let decoded_ch = qdoc_opt
+            .and_then(|d| crate::services::question_compatibility::decode(d.clone()).ok())
+            .and_then(|q| q.effective_evidence_challenge());
+
+        let mut had_prior_good = false;
         for s in &act.past_sessions {
             if s.is_blank {
+                three_signal.strategic_omissions += 1;
+                if penalty > 0.0 {
+                    // Sob penalidade (ex.: Cebraspe -1), omitir evita perda esperada em itens incertos
+                    three_signal.omission_net_points_saved += 0.25 * penalty;
+                }
                 continue;
             }
             let band = s.nivel_confianca.clamp(1, 3);
@@ -344,8 +574,35 @@ pub async fn get_next_action(
                 entry.0 += 1;
             }
             entry.1 += 1;
+
+            let ev_passed = match (s.selected_evidence_id.as_deref(), decoded_ch.as_ref()) {
+                (Some(sel), Some(ch)) if !sel.trim().is_empty() => {
+                    Some(sel.trim() == ch.correct_evidence_id)
+                }
+                _ => None,
+            };
+
+            if s.status {
+                if ev_passed == Some(false) {
+                    three_signal.illusory_competence_hits += 1;
+                } else if s.nivel_confianca <= 1 {
+                    three_signal.hesitant_hits += 1;
+                } else {
+                    three_signal.grounded_hits += 1;
+                    had_prior_good = true;
+                }
+            } else if s.nivel_confianca >= 3 || (s.nivel_confianca >= 2 && ev_passed == Some(false))
+            {
+                three_signal.overconfidence_errors += 1;
+            } else if had_prior_good {
+                three_signal.retrieval_failures += 1;
+            } else {
+                three_signal.conceptual_errors += 1;
+            }
         }
     }
+    three_signal.omission_net_points_saved =
+        (three_signal.omission_net_points_saved * 100.0).round() / 100.0;
 
     let mut calibration_cells = Vec::new();
     for qt in ["TRUE_FALSE", "MULTIPLE_CHOICE"] {
@@ -355,10 +612,6 @@ pub async fn get_next_action(
         }
     }
 
-    let penalty = active_exam.map(|e| e.wrong_answer_penalty).unwrap_or(0.0);
-    let cutoff = active_exam
-        .map(|e| e.historical_cutoff_score)
-        .unwrap_or(0.0);
     let primary_qt = if penalty > 0.0 {
         "TRUE_FALSE"
     } else {
@@ -379,6 +632,19 @@ pub async fn get_next_action(
         })
         .collect();
 
+    let fatigue_report = evaluate_from_activities(&typed_activities);
+    let medium_cell = calibration_cells
+        .iter()
+        .find(|c| c.question_type == primary_qt && c.confidence_band == 2)
+        .unwrap();
+    let exam_scenarios = build_exam_moment_scenarios(
+        medium_cell.calibrated_mean,
+        medium_cell.credible_sd,
+        penalty,
+        cutoff,
+        fatigue_report.estimated_lambda,
+    );
+
     let total_units = verified_units + consolidating_units + insufficient_units;
     let days_until_exam = active_exam.and_then(|e| match &e.target_date {
         ExamDateTarget::ExactDate { iso_date } => days_until(iso_date, study_today()),
@@ -386,6 +652,7 @@ pub async fn get_next_action(
     });
 
     Ok(Json(NextActionResponse {
+        schedule_header,
         entry_question: entry_questions.into_iter().next(),
         entry_reason,
         priority_topic_id,
@@ -399,9 +666,17 @@ pub async fn get_next_action(
             total_units,
             wrong_answer_penalty: penalty,
             historical_cutoff_score: cutoff,
+            min_questions_for_mastery: MIN_QUESTIONS_FOR_MASTERY,
+            evidence_in_progress_units,
+            active_error_units,
+            transfer_verified_units,
+            transfer_available_units,
+            transfer_unmeasured_units,
         },
+        three_signal_summary: three_signal,
         calibration_cells,
         strategy_guidance,
-        fatigue_report: evaluate_from_activities(&typed_activities),
+        exam_scenarios,
+        fatigue_report,
     }))
 }

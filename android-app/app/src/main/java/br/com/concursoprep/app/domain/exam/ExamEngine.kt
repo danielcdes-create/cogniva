@@ -806,7 +806,106 @@ object ExamCatalog {
     private val bundledKnowledge: JsonObject by lazy {
         checkNotNull(ExamCatalog::class.java.getResourceAsStream("/knowledge-catalog.json")).bufferedReader(Charsets.UTF_8).use { Json.parseToJsonElement(it.readText()).jsonObject }
     }
+    private val bundledConceptSeed: JsonObject by lazy {
+        ExamCatalog::class.java.getResourceAsStream("/knowledge-concepts-seed.json")
+            ?.bufferedReader(Charsets.UTF_8)
+            ?.use { Json.parseToJsonElement(it.readText()).jsonObject }
+            ?: buildJsonObject {}
+    }
     private val knowledge: JsonObject get() = installedKnowledge ?: bundledKnowledge
+
+    private fun foldSearchKey(raw: String): String =
+        java.text.Normalizer.normalize(raw, java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{M}+"), "")
+            .lowercase()
+
+    private fun effectiveNormativeSources(): List<JsonObject> {
+        val fromCat = (knowledge["normative_sources"] as? JsonArray)?.map { it.jsonObject }.orEmpty()
+        if (fromCat.isNotEmpty()) return fromCat
+        return (bundledConceptSeed["normative_sources"] as? JsonArray)?.map { it.jsonObject }.orEmpty()
+    }
+
+    private fun effectiveConcepts(): List<JsonObject> {
+        val fromCat = (knowledge["concepts"] as? JsonArray)?.map { it.jsonObject }.orEmpty()
+        if (fromCat.isNotEmpty()) return fromCat
+        return (bundledConceptSeed["concepts"] as? JsonArray)?.map { it.jsonObject }.orEmpty()
+    }
+
+    fun normativeSourcesForQuestion(
+        canonicalTopicId: String?,
+        conceptIds: List<String>
+    ): List<br.com.concursoprep.app.domain.model.NormativeLookupItemDto> {
+        val concepts = effectiveConcepts()
+        val wantedSourceIds = linkedSetOf<String>()
+        for (c in concepts) {
+            if (c["status"]?.jsonPrimitive?.contentOrNull != "ACTIVE") continue
+            val cid = c["concept_id"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            val cTopic = c["topic_id"]?.jsonPrimitive?.contentOrNull
+            if (cid in conceptIds || (conceptIds.isEmpty() && !canonicalTopicId.isNullOrBlank() && cTopic == canonicalTopicId)) {
+                (c["source_ids"] as? JsonArray)?.forEach { s ->
+                    s.jsonPrimitive.contentOrNull?.let { wantedSourceIds += it }
+                }
+            }
+        }
+        if (wantedSourceIds.isEmpty()) return emptyList()
+        return effectiveNormativeSources()
+            .filter { it["status"]?.jsonPrimitive?.contentOrNull == "ACTIVE" && it["source_id"]?.jsonPrimitive?.contentOrNull in wantedSourceIds }
+            .map { ns ->
+                br.com.concursoprep.app.domain.model.NormativeLookupItemDto(
+                    sourceId = ns["source_id"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                    title = ns["title"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                    locator = ns["locator"]?.jsonPrimitive?.contentOrNull,
+                    excerpt = ns["excerpt"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                    canonicalUri = ns["canonical_uri"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                )
+            }
+    }
+
+    fun lookupCatalogMatches(
+        selectedText: String
+    ): Pair<List<br.com.concursoprep.app.domain.model.NormativeLookupItemDto>, List<br.com.concursoprep.app.domain.model.ConceptLookupItemDto>> {
+        val trimmed = selectedText.trim()
+        if (trimmed.isEmpty()) return emptyList<br.com.concursoprep.app.domain.model.NormativeLookupItemDto>() to emptyList()
+        val folded = foldSearchKey(trimmed)
+        val terms = folded.split(Regex("\\s+")).filter { it.length >= 3 }.take(6)
+
+        val normMatches = mutableListOf<br.com.concursoprep.app.domain.model.NormativeLookupItemDto>()
+        for (ns in effectiveNormativeSources()) {
+            if (ns["status"]?.jsonPrimitive?.contentOrNull != "ACTIVE") continue
+            val title = ns["title"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            val locator = ns["locator"]?.jsonPrimitive?.contentOrNull
+            val excerpt = ns["excerpt"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            val uri = ns["canonical_uri"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            val hay = foldSearchKey("$title ${locator.orEmpty()} $excerpt")
+            val hit = hay.contains(folded) || (terms.isNotEmpty() && terms.count { hay.contains(it) } >= minOf(2, terms.size))
+            if (hit) {
+                normMatches += br.com.concursoprep.app.domain.model.NormativeLookupItemDto(
+                    sourceId = ns["source_id"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                    title = title,
+                    locator = locator,
+                    excerpt = excerpt,
+                    canonicalUri = uri
+                )
+                if (normMatches.size >= 4) break
+            }
+        }
+
+        val conceptMatches = mutableListOf<br.com.concursoprep.app.domain.model.ConceptLookupItemDto>()
+        for (c in effectiveConcepts()) {
+            if (c["status"]?.jsonPrimitive?.contentOrNull != "ACTIVE") continue
+            val label = c["label"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            val hay = foldSearchKey(label)
+            val hit = hay.contains(folded) || (terms.isNotEmpty() && terms.count { hay.contains(it) } >= minOf(2, terms.size))
+            if (hit) {
+                conceptMatches += br.com.concursoprep.app.domain.model.ConceptLookupItemDto(
+                    conceptId = c["concept_id"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                    label = label
+                )
+                if (conceptMatches.size >= 4) break
+            }
+        }
+        return normMatches to conceptMatches
+    }
     fun installKnowledge(value: JsonObject) {
         require(value["catalog_id"] == bundledKnowledge["catalog_id"] && value["subjects"] is JsonArray && value["topics"] is JsonArray)
         installedKnowledge = value

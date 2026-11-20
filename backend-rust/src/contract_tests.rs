@@ -5,7 +5,11 @@ use serde_json::Value;
 fn both_runtimes_share_utf8_mastery_weighted_score_srs_and_calendar_fixtures() {
     let f: Value =
         serde_json::from_str(include_str!("../../shared/domain-contracts.json")).unwrap();
-    assert_eq!(f["contract_version"].as_i64(), Some(4));
+    assert_eq!(f["contract_version"].as_i64(), Some(5));
+    assert_eq!(
+        f["min_questions_for_mastery"].as_u64(),
+        Some(crate::services::diagnostic_engine::MIN_QUESTIONS_FOR_MASTERY as u64)
+    );
 
     let catalog = question_contracts::catalog();
     assert_eq!(catalog["schema_version"].as_i64(), Some(2));
@@ -77,7 +81,16 @@ fn both_runtimes_share_utf8_mastery_weighted_score_srs_and_calendar_fixtures() {
         );
     }
 
-    // Contract v4 parity suites across all 5 decision engines + Holdout 20%
+    // Contract v5 parity suites across Entry 60s, 3-Signal Diagnostics (<15 scarcity), Transfer, Retention, Prioritization, Calibration, 300m Model, Decision Under Uncertainty & Difficulty-Controlled Fatigue
+    for v in f["entry_60s"].as_array().unwrap() {
+        let instant = chrono::DateTime::parse_from_rfc3339(v["instant"].as_str().unwrap()).unwrap();
+        assert_eq!(
+            crate::services::prioritization_engine::format_entry_60s_header(
+                instant.with_timezone(&chrono::Utc)
+            ),
+            v["expected_header"].as_str().unwrap()
+        );
+    }
     for v in f["holdout"].as_array().unwrap() {
         let actual = crate::services::strategy_engine::is_holdout_reserved(
             v["user_id"].as_i64().unwrap(),
@@ -97,6 +110,21 @@ fn both_runtimes_share_utf8_mastery_weighted_score_srs_and_calendar_fixtures() {
                 had_prior_verified_correct: v["had_prior_verified_correct"].as_bool().unwrap(),
                 has_spaced_retention: v["has_spaced_retention"].as_bool().unwrap(),
                 evidence_challenge_passed: v["evidence_challenge_passed"].as_bool(),
+                has_independent_transfer: v["has_independent_transfer"].as_bool().unwrap(),
+            },
+        );
+        assert_eq!(actual.as_str(), v["expected"].as_str().unwrap());
+    }
+    for v in f["transfer"].as_array().unwrap() {
+        let actual = crate::services::diagnostic_engine::evaluate_transfer_status(
+            &crate::services::diagnostic_engine::TransferInputs {
+                distinct_questions: v["distinct_questions"].as_u64().unwrap() as usize,
+                available_cross_board_questions: v["available_cross_board_questions"]
+                    .as_u64()
+                    .unwrap() as usize,
+                transfer_attempts: v["transfer_attempts"].as_u64().unwrap() as usize,
+                transfer_correct_grounded: v["transfer_correct_grounded"].as_u64().unwrap()
+                    as usize,
             },
         );
         assert_eq!(actual.as_str(), v["expected"].as_str().unwrap());
@@ -149,6 +177,61 @@ fn both_runtimes_share_utf8_mastery_weighted_score_srs_and_calendar_fixtures() {
         assert!((cell.calibrated_mean - v["expected_mean"].as_f64().unwrap()).abs() < 1e-8);
         assert!((cell.credible_sd - v["expected_sd"].as_f64().unwrap()).abs() < 1e-8);
     }
+    assert!(
+        (crate::services::strategy_engine::normalize_binary_choice_probability(0.48) - 0.52).abs()
+            < 1e-9
+    );
+    for v in f["performance_300m"].as_array().unwrap() {
+        let (p0, pt) = crate::services::fatigue_engine::performance_at_minute(
+            v["p_base"].as_f64().unwrap(),
+            v["item_difficulty"].as_f64().unwrap(),
+            v["lambda_i"].as_f64().unwrap(),
+            v["elapsed_minutes"].as_f64().unwrap(),
+        );
+        assert!((p0 - v["expected_p0"].as_f64().unwrap()).abs() < 1e-8);
+        assert!((pt - v["expected_pt"].as_f64().unwrap()).abs() < 1e-8);
+    }
+    for v in f["decision_uncertainty"].as_array().unwrap() {
+        let res = crate::services::strategy_engine::simulate_decision_under_uncertainty(
+            &crate::services::strategy_engine::UncertaintyDecisionInputs {
+                p_base: v["p_base"].as_f64().unwrap(),
+                uncertainty_sd: v["uncertainty_sd"].as_f64().unwrap(),
+                penalty: v["penalty"].as_f64().unwrap(),
+                item_difficulty: v["item_difficulty"].as_f64().unwrap(),
+                lambda_i: v["lambda_i"].as_f64().unwrap(),
+                elapsed_minutes: v["elapsed_minutes"].as_f64().unwrap(),
+                current_net_score: v["current_net_score"].as_f64().unwrap(),
+                remaining_items: v["remaining_items"].as_u64().unwrap() as usize,
+                target_score: v["target_score"].as_f64().unwrap(),
+                minimum_score: v["minimum_score"].as_f64().unwrap(),
+                baseline_future_p: v["baseline_future_p"].as_f64().unwrap(),
+            },
+        );
+        assert!((res.p0 - v["expected_p0"].as_f64().unwrap()).abs() < 1e-8);
+        assert!((res.p_at_time - v["expected_pt"].as_f64().unwrap()).abs() < 1e-8);
+        assert!((res.expected_value - v["expected_ev"].as_f64().unwrap()).abs() < 1e-8);
+        assert!(
+            (res.risk_neutral_threshold - v["expected_p_star"].as_f64().unwrap()).abs() < 1e-8
+        );
+        assert!(
+            (res.prob_goal_if_answer - v["expected_prob_goal_if_answer"].as_f64().unwrap()).abs()
+                < 1e-8
+        );
+        assert!(
+            (res.prob_goal_if_omit - v["expected_prob_goal_if_omit"].as_f64().unwrap()).abs()
+                < 1e-8
+        );
+        let posture_str = serde_json::to_value(res.posture).unwrap();
+        let action_str = serde_json::to_value(res.recommended_action).unwrap();
+        assert_eq!(
+            posture_str.as_str().unwrap(),
+            v["expected_posture"].as_str().unwrap()
+        );
+        assert_eq!(
+            action_str.as_str().unwrap(),
+            v["expected_action"].as_str().unwrap()
+        );
+    }
     for v in f["strategy"].as_array().unwrap() {
         let dec = crate::services::strategy_engine::evaluate_strategy(
             v["p_calibrated"].as_f64().unwrap(),
@@ -169,15 +252,24 @@ fn both_runtimes_share_utf8_mastery_weighted_score_srs_and_calendar_fixtures() {
         assert_eq!(action_str.as_str().unwrap(), v["expected_action"].as_str().unwrap());
     }
     for v in f["fatigue"].as_array().unwrap() {
-        let rep = crate::services::fatigue_engine::evaluate_fatigue(
+        let rep = crate::services::fatigue_engine::evaluate_fatigue_with_difficulty(
             v["qualifying_sessions"].as_u64().unwrap() as u32,
             v["early_correct"].as_u64().unwrap() as u32,
             v["early_total"].as_u64().unwrap() as u32,
             v["late_correct"].as_u64().unwrap() as u32,
             v["late_total"].as_u64().unwrap() as u32,
+            v["early_avg_difficulty"].as_f64().unwrap(),
+            v["late_avg_difficulty"].as_f64().unwrap(),
+            v["early_mean_minutes"].as_f64().unwrap(),
+            v["late_mean_minutes"].as_f64().unwrap(),
         );
         let status_str = serde_json::to_value(rep.status).unwrap();
         assert_eq!(status_str.as_str().unwrap(), v["expected_status"].as_str().unwrap());
+        match (rep.estimated_lambda, v["expected_lambda"].as_f64()) {
+            (None, None) => {}
+            (Some(a), Some(b)) => assert!((a - b).abs() < 1e-8),
+            other => panic!("fatigue lambda mismatch: {other:?}"),
+        }
         match (rep.shrunk_accuracy_delta, v["expected_shrunk_delta"].as_f64()) {
             (None, None) => {}
             (Some(a), Some(b)) => assert!((a - b).abs() < 1e-8),

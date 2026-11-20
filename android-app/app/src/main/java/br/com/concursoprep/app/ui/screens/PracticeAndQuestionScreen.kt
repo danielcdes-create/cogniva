@@ -28,6 +28,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -53,7 +54,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -68,6 +71,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
@@ -81,15 +86,26 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import java.util.Locale
 import br.com.concursoprep.app.R
+import br.com.concursoprep.app.domain.exam.CalibrationCellDto
+import br.com.concursoprep.app.domain.exam.CalibrationEngine
 import br.com.concursoprep.app.domain.exam.ExamCatalog
+import br.com.concursoprep.app.domain.exam.ExamMomentScenarioDto
+import br.com.concursoprep.app.domain.exam.StrategyAction
+import br.com.concursoprep.app.domain.exam.StrategyEngine
+import br.com.concursoprep.app.domain.exam.StrategyPosture
+import br.com.concursoprep.app.domain.exam.UncertaintyDecisionInputs
+import br.com.concursoprep.app.domain.model.ContextualLookupUiState
 import br.com.concursoprep.app.domain.model.QuestionDto
 import br.com.concursoprep.app.domain.model.QuestionType
 import br.com.concursoprep.app.domain.model.QuizMode
 import br.com.concursoprep.app.domain.model.VALID_PROBLEM_CATEGORIES
 import br.com.concursoprep.app.ui.components.ConfidenceSelectorGrid
+import br.com.concursoprep.app.ui.components.ContextualLookupBottomSheet
+import br.com.concursoprep.app.ui.components.LayerSelectionTextToolbar
 import br.com.concursoprep.app.ui.components.MarkdownParser
 import br.com.concursoprep.app.ui.components.OptionCard
 import br.com.concursoprep.app.ui.components.QuestionActionChips
+import br.com.concursoprep.app.ui.components.extractSuggestedLookupTerms
 import br.com.concursoprep.app.ui.theme.CognivaBrandHeader
 import br.com.concursoprep.app.ui.theme.LocalExtendedColors
 import kotlinx.coroutines.delay
@@ -144,14 +160,24 @@ fun PracticeHubScreen(
             }
 
             PracticeModeCard(
+                title = "Protocolo de Entrada de 60s (1 Questão)",
+                description = "Compromisso reversível: uma questão humana curta de assunto familiar com saída livre imediata.",
+                onClick = { onLaunchSession(QuizMode.ENTRY_60S, 1) }
+            )
+            PracticeModeCard(
+                title = "Simulador de Decisão sob Incerteza (8–12 min)",
+                description = "Questões reais em cenários de prova (35m, 165m, 275m, 285m) maximizando P(atingir meta) sob VE = 2p − 1.",
+                onClick = { onLaunchSession(QuizMode.STRATEGY_BATTERY, selectedQuantity.coerceAtMost(12)) }
+            )
+            PracticeModeCard(
+                title = "Avaliação de Transferência Cross-Banca",
+                description = "Conjunto separado de questões humanas inéditas de outras bancas para validar transferência real de conceito.",
+                onClick = { onLaunchSession(QuizMode.TRANSFER_PROBE, selectedQuantity) }
+            )
+            PracticeModeCard(
                 title = "Treinamento Adaptativo (Rota 40/40/20)",
                 description = "Intercala revisões próximas do esquecimento, lacunas diagnósticas e tópicos novos de alto impacto no edital.",
                 onClick = { onLaunchSession(QuizMode.ADAPTIVE_LOOP, selectedQuantity) }
-            )
-            PracticeModeCard(
-                title = "Estratégia de Prova (Decisão sob Pressão)",
-                description = "Bateria curta com regras reais de correção e omissão estratégica (VE), priorizando reserva de validação.",
-                onClick = { onLaunchSession(QuizMode.STRATEGY_BATTERY, selectedQuantity) }
             )
             PracticeModeCard(
                 title = "Revisão Espaçada (SRS)",
@@ -249,6 +275,15 @@ fun QuestionSessionScreen(
     allowBlankAnswer: Boolean = false,
     isSmartEntrySession: Boolean = false,
     onContinueAdaptiveRoute: () -> Unit = {},
+    onResolveAnotherEntry: () -> Unit = onContinueAdaptiveRoute,
+    isStrategySimulator: Boolean = false,
+    examScenarios: List<ExamMomentScenarioDto> = emptyList(),
+    calibrationCells: List<CalibrationCellDto> = emptyList(),
+    estimatedLambda: Double? = null,
+    contextualLookupState: ContextualLookupUiState? = null,
+    onOpenContextualLookup: ((QuestionDto, String) -> Unit)? = null,
+    onRequestContextualLookupAi: (questionId: String, selectedText: String, isAnswerSubmitted: Boolean) -> Unit = { _, _, _ -> },
+    onDismissContextualLookup: () -> Unit = {},
     onSelectEvidence: (questionId: String, evidenceId: String) -> Unit = { _, _ -> },
     onSubmitExtendedAnswer: (suspend (question: QuestionDto, chosenIndex: Int, confidenceLevel: Int, timeSpentSeconds: Int, isBlank: Boolean, confidenceExplicit: Boolean) -> Boolean)? = null
 ) {
@@ -283,12 +318,13 @@ fun QuestionSessionScreen(
         }
     }
 
-    BackHandler(enabled = !showReportSheet && aiTutorMarkdown == null) {
+    BackHandler(enabled = !showReportSheet && aiTutorMarkdown == null && contextualLookupState == null) {
         handleBackNavigation()
     }
 
     LaunchedEffect(currentIndex) {
         onDismissAiSheet()
+        onDismissContextualLookup()
     }
 
     val deadline by rememberSaveable(snapshot?.sessionId) { mutableStateOf(snapshot?.deadlineEpochMs ?: (System.currentTimeMillis()+questions.size*180000L)) }
@@ -446,6 +482,8 @@ fun QuestionSessionScreen(
     ) {
         ExamCatalog.resolveQuestionHeaderMeta(question, snapshot?.exam)
     }
+    val editorial = remember(question.id, question.questionRevision) { question.effectiveEditorialCard() }
+    val challenge = remember(question.id, question.questionRevision) { question.effectiveEvidenceChallenge() }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -794,6 +832,56 @@ fun QuestionSessionScreen(
                     }
                 }
 
+                if (isStrategySimulator && !hideFeedback) {
+                    item(key = "strategy_simulator_scenario") {
+                        val activePenalty = snapshot?.exam?.wrongAnswerPenalty ?: 1.0
+                        val activeCutoff = snapshot?.exam?.historicalCutoffScore ?: 65.0
+                        val fallbackScenarios = remember(activePenalty, activeCutoff, estimatedLambda) {
+                            StrategyEngine.buildExamMomentScenarios(
+                                mediumP = 0.62,
+                                mediumSd = 0.08,
+                                penalty = activePenalty,
+                                cutoffPct = activeCutoff,
+                                lambdaI = estimatedLambda
+                            )
+                        }
+                        val activeList = examScenarios.ifEmpty { fallbackScenarios }
+                        val scenario = activeList[currentIndex % activeList.size]
+                        Card(
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = "Simulador de Decisão · ${scenario.label}",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Estado simulado: ${scenario.currentNetScore} pts · Faltam ${scenario.remainingItems} itens · Meta ${scenario.targetScore.toInt()} pts (mínimo ${scenario.minimumScore.toInt()} pts)",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    text = if (scenario.calibratedLongitudinal) {
+                                        "Curva 300 min calibrada longitudinalmente (λᵢ com controle de dificuldade)."
+                                    } else {
+                                        "Cenário matemático de decisão (calibração fisiológica real de fadiga exige ≥ 3 simulados longos)."
+                                    },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f)
+                                )
+                            }
+                        }
+                    }
+                }
+
                 if (question.isBorrowedAnalogous) {
                     item(key = "borrowed_badge") {
                         Surface(
@@ -821,6 +909,16 @@ fun QuestionSessionScreen(
                 }
 
                 item(key = "question_text") {
+                    val clipboardManager = LocalClipboardManager.current
+                    val layerToolbar = remember(question.id, onOpenContextualLookup) {
+                        if (onOpenContextualLookup != null) {
+                            LayerSelectionTextToolbar(clipboardManager) { selected ->
+                                onOpenContextualLookup(question, selected)
+                            }
+                        } else {
+                            null
+                        }
+                    }
                     Card(
                         shape = RoundedCornerShape(14.dp),
                         colors = CardDefaults.cardColors(
@@ -829,11 +927,62 @@ fun QuestionSessionScreen(
                         ),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(
-                            text = question.question,
-                            style = MaterialTheme.typography.titleLarge,
-                            modifier = Modifier.padding(16.dp)
-                        )
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            if (layerToolbar != null) {
+                                CompositionLocalProvider(LocalTextToolbar provides layerToolbar) {
+                                    SelectionContainer {
+                                        Text(
+                                            text = question.question,
+                                            style = MaterialTheme.typography.titleLarge,
+                                            modifier = Modifier.padding(16.dp)
+                                        )
+                                    }
+                                }
+                                if (layerToolbar.isVisible) {
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.primaryContainer,
+                                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        shape = RoundedCornerShape(bottomStart = 14.dp, bottomEnd = 14.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Button(
+                                                onClick = { layerToolbar.triggerLookupFromSelection() },
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .heightIn(min = 40.dp),
+                                                shape = RoundedCornerShape(10.dp)
+                                            ) {
+                                                Text(
+                                                    text = "Consultar trecho em Camada / Google",
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                            OutlinedButton(
+                                                onClick = { layerToolbar.triggerCopyOnly() },
+                                                modifier = Modifier.heightIn(min = 40.dp),
+                                                shape = RoundedCornerShape(10.dp)
+                                            ) {
+                                                Text("Copiar")
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                Text(
+                                    text = question.question,
+                                    style = MaterialTheme.typography.titleLarge,
+                                    modifier = Modifier.padding(16.dp)
+                                )
+                            }
+                        }
                     }
                 }
 
@@ -856,6 +1005,14 @@ fun QuestionSessionScreen(
                             },
                             onSimplify = {
                                 onRequestAiTutor(question.id, "child-friendly-pre", "Simplificar Pergunta", null)
+                            },
+                            onLookupLayer = if (onOpenContextualLookup != null) {
+                                {
+                                    val seed = extractSuggestedLookupTerms(question).firstOrNull().orEmpty()
+                                    onOpenContextualLookup(question, seed)
+                                }
+                            } else {
+                                null
                             }
                         )
                     }
@@ -1044,6 +1201,8 @@ fun QuestionSessionScreen(
                 }
 
                 if (isAnswerSubmitted && !hideFeedback) {
+                    val correctOptionLabel = question.answers.getOrNull(correctIndex) ?: "Gabarito oficial"
+
                     item(key = "post_feedback") {
                         Card(
                             shape = RoundedCornerShape(14.dp),
@@ -1067,9 +1226,9 @@ fun QuestionSessionScreen(
                             ) {
                                 Text(
                                     text = when {
-                                        isBlankAnswer -> "Questão em Branco · Veja o gabarito comentado abaixo"
-                                        isUserCorrect -> "Resposta Correta! (+Pontos SRS)"
-                                        else -> "Resposta Incorreta · Adicionada ao Caderno de Erros"
+                                        isBlankAnswer -> "Em Branco (0 pt) · Gabarito: $correctOptionLabel"
+                                        isUserCorrect -> "Resposta Correta · Gabarito: $correctOptionLabel"
+                                        else -> "Resposta Incorreta · Gabarito: $correctOptionLabel"
                                     },
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold
@@ -1082,7 +1241,7 @@ fun QuestionSessionScreen(
                                         contentColor = ext.onError
                                     ) {
                                         Text(
-                                            text = "Alerta de Ponto Cego: Você errou com alta confiança. Prioridade máxima na próxima revisão!",
+                                            text = "Indício de Excesso de Confiança: erro declarado com confiança alta. Prioridade elevada de revisão.",
                                             style = MaterialTheme.typography.bodyMedium,
                                             fontWeight = FontWeight.SemiBold,
                                             modifier = Modifier.padding(10.dp)
@@ -1090,16 +1249,59 @@ fun QuestionSessionScreen(
                                     }
                                 }
 
-                                val expText = question.explanation
-                                    ?: "Toque em 'Análise das Alternativas' abaixo para ver o comentário pedagógico detalhado."
-                                Text(
-                                    text = remember(expText) { MarkdownParser.parse(expText) },
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
+                                // Ficha Editorial Rastreável (Fundamento Legal, Regra, Exceção e Erro Objetivo)
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = MaterialTheme.colorScheme.surface,
+                                    contentColor = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        if (editorial.legalProvisions.isNotEmpty()) {
+                                            Text(
+                                                text = "Fundamento: " + editorial.legalProvisions.joinToString(" · "),
+                                                style = MaterialTheme.typography.labelLarge,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                        Text(
+                                            text = "Regra cobrada: ${editorial.testedRule}",
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                        editorial.exceptionClause?.takeIf { it.isNotBlank() }?.let { exc ->
+                                            Text(
+                                                text = "Ressalva / Exceção: $exc",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = ext.warning
+                                            )
+                                        }
+                                        if (!isUserCorrect && !isBlankAnswer && editorial.plausibleConceptualErrors.isNotEmpty()) {
+                                            val err = editorial.plausibleConceptualErrors.first()
+                                            Text(
+                                                text = "Indicação objetiva do erro: ${err.label} — ${err.description}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = ext.error
+                                            )
+                                        }
+                                    }
+                                }
 
-                                Spacer(modifier = Modifier.height(4.dp))
+                                question.explanation?.takeIf { it.isNotBlank() }?.let { expText ->
+                                    Text(
+                                        text = remember(expText) { MarkdownParser.parse(expText) },
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "Aprofundar com Cogniva AI:",
+                                    text = "Aprofundar ou consultar trecho:",
                                     style = MaterialTheme.typography.labelMedium
                                 )
 
@@ -1107,6 +1309,16 @@ fun QuestionSessionScreen(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     verticalArrangement = Arrangement.spacedBy(0.dp)
                                 ) {
+                                    if (onOpenContextualLookup != null) {
+                                        AssistChip(
+                                            onClick = {
+                                                val seed = editorial.legalProvisions.firstOrNull()
+                                                    ?: extractSuggestedLookupTerms(question).firstOrNull().orEmpty()
+                                                onOpenContextualLookup(question, seed)
+                                            },
+                                            label = { Text("Consultar / Google em Camada") }
+                                        )
+                                    }
                                     AssistChip(
                                         onClick = { onRequestAiTutor(question.id, "explanation", "Gabarito Comentado Completo", null) },
                                         label = { Text("Análise das Alternativas") }
@@ -1132,9 +1344,98 @@ fun QuestionSessionScreen(
                         }
                     }
 
-                    val challenge = question.evidenceChallenge
-                    if (!isUserCorrect && !isBlankAnswer && challenge != null && challenge.options.isNotEmpty()) {
+                    // Veredito do Simulador de Decisão sob Incerteza (quando em bateria de estratégia)
+                    if (isStrategySimulator) {
+                        item(key = "strategy_simulator_verdict") {
+                            val activePenalty = snapshot?.exam?.wrongAnswerPenalty ?: 1.0
+                            val activeCutoff = snapshot?.exam?.historicalCutoffScore ?: 65.0
+                            val qtKey = if (question.questionType == QuestionType.TRUE_FALSE) "TRUE_FALSE" else "MULTIPLE_CHOICE"
+                            val band = if (isBlankAnswer) 1 else selectedConfidence.coerceIn(1, 3)
+                            val cell = calibrationCells.firstOrNull { it.questionType == qtKey && it.confidenceBand == band }
+                                ?: CalibrationEngine.calibratedProbability(qtKey, band, 0, 0)
+                            val rawP = if (question.questionType == QuestionType.TRUE_FALSE) {
+                                StrategyEngine.normalizeBinaryChoiceProbability(cell.calibratedMean)
+                            } else {
+                                cell.calibratedMean
+                            }
+                            val fallbackScenarios = remember(activePenalty, activeCutoff, estimatedLambda) {
+                                StrategyEngine.buildExamMomentScenarios(
+                                    mediumP = 0.62,
+                                    mediumSd = 0.08,
+                                    penalty = activePenalty,
+                                    cutoffPct = activeCutoff,
+                                    lambdaI = estimatedLambda
+                                )
+                            }
+                            val activeList = examScenarios.ifEmpty { fallbackScenarios }
+                            val scenario = activeList[currentIndex % activeList.size]
+                            val sim = StrategyEngine.simulateDecisionUnderUncertainty(
+                                UncertaintyDecisionInputs(
+                                    pBase = rawP,
+                                    uncertaintySd = cell.credibleSd,
+                                    penalty = activePenalty,
+                                    itemDifficulty = 0.50,
+                                    lambdaI = estimatedLambda ?: 0.0,
+                                    elapsedMinutes = scenario.elapsedMinutes.toDouble(),
+                                    currentNetScore = scenario.currentNetScore,
+                                    remainingItems = scenario.remainingItems,
+                                    targetScore = scenario.targetScore,
+                                    minimumScore = scenario.minimumScore,
+                                    baselineFutureP = 0.72
+                                )
+                            )
+                            val ptLocale = Locale.forLanguageTag("pt-BR")
+                            val evStr = String.format(ptLocale, "%+.2f pt", sim.expectedValue)
+                            val pAnsPct = String.format(ptLocale, "%.1f%%", sim.probGoalIfAnswer * 100.0)
+                            val pOmitPct = String.format(ptLocale, "%.1f%%", sim.probGoalIfOmit * 100.0)
+                            val postureLabel = when (sim.posture) {
+                                StrategyPosture.PROTECT_MARGIN -> "Proteger margem acima da meta"
+                                StrategyPosture.CALCULATED_RISK -> "Risco calculado p/ buscar a meta"
+                                StrategyPosture.MAXIMIZE_EV -> "Maximizar valor esperado"
+                            }
+                            val recLabel = if (sim.recommendedAction == StrategyAction.OMIT) "Omitir (Deixar em Branco)" else "Responder"
+
+                            Card(
+                                shape = RoundedCornerShape(14.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surface,
+                                    contentColor = MaterialTheme.colorScheme.onSurface
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(
+                                        text = "Análise de Decisão sob Incerteza (${scenario.elapsedMinutes} min)",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "p(t) estimada = ${(sim.pAtTime * 100.0).toInt()}% · Valor Esperado VE = $evStr",
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Text(
+                                        text = "P(atingir meta | Responder) = $pAnsPct vs. P(atingir meta | Omitir) = $pOmitPct",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = "Decisão ótima p/ meta: $recLabel ($postureLabel)",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Diagnóstico dos 3 Sinais: Resposta × Confiança × Evidência Selecionada (em acertos e erros, sem nova pergunta jurídica)
+                    if (!isBlankAnswer && challenge != null && challenge.options.isNotEmpty()) {
                         item(key = "evidence_challenge") {
+                            val pickedWrongEvidenceOnHit = isUserCorrect && selectedEvidenceId != null && selectedEvidenceId != challenge.correctEvidenceId
                             Card(
                                 shape = RoundedCornerShape(14.dp),
                                 colors = CardDefaults.cardColors(
@@ -1148,7 +1449,7 @@ fun QuestionSessionScreen(
                                     verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     Text(
-                                        text = "Diagnóstico de Evidência (Opcional)",
+                                        text = "Rastreabilidade da Resposta · 3 Sinais (Opcional)",
                                         style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.Bold
                                     )
@@ -1190,11 +1491,27 @@ fun QuestionSessionScreen(
                                             )
                                         }
                                     }
+                                    if (pickedWrongEvidenceOnHit) {
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = ext.warningContainer,
+                                            contentColor = ext.onWarningContainer,
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text(
+                                                text = "Indício de Competência Ilusória detectado: resposta correta, porém apoiada em premissa diferente do fundamento oficial. O sistema preserva o conceito em observação (< 15 questões).",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                modifier = Modifier.padding(10.dp)
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
 
+                    // Protocolo 50–60 s: Encerrar ou Resolver outra (zero punição ou pressão)
                     if (isSmartEntrySession && questions.size == 1) {
                         item(key = "smart_entry_continuation") {
                             Card(
@@ -1210,33 +1527,21 @@ fun QuestionSessionScreen(
                                     verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     Text(
-                                        text = "02 · Seguir para Treinamento Adaptativo (5–45 min)",
-                                        style = MaterialTheme.typography.titleSmall,
+                                        text = "Compromisso concluído.",
+                                        style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold
                                     )
                                     Text(
-                                        text = "Primeira resposta registrada! Você pode encerrar agora sem penalidade ou continuar em uma rota curta intercalando revisões pendentes, lacunas e avanço.",
+                                        text = "Você pode encerrar agora sem qualquer penalidade ou resolver mais uma questão curta.",
                                         style = MaterialTheme.typography.bodyMedium
                                     )
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        Button(
-                                            onClick = onContinueAdaptiveRoute,
-                                            modifier = Modifier
-                                                .weight(1.3f)
-                                                .heightIn(min = 48.dp),
-                                            shape = RoundedCornerShape(12.dp)
-                                        ) {
-                                            Text(
-                                                text = "Seguir Rota (12 questões)",
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                        }
                                         OutlinedButton(
                                             onClick = onCompleteSession,
+                                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.45f)),
                                             modifier = Modifier
                                                 .weight(1f)
                                                 .heightIn(min = 48.dp),
@@ -1244,10 +1549,34 @@ fun QuestionSessionScreen(
                                         ) {
                                             Text(
                                                 text = "Encerrar",
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                fontWeight = FontWeight.SemiBold,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
                                             )
                                         }
+                                        Button(
+                                            onClick = onResolveAnotherEntry,
+                                            modifier = Modifier
+                                                .weight(1.2f)
+                                                .heightIn(min = 48.dp),
+                                            shape = RoundedCornerShape(12.dp)
+                                        ) {
+                                            Text(
+                                                text = "Resolver outra",
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+                                    TextButton(
+                                        onClick = onContinueAdaptiveRoute,
+                                        modifier = Modifier.align(Alignment.End)
+                                    ) {
+                                        Text(
+                                            text = "Seguir bateria adaptativa curta (10 questões) →",
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
                                     }
                                 }
                             }
@@ -1356,6 +1685,21 @@ fun QuestionSessionScreen(
                 Spacer(modifier = Modifier.height(12.dp))
             }
         }
+    }
+
+    if (contextualLookupState != null && contextualLookupState.questionId == question.id) {
+        ContextualLookupBottomSheet(
+            question = question,
+            lookupState = contextualLookupState,
+            isAnswerSubmitted = isAnswerSubmitted && !hideFeedback,
+            onUpdateLookupQuery = { newQuery ->
+                onOpenContextualLookup?.invoke(question, newQuery)
+            },
+            onRequestAiExplanation = { queryText ->
+                onRequestContextualLookupAi(question.id, queryText, isAnswerSubmitted && !hideFeedback)
+            },
+            onDismiss = onDismissContextualLookup
+        )
     }
 }
 

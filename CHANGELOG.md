@@ -4,6 +4,35 @@ Todas as mudanças arquiteturais, de segurança, acessibilidade e operacionais r
 
 ---
 
+## [2.3.0] - 2026-11-20 (build 29)
+
+Evolução disruptiva do Cogniva em três camadas epistemológicas e comportamentais (**Escassez com Diagnóstico por Evidências**, **Simulador de Decisão sob Incerteza & Curva de 300 Minutos** e **Protocolo de Entrada de 60 Segundos "Terça · 22h"**), somada à **Consulta Contextual em Camada (Catálogo + IA + Google Overlay)**, estatísticas aprofundadas em **Progresso** e correção de sincronização pós-resposta (`contract_version: 5`).
+
+### 1. Escassez — Diagnóstico por Evidências, Ficha Editorial e Regra `< 15` (`shared/`, `backend-rust/`, `web-admin/`, `android-app/`)
+- **Ficha Editorial Rastreável (`editorial_card` em `question-contracts.schema.json`, `question-v2-validator-2.3.0` / `CURRENT_VALIDATOR_REVISION = 6`):**
+  - Suporte nativo no schema V2, no editor do `/admin/`, no backend Rust e no Android para `legal_provisions[]`, `tested_rule`, `exception_clause`, `decisive_stem_excerpt`, `official_source_excerpt` e `plausible_conceptual_errors[]` fora do `content_revision`, com sintetizador determinístico baseado nas fontes normativas do catálogo (zero geração sintética de questões).
+- **Diagnóstico Cruzado de 3 Sinais e Sincronização Pós-Resposta (`diagnostic_engine`, `POST /api/v1/quiz/attempt-evidence`):**
+  - Cruzamento de **resposta × confiança declarada × evidência selecionada** tanto em erros quanto em acertos, identificando `ILLUSORY_COMPETENCE` quando o candidato acerta o gabarito apoiado em premissa incorreta.
+  - Novo endpoint idempotente `POST /api/v1/quiz/attempt-evidence` e fila durável `pending_evidence_patches` no Android eliminando perda do `selected_evidence_id` quando o lote `submit-batch` sincroniza antes do clique opcional pós-resposta.
+- **Restrição Explícita `< 15` Questões e Transferência Cross-Banca (`MIN_QUESTIONS_FOR_MASTERY = 15`, `TRANSFER_PROBE`):**
+  - Com menos de 15 questões humanas distintas, o motor identifica indícios de erro e marca progresso positivo como `EVIDENCE_IN_PROGRESS`, jamais afirmando domínio (`VERIFIED_COMPETENCE`) sem `>= 15` itens e evidência independente em outra banca (`TRANSFER_VERIFIED` vs. `CONSOLIDATED_NO_TRANSFER`). Quando inexiste questão humana inédita de outra banca, registra explicitamente `TRANSFER_UNMEASURED`.
+
+### 2. Fadiga, Pontuação Líquida e Simulador de Decisão sob Incerteza (`strategy_engine`, `fatigue_engine`, `contract_version: 5`)
+- **Maximização de Atingimento de Meta e Complementaridade Binária (`simulate_decision_under_uncertainty`, `normalize_binary_choice_probability`):**
+  - Em provas estilo Cebraspe ($+1 / -1 / 0$), $VE = 2p - 1$ ($p = 0{,}55 \implies +0{,}10\text{ pt}$) e complementaridade binária ($48\% \leftrightarrow 52\%$). O motor calcula analiticamente $P(S_{\text{final}} \ge \max(S_{\text{meta}}, S_{\text{min}}))$ para **Responder** vs. **Omitir** integrando estado atual da prova, itens restantes e incerteza epistêmica $\sigma_p$ em cenários simulados de `35m`, `165m`, `275m` e `285m`.
+- **Modelo Logístico Individual de 300 Minutos com Controle de Dificuldade (`performance_at_minute`, `evaluate_fatigue_with_difficulty`):**
+  - Implementação de $p(t) = \sigma(\operatorname{logit}(p_0) - \lambda_i \frac{t}{300})$ ajustado à dificuldade dos itens e regularizado por precisão informacional, distinguindo `FATIGUE_DETECTED` ($\lambda_i > 0$), `STABLE_ENDURANCE` e `WARMUP_GAIN_DETECTED` ($\lambda_i < 0$) apenas após `>= 3` simulados longos contínuos e `>= 120` itens cronometrados.
+
+### 3. Protocolo de Entrada de 60s ("Terça · 22h"), Consulta em Camada e Analytics (`TodayScreen.kt`, `PracticeAndQuestionScreen.kt`, `ProgressScreen.kt`)
+- **Primeira Tela Reversível sem Culpa (`TodayScreen.kt`, `QuizMode.ENTRY_60S`):**
+  - Remoção de metas diárias atrasadas, barras de cobrança e contadores alarmistas da tela inicial. Cabeçalho temporal `DIA · HORA` (`UTC-3`), proposta **"Só uma questão."**, botão **`Resolver 1 questão`** (`Certo · Errado · Branco`, gabarito + fundamento imediato, saída **`Encerrar`** ou **`Resolver outra`**) e saída visível **`Sem estudar hoje`** com métricas voluntárias de início, conclusão da 1ª questão e retorno espontâneo.
+- **Seleção de Texto e Consulta em Camada (`ContextualLookupSheet.kt`, `POST /api/v1/questions/:id/lookup`, `term-lookup`):**
+  - Seleção nativa de texto no enunciado (`LayerSelectionTextToolbar`) + chip **`Consultar / Google`** abrindo Bottom Sheet sobreposto com fontes normativas do catálogo, síntese aberta Wikimedia PT, explicação IA sem spoiler (`term-lookup` / `term-lookup-post`, nunca gravada em cache compartilhado) e **Pesquisa Google / Planalto / STF-STJ em Camada** via Partial Custom Tab sobre a questão.
+- **Estatísticas Aprimoradas em Progresso (`ProgressScreen.kt`):**
+  - Novos painéis de Confiabilidade Epistêmica (`< 15`), Mapa de Transferência Cross-Banca, Diagnóstico dos 3 Sinais + saldo de Omissões Estratégicas, Cenários de Decisão sob Incerteza, Curva de 300 Minutos $p(t)$, Hábito Voluntário 60s e amostra distinta `X/15` por disciplina.
+
+---
+
 ## [2.2.0] - 2026-11-18 (build 28)
 
 Evolução estrutural do Cogniva para um **sistema inteligente de preparação orientado por evidência de aprendizagem**, implantando o Grafo de Conceitos e Fontes Normativas Versionadas, os **5 Motores Simétricos de Decisão** (`contract_version: 4`), a reserva determinística **Holdout 20%**, o **Fallback Cross-Banca** em simulados e o **Core Loop Diário de 60 Minutos** em Rust, Python, Web Admin e Android (`Room v7`).

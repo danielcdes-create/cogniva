@@ -594,6 +594,104 @@ pub async fn generate(
             candidates.truncate(if exam.is_some() { 2000 } else { quantity });
             candidates
         }
+        QuizMode::Entry60s => {
+            let candidates = exclude_holdout_for_practice(
+                req.user_id,
+                pool(state, req.user_id, filter, 1500).await?,
+                quantity,
+            );
+            let mut act_cursor = state
+                .db
+                .collection::<UserActivityDocument>("userActivityLog")
+                .find(doc! { "user_id": req.user_id })
+                .await?;
+            let now = chrono::Utc::now();
+            let mut familiar_topics = HashSet::new();
+            let mut pending_retention_topics = HashSet::new();
+            let mut recent_qids = HashSet::new();
+            while let Some(act) = act_cursor.try_next().await? {
+                if (now - act.datas.ultima_sessao).num_hours() < 18 {
+                    recent_qids.insert(act.question_id);
+                }
+                if let Some(tid) = act.canonical_topic_id.as_deref() {
+                    if act.quantidade_praticas > 0 {
+                        familiar_topics.insert(tid.to_string());
+                    }
+                    let elapsed_days =
+                        (now - act.datas.ultima_sessao).num_hours().max(0) as f64 / 24.0;
+                    if act.review_due(now)
+                        || (act.memory_stability_days > 0.0
+                            && crate::services::retention_engine::retrievability(
+                                elapsed_days,
+                                act.memory_stability_days,
+                            ) < 0.90)
+                    {
+                        pending_retention_topics.insert(tid.to_string());
+                    }
+                }
+            }
+            let mut scored: Vec<(f64, QuestionDocument)> = candidates
+                .into_iter()
+                .map(|q| {
+                    let tid = q.canonical_topic_id.as_deref().unwrap_or("");
+                    let s = crate::services::prioritization_engine::entry_60s_question_score(
+                        q.question.chars().count(),
+                        q.effective_question_type() == "TRUE_FALSE",
+                        familiar_topics.contains(tid),
+                        pending_retention_topics.contains(tid),
+                        recent_qids.contains(&q.id),
+                    );
+                    (s, q)
+                })
+                .collect();
+            scored.sort_by(|a, b| b.0.total_cmp(&a.0));
+            scored
+                .into_iter()
+                .map(|(_, q)| q)
+                .take(if exam.is_some() { 2000 } else { quantity })
+                .collect()
+        }
+        QuizMode::TransferProbe => {
+            let mut candidates = pool(state, req.user_id, filter, 2000).await?;
+            let pool_len = candidates.len().max(5);
+            let buckets = fetch_user_history_buckets(&state.db, req.user_id, 120).await?;
+            let target_boards: HashSet<String> = exam
+                .map(|e| {
+                    e.exam_boards
+                        .iter()
+                        .filter(|b| b.as_str() != "A definir" && !b.trim().is_empty())
+                        .flat_map(|b| {
+                            if b.eq_ignore_ascii_case("Cebraspe") {
+                                vec!["cebraspe".to_string(), "cespe".to_string()]
+                            } else {
+                                vec![b.trim().to_lowercase()]
+                            }
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            candidates.sort_by_key(|q| {
+                let unseen = !buckets.all_attempted_ids.contains(&q.id);
+                let src_norm = q.source.as_deref().unwrap_or("").trim().to_lowercase();
+                let is_other_board = !src_norm.is_empty()
+                    && src_norm != "origem não informada"
+                    && (target_boards.is_empty() || !target_boards.contains(&src_norm));
+                let holdout = crate::services::strategy_engine::is_holdout_reserved(
+                    req.user_id,
+                    &q.id.to_hex(),
+                    pool_len,
+                );
+                (!unseen, !is_other_board, !holdout)
+            });
+            for q in &candidates {
+                let src_norm = q.source.as_deref().unwrap_or("").trim().to_lowercase();
+                if !target_boards.is_empty() && !target_boards.contains(&src_norm) {
+                    analogous_ids.insert(q.id.to_hex());
+                }
+            }
+            candidates.truncate(if exam.is_some() { 2000 } else { quantity });
+            candidates
+        }
         QuizMode::CommonTrunk => {
             let rows = load_canonical_slices(&state.db, req.user_id).await?;
             let inputs: Vec<_> = exams.iter().map(blueprint_to_leverage).collect();
@@ -841,6 +939,7 @@ mod tests {
             plausibility_markdown: None,
             plausibility_analysis: None,
             evidence_challenge: None,
+            editorial_card: None,
         };
 
         let mut q_recente = q_inedita.clone();

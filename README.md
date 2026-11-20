@@ -4,9 +4,12 @@ Plataforma inteligente de preparação de alta performance para concursos públi
 
 ---
 
-## 🚀 Versão Atual: `2.2.0` (`build 28`)
+## 🚀 Versão Atual: `2.3.0` (`build 29`)
 
-- **Contrato de Domínio (`v4`) e 5 Motores Simétricos:** `contract_version: 4` ([`shared/domain-contracts.json`](shared/domain-contracts.json)), catálogo canônico unificado ([`shared/knowledge-catalog.json`](shared/knowledge-catalog.json)), grafo de conceitos/fontes versionadas ([`shared/knowledge-concepts-seed.json`](shared/knowledge-concepts-seed.json)) e motores simétricos Rust ↔ Kotlin de **Diagnóstico**, **Retenção Contínua**, **Priorização (40/40/20)**, **Calibração Beta-Binomial / Estratégia ($VE$)** e **Fadiga**, com reserva determinística **Holdout 20%** ([`docs/MOTORES-DECISAO-CORE-LOOP.md`](docs/MOTORES-DECISAO-CORE-LOOP.md)).
+- **Arquitetura Disruptiva em 3 Camadas (`contract_version: 5`):**
+  1. **Escassez — Diagnóstico por Evidências, Não por Geração:** Ficha Editorial Rastreável (`editorial_card` com dispositivos legais, regra cobrada, exceção, trecho decisivo e erros conceituais plausíveis), diagnóstico cruzando **3 sinais** (*resposta × confiança × evidência selecionada*, detectando inclusive `ILLUSORY_COMPETENCE`), restrição explícita **`< 15` questões humanas** (`MIN_QUESTIONS_FOR_MASTERY = 15`) e conjunto separado de **Transferência Cross-Banca (`TRANSFER_PROBE`)** com registro explícito de `TRANSFER_UNMEASURED` quando não há item válido de outra banca.
+  2. **Fadiga e Pontuação Líquida — Simulador de Decisão sob Incerteza:** Correção matemática $VE = 2p - 1$ em itens $+1/-1/0$, complementaridade binária ($48\% \leftrightarrow 52\%$), maximização de $P(S_{\text{final}} \ge \max(S_{\text{meta}}, S_{\text{min}}))$ considerando estado atual da prova e incerteza Beta-Binomial, e modelo individual logístico de **300 minutos** $p(t) = \sigma(\operatorname{logit}(p_0) - \lambda_i \frac{t}{300})$ com controle de dificuldade (`FATIGUE_DETECTED`, `STABLE_ENDURANCE`, `WARMUP_GAIN_DETECTED`).
+  3. **Protocolo de Entrada de 60 Segundos ("Terça · 22h") & Consulta em Camada:** Tela inicial livre de metas atrasadas, gráficos punitivos ou cobrança de sequência — compromisso reversível (**`Resolver 1 questão`** / **`Sem estudar hoje`**) e seleção contextual de qualquer trecho na questão com **Camada de Consulta Normativa + IA + Pesquisa Google sobreposta** (Partial Custom Tab). Consulte [`docs/MOTORES-DECISAO-CORE-LOOP.md`](docs/MOTORES-DECISAO-CORE-LOOP.md).
 - **Autenticação Nativa e LGPD (Art. 18):** Modo convidado imediato + contas nativas Cogniva com e-mail, senha `Argon2id`, sessões revogáveis e exclusão física imediata de dados pessoais (`DELETE /api/v1/auth/account` / app Android) preservando 100% do acervo compartilhado ([`PRIVACY.md`](PRIVACY.md)).
 - **Saúde e Prontidão:** `GET /api/v1/health` (processo) e `GET /api/v1/ready` (validação MongoDB com retorno `503` em falha, catálogo ativo e revisão).
 - **Distribuição OTA Android:** `GET /api/v1/apk/info`, `GET /api/app/latest-apk` e streaming binário direto em `GET /api/v1/apk/download` (`ETag` / `304`, `Cache-Control: no-store, no-transform`, `proxy_buffering off`), preservando `applicationId = "br.com.concursoprep.app"` para atualização contínua.
@@ -19,7 +22,7 @@ Plataforma inteligente de preparação de alta performance para concursos públi
 Toda a documentação técnica e operacional ativa está centralizada em [`docs/`](docs/README.md):
 
 - **[Arquitetura do Ecossistema 2.0](docs/ARQUITETURA.md):** Visão ponta a ponta de autenticação nativa, banco `cogniva` 100% V2, conformidade LGPD, separação `exam_templates` vs. `user_exams`, simetria Rust ↔ Kotlin e governança de IA.
-- **[Motores de Decisão, Grafo de Conceitos e Core Loop Diário](docs/MOTORES-DECISAO-CORE-LOOP.md):** Especificação matemática dos 5 motores (`contract_version: 4`), grafo DAG de conceitos e fontes normativas versionadas, Holdout 20%, Fallback Cross-Banca e jornada diária de 60 minutos.
+- **[Motores de Decisão, Grafo de Conceitos e Core Loop Diário](docs/MOTORES-DECISAO-CORE-LOOP.md):** Especificação matemática (`contract_version: 5`), regra de escassez `< 15`, Ficha Editorial e 3 sinais, Transferência Cross-Banca, Simulador de Decisão sob Incerteza ($p(t)$ em 300 min) e Protocolo de Entrada de 60 Segundos.
 - **[Política de Privacidade e LGPD](PRIVACY.md) & [Política de Segurança](SECURITY.md):** Governança de dados pessoais, exclusão Art. 18, invariantes de segurança e relato responsável de vulnerabilidades.
 - **[Manual de Operação e Produção](docs/OPERACAO.md):** Variáveis de ambiente, migração *read-only* `CNU → cogniva`, preparação do MongoDB (`--prepare-storage`), TLS + HSTS + rate limits IPv6 `/64`, promoção atômica, retenção de releases e rollback.
 - **[Administração Web (`/admin/`)](docs/ADMIN-WEB.md):** Login nativo com cookie `HttpOnly` + `Sec-Fetch-Site` + CSRF, acessibilidade WCAG 2.1 AA, gestão de templates globais, edição V2 de questões, **Reportes**, **Classificação IA** e ativação versionada do catálogo.
@@ -43,8 +46,8 @@ Toda a documentação técnica e operacional ativa está centralizada em [`docs/
    - Tentativas e comandos administrativos usam `write_concern: majority` com `journal: true`, recibos idempotentes e replay cronológico de respostas offline fora de ordem.
 3. **Offline-First, Simulados Duráveis e Conformidade LGPD:**
    - O cliente Android isola dados em bancos Room v7 separados por conta (`cogniva-<userId>.db`), persiste simulados, omissões estratégicas (`isBlank`) e telemetria de sessão contra morte de processo e permite exclusão física imediata dos dados pessoais do titular sem afetar o acervo público de questões.
-4. **Simetria Matemática (`v4`), Honestidade Epistemológica e Acessibilidade WCAG 2.1 AA:**
-   - Pontuação líquida ponderada, valor esperado de resposta $VE = (1+\lambda)\hat{p} - \lambda$, curva contínua de recuperabilidade $R(t,S)$, exigência de `>= 3` questões distintas para competência comprovada, guarda estrita de amostra mínima para fadiga, calendário/cotas em `America/Sao_Paulo` (`UTC-3`) e contraste mínimo `>= 4.5:1` auditado automaticamente no Android e no Web Admin.
+4. **Simetria Matemática (`v5`), Honestidade Epistemológica e Acessibilidade WCAG 2.1 AA:**
+   - Pontuação líquida ponderada, decisão sob incerteza maximizando $P(S_{\text{final}} \ge S_{\text{meta}})$ sob $VE = (1+\lambda)p(t) - \lambda$, curva contínua $R(t,S)$, restrição estrita de escassez (`< 15` questões humanas distintas nunca afirmam domínio pleno; `TRANSFER_UNMEASURED` quando não há questão de outra banca), curva logística de 300 minutos controlada por dificuldade, calendário/cotas em `America/Sao_Paulo` (`UTC-3`) e contraste mínimo `>= 4.5:1` auditado automaticamente no Android e no Web Admin.
 
 ---
 

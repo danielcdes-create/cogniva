@@ -3,8 +3,14 @@ package br.com.concursoprep.app.domain.exam
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.security.MessageDigest
+import java.time.DayOfWeek
+import java.time.Instant
+import java.time.ZoneOffset
+import kotlin.math.abs
 import kotlin.math.ceil
+import kotlin.math.exp
 import kotlin.math.floor
+import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
@@ -25,7 +31,25 @@ enum class DiagnosticStatus {
     @SerialName("OVERCONFIDENCE_ERROR") OVERCONFIDENCE_ERROR,
     @SerialName("CONCEPTUAL_ERROR") CONCEPTUAL_ERROR,
     @SerialName("RETRIEVAL_FAILURE") RETRIEVAL_FAILURE,
-    @SerialName("VERIFIED_COMPETENCE") VERIFIED_COMPETENCE
+    @SerialName("ILLUSORY_COMPETENCE") ILLUSORY_COMPETENCE,
+    @SerialName("EVIDENCE_IN_PROGRESS") EVIDENCE_IN_PROGRESS,
+    @SerialName("CONSOLIDATED_NO_TRANSFER") CONSOLIDATED_NO_TRANSFER,
+    @SerialName("VERIFIED_COMPETENCE") VERIFIED_COMPETENCE;
+
+    val isErrorIndication: Boolean
+        get() = this == OVERCONFIDENCE_ERROR ||
+            this == CONCEPTUAL_ERROR ||
+            this == RETRIEVAL_FAILURE ||
+            this == ILLUSORY_COMPETENCE
+}
+
+@Serializable
+enum class TransferStatus {
+    @SerialName("TRANSFER_UNMEASURED") TRANSFER_UNMEASURED,
+    @SerialName("TRANSFER_AVAILABLE") TRANSFER_AVAILABLE,
+    @SerialName("TRANSFER_PROVISIONAL") TRANSFER_PROVISIONAL,
+    @SerialName("TRANSFER_FAILED") TRANSFER_FAILED,
+    @SerialName("TRANSFER_VERIFIED") TRANSFER_VERIFIED
 }
 
 data class DiagnosticInputs(
@@ -36,15 +60,32 @@ data class DiagnosticInputs(
     val lastConfidence: Int,
     val hadPriorVerifiedCorrect: Boolean,
     val hasSpacedRetention: Boolean,
-    val evidenceChallengePassed: Boolean? = null
+    val evidenceChallengePassed: Boolean? = null,
+    val hasIndependentTransfer: Boolean = false
+)
+
+data class TransferInputs(
+    val distinctQuestions: Int,
+    val availableCrossBoardQuestions: Int,
+    val transferAttempts: Int,
+    val transferCorrectGrounded: Int
 )
 
 object DiagnosticEngine {
+    const val MIN_QUESTIONS_FOR_MASTERY = 15
+
     fun resolveUnitId(conceptId: String?, topicId: String): String {
         val cleaned = conceptId?.trim()?.takeIf { it.isNotEmpty() }
         return cleaned ?: topicId.trim()
     }
 
+    /**
+     * Classifica o estado diagnóstico cruzando os três sinais (resposta, confiança declarada e
+     * evidência selecionada) sob a restrição explícita de escassez (`< 15` questões humanas):
+     * com menos de 15 questões distintas, identifica indícios de erro (incluindo `ILLUSORY_COMPETENCE`
+     * quando acerta por evidência incorreta), mas jamais afirma domínio ou transferência sem
+     * evidência independente (`>= 15` questões + transferência verificada).
+     */
     fun classifyDiagnostic(input: DiagnosticInputs): DiagnosticStatus {
         if (input.nonBlankAttempts <= 0) {
             return DiagnosticStatus.INSUFFICIENT_EVIDENCE
@@ -58,16 +99,49 @@ object DiagnosticEngine {
             }
             return DiagnosticStatus.RETRIEVAL_FAILURE
         }
+
+        if (input.evidenceChallengePassed == false) {
+            return DiagnosticStatus.ILLUSORY_COMPETENCE
+        }
+
         val acc = input.correctAttempts.toDouble() / input.nonBlankAttempts.toDouble()
-        return if (
-            input.distinctQuestions >= 3 &&
-            input.hasSpacedRetention &&
-            acc >= 0.80 - 1e-9 &&
-            input.lastConfidence >= 2
-        ) {
+        if (!input.hasSpacedRetention || acc < 0.80 - 1e-9 || input.lastConfidence < 2) {
+            return DiagnosticStatus.INSUFFICIENT_EVIDENCE
+        }
+
+        if (input.distinctQuestions < MIN_QUESTIONS_FOR_MASTERY) {
+            return DiagnosticStatus.EVIDENCE_IN_PROGRESS
+        }
+
+        return if (input.hasIndependentTransfer) {
             DiagnosticStatus.VERIFIED_COMPETENCE
         } else {
-            DiagnosticStatus.INSUFFICIENT_EVIDENCE
+            DiagnosticStatus.CONSOLIDATED_NO_TRANSFER
+        }
+    }
+
+    /**
+     * Avalia transferência entre bancas sobre conjunto separado de questões humanas inéditas.
+     * Se não houver questão válida de outra banca, registra `TRANSFER_UNMEASURED`.
+     */
+    fun evaluateTransferStatus(input: TransferInputs): TransferStatus {
+        val avail = max(0, input.availableCrossBoardQuestions)
+        val att = max(0, input.transferAttempts)
+        if (avail == 0 && att == 0) {
+            return TransferStatus.TRANSFER_UNMEASURED
+        }
+        if (att == 0) {
+            return TransferStatus.TRANSFER_AVAILABLE
+        }
+        val safeGrounded = input.transferCorrectGrounded.coerceIn(0, att)
+        val ratio = safeGrounded.toDouble() / att.toDouble()
+        if (safeGrounded == 0 || ratio < 0.50 - 1e-9) {
+            return TransferStatus.TRANSFER_FAILED
+        }
+        return if (input.distinctQuestions >= MIN_QUESTIONS_FOR_MASTERY && ratio >= 0.75 - 1e-9) {
+            TransferStatus.TRANSFER_VERIFIED
+        } else {
+            TransferStatus.TRANSFER_PROVISIONAL
         }
     }
 }
@@ -150,9 +224,56 @@ enum class AdaptiveSlotKind {
 }
 
 object PrioritizationEngine {
+    private val studyZone: ZoneOffset = ZoneOffset.ofHours(-3)
+
+    fun formatEntry60sHeader(at: Instant = Instant.now()): String {
+        val local = at.atOffset(studyZone)
+        val day = when (local.dayOfWeek) {
+            DayOfWeek.MONDAY -> "SEGUNDA"
+            DayOfWeek.TUESDAY -> "TERÇA"
+            DayOfWeek.WEDNESDAY -> "QUARTA"
+            DayOfWeek.THURSDAY -> "QUINTA"
+            DayOfWeek.FRIDAY -> "SEXTA"
+            DayOfWeek.SATURDAY -> "SÁBADO"
+            DayOfWeek.SUNDAY -> "DOMINGO"
+        }
+        return "%s · %02dH".format(day, local.hour)
+    }
+
+    fun entry60sQuestionScore(
+        stemCharLen: Int,
+        isTrueFalse: Boolean,
+        isFamiliarTopic: Boolean,
+        hasPendingRetention: Boolean,
+        recentlyAnswered: Boolean
+    ): Double {
+        var score = 0.0
+        if (isFamiliarTopic && hasPendingRetention) {
+            score += 50.0
+        } else if (isFamiliarTopic) {
+            score += 25.0
+        } else if (hasPendingRetention) {
+            score += 20.0
+        }
+        if (isTrueFalse) {
+            score += 18.0
+        }
+        if (stemCharLen <= 260) {
+            score += 22.0
+        } else if (stemCharLen <= 420) {
+            score += 12.0
+        } else if (stemCharLen > 750) {
+            score -= 20.0
+        }
+        if (recentlyAnswered) {
+            score -= 35.0
+        }
+        return score
+    }
+
     fun priorityUtility(input: PrioritizationInputs): Double {
         val r = input.retrievability.coerceIn(0.0, 1.0)
-        val evFactor = min(3, max(0, input.distinctQuestions)).toDouble() / 3.0
+        val evFactor = min(15, max(0, input.distinctQuestions)).toDouble() / 15.0
         val mEff = if (input.verifiedCompetence) {
             0.85 * r + 0.15
         } else {
@@ -187,9 +308,6 @@ object PrioritizationEngine {
             AdaptiveSlotKind.PERSISTENT_GAP,
             AdaptiveSlotKind.NEW_HIGH_IMPACT
         )
-        var idxRet = 0
-        var idxGap = 0
-        var idxNew = 0
         var step = 0
 
         fun nextUnseen(list: List<T>, cursorRef: IntArray): T? {
@@ -223,9 +341,6 @@ object PrioritizationEngine {
                 break
             }
         }
-        // suppress unused local vars warning cleanly
-        idxRet = cRet[0]; idxGap = cGap[0]; idxNew = cNew[0]
-        if (idxRet < 0 || idxGap < 0 || idxNew < 0) return emptyList()
         return out
     }
 }
@@ -298,7 +413,78 @@ data class StrategyDecision(
     @SerialName("recommended_action") val recommendedAction: StrategyAction
 )
 
+@Serializable
+data class UncertaintyDecisionInputs(
+    @SerialName("p_base") val pBase: Double,
+    @SerialName("uncertainty_sd") val uncertaintySd: Double,
+    val penalty: Double,
+    @SerialName("item_difficulty") val itemDifficulty: Double,
+    @SerialName("lambda_i") val lambdaI: Double,
+    @SerialName("elapsed_minutes") val elapsedMinutes: Double,
+    @SerialName("current_net_score") val currentNetScore: Double,
+    @SerialName("remaining_items") val remainingItems: Int,
+    @SerialName("target_score") val targetScore: Double,
+    @SerialName("minimum_score") val minimumScore: Double,
+    @SerialName("baseline_future_p") val baselineFutureP: Double
+)
+
+@Serializable
+data class UncertaintyDecisionResult(
+    val p0: Double,
+    @SerialName("p_at_time") val pAtTime: Double,
+    @SerialName("expected_value") val expectedValue: Double,
+    @SerialName("risk_neutral_threshold") val riskNeutralThreshold: Double,
+    @SerialName("prob_goal_if_answer") val probGoalIfAnswer: Double,
+    @SerialName("prob_goal_if_omit") val probGoalIfOmit: Double,
+    val posture: StrategyPosture,
+    @SerialName("recommended_action") val recommendedAction: StrategyAction
+)
+
+@Serializable
+data class ExamMomentScenarioDto(
+    @SerialName("scenario_id") val scenarioId: String,
+    val label: String,
+    @SerialName("elapsed_minutes") val elapsedMinutes: Int,
+    @SerialName("current_net_score") val currentNetScore: Double,
+    @SerialName("remaining_items") val remainingItems: Int,
+    @SerialName("target_score") val targetScore: Double,
+    @SerialName("minimum_score") val minimumScore: Double,
+    @SerialName("calibrated_longitudinal") val calibratedLongitudinal: Boolean,
+    @SerialName("decision_at_medium_confidence") val decisionAtMediumConfidence: UncertaintyDecisionResult
+)
+
 object StrategyEngine {
+    private val SQRT_2 = sqrt(2.0)
+
+    /**
+     * Complementaridade em questão estritamente binária (`Certo`/`Errado`):
+     * se uma alternativa tem probabilidade estimada de 48%, a outra possui 52%.
+     */
+    fun normalizeBinaryChoiceProbability(pAlternative: Double): Double {
+        val p = pAlternative.coerceIn(0.0, 1.0)
+        return round9(max(p, 1.0 - p))
+    }
+
+    /**
+     * CDF da distribuição normal padrão via aproximação racional Abramowitz & Stegun 7.1.26,
+     * idêntica bit a bit entre Python, Rust e Kotlin.
+     */
+    fun normalCdf(z: Double): Double {
+        if (z <= -8.0) return 0.0
+        if (z >= 8.0) return 1.0
+        val sign = if (z < 0.0) -1.0 else 1.0
+        val x = abs(z) / SQRT_2
+        val t = 1.0 / (1.0 + 0.3275911 * x)
+        val a1 = 0.254829592
+        val a2 = -0.284496736
+        val a3 = 1.421413741
+        val a4 = -1.453152027
+        val a5 = 1.061405429
+        val poly = (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t
+        val erfApprox = sign * (1.0 - poly * exp(-x * x))
+        return 0.5 * (1.0 + erfApprox)
+    }
+
     fun isHoldoutReserved(userId: Long, questionId: String, poolSize: Int): Boolean {
         if (poolSize < 5) return false
         val digest = MessageDigest.getInstance("SHA-256")
@@ -308,6 +494,125 @@ object StrategyEngine {
             ((digest[2].toLong() and 0xFFL) shl 8) or
             (digest[3].toLong() and 0xFFL)
         return (head % 5L) == 0L
+    }
+
+    fun simulateDecisionUnderUncertainty(input: UncertaintyDecisionInputs): UncertaintyDecisionResult {
+        val pen = if (input.penalty.isFinite()) max(0.0, input.penalty) else 0.0
+        val (p0, pt) = FatigueEngine.performanceAtMinute(
+            pBase = input.pBase,
+            itemDifficulty = input.itemDifficulty,
+            lambdaI = input.lambdaI,
+            elapsedMinutes = input.elapsedMinutes
+        )
+        val ev = round9((1.0 + pen) * pt - pen)
+        val pStar = if (pen > 0.0) round9(pen / (1.0 + pen)) else 0.0
+        val rem = max(1, input.remainingItems)
+        val goal = max(input.targetScore, input.minimumScore)
+        val sdU = input.uncertaintySd.coerceIn(0.0, 0.35)
+
+        val pf = input.baselineFutureP.coerceIn(0.10, 0.95)
+        val qf = if (pen > 0.0) 0.85 else 1.0
+        val muItem = qf * ((1.0 + pen) * pf - pen)
+        val eX2 = qf * (pf * 1.0 + (1.0 - pf) * pen * pen)
+        val varItem = max(0.04, eX2 - muItem * muItem)
+
+        fun continuationProb(startScore: Double, nLeft: Int): Double {
+            if (nLeft <= 0) {
+                return if (startScore >= goal - 1e-9) 1.0 else 0.0
+            }
+            val nl = nLeft.toDouble()
+            val meanFinal = startScore + nl * muItem
+            val epistemicTerm = nl * (1.0 + pen) * sdU * 0.35
+            val epistemicVar = epistemicTerm * epistemicTerm
+            val sdFinal = sqrt(nl * varItem + epistemicVar)
+            return normalCdf((meanFinal - goal) / sdFinal)
+        }
+
+        val probOmit = continuationProb(input.currentNetScore, rem - 1)
+        val pMinus = (pt - sdU).coerceIn(0.01, 0.99)
+        val pPlus = (pt + sdU).coerceIn(0.01, 0.99)
+        val probHit = continuationProb(input.currentNetScore + 1.0, rem - 1)
+        val probMiss = continuationProb(input.currentNetScore - pen, rem - 1)
+        val probAns = 0.5 * (pMinus * probHit + (1.0 - pMinus) * probMiss) +
+            0.5 * (pPlus * probHit + (1.0 - pPlus) * probMiss)
+
+        val (recommendedAction, posture) = when {
+            pen <= 0.0 -> StrategyAction.ANSWER to StrategyPosture.MAXIMIZE_EV
+            probOmit > probAns + 0.002 -> {
+                val pos = if (ev > 0.0) StrategyPosture.PROTECT_MARGIN else StrategyPosture.MAXIMIZE_EV
+                StrategyAction.OMIT to pos
+            }
+            probAns > probOmit + 0.002 -> {
+                val pos = if (ev < 0.0) StrategyPosture.CALCULATED_RISK else StrategyPosture.MAXIMIZE_EV
+                StrategyAction.ANSWER to pos
+            }
+            ev > 0.0 -> StrategyAction.ANSWER to StrategyPosture.MAXIMIZE_EV
+            else -> StrategyAction.OMIT to StrategyPosture.MAXIMIZE_EV
+        }
+
+        return UncertaintyDecisionResult(
+            p0 = p0,
+            pAtTime = pt,
+            expectedValue = ev,
+            riskNeutralThreshold = pStar,
+            probGoalIfAnswer = round9(probAns),
+            probGoalIfOmit = round9(probOmit),
+            posture = posture,
+            recommendedAction = recommendedAction
+        )
+    }
+
+    fun buildExamMomentScenarios(
+        mediumP: Double,
+        mediumSd: Double,
+        penalty: Double,
+        cutoffPct: Double,
+        lambdaI: Double?
+    ): List<ExamMomentScenarioDto> {
+        val totalItems = 120.0
+        val target = when {
+            cutoffPct > 0.0 -> (totalItems * cutoffPct / 100.0).coerceIn(30.0, 108.0)
+            penalty > 0.0 -> 66.0
+            else -> 84.0
+        }
+        val minFloor = rustRound(target * 0.75)
+        val lam = lambdaI ?: 0.0
+        val calibrated = lambdaI != null
+
+        data class Spec(val id: String, val label: String, val mins: Int, val curScore: Double, val rem: Int)
+        val specs = listOf(
+            Spec("OPENING_35M", "Início de prova · 35 min (ritmo base)", 35, rustRound(target * 0.18), 98),
+            Spec("MIDPOINT_165M", "Meio de prova · 165 min (maximização de VE)", 165, rustRound(target * 0.58), 52),
+            Spec("PROTECT_275M", "Reta final · 275 min (protegendo margem acima do corte)", 275, target + 1.5, 4),
+            Spec("RECOVERY_285M", "Reta final · 285 min (1 ponto abaixo da meta)", 285, target - 1.0, 3)
+        )
+        return specs.map { sp ->
+            ExamMomentScenarioDto(
+                scenarioId = sp.id,
+                label = sp.label,
+                elapsedMinutes = sp.mins,
+                currentNetScore = sp.curScore,
+                remainingItems = sp.rem,
+                targetScore = target,
+                minimumScore = minFloor,
+                calibratedLongitudinal = calibrated,
+                decisionAtMediumConfidence = simulateDecisionUnderUncertainty(
+                    UncertaintyDecisionInputs(
+                        pBase = mediumP,
+                        uncertaintySd = mediumSd,
+                        penalty = penalty,
+                        itemDifficulty = 0.50,
+                        lambdaI = lam,
+                        elapsedMinutes = sp.mins.toDouble(),
+                        currentNetScore = sp.curScore,
+                        remainingItems = sp.rem,
+                        targetScore = target,
+                        minimumScore = minFloor,
+                        baselineFutureP = 0.72
+                    )
+                )
+            )
+        }
     }
 
     fun evaluateStrategy(
@@ -358,8 +663,15 @@ object StrategyEngine {
 enum class FatigueStatus {
     @SerialName("INSUFFICIENT_EVIDENCE") INSUFFICIENT_EVIDENCE,
     @SerialName("FATIGUE_DETECTED") FATIGUE_DETECTED,
-    @SerialName("STABLE_ENDURANCE") STABLE_ENDURANCE
+    @SerialName("STABLE_ENDURANCE") STABLE_ENDURANCE,
+    @SerialName("WARMUP_GAIN_DETECTED") WARMUP_GAIN_DETECTED
 }
+
+@Serializable
+data class FatigueCurvePointDto(
+    val minute: Int,
+    @SerialName("predicted_accuracy") val predictedAccuracy: Double
+)
 
 @Serializable
 data class FatigueReportDto(
@@ -368,16 +680,62 @@ data class FatigueReportDto(
     @SerialName("required_sessions") val requiredSessions: Int = 3,
     @SerialName("qualifying_attempts") val qualifyingAttempts: Int,
     @SerialName("required_attempts") val requiredAttempts: Int = 120,
-    @SerialName("shrunk_accuracy_delta") val shrunkAccuracyDelta: Double? = null
+    @SerialName("shrunk_accuracy_delta") val shrunkAccuracyDelta: Double? = null,
+    @SerialName("estimated_lambda") val estimatedLambda: Double? = null,
+    @SerialName("difficulty_controlled") val difficultyControlled: Boolean = true,
+    @SerialName("curve_300m") val curve300m: List<FatigueCurvePointDto> = emptyList()
 )
 
 object FatigueEngine {
-    fun evaluateFatigue(
+    fun sigmoid(z: Double): Double =
+        if (z >= 0.0) {
+            val ez = exp(-z)
+            1.0 / (1.0 + ez)
+        } else {
+            val ez = exp(z)
+            ez / (1.0 + ez)
+        }
+
+    fun logit(p: Double): Double {
+        val c = p.coerceIn(0.02, 0.98)
+        return ln(c / (1.0 - c))
+    }
+
+    /**
+     * Modelo individual de desempenho ao longo de 300 minutos:
+     * `p(t) = sigma(logit(p0) - lambda_i * (t / 300))`
+     */
+    fun performanceAtMinute(
+        pBase: Double,
+        itemDifficulty: Double,
+        lambdaI: Double,
+        elapsedMinutes: Double
+    ): Pair<Double, Double> {
+        val d = itemDifficulty.coerceIn(0.0, 1.0)
+        val t = elapsedMinutes.coerceIn(0.0, 300.0)
+        val lam = if (lambdaI.isFinite()) lambdaI.coerceIn(-2.5, 2.5) else 0.0
+        val z0 = logit(pBase) - 0.80 * (d - 0.50)
+        val p0 = sigmoid(z0)
+        val pt = sigmoid(z0 - lam * (t / 300.0))
+        return round9(p0) to round9(pt)
+    }
+
+    fun buildCurve300m(pBase: Double, lambdaI: Double): List<FatigueCurvePointDto> =
+        listOf(0, 60, 120, 180, 240, 300).map { minute ->
+            val (_, pt) = performanceAtMinute(pBase, 0.50, lambdaI, minute.toDouble())
+            FatigueCurvePointDto(minute = minute, predictedAccuracy = pt)
+        }
+
+    fun evaluateFatigueWithDifficulty(
         qualifyingSessions: Int,
         earlyCorrect: Int,
         earlyTotal: Int,
         lateCorrect: Int,
-        lateTotal: Int
+        lateTotal: Int,
+        earlyAvgDifficulty: Double = 0.50,
+        lateAvgDifficulty: Double = 0.50,
+        earlyMeanMinutes: Double = 30.0,
+        lateMeanMinutes: Double = 210.0
     ): FatigueReportDto {
         val sEarlyTotal = max(0, earlyTotal)
         val sLateTotal = max(0, lateTotal)
@@ -389,27 +747,75 @@ object FatigueEngine {
                 requiredSessions = 3,
                 qualifyingAttempts = total,
                 requiredAttempts = 120,
-                shrunkAccuracyDelta = null
+                shrunkAccuracyDelta = null,
+                estimatedLambda = null,
+                difficultyControlled = true,
+                curve300m = emptyList()
             )
         }
-        val pEarly = earlyCorrect.coerceIn(0, sEarlyTotal).toDouble() / sEarlyTotal.toDouble()
-        val pLate = lateCorrect.coerceIn(0, sLateTotal).toDouble() / sLateTotal.toDouble()
-        val delta = pLate - pEarly
-        val se = sqrt((pEarly * (1.0 - pEarly)) / sEarlyTotal.toDouble() + (pLate * (1.0 - pLate)) / sLateTotal.toDouble())
+
+        val dEarly = earlyAvgDifficulty.coerceIn(0.0, 1.0)
+        val dLate = lateAvgDifficulty.coerceIn(0.0, 1.0)
+        val uEarly = (earlyMeanMinutes / 300.0).coerceIn(0.0, 1.0)
+        val uLate = (lateMeanMinutes / 300.0).coerceIn(uEarly + 0.15, 1.0)
+
+        val pEarly = (earlyCorrect.coerceIn(0, sEarlyTotal).toDouble() + 0.5) / (sEarlyTotal.toDouble() + 1.0)
+        val pLate = (lateCorrect.coerceIn(0, sLateTotal).toDouble() + 0.5) / (sLateTotal.toDouble() + 1.0)
+
+        val zEarlyAdj = logit(pEarly) + 0.80 * (dEarly - 0.50)
+        val zLateAdj = logit(pLate) + 0.80 * (dLate - 0.50)
+
+        val du = uLate - uEarly
+        val rawLambda = (zEarlyAdj - zLateAdj) / du
+
+        val wEarly = sEarlyTotal.toDouble() * pEarly * (1.0 - pEarly)
+        val wLate = sLateTotal.toDouble() * pLate * (1.0 - pLate)
+        val varDiff = (1.0 / wEarly) + (1.0 / wLate)
+        val seRawLambda = sqrt(varDiff) / du
+        val infoLambda = 1.0 / (seRawLambda * seRawLambda)
+        val priorPrec = 4.0
+        val shrunkLambda = ((infoLambda / (infoLambda + priorPrec)) * rawLambda).coerceIn(-2.5, 2.5)
+
+        val pEarlyNeutral = sigmoid(zEarlyAdj)
+        val pLateNeutral = sigmoid(zLateAdj)
         val kappa = sLateTotal.toDouble() / (sLateTotal.toDouble() + 40.0)
-        val shrunk = round9(kappa * delta)
-        val status = if (delta < -0.05 && (delta + 1.645 * se) < 0.0) {
-            FatigueStatus.FATIGUE_DETECTED
-        } else {
-            FatigueStatus.STABLE_ENDURANCE
+        val shrunkDelta = round9(kappa * (pLateNeutral - pEarlyNeutral))
+        val roundedLambda = round9(shrunkLambda)
+
+        val status = when {
+            shrunkLambda > 0.25 && (rawLambda - 1.645 * seRawLambda) > 0.0 -> FatigueStatus.FATIGUE_DETECTED
+            shrunkLambda < -0.25 && (rawLambda + 1.645 * seRawLambda) < 0.0 -> FatigueStatus.WARMUP_GAIN_DETECTED
+            else -> FatigueStatus.STABLE_ENDURANCE
         }
+
         return FatigueReportDto(
             status = status,
             qualifyingSessions = qualifyingSessions,
             requiredSessions = 3,
             qualifyingAttempts = total,
             requiredAttempts = 120,
-            shrunkAccuracyDelta = shrunk
+            shrunkAccuracyDelta = shrunkDelta,
+            estimatedLambda = roundedLambda,
+            difficultyControlled = true,
+            curve300m = buildCurve300m(pEarlyNeutral, roundedLambda)
         )
     }
+
+    fun evaluateFatigue(
+        qualifyingSessions: Int,
+        earlyCorrect: Int,
+        earlyTotal: Int,
+        lateCorrect: Int,
+        lateTotal: Int
+    ): FatigueReportDto = evaluateFatigueWithDifficulty(
+        qualifyingSessions = qualifyingSessions,
+        earlyCorrect = earlyCorrect,
+        earlyTotal = earlyTotal,
+        lateCorrect = lateCorrect,
+        lateTotal = lateTotal,
+        earlyAvgDifficulty = 0.50,
+        lateAvgDifficulty = 0.50,
+        earlyMeanMinutes = 30.0,
+        lateMeanMinutes = 210.0
+    )
 }

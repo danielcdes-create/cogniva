@@ -260,7 +260,7 @@ async fn protected_routes_reject_untrusted_identity_before_database_access() {
         .unwrap();
     assert_eq!(forged.status(), StatusCode::UNAUTHORIZED);
 
-    // Health check reports cogniva-api v2.2.0 and contract_version 4 without DB access
+    // Health check reports cogniva-api v2.3.0 and contract_version 5 without DB access
     let health_resp = app
         .oneshot(
             Request::builder()
@@ -277,8 +277,8 @@ async fn protected_routes_reject_untrusted_identity_before_database_access() {
         .unwrap();
     let health: Value = serde_json::from_slice(&health_bytes).unwrap();
     assert_eq!(health["service"], "cogniva-api");
-    assert_eq!(health["version"], "2.2.0");
-    assert_eq!(health["contract_version"], 4);
+    assert_eq!(health["version"], "2.3.0");
+    assert_eq!(health["contract_version"], 5);
 }
 
 #[tokio::test]

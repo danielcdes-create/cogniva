@@ -1,3 +1,4 @@
+use chrono::{Datelike, FixedOffset, Timelike, Utc, Weekday};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -20,12 +21,28 @@ pub enum AdaptiveSlotKind {
     NewHighImpact,
 }
 
+/// Formata o cabeçalho temporal calmo do Protocolo de Entrada de 60 Segundos (`TERÇA · 22H`)
+/// no fuso oficial de estudo `America/Sao_Paulo` (`UTC-3`).
+pub fn format_entry_60s_header(at: chrono::DateTime<Utc>) -> String {
+    let local = at.with_timezone(&FixedOffset::west_opt(10_800).unwrap());
+    let day = match local.weekday() {
+        Weekday::Mon => "SEGUNDA",
+        Weekday::Tue => "TERÇA",
+        Weekday::Wed => "QUARTA",
+        Weekday::Thu => "QUINTA",
+        Weekday::Fri => "SEXTA",
+        Weekday::Sat => "SÁBADO",
+        Weekday::Sun => "DOMINGO",
+    };
+    format!("{day} · {:02}H", local.hour())
+}
+
 /// Calcula a utilidade esperada por minuto de uma unidade de conhecimento,
-/// descontando incerteza de amostra pequena e aplicando impulso suave (não-punitivo)
-/// de pré-requisitos pendentes.
+/// descontando incerteza de amostra pequena (`< 15` questões humanas distintas) e
+/// aplicando impulso suave (não-punitivo) de pré-requisitos pendentes.
 pub fn priority_utility(input: &PrioritizationInputs) -> f64 {
     let r = input.retrievability.clamp(0.0, 1.0);
-    let ev_factor = (input.distinct_questions.min(3) as f64) / 3.0;
+    let ev_factor = (input.distinct_questions.min(15) as f64) / 15.0;
     let m_eff = if input.verified_competence {
         0.85 * r + 0.15
     } else {
@@ -42,7 +59,45 @@ pub fn priority_utility(input: &PrioritizationInputs) -> f64 {
     let raw = (input.edital_weight * input.incidence_weight * gap / tau_min)
         * prereq_mult
         * downstream_boost;
-    (raw * 1_000_000_000.0).round() / 1_000_000_000.0
+    if raw >= 0.0 {
+        (raw * 1_000_000_000.0 + 0.5).floor() / 1_000_000_000.0
+    } else {
+        (raw * 1_000_000_000.0 - 0.5).ceil() / 1_000_000_000.0
+    }
+}
+
+/// Pontua candidatas para o Protocolo de Entrada de 60 Segundos (`8–40 s`):
+/// prioriza questão humana curta (`<= 380` caracteres), preferencialmente em formato
+/// binário direto (`Certo · Errado · Branco`) e de assunto familiar com retenção pendente.
+pub fn entry_60s_question_score(
+    stem_char_len: usize,
+    is_true_false: bool,
+    is_familiar_topic: bool,
+    has_pending_retention: bool,
+    recently_answered: bool,
+) -> f64 {
+    let mut score = 0.0;
+    if is_familiar_topic && has_pending_retention {
+        score += 50.0;
+    } else if is_familiar_topic {
+        score += 25.0;
+    } else if has_pending_retention {
+        score += 20.0;
+    }
+    if is_true_false {
+        score += 18.0;
+    }
+    if stem_char_len <= 260 {
+        score += 22.0;
+    } else if stem_char_len <= 420 {
+        score += 12.0;
+    } else if stem_char_len > 750 {
+        score -= 20.0;
+    }
+    if recently_answered {
+        score -= 35.0;
+    }
+    score
 }
 
 /// Intercala até `quantity` itens (~40% retenção próxima do esquecimento, ~40% lacunas
@@ -80,9 +135,15 @@ pub fn interleave_buckets<T: Clone, F: Fn(&T) -> &str>(
         let slot = pattern[step % pattern.len()];
         step += 1;
         let picked = match slot {
-            AdaptiveSlotKind::RetentionReview => next_unseen(retention_due, &mut idx_ret, &seen, &id_of),
-            AdaptiveSlotKind::PersistentGap => next_unseen(persistent_gaps, &mut idx_gap, &seen, &id_of),
-            AdaptiveSlotKind::NewHighImpact => next_unseen(new_high_impact, &mut idx_new, &seen, &id_of),
+            AdaptiveSlotKind::RetentionReview => {
+                next_unseen(retention_due, &mut idx_ret, &seen, &id_of)
+            }
+            AdaptiveSlotKind::PersistentGap => {
+                next_unseen(persistent_gaps, &mut idx_gap, &seen, &id_of)
+            }
+            AdaptiveSlotKind::NewHighImpact => {
+                next_unseen(new_high_impact, &mut idx_new, &seen, &id_of)
+            }
         }
         .or_else(|| next_unseen(retention_due, &mut idx_ret, &seen, &id_of))
         .or_else(|| next_unseen(persistent_gaps, &mut idx_gap, &seen, &id_of))

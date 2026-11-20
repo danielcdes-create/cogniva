@@ -119,6 +119,7 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
     val analytics by viewModel.analytics.collectAsState()
     val activeAiSheetMarkdown by viewModel.activeAiSheetMarkdown.collectAsState()
     val activeAiSheetTitle by viewModel.activeAiSheetTitle.collectAsState()
+    val contextualLookupState by viewModel.contextualLookupState.collectAsState()
     val apkUpdateState by viewModel.apkUpdateState.collectAsState()
     val userProfile by viewModel.userProfile.collectAsState()
     val accountAuthState by viewModel.accountAuthState.collectAsState()
@@ -271,9 +272,18 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                 viewModel.exitSession()
             },
             requireExplicitConfidence = true,
-            allowBlankAnswer = activeSession?.mode in listOf(QuizMode.SIMULADO, QuizMode.STRATEGY_BATTERY),
-            isSmartEntrySession = activeSession?.isSmartEntry == true,
+            allowBlankAnswer = activeSession?.mode in listOf(QuizMode.SIMULADO, QuizMode.STRATEGY_BATTERY, QuizMode.ENTRY_60S) || activeSession?.isSmartEntry == true,
+            isSmartEntrySession = activeSession?.isSmartEntry == true || activeSession?.mode == QuizMode.ENTRY_60S,
             onContinueAdaptiveRoute = { viewModel.continueAdaptiveRouteFromEntry() },
+            onResolveAnotherEntry = { viewModel.resolveAnotherSmartEntryQuestion() },
+            isStrategySimulator = activeSession?.mode == QuizMode.STRATEGY_BATTERY,
+            examScenarios = todayDashboard?.nextAction?.examScenarios ?: analytics?.examScenarios.orEmpty(),
+            calibrationCells = todayDashboard?.nextAction?.calibrationCells ?: analytics?.calibrationCells.orEmpty(),
+            estimatedLambda = todayDashboard?.nextAction?.fatigueReport?.estimatedLambda ?: analytics?.fatigueReport?.estimatedLambda,
+            contextualLookupState = contextualLookupState,
+            onOpenContextualLookup = { q, selected -> viewModel.openContextualLookup(q, selected) },
+            onRequestContextualLookupAi = { qId, selected, submitted -> viewModel.requestContextualLookupAi(qId, selected, submitted) },
+            onDismissContextualLookup = { viewModel.dismissContextualLookup() },
             onSelectEvidence = { qId, evId -> viewModel.selectEvidenceForQuestion(qId, evId) },
             onSubmitExtendedAnswer = { question, chosenIndex, confidenceLevel, timeSpentSeconds, isBlank, confidenceExplicit ->
                 viewModel.submitAnswer(
@@ -355,7 +365,9 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                                 quantity = 10,
                                 contestId = selectedContestId
                             )
-                        }
+                        },
+                        onChooseConsciousRest = { rested -> viewModel.chooseConsciousRestToday(rested) },
+                        onScreenVisible = { viewModel.recordEntryImpression() }
                     )
                 }
 
@@ -397,11 +409,15 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                 BottomTab.PRATICAR -> {
                     PracticeHubScreen(
                         onLaunchSession = { mode, quantity ->
-                            viewModel.startQuizSession(
-                                mode = mode,
-                                quantity = quantity,
-                                contestId = if(mode==QuizMode.SIMULADO)selectedContestId else null
-                            )
+                            if (mode == QuizMode.ENTRY_60S) {
+                                viewModel.startSmartEntryQuestion()
+                            } else {
+                                viewModel.startQuizSession(
+                                    mode = mode,
+                                    quantity = quantity,
+                                    contestId = if (mode in listOf(QuizMode.SIMULADO, QuizMode.STRATEGY_BATTERY, QuizMode.TRANSFER_PROBE, QuizMode.ADAPTIVE_LOOP)) selectedContestId else null
+                                )
+                            }
                         }
                     )
                 }
@@ -414,7 +430,7 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                             viewModel.startQuizSession(
                                 mode = mode,
                                 quantity = 10,
-                                contestId = null,
+                                contestId = if (mode in listOf(QuizMode.STRATEGY_BATTERY, QuizMode.TRANSFER_PROBE)) selectedContestId else null,
                                 disciplina = disc
                             )
                         }

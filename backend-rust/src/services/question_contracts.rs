@@ -1122,6 +1122,42 @@ pub fn validate_with_catalog(
             )?;
         }
     }
+    if let Some(ed_card) = q.get("editorial_card").filter(|v| !v.is_null()) {
+        ensure(
+            ed_card
+                .get("tested_rule")
+                .and_then(Value::as_str)
+                .is_some_and(|s| !s.trim().is_empty()),
+            "SCHEMA_VALIDATION_FAILED",
+            Some("editorial_card.tested_rule"),
+            "Regra cobrada na ficha editorial não pode ser vazia",
+        )?;
+        ensure(
+            ed_card
+                .get("decisive_stem_excerpt")
+                .and_then(Value::as_str)
+                .is_some_and(|s| !s.trim().is_empty()),
+            "SCHEMA_VALIDATION_FAILED",
+            Some("editorial_card.decisive_stem_excerpt"),
+            "Trecho decisivo do enunciado na ficha editorial não pode ser vazio",
+        )?;
+        if let Some(errs) = ed_card
+            .get("plausible_conceptual_errors")
+            .and_then(Value::as_array)
+        {
+            let mut seen_err = HashSet::new();
+            for item in errs {
+                if let Some(eid) = item.get("error_id").and_then(Value::as_str) {
+                    ensure(
+                        !eid.trim().is_empty() && seen_err.insert(eid),
+                        "SCHEMA_VALIDATION_FAILED",
+                        Some("editorial_card.plausible_conceptual_errors"),
+                        "Identificador de erro conceitual repetido ou vazio na ficha editorial",
+                    )?;
+                }
+            }
+        }
+    }
 
     let v = &q["validity"];
     let val_rev = v["revision"].as_u64().ok_or_else(|| {

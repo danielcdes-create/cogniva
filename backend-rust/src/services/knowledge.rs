@@ -113,6 +113,7 @@ pub struct UnitQuestionObservation {
     pub canonical_topic_id: String,
     pub concept_id: Option<String>,
     pub question_id: String,
+    pub board_key: String,
     pub non_blank_attempts: usize,
     pub correct_attempts: usize,
     pub last_is_correct: bool,
@@ -195,14 +196,35 @@ pub fn project_units(activity: &Document, question: &Document) -> Vec<UnitQuesti
         .sum();
     let avg_seconds = (total_secs as f64) / (events.len() as f64);
 
+    let effective_ch = q.effective_evidence_challenge();
     let evidence_challenge_passed = match (
         last.get_str("selected_evidence_id").ok(),
-        q.evidence_challenge.as_ref(),
+        effective_ch.as_ref(),
     ) {
         (Some(sel), Some(ch)) if !sel.trim().is_empty() => {
             Some(sel.trim() == ch.correct_evidence_id)
         }
         _ => None,
+    };
+
+    let board_key = question
+        .get_array("origins")
+        .ok()
+        .and_then(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_document())
+                .find_map(|o| o.get_str("organizer").ok())
+        })
+        .or(q.source.as_deref())
+        .unwrap_or("")
+        .trim()
+        .to_lowercase();
+    let normalized_board = if board_key == "cespe" || board_key == "cebraspe" {
+        "cebraspe".to_string()
+    } else if board_key == "origem não informada" {
+        String::new()
+    } else {
+        board_key
     };
 
     let mut targets: Vec<(String, String, Option<String>)> = Vec::new();
@@ -246,6 +268,7 @@ pub fn project_units(activity: &Document, question: &Document) -> Vec<UnitQuesti
                 canonical_topic_id: top,
                 concept_id: cid,
                 question_id: qid_hex.clone(),
+                board_key: normalized_board.clone(),
                 non_blank_attempts: events.len(),
                 correct_attempts,
                 last_is_correct,

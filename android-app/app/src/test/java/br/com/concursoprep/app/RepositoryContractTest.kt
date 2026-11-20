@@ -156,6 +156,7 @@ class RepositoryContractTest {
         }}
         fun repository(
             submit:(SubmitBatchPayload)->SubmitBatchResponseDto={throw IOException("Synthetic outage")},
+            attachEvidence:(AttachAttemptEvidencePayload)->AttachAttemptEvidenceResponse={AttachAttemptEvidenceResponse("applied",it.attemptId,it.selectedEvidenceId)},
             sendReport:()->Unit={},
             updateExam:(ExamBlueprintPayload)->ExamBlueprintPayload={throw IOException("Synthetic outage")},
             generate:(QuizGeneratePayload)->List<QuestionDto> = {throw IOException("Synthetic outage")},
@@ -165,6 +166,7 @@ class RepositoryContractTest {
         ):ConcursoRepository {
             val api=fake<ConcursoApiService>{method,args->when(method){
                 "submitAttemptsBatch"->submit(args[0] as SubmitBatchPayload)
+                "attachAttemptEvidence"->attachEvidence(args[0] as AttachAttemptEvidencePayload)
                 "listExams"->remoteExams
                 "updateExam"->updateExam(args[1] as ExamBlueprintPayload)
                 "catalog"->Json.parseToJsonElement(checkNotNull(javaClass.getResourceAsStream("/exam-templates.json")).bufferedReader().readText()).jsonObject
@@ -174,6 +176,8 @@ class RepositoryContractTest {
                 "reportQuestionProblem"->{sendReport();Unit}
                 "generateQuizQuestions"->generate(args[0] as QuizGeneratePayload)
                 "requestAiTutor"->aiTutor(args[0] as String,args[1] as String,args[2] as Int?)
+                "requestAiTutorWithContext"->{throw IOException("Synthetic offline contextual AI")}
+                "lookupQuestionContext"->{throw IOException("Synthetic offline lookup")}
                 "saveOnboardingPreferences"->saveOnboarding(args[0] as OnboardingPayload)
                 "profile"->UserProfileDto(123,displayName="Estudante",isGuest=true)
                 "getApkInfo"->{throw IOException("Synthetic offline APK check")}
@@ -740,5 +744,106 @@ class RepositoryContractTest {
         repo.recordAttemptOfflineFirst(123L, blankAttempt)
         assertEquals(0, repo.getProgressAnalytics(123L).totalQuestionsPracticed)
         assertEquals(FatigueStatus.INSUFFICIENT_EVIDENCE, repo.getProgressAnalytics(123L).fatigueReport.status)
+    }
+
+    @Test fun postAnswerEvidenceSelectionSurvivesPriorBatchSyncAndFlushesPatch() = runBlocking {
+        val store = Store()
+        val q = question("000000000000000000000088").copy(
+            editorialCard = EditorialCardDto(
+                legalProvisions = listOf("Lei nº 9.784/1999 — Art. 53"),
+                testedRule = "A Administração deve anular atos eivados de vício de legalidade.",
+                decisiveStemExcerpt = "eivados de vício de legalidade",
+                plausibleConceptualErrors = listOf(
+                    ConceptualErrorItemDto("ERR_REVOG", "Confusão entre revogação e anulação", "Revogação recai apenas sobre ato válido por mérito.")
+                )
+            )
+        )
+        store.questions[q.id] = QuestionCacheMapping.toEntity(q, json)
+        val sessionUuid = "sess-evidence-race"
+        val detId = ConcursoRepository.deterministicAttemptId(sessionUuid, q.id)
+        val pendingAttempt = PendingAttemptEntity(
+            localId = 1,
+            questionId = q.id,
+            chosenIndex = 1,
+            chosenText = "B",
+            isCorrect = true,
+            timeSpentSeconds = 18,
+            confidenceLevel = 3,
+            sessionUuid = sessionUuid,
+            quizMode = "ENTRY_60S",
+            examBlock = null,
+            contestId = "CPNU",
+            userNote = null,
+            ownerUserId = 123L,
+            attemptId = detId,
+            questionRevision = q.questionRevision,
+            confidenceExplicit = true
+        )
+        store.pending[detId] = pendingAttempt
+
+        val attachedPayloads = mutableListOf<AttachAttemptEvidencePayload>()
+        val repo = store.repository(
+            submit = { batch -> SubmitBatchResponseDto(batch.attempts.size, batch.attempts.map { ack(pendingAttempt) }) },
+            attachEvidence = { p ->
+                attachedPayloads += p
+                AttachAttemptEvidenceResponse("applied", p.attemptId, p.selectedEvidenceId)
+            }
+        )
+
+        // 1. Background sync finishes BEFORE student taps optional post-answer evidence card
+        repo.syncPendingAttempts(123L)
+        assertTrue("Pending attempt was already drained", store.pending.isEmpty())
+
+        // 2. Student taps wrong distractor evidence on a hit -> local LearningRecord updates immediately (ILLUSORY_COMPETENCE) + patch queued
+        repo.recordEvidenceSelection(123L, sessionUuid, q.id, "ev_err_1")
+        val analyticsBeforePatchSync = repo.getProgressAnalytics(123L)
+        assertEquals(1, analyticsBeforePatchSync.threeSignalSummary.illusoryCompetenceHits)
+
+        // 3. Next sync flushes `POST /api/v1/quiz/attempt-evidence` idempotently and clears queue
+        val syncedPatches = repo.syncPendingAttempts(123L)
+        assertEquals(1, syncedPatches)
+        assertEquals(1, attachedPayloads.size)
+        assertEquals(detId, attachedPayloads.single().attemptId)
+        assertEquals("ev_err_1", attachedPayloads.single().selectedEvidenceId)
+        assertEquals("", store.metadata["pending_evidence_patches"].orEmpty())
+    }
+
+    @Test fun entry60sProtocolConsciousRestAndOfflineContextualLookupWorkCleanly() = runBlocking {
+        val store = Store()
+        val q = question("000000000000000000000099").copy(
+            question = "A Administração deve anular seus próprios atos eivados de vício de legalidade (Art. 53 da Lei 9.784/1999).",
+            questionType = QuestionType.TRUE_FALSE,
+            answers = listOf("Certo", "Errado"),
+            correctAnswerIndices = listOf(0),
+            disciplina = "Direito Administrativo",
+            source = "Cebraspe",
+            canonicalSubjectId = "DIR_ADM",
+            canonicalTopicId = "DIR_ADM_01_001"
+        )
+        store.questions[q.id] = QuestionCacheMapping.toEntity(q, json)
+        val repo = store.repository()
+
+        // 1. Conscious rest ("Sem estudar hoje") is reversible and recorded without guilt
+        repo.recordEntryScreenImpression(123L)
+        val restMetrics = repo.setConsciousRestToday(123L, rested = true)
+        assertTrue(restMetrics.restedToday)
+        assertEquals(1, restMetrics.consciousRestDaysCount)
+
+        // 2. Voluntary start clears restedToday automatically
+        repo.recordEntryVoluntaryStart(123L)
+        repo.recordEntryFirstQuestionCompleted(123L)
+        val dash = repo.getTodayDashboard(123L)
+        assertFalse(dash.entryMetrics.restedToday)
+        assertEquals(1, dash.entryMetrics.voluntaryStartsCount)
+        assertEquals(1, dash.entryMetrics.firstQuestionCompletedCount)
+
+        // 3. Offline ENTRY_60S returns the short familiar question
+        val entryQuiz = repo.fetchOrGetOfflineQuiz(123L, QuizMode.ENTRY_60S, 1)
+        assertEquals(listOf(q.id), entryQuiz.map { it.id })
+
+        // 4. Offline contextual lookup matches bundled normative source Art. 53 Lei 9.784/1999 + builds Google layer URL
+        val lookup = repo.lookupQuestionContext(q, "Art. 53")
+        assertTrue(lookup.googleSearchUrl.startsWith("https://www.google.com/search?hl=pt-BR&q="))
+        assertTrue(lookup.normativeMatches.any { it.sourceId == "LEI_9784_ART_53" })
     }
 }

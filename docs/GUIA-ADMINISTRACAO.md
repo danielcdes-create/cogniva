@@ -210,15 +210,16 @@ A mesma conta de e-mail pode ser usada no aplicativo Android e no painel adminis
 
 No portal: **Ver rascunhos preservados**.
 
-## Grafo de conceitos, fontes normativas e motores de decisão
+## Arquitetura em 3 Camadas: Protocolo 60s, Ficha Editorial (<15 itens) e Decisão 300m
 
-O Cogniva 2.2 estende os subassuntos folha com conceitos reutilizáveis entre editais e fontes normativas versionadas que alimentam os 5 motores de decisão.
+O Cogniva 2.3 organiza a preparação em três camadas orientadas por evidência: Entrada de 60 Segundos sem cobrança punitiva, Diagnóstico Rastreável com Ficha Editorial e Simulador de Decisão sob Incerteza.
 
-1. Subordine novos conceitos sempre a um Subassunto folha ativo (SUBTOPIC) e declare pré-requisitos sem ciclos (DAG verificado na validação do catálogo).
-2. Cadastre fontes normativas com hash SHA-256 do texto vigente; ao atualizar o hash de uma lei ou súmula, revise apenas as questões vinculadas aos conceitos impactados.
-3. Ao classificar ou importar questões, vincule opcionalmente concept_id e desafio de evidência pós-erro; questões sem concept_id operam automaticamente pelo subassunto folha.
+1. Subordine novos conceitos a um Subassunto folha ativo (SUBTOPIC) e declare pré-requisitos sem ciclos (DAG verificado na validação do catálogo).
+2. Cadastre fontes normativas com hash SHA-256 vigente e preencha opcionalmente a Ficha Editorial das questões humanas (dispositivos legais, regra cobrada, exceção, trecho decisivo do enunciado, fonte oficial e erros conceituais plausíveis).
+3. Respeite a regra epistemológica de escassez: com menos de 15 questões humanas distintas, o sistema aponta indícios de erro (cruzando resposta, confiança e evidência selecionada), mas jamais afirma domínio nem inventa questões sintéticas; sem questão válida de outra banca, registra transferência não mensurada.
+4. O Simulador de Decisão sob Incerteza opera com o modelo logístico individual de 300 minutos p(t) = sigma(logit(p0) - lambda_i * t/300), exigindo provas prolongadas periódicas com controle de dificuldade para calibrar fadiga real.
 
-Todas as questões confirmadas e vigentes alimentam os motores de Diagnóstico, Retenção, Priorização, Calibração/Estratégia e a reserva de validação Holdout de 20%.
+A Ficha Editorial fica fora de content_revision e semantic_revision, permitindo enriquecer questões vigentes sem invalidar sua confirmação normativa.
 
 No portal: **Abrir revisões do catálogo**.
 

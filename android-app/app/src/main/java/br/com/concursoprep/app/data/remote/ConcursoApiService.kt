@@ -143,6 +143,28 @@ data class ExamBlueprintPayload(
     @SerialName("catalog_version") val catalogVersion:Long
 )
 @Serializable data class CacheStateResponse(@SerialName("projection_version") val projectionVersion:Int,val questions:List<CacheStateItem>,val decisions:List<PracticeDecision> = emptyList())
+
+@Serializable
+data class AiAssistRequestPayload(
+    @SerialName("hint_index") val hintIndex: Int? = null,
+    @SerialName("user_note") val userNote: String? = null,
+    @SerialName("student_answer") val studentAnswer: String? = null
+)
+
+@Serializable
+data class AttachAttemptEvidencePayload(
+    @SerialName("question_id") val questionId: String,
+    @SerialName("attempt_id") val attemptId: String,
+    @SerialName("selected_evidence_id") val selectedEvidenceId: String
+)
+
+@Serializable
+data class AttachAttemptEvidenceResponse(
+    val status: String,
+    @SerialName("attempt_id") val attemptId: String,
+    @SerialName("selected_evidence_id") val selectedEvidenceId: String
+)
+
 @Keep
 @Serializable
 data class DeleteAccountRequest(
@@ -211,12 +233,30 @@ interface ConcursoApiService {
         @Body payload: SubmitBatchPayload
     ): SubmitBatchResponseDto
 
+    @POST("quiz/attempt-evidence")
+    suspend fun attachAttemptEvidence(
+        @Body payload: AttachAttemptEvidencePayload
+    ): AttachAttemptEvidenceResponse
+
     @POST("questions/{id}/ai/{kind}")
     suspend fun requestAiTutor(
         @Path("id") questionId: String,
         @Path("kind") kind: String,
         @Query("hint_index") hintIndex: Int? = null
     ): AiAssistResponseDto
+
+    @POST("questions/{id}/ai/{kind}")
+    suspend fun requestAiTutorWithContext(
+        @Path("id") questionId: String,
+        @Path("kind") kind: String,
+        @Body payload: AiAssistRequestPayload
+    ): AiAssistResponseDto
+
+    @POST("questions/{id}/lookup")
+    suspend fun lookupQuestionContext(
+        @Path("id") questionId: String,
+        @Body payload: br.com.concursoprep.app.domain.model.ContextualLookupRequestDto
+    ): br.com.concursoprep.app.domain.model.ContextualLookupResponseDto
 
     @POST("questions/{id}/report")
     suspend fun reportQuestionProblem(

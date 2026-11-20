@@ -1,6 +1,6 @@
 # Manual de Operação e Produção — Cogniva 2.0
 
-Este guia documenta a operação segura do **Cogniva `2.2.0`** (`build 28`) na VPS DigitalOcean, incluindo credenciais, migração do acervo `CNU → cogniva`, administração de contas, conformidade LGPD, TLS IPv4/IPv6, promoção atômica e rollback verificado.
+Este guia documenta a operação segura do **Cogniva `2.3.0`** (`build 29`) na VPS DigitalOcean, incluindo credenciais, migração do acervo `CNU → cogniva`, administração de contas, conformidade LGPD, TLS IPv4/IPv6, promoção atômica e rollback verificado.
 
 ---
 
@@ -70,13 +70,13 @@ O fluxo de promoção em [`.github/workflows/deploy.yml`](../.github/workflows/d
 
 1. **Verificação `SHA256SUMS` e Ensaio Controlado de Rollback (`rollback-drill`):** Exercita `promote.py --exercise-rollback` em pilha Docker isolada antes de conectar à VPS, exigindo `CONTROLLED_ROLLBACK_VERIFIED`.
 2. **Gate `503`:** Ativa `/etc/nginx/cogniva-gate.conf` (`set $cogniva_maintenance 1;`) bloqueando tráfego externo com `Retry-After: 15` enquanto preserva `/api/v1/health`.
-3. **Troca Atômica e Prontidão:** Atualiza o container por digest imutável, vincula `/opt/apps/apk/current` ao novo APK assinado + `output-metadata.json` e aguarda `/api/v1/ready` (`contract_version: 4` e `revision` exata).
-4. **Preparação e Higiene:** Executa `cogniva-api --prepare-storage` (incluindo migração auditada de validadores MongoDB para `question-v2-validator-2.2.0`), reabre o gate (`set $cogniva_maintenance 0;`), grava `/opt/apps/cogniva-current-release.json` e poda releases antigas excedentes.
+3. **Troca Atômica e Prontidão:** Atualiza o container por digest imutável, vincula `/opt/apps/apk/current` ao novo APK assinado + `output-metadata.json` e aguarda `/api/v1/ready` (`contract_version: 5` e `revision` exata).
+4. **Preparação e Higiene:** Executa `cogniva-api --prepare-storage` (incluindo migração auditada de validadores MongoDB para `question-v2-validator-2.3.0`), reabre o gate (`set $cogniva_maintenance 0;`), grava `/opt/apps/cogniva-current-release.json` e poda releases antigas excedentes.
 5. **Aceite Read-Only Pós-Promoção:** Audita saúde, prontidão, headers TLS/HSTS, validade restante do certificado (`>= 48h`), download integral do APK com SHA-256 e estado dos timers na VPS sem mutar dados de produção:
 
 ```bash
 python3 scripts/verify-production-release.py <GIT_SHA> \
   --origin https://198.199.65.103 \
-  --version-name 2.2.0 \
-  --version-code 28
+  --version-name 2.3.0 \
+  --version-code 29
 ```
