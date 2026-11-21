@@ -9,6 +9,7 @@ pub mod exam_engine;
 pub mod exam_store;
 pub mod fatigue_engine;
 pub mod knowledge;
+pub mod missions;
 pub mod practice_context;
 pub mod prioritization_engine;
 pub mod question_compatibility;

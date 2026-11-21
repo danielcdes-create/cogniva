@@ -235,3 +235,15 @@ O Cogniva separa estritamente os dados pessoais de estudo do acervo editorial co
 Nenhuma resposta de IA publica questões, altera gabaritos ou confirma classificação/validade automaticamente sem confirmação humana auditada.
 
 No portal: **Voltar à visão geral**.
+
+## Módulo Missões: narrativas audiovisuais e separação epistemológica
+
+Missões apresenta episódios audiovisuais interativos estruturados em Carreira → Disciplina → Temporada → Missão → Cena → Interação → Evidência de aprendizagem.
+
+1. Consulte em Missões os episódios declarativos publicados, a duração real calculada e a integridade dos vídeos locais (resolução, codecs e SHA-256).
+2. Abra a experiência do estudante em /missoes/ (ou na aba Missões do aplicativo Android) para reproduzir as cenas com legendas e transcrição em português brasileiro.
+3. Verifique a separação estrita em 3 dimensões: progresso narrativo, desempenho formativo nas decisões da cena e domínio demonstrado exclusivamente em questões humanas reais do acervo.
+
+Decisões narrativas da missão nunca são gravadas automaticamente em todasQuestoes nem conferem domínio formal sem avaliação independente no acervo.
+
+No portal: **Abrir Missões**.

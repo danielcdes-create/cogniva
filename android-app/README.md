@@ -1,4 +1,4 @@
-# 📱 Cogniva Android App (`android-app` `2.3.0` / `build 29`)
+# 📱 Cogniva Android App (`android-app` `2.4.0` / `build 30`)
 
 Aplicativo nativo Android construído em **Kotlin + Jetpack Compose (Material 3)** com persistência local **Room v7** (com schema exportado em `7.json`), **Motores Simétricos de Decisão & Curva de 300 Minutos** (`PerformanceEngines.kt`, `contract_version: 5`), **Protocolo de Entrada de 60 Segundos ("Terça · 22h")**, **Consulta Contextual em Camada (Catálogo + IA + Google Partial Custom Tab)**, criptografia de sessão no **Android Keystore**, contraste **WCAG 2.1 AA** e sincronização *offline-first* idempotente com o backend `cogniva-api`.
 

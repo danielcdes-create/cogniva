@@ -33,5 +33,7 @@ jobs:
         run: python scripts/knowledge_catalog.py --check
       - name: Question, suggestion, compatibility and grading examples
         run: python scripts/question_contracts.py --examples
+      - name: Missions declarative catalog and epistemological contracts
+        run: python scripts/missions_contracts.py --check
       - name: Contract, preservation and migration tests
         run: pytest scripts/tests -v

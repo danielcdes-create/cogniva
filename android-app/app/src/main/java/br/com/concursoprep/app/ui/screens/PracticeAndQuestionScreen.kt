@@ -116,7 +116,8 @@ import kotlinx.coroutines.delay
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PracticeHubScreen(
-    onLaunchSession: (QuizMode, Int) -> Unit
+    onLaunchSession: (QuizMode, Int) -> Unit,
+    onOpenMissions: (() -> Unit)? = null
 ) {
     var selectedQuantity by rememberSaveable { mutableIntStateOf(10) }
     val quantities = listOf(5, 10, 20, 40, 60)
@@ -157,6 +158,14 @@ fun PracticeHubScreen(
                         )
                     )
                 }
+            }
+
+            if (onOpenMissions != null) {
+                PracticeModeCard(
+                    title = "Cogniva Missões · Episódios Audiovisuais Interativos",
+                    description = "Vivencie situações reais de carreira (piloto: Banco Central · O Choque dos Juros) com modelos nativos e vínculo ao edital.",
+                    onClick = onOpenMissions
+                )
             }
 
             PracticeModeCard(

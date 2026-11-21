@@ -23,8 +23,11 @@ jobs:
           node --check web-admin/app.js
           node --check web-admin/domain.js
           node --check web-admin/help.js
+          node --check web-missions/app.js
+          node --check web-missions/domain.js
           node scripts/export-admin-help.mjs --check
           node --test web-admin/tests/*.test.js
+          node --test web-missions/tests/*.test.js
           python3 scripts/check_markdown_links.py
   knowledge-contracts:
     if: "github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip ci]')"

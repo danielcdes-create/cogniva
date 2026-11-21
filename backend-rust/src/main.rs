@@ -201,6 +201,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             header::CONTENT_TYPE,
             header::ACCEPT,
             header::IF_NONE_MATCH,
+            header::RANGE,
             HeaderName::from_static("x-cogniva-csrf"),
         ]);
 
@@ -310,6 +311,10 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             "/api/v1/admin/run-daily-maintenance",
             post(routes::auth::handle_trigger_daily_maintenance),
         )
+        .route(
+            "/api/v1/admin/missions",
+            get(routes::missions::admin_missions_overview),
+        )
         .route_layer(axum::middleware::from_fn(security::require_admin));
 
     let authenticated_routes = Router::new()
@@ -390,6 +395,45 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             "/api/v1/exams/:exam_id/compatibility",
             get(routes::exams::get_compatibility).post(routes::exams::decide_compatibility),
         )
+        .route("/api/v1/missions", get(routes::missions::list_missions))
+        .route(
+            "/api/v1/missions/captions/:asset_id",
+            get(routes::missions::get_mission_captions),
+        )
+        .route(
+            "/api/v1/missions/:mission_id",
+            get(routes::missions::get_mission_detail),
+        )
+        .route(
+            "/api/v1/missions/:mission_id/progress",
+            post(routes::missions::update_mission_progress),
+        )
+        .route(
+            "/api/v1/missions/:mission_id/decisions",
+            post(routes::missions::submit_mission_decision),
+        )
+        .route(
+            "/api/v1/missions/:mission_id/repeat",
+            post(routes::missions::repeat_mission),
+        )
+        .route(
+            "/api/v1/missions/:mission_id/telemetry",
+            post(routes::missions::record_mission_telemetry),
+        )
+        .route(
+            "/api/v1/missions/:mission_id/practice-questions",
+            post(routes::missions::get_mission_practice_questions),
+        )
+        .route_layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            security::authenticate,
+        ));
+
+    let authenticated_binary_routes = Router::new()
+        .route(
+            "/api/v1/missions/media/:asset_id",
+            get(routes::missions::stream_mission_media),
+        )
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),
             security::authenticate,
@@ -399,6 +443,9 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/admin", get(routes::web_admin::index))
         .route("/admin/", get(routes::web_admin::index))
         .route("/admin/assets/:name", get(routes::web_admin::asset))
+        .route("/missoes", get(routes::web_missions::index))
+        .route("/missoes/", get(routes::web_missions::index))
+        .route("/missoes/assets/:name", get(routes::web_missions::asset))
         .route(
             "/api/v1/health",
             get(|| async {
@@ -437,6 +484,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .merge(public_routes)
         .layer(DefaultBodyLimit::max(2 * 1024 * 1024))
         .layer(CompressionLayer::new())
+        .merge(authenticated_binary_routes)
         .merge(
             Router::new().route(
                 "/api/v1/apk/download",
@@ -520,6 +568,7 @@ mod latest_apk_tests {
             jwt_secret: "test-secret-with-at-least-32-characters".to_string(),
             apk_storage_path: apk_path.clone(),
             apk_metadata_path: meta_path,
+            missions_media_dir: config::resolve_default_missions_media_dir(),
         };
         let client = mongodb::Client::with_uri_str(&config.mongodb_uri)
             .await
@@ -657,6 +706,7 @@ mod router_remediation_tests {
             jwt_secret: "test-secret-with-at-least-32-characters".to_string(),
             apk_storage_path: std::path::PathBuf::from("nonexistent.apk"),
             apk_metadata_path: std::path::PathBuf::from("nonexistent.json"),
+            missions_media_dir: config::resolve_default_missions_media_dir(),
         };
         let client = mongodb::Client::with_uri_str(&config.mongodb_uri)
             .await
@@ -831,6 +881,80 @@ mod router_remediation_tests {
                 .unwrap();
             assert_eq!(throttled.status(), StatusCode::TOO_MANY_REQUESTS, "uri={uri}");
         }
+    }
+
+    #[tokio::test]
+    async fn missions_web_portal_and_protected_endpoints_enforce_csp_auth_and_csrf() {
+        let app = test_app("mongodb://127.0.0.1:27017").await;
+
+        for (uri, expected_mime_prefix) in [
+            ("/missoes/", "text/html"),
+            ("/missoes/assets/app.js", "text/javascript"),
+            ("/missoes/assets/domain.js", "text/javascript"),
+            ("/missoes/assets/style.css", "text/css"),
+        ] {
+            let res = app
+                .clone()
+                .oneshot(Request::builder().method(Method::GET).uri(uri).body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(res.status(), StatusCode::OK, "uri={uri}");
+            let ct = res
+                .headers()
+                .get(header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("");
+            assert!(ct.starts_with(expected_mime_prefix), "uri={uri} ct={ct}");
+            let csp = res
+                .headers()
+                .get(header::CONTENT_SECURITY_POLICY)
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("");
+            assert!(csp.contains("script-src 'self'") && csp.contains("media-src 'self'"));
+            let body_str = String::from_utf8(
+                axum::body::to_bytes(res.into_body(), usize::MAX)
+                    .await
+                    .unwrap()
+                    .to_vec(),
+            )
+            .unwrap();
+            assert!(!body_str.contains("C:\\Users\\"));
+        }
+
+        // Unauthenticated access to missions catalog and media stream returns 401
+        for protected_uri in [
+            "/api/v1/missions",
+            "/api/v1/missions/media/asset-bcb-m01-v01-alerta",
+        ] {
+            let unauth = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method(Method::GET)
+                        .uri(protected_uri)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(unauth.status(), StatusCode::UNAUTHORIZED, "uri={protected_uri}");
+        }
+
+        // Cookie-authenticated POST without X-Cogniva-CSRF is rejected before hitting DB
+        let missing_csrf = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/v1/missions/bcb-ef-t1-m01-choque-dos-juros/decisions")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header(header::COOKIE, "cogniva_web_session=fake-token")
+                    .header(header::ORIGIN, "https://cogniva.local")
+                    .body(Body::from(r#"{"scene_id":"s","interaction_id":"i","selected_option_id":"B"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(missing_csrf.status(), StatusCode::FORBIDDEN);
     }
 }
 

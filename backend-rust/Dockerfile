@@ -7,6 +7,7 @@ COPY backend-rust/Cargo.toml backend-rust/Cargo.lock ./
 COPY backend-rust/src ./src
 COPY shared /app/shared
 COPY web-admin /app/web-admin
+COPY web-missions /app/web-missions
 ARG BUILD_REVISION=local
 ENV BUILD_REVISION=${BUILD_REVISION}
 RUN --mount=type=cache,target=/usr/local/cargo/registry \

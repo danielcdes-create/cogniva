@@ -16,8 +16,8 @@ android {
         applicationId = "br.com.concursoprep.app"
         minSdk = 28
         targetSdk = 35
-        versionCode = 29
-        versionName = "2.3.0"
+        versionCode = 30
+        versionName = "2.4.0"
 
         val doApiBaseUrl = (project.findProperty("DO_API_BASE_URL") as? String)
             ?: "https://198.199.65.103/api/v1/"
@@ -84,6 +84,7 @@ val syncSharedContracts = tasks.register<Sync>("syncSharedContracts") {
             "knowledge-concepts-seed.json",
             "exam-templates.json",
             "domain-contracts.json",
+            "missions-catalog.json",
         )
     }
     into(layout.buildDirectory.dir("generated/sharedContracts"))

@@ -1010,6 +1010,40 @@ pub async fn ensure_indexes(db: &Database) -> Result<Vec<String>, AppError> {
         created.push(label.to_string());
     }
 
+    create_index_tolerant(
+        db,
+        "mission_progress",
+        IndexModel::builder()
+            .keys(doc! { "user_id": 1, "mission_id": 1 })
+            .options(
+                IndexOptions::builder()
+                    .name("idx_mission_progress_user_mission".to_string())
+                    .unique(true)
+                    .build(),
+            )
+            .build(),
+        "idx_mission_progress_user_mission",
+    )
+    .await?;
+    created.push("idx_mission_progress_user_mission".to_string());
+
+    create_index_tolerant(
+        db,
+        "mission_definitions",
+        IndexModel::builder()
+            .keys(doc! { "mission_id": 1 })
+            .options(
+                IndexOptions::builder()
+                    .name("idx_mission_definitions_id".to_string())
+                    .unique(true)
+                    .build(),
+            )
+            .build(),
+        "idx_mission_definitions_id",
+    )
+    .await?;
+    created.push("idx_mission_definitions_id".to_string());
+
     Ok(created)
 }
 

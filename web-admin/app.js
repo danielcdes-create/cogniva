@@ -35,6 +35,7 @@ const pretty = value => JSON.stringify(value,null,2);
 
 const labels = {
   overview:'Visão geral',
+  missions:'Missões',
   exams:'Concursos',
   edital:'Editais e grades',
   trunks:'Troncos de carreira',
@@ -103,6 +104,7 @@ const trunkIcons = [
 ];
 const helpForPage = {
   overview:'visao-geral',
+  missions:'missoes-interativas',
   exams:'concursos',
   exam:'editais-grades',
   edital:'editais-grades',
@@ -129,6 +131,7 @@ let questionCursor = null, questionCursorStack = [];
 let catalogTab = 'trunks';
 let proposalsData = null, proposalStatusFilter = 'PENDING';
 let reportsData = null, reportStatusFilter = 'open';
+let missionsAdminData = null;
 let lastRenderedRoute = null;
 let openDetailsByRoute = new Map();
 let examUiState = new Map();
@@ -281,6 +284,7 @@ function resetToLoginView(message = '') {
   loadErrors = [];
   proposalsData = null;
   reportsData = null;
+  missionsAdminData = null;
   questionPage = null;
   questionCursor = null;
   questionCursorStack = [];
@@ -708,6 +712,7 @@ export function render() {
   }
   const views = {
     overview:overviewView,
+    missions:missionsView,
     exams:examsView,
     edital:examsView,
     exam:examView,
@@ -1959,6 +1964,78 @@ function fetchReports() {
     reportsData=await api(`admin/reports?${query}`);
     data.summary=await api('admin/summary');
   });
+}
+
+function fetchAdminMissions() {
+  return run('Carregando catálogo de Missões…', async () => {
+    missionsAdminData = await api('admin/missions');
+  });
+}
+
+function missionsView() {
+  const openPortalLink = h('a', {href: '/missoes/', class: 'button-link'}, 'Abrir experiência do aluno (/missoes/) ↗');
+  const root = h(
+    'div',
+    {},
+    heading(
+      'Missões interativas',
+      'Narrativas audiovisuais declarativas separadas da avaliação formal de questões humanas.',
+      button('Atualizar Missões', fetchAdminMissions, 'primary')
+    ),
+    card(
+      h('h2', {}, 'Experiência do Estudante · Cogniva Missões'),
+      h('p', {}, 'O módulo Missões opera de forma desacoplada do acervo oficial: decisões narrativas são estritamente formativas e nunca são inseridas automaticamente em todasQuestoes.'),
+      actions(openPortalLink, button('Carregar inventário de Missões e vídeos', fetchAdminMissions))
+    )
+  );
+
+  if (!missionsAdminData) {
+    return root;
+  }
+
+  root.append(
+    card(
+      h('h2', {}, `Missões publicadas (${(missionsAdminData.missions || []).length})`),
+      ...(missionsAdminData.missions || []).map(m =>
+        h(
+          'div',
+          {class: 'catalog-row'},
+          h(
+            'div',
+            {},
+            h('strong', {}, `${m.career_header} · ${m.season_title} · ${m.full_title}`),
+            h(
+              'small',
+              {},
+              `ID: ${m.mission_id} (v${m.version}) · Disciplina: ${m.discipline} (${m.canonical_subject_id}) · ${m.scenes_count} cenas · ${m.interactions_count} decisões · ${m.duration?.display_label || ''}`
+            )
+          ),
+          badge(m.publication_state, 'good')
+        )
+      )
+    ),
+    card(
+      h('h2', {}, `Ativos audiovisuais verificados (${(missionsAdminData.media_assets || []).length})`),
+      ...(missionsAdminData.media_assets || []).map(a =>
+        h(
+          'div',
+          {class: 'catalog-row'},
+          h(
+            'div',
+            {},
+            h('strong', {}, `${a.asset_id} — ${a.relative_file_name}`),
+            h(
+              'small',
+              {},
+              `${a.resolution} (${a.aspect_ratio}) · ${a.duration_seconds}s · ${a.video_codec}/${a.audio_codec} · SHA-256: ${String(a.sha256).slice(0, 16)}…`
+            )
+          ),
+          badge(a.available_on_server ? 'Disponível no servidor' : 'Modo transcrição', a.available_on_server ? 'good' : 'warning')
+        )
+      )
+    )
+  );
+  return root;
 }
 
 function reportsView() {

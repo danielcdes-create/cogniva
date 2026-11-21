@@ -275,4 +275,42 @@ interface ConcursoApiService {
         @Path("examId") examId: String,
         @Body payload: ExamBlueprintPayload
     ): ExamBlueprintPayload
+
+    @GET("missions")
+    suspend fun listMissions(): JsonObject
+
+    @GET("missions/{missionId}")
+    suspend fun getMissionDetail(
+        @Path("missionId") missionId: String,
+        @Query("resume") resume: Boolean = false
+    ): JsonObject
+
+    @POST("missions/{missionId}/progress")
+    suspend fun updateMissionProgress(
+        @Path("missionId") missionId: String,
+        @Body payload: JsonObject
+    ): JsonObject
+
+    @POST("missions/{missionId}/decisions")
+    suspend fun submitMissionDecision(
+        @Path("missionId") missionId: String,
+        @Body payload: JsonObject
+    ): JsonObject
+
+    @POST("missions/{missionId}/repeat")
+    suspend fun repeatMission(
+        @Path("missionId") missionId: String
+    ): JsonObject
+
+    @POST("missions/{missionId}/telemetry")
+    suspend fun recordMissionTelemetry(
+        @Path("missionId") missionId: String,
+        @Body payload: JsonObject
+    ): JsonObject
+
+    @POST("missions/{missionId}/practice-questions")
+    suspend fun getMissionPracticeQuestions(
+        @Path("missionId") missionId: String,
+        @Body payload: JsonObject
+    ): JsonObject
 }

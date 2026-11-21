@@ -32,6 +32,7 @@ pub(super) fn config(uri: &str) -> AppConfig {
         jwt_secret: "synthetic-only-secret-at-least-thirty-two-characters".into(),
         apk_storage_path: PathBuf::from("missing"),
         apk_metadata_path: PathBuf::from("missing"),
+        missions_media_dir: crate::config::resolve_default_missions_media_dir(),
     }
 }
 
@@ -2479,6 +2480,530 @@ async fn nt_cogniva_questions_002_provenance_idempotency_concurrency_and_eligibi
     assert!(!returned_ids.contains(&expired_oid.to_hex()));
     assert!(!returned_ids.contains(&imported_oid_hex));
 
+    assert!(name.starts_with("cogniva_test_"));
+    db.drop().await.unwrap();
+}
+
+#[tokio::test]
+#[ignore = "Requires dedicated loopback Mongo 27048"]
+async fn missions_end_to_end_flow_range_streaming_isolation_and_epistemology() {
+    let uri = std::env::var("COGNIVA_TEST_MONGODB_URI").unwrap();
+    assert!(uri.starts_with("mongodb://127.0.0.1:27048/"));
+    let client = Client::with_uri_str(&uri).await.unwrap();
+    let name = format!("cogniva_test_{}", uuid::Uuid::new_v4().simple());
+    let db = client.database(&name);
+
+    // Prepare isolated synthetic media directory so HTTP Range streaming works deterministically
+    // both on Windows dev machines and on clean CI runners without 22 MB binary checkouts.
+    let tmp_media_dir =
+        std::env::temp_dir().join(format!("cogniva_missions_media_{}", uuid::Uuid::new_v4().simple()));
+    std::fs::create_dir_all(&tmp_media_dir).unwrap();
+    let synthetic_mp4: Vec<u8> = (0..5000_usize).map(|i| (i % 251) as u8).collect();
+    std::fs::write(
+        tmp_media_dir.join("Vídeo 1 — O alerta.mp4"),
+        &synthetic_mp4,
+    )
+    .unwrap();
+
+    let mut cfg = config(&uri);
+    cfg.missions_media_dir = tmp_media_dir.clone();
+    let secret = cfg.jwt_secret.clone();
+    let state = Arc::new(AppState::new(db.clone(), cfg));
+    let app = build_router(state.clone());
+
+    services::question_storage::prepare(&db).await.unwrap();
+    seed_user_and_session(&db, 456, false).await;
+    seed_user_and_session(&db, 789, false).await;
+
+    // 1. Web student portal HTML & assets obey strict CSP and leak zero host filesystem paths
+    let html_res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/missoes/")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(html_res.status(), StatusCode::OK);
+    let csp = html_res
+        .headers()
+        .get("content-security-policy")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+    assert!(csp.contains("script-src 'self'"));
+    assert!(csp.contains("style-src 'self'"));
+    assert!(csp.contains("media-src 'self'"));
+
+    // 2. Student web cookie session (`client: "student_web"`) + CSRF protection + admin isolation
+    let guest_web_res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/guest")
+                .header("content-type", "application/json")
+                .header("origin", "http://127.0.0.1:8876")
+                .header("x-cogniva-csrf", "1")
+                .body(Body::from(json!({ "client": "student_web" }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(guest_web_res.status(), StatusCode::OK);
+    let set_cookie = guest_web_res
+        .headers()
+        .get("set-cookie")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+    assert!(set_cookie.contains("cogniva_web_session="));
+    assert!(set_cookie.contains("HttpOnly"));
+    let cookie_pair = set_cookie.split(';').next().unwrap().to_string();
+
+    // Mutating request with cookie but WITHOUT X-Cogniva-CSRF is blocked (403)
+    let csrf_blocked = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/missions/bcb-ef-t1-m01-choque-dos-juros/progress")
+                .header("content-type", "application/json")
+                .header("origin", "http://127.0.0.1:8876")
+                .header("cookie", &cookie_pair)
+                .body(Body::from(
+                    json!({ "current_scene_id": "cena-01-o-alerta" }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(csrf_blocked.status(), StatusCode::FORBIDDEN);
+
+    // Mutating request with cookie + X-Cogniva-CSRF + matching Origin succeeds (200)
+    let csrf_allowed = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/missions/bcb-ef-t1-m01-choque-dos-juros/progress")
+                .header("content-type", "application/json")
+                .header("cookie", &cookie_pair)
+                .header("origin", "http://127.0.0.1:8876")
+                .header("x-cogniva-csrf", "1")
+                .body(Body::from(
+                    json!({ "current_scene_id": "cena-01-o-alerta" }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(csrf_allowed.status(), StatusCode::OK);
+
+    // Student cookie cannot access `/api/v1/admin/missions` (403 Forbidden)
+    let admin_denied = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/admin/missions")
+                .header("cookie", &cookie_pair)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(admin_denied.status(), StatusCode::FORBIDDEN);
+
+    // 3. HTTP Range video streaming (206 Partial Content, ETag 304, invalid range 416, no gzip) & WebVTT captions
+    let token_456 = security::sign_session_token(&secret, 456, "test-sid-456", "mobile", 3600).unwrap();
+    let range_res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/missions/media/asset-bcb-m01-v01-alerta")
+                .header("authorization", format!("Bearer {token_456}"))
+                .header("accept-encoding", "gzip")
+                .header("range", "bytes=100-1099")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(range_res.status(), StatusCode::PARTIAL_CONTENT);
+    assert_eq!(
+        range_res.headers().get("accept-ranges").unwrap(),
+        "bytes"
+    );
+    assert_eq!(
+        range_res.headers().get("content-range").unwrap(),
+        "bytes 100-1099/5000"
+    );
+    assert!(
+        range_res.headers().get("content-encoding").is_none(),
+        "MP4 byte-range responses must never be gzip-encoded"
+    );
+    let etag = range_res
+        .headers()
+        .get("etag")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+    let chunk_bytes = axum::body::to_bytes(range_res.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    assert_eq!(chunk_bytes.len(), 1000);
+    assert_eq!(&chunk_bytes[..], &synthetic_mp4[100..1100]);
+
+    // If-None-Match returns 304 Not Modified
+    let not_mod = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/missions/media/asset-bcb-m01-v01-alerta")
+                .header("authorization", format!("Bearer {token_456}"))
+                .header("if-none-match", &etag)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(not_mod.status(), StatusCode::NOT_MODIFIED);
+
+    // Out-of-bounds Range returns 416 Range Not Satisfiable
+    let bad_range = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/missions/media/asset-bcb-m01-v01-alerta")
+                .header("authorization", format!("Bearer {token_456}"))
+                .header("range", "bytes=9000-9999")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(bad_range.status(), StatusCode::RANGE_NOT_SATISFIABLE);
+
+    // Missing media file returns structured 404 MEDIA_ASSET_UNAVAILABLE so client activates Transcript Fallback
+    let missing_media = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/missions/media/asset-bcb-m01-v02-problema")
+                .header("authorization", format!("Bearer {token_456}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(missing_media.status(), StatusCode::NOT_FOUND);
+
+    // WebVTT captions endpoint serves valid UTF-8 WEBVTT
+    let vtt_res = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/missions/captions/asset-bcb-m01-v01-alerta.vtt")
+                .header("authorization", format!("Bearer {token_456}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(vtt_res.status(), StatusCode::OK);
+    let vtt_body = String::from_utf8(
+        axum::body::to_bytes(vtt_res.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap();
+    assert!(vtt_body.starts_with("WEBVTT"));
+    assert!(vtt_body.contains("Uma alta inesperada dos juros"));
+
+    // 4. Pilot Mission Flow, Anti-Tampering, User Isolation & Epistemological Separation
+    let (st, cat_456) = request(&app, &secret, Some(456), "GET", "/api/v1/missions", Value::Null).await;
+    assert_eq!(st, StatusCode::OK);
+    assert_eq!(
+        cat_456["careers"][0]["display_header"],
+        "Banco Central — Economia e Finanças"
+    );
+    let m_summary = &cat_456["careers"][0]["disciplines"][0]["seasons"][0]["missions"][0];
+    assert_eq!(m_summary["full_title"], "Missão 01: O Choque dos Juros");
+    assert_eq!(m_summary["narrative_progress"]["status"], "NOT_STARTED");
+
+    // Anti-tampering: attempting to complete Scene 3 or skip to Scene 4 before answering Scene 3 fails with 409
+    let (tamper_st1, tamper_body1) = request(
+        &app,
+        &secret,
+        Some(456),
+        "POST",
+        "/api/v1/missions/bcb-ef-t1-m01-choque-dos-juros/progress",
+        json!({ "completed_scene_id": "cena-03-primeira-decisao" }),
+    )
+    .await;
+    assert_eq!(tamper_st1, StatusCode::CONFLICT);
+    assert_eq!(tamper_body1["code"], "DECISION_REQUIRED_BEFORE_ADVANCE");
+
+    let (tamper_st2, tamper_body2) = request(
+        &app,
+        &secret,
+        Some(456),
+        "POST",
+        "/api/v1/missions/bcb-ef-t1-m01-choque-dos-juros/progress",
+        json!({ "current_scene_id": "cena-04-explicacao" }),
+    )
+    .await;
+    assert_eq!(tamper_st2, StatusCode::CONFLICT);
+    assert_eq!(tamper_body2["code"], "DECISION_REQUIRED_BEFORE_ADVANCE");
+
+    // Advance Scene 1 -> Scene 2 -> Scene 3
+    for (done, next) in [
+        ("cena-01-o-alerta", "cena-02-o-problema"),
+        ("cena-02-o-problema", "cena-03-primeira-decisao"),
+    ] {
+        let (pst, _) = request(
+            &app,
+            &secret,
+            Some(456),
+            "POST",
+            "/api/v1/missions/bcb-ef-t1-m01-choque-dos-juros/progress",
+            json!({ "completed_scene_id": done, "current_scene_id": next }),
+        )
+        .await;
+        assert_eq!(pst, StatusCode::OK);
+    }
+
+    // Scene 3: first attempt wrong ("A") -> server marks is_correct=false, first_attempt_correct=false, flags concepts for review
+    let (dec1_st, dec1_wrong) = request(
+        &app,
+        &secret,
+        Some(456),
+        "POST",
+        "/api/v1/missions/bcb-ef-t1-m01-choque-dos-juros/decisions",
+        json!({
+            "scene_id": "cena-03-primeira-decisao",
+            "interaction_id": "decisao-01-juros-preco-prefixado",
+            "selected_option_id": "A",
+            "time_spent_ms": 4200
+        }),
+    )
+    .await;
+    assert_eq!(dec1_st, StatusCode::OK);
+    assert_eq!(dec1_wrong["decision"]["is_correct"], false);
+    assert_eq!(dec1_wrong["decision"]["expected_option_id"], "B");
+    assert_eq!(dec1_wrong["decision"]["first_attempt_correct"], false);
+    assert!(!dec1_wrong["interaction_performance"]["concepts_for_review"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+
+    // Retry Scene 3 with "B" -> latest is_correct=true, attempt_count=2, first_attempt_correct stays false
+    let (dec1_retry_st, dec1_right) = request(
+        &app,
+        &secret,
+        Some(456),
+        "POST",
+        "/api/v1/missions/bcb-ef-t1-m01-choque-dos-juros/decisions",
+        json!({
+            "scene_id": "cena-03-primeira-decisao",
+            "interaction_id": "decisao-01-juros-preco-prefixado",
+            "selected_option_id": "B",
+            "time_spent_ms": 2100
+        }),
+    )
+    .await;
+    assert_eq!(dec1_retry_st, StatusCode::OK);
+    assert_eq!(dec1_right["decision"]["is_correct"], true);
+    assert_eq!(dec1_right["decision"]["first_attempt_correct"], false);
+    assert_eq!(dec1_right["decision"]["attempt_count"], 2);
+
+    // User isolation: Student 789 still sees NOT_STARTED and 0 decisions
+    let (_, cat_789) = request(&app, &secret, Some(789), "GET", "/api/v1/missions", Value::Null).await;
+    assert_eq!(
+        cat_789["careers"][0]["disciplines"][0]["seasons"][0]["missions"][0]["narrative_progress"]["status"],
+        "NOT_STARTED"
+    );
+
+    // Advance Scene 4 -> Scene 5 and resume via `?resume=true`
+    let (p4_st, _) = request(
+        &app,
+        &secret,
+        Some(456),
+        "POST",
+        "/api/v1/missions/bcb-ef-t1-m01-choque-dos-juros/progress",
+        json!({
+            "completed_scene_id": "cena-04-explicacao",
+            "current_scene_id": "cena-05-desafio-duration",
+            "playback_position_ms": 3400
+        }),
+    )
+    .await;
+    assert_eq!(p4_st, StatusCode::OK);
+
+    let (res_st, resumed) = request(
+        &app,
+        &secret,
+        Some(456),
+        "GET",
+        "/api/v1/missions/bcb-ef-t1-m01-choque-dos-juros?resume=true",
+        Value::Null,
+    )
+    .await;
+    assert_eq!(res_st, StatusCode::OK);
+    assert_eq!(resumed["narrative_progress"]["current_scene_id"], "cena-05-desafio-duration");
+    assert_eq!(resumed["narrative_progress"]["resume_count"], 1);
+
+    // Scene 5: answer "B" (5-year bond) -> completes mission
+    let (dec2_st, dec2_res) = request(
+        &app,
+        &secret,
+        Some(456),
+        "POST",
+        "/api/v1/missions/bcb-ef-t1-m01-choque-dos-juros/decisions",
+        json!({
+            "scene_id": "cena-05-desafio-duration",
+            "interaction_id": "decisao-02-desafio-duration",
+            "selected_option_id": "B",
+            "time_spent_ms": 5100
+        }),
+    )
+    .await;
+    assert_eq!(dec2_st, StatusCode::OK);
+    assert_eq!(dec2_res["decision"]["is_correct"], true);
+    assert_eq!(dec2_res["mission_completed"], true);
+    assert_eq!(dec2_res["narrative_progress"]["status"], "COMPLETED");
+    assert_eq!(dec2_res["interaction_performance"]["first_attempt_correct_count"], 1);
+    assert_eq!(dec2_res["interaction_performance"]["latest_correct_count"], 2);
+
+    // 5. Epistemological Separation: 0 docs added to `todasQuestoes`, `userActivityLog`, or `attempt_receipts`
+    assert_eq!(
+        db.collection::<Document>("todasQuestoes")
+            .count_documents(doc! {})
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        db.collection::<Document>("userActivityLog")
+            .count_documents(doc! { "user_id": 456_i64 })
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        db.collection::<Document>("attempt_receipts")
+            .count_documents(doc! { "user_id": 456_i64 })
+            .await
+            .unwrap(),
+        0
+    );
+
+    let (_, completed_detail) = request(
+        &app,
+        &secret,
+        Some(456),
+        "GET",
+        "/api/v1/missions/bcb-ef-t1-m01-choque-dos-juros",
+        Value::Null,
+    )
+    .await;
+    assert_eq!(
+        completed_detail["demonstrated_mastery"]["mastery_state"],
+        "NO_QUESTIONS_AVAILABLE"
+    );
+
+    // Seed 1 human-validated V2 question in MFIN / MFIN_01_004 -> mastery stays UNMEASURED (never auto-granted!)
+    let human_mfin_oid = ObjectId::new();
+    db.collection::<Document>("todasQuestoes")
+        .insert_one(v2_question_doc(
+            human_mfin_oid,
+            "Em títulos públicos prefixados (LTN), a elevação da taxa de desconto reduz o PU.",
+            &["Certo", "Errado"],
+            0,
+            "Finanças",
+            Some(("MFIN", "MFIN_01_004")),
+        ))
+        .await
+        .unwrap();
+
+    let (_, detail_with_q) = request(
+        &app,
+        &secret,
+        Some(456),
+        "GET",
+        "/api/v1/missions/bcb-ef-t1-m01-choque-dos-juros",
+        Value::Null,
+    )
+    .await;
+    assert_eq!(
+        detail_with_q["demonstrated_mastery"]["available_human_questions_count"],
+        1
+    );
+    assert_eq!(
+        detail_with_q["demonstrated_mastery"]["mastery_state"],
+        "UNMEASURED"
+    );
+
+    let (pq_st, pq_res) = request(
+        &app,
+        &secret,
+        Some(456),
+        "POST",
+        "/api/v1/missions/bcb-ef-t1-m01-choque-dos-juros/practice-questions",
+        json!({ "quantity": 5 }),
+    )
+    .await;
+    assert_eq!(pq_st, StatusCode::OK);
+    assert_eq!(pq_res["available_count"], 1);
+    assert_eq!(pq_res["questions"][0]["id"], human_mfin_oid.to_hex());
+
+    // 6. Repeat mission & LGPD Art. 18 deletion of `mission_progress`
+    let (rep_st, rep_res) = request(
+        &app,
+        &secret,
+        Some(456),
+        "POST",
+        "/api/v1/missions/bcb-ef-t1-m01-choque-dos-juros/repeat",
+        json!({}),
+    )
+    .await;
+    assert_eq!(rep_st, StatusCode::OK);
+    assert_eq!(rep_res["narrative_progress"]["status"], "IN_PROGRESS");
+    assert_eq!(rep_res["narrative_progress"]["completed_runs_count"], 1);
+
+    let (del_st, _) = request(
+        &app,
+        &secret,
+        Some(456),
+        "DELETE",
+        "/api/v1/auth/account",
+        json!({ "confirm": "EXCLUIR" }),
+    )
+    .await;
+    assert_eq!(del_st, StatusCode::OK);
+    assert_eq!(
+        db.collection::<Document>("mission_progress")
+            .count_documents(doc! { "user_id": 456_i64 })
+            .await
+            .unwrap(),
+        0,
+        "LGPD Art. 18 deletion must purge mission_progress for the deleted user"
+    );
+
+    let _ = std::fs::remove_dir_all(&tmp_media_dir);
     assert!(name.starts_with("cogniva_test_"));
     db.drop().await.unwrap();
 }

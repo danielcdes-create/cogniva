@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>Cogniva · Missões</title>
+  <link rel="stylesheet" href="/missoes/assets/style.css">
+  <script type="module" src="/missoes/assets/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#missions-main">Ir para o conteúdo principal</a>
+
+  <section id="auth-screen" class="auth-layout" aria-labelledby="auth-heading">
+    <div class="auth-story">
+      <div class="brand"><span class="brand-mark">c.</span> cogniva <span class="brand-pill">MISSÕES</span></div>
+      <span class="eyebrow">APRENDIZAGEM EXPERIENCIAL · CONCURSOS PÚBLICOS</span>
+      <h1>Narrativas profissionais.<br>Decisões ativas.<br>Domínio verificável.</h1>
+      <p>Vivencie situações concretas de carreira em episódios audiovisuais interativos, explore modelos visuais precisos e valide seu conhecimento em questões humanas reais do acervo Cogniva.</p>
+      <div class="story-pills">
+        <span>Banco Central do Brasil</span>
+        <span>Finanças · Renda Fixa</span>
+        <span>Progresso persistente</span>
+        <span>Avaliação independente</span>
+      </div>
+    </div>
+
+    <div class="auth-card">
+      <span class="eyebrow">ACESSO DO ESTUDANTE</span>
+      <h2 id="auth-heading">Entrar no Cogniva Missões</h2>
+      <p id="auth-subtitle">Acesse com sua conta Cogniva ou inicie imediatamente como convidado.</p>
+
+      <div class="auth-tabs" role="tablist" aria-label="Modo de acesso">
+        <button type="button" id="tab-login" class="active" role="tab" aria-selected="true">Entrar</button>
+        <button type="button" id="tab-register" role="tab" aria-selected="false">Criar conta</button>
+      </div>
+
+      <form id="auth-form">
+        <div class="field" id="auth-name-wrap" hidden>
+          <label for="auth-name">Seu nome</label>
+          <input id="auth-name" type="text" autocomplete="name" maxlength="80" placeholder="Ex.: Ana Ribeiro">
+        </div>
+        <div class="field">
+          <label for="auth-email">E-mail</label>
+          <input id="auth-email" type="email" required autocomplete="username" maxlength="254" placeholder="voce@exemplo.com">
+        </div>
+        <div class="field">
+          <label for="auth-password">Senha</label>
+          <input id="auth-password" type="password" required autocomplete="current-password" minlength="8" maxlength="128" placeholder="Mínimo de 8 caracteres">
+        </div>
+        <button type="submit" id="auth-submit" class="btn-primary full">Entrar nas Missões</button>
+      </form>
+
+      <div class="auth-divider"><span>ou estude agora sem cadastro prévio</span></div>
+      <button type="button" id="guest-btn" class="btn-secondary full">Continuar como convidado</button>
+
+      <p id="auth-status" class="auth-status" role="status" aria-live="polite"></p>
+      <small class="auth-footnote">Seu progresso narrativo e suas decisões ficam salvos na sua sessão autenticada.</small>
+    </div>
+  </section>
+
+  <div id="missions-shell" class="missions-shell" hidden>
+    <header id="topbar" class="topbar">
+      <div class="topbar-left">
+        <a class="brand" href="/missoes/" id="nav-home-link"><span class="brand-mark">c.</span> cogniva</a>
+        <nav class="primary-nav" aria-label="Navegação principal do Cogniva">
+          <button type="button" id="nav-missions-btn" class="nav-link active" aria-current="page">Missões</button>
+          <a id="nav-admin-link" class="nav-link" href="/admin/" hidden>Administração</a>
+        </nav>
+      </div>
+      <div class="topbar-right">
+        <span id="user-badge" class="user-badge"></span>
+        <button type="button" id="logout-btn" class="btn-ghost">Sair</button>
+      </div>
+    </header>
+
+    <div id="missions-notice" class="notice-banner" hidden role="status" aria-live="polite"></div>
+    <main id="missions-main" class="missions-main" tabindex="-1"></main>
+  </div>
+</body>
+</html>

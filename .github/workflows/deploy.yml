@@ -198,6 +198,11 @@ jobs:
       contents: read
       packages: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            missoes/videos
+            deploy
       - uses: actions/download-artifact@v4
         with:
           name: cogniva-release-${{ github.sha }}
@@ -228,7 +233,13 @@ jobs:
           target="$DO_USER@$DO_HOST"
           run_slug="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           incoming="/opt/apps/cogniva-incoming/$run_slug"
-          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" "mkdir -p '$incoming'"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" "mkdir -p '$incoming' '/opt/apps/missoes/videos' && chmod 755 /opt/apps/missoes /opt/apps/missoes/videos"
+          if [ -d missoes/videos ]; then
+            tar -cf - -C missoes/videos . | ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" "tar -xf - -C /opt/apps/missoes/videos && chmod 755 /opt/apps/missoes /opt/apps/missoes/videos && chmod 644 /opt/apps/missoes/videos/*.mp4"
+          fi
+          scp -o BatchMode=yes -o StrictHostKeyChecking=yes deploy/nginx-cogniva.conf "$target:$incoming/nginx-cogniva.conf.tpl"
+          scp -o BatchMode=yes -o StrictHostKeyChecking=yes deploy/sync_nginx_site.py "$target:$incoming/sync_nginx_site.py"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" "python3 '$incoming/sync_nginx_site.py' '$incoming/nginx-cogniva.conf.tpl' && rm -f '$incoming/sync_nginx_site.py' '$incoming/nginx-cogniva.conf.tpl'"
           scp -o BatchMode=yes -o StrictHostKeyChecking=yes release-bundle/* "$target:$incoming/"
           ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" "python3 '$incoming/stage_bundle.py'"
           printf '%s' "$REGISTRY_TOKEN" | ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" \

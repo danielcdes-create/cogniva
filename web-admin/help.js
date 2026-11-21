@@ -107,7 +107,12 @@ export const helpTopics = [
     'O acervo compartilhado e sua auditoria permanecem 100% preservados após exclusões de conta: todasQuestoes, question_revision_events, knowledge_catalog e exam_templates nunca são apagados.',
     'Todo conteúdo enviado ao provedor de IA recebe isolamento contra prompt injection (delimitadores explícitos de entrada não confiável, instruções de sistema fixas e validação estrita de schema JSON na resposta).',
     'O uso de IA obedece a cotas diárias por usuário e teto operacional global, estornando reservas em falhas de rede/provedor e exigindo revisão humana explícita antes de qualquer publicação.'
-  ],notes:['Nenhuma resposta de IA publica questões, altera gabaritos ou confirma classificação/validade automaticamente sem confirmação humana auditada.'],page:'overview',action:'Voltar à visão geral'}
+  ],notes:['Nenhuma resposta de IA publica questões, altera gabaritos ou confirma classificação/validade automaticamente sem confirmação humana auditada.'],page:'overview',action:'Voltar à visão geral'},
+  {id:'missoes-interativas',title:'Módulo Missões: narrativas audiovisuais e separação epistemológica',category:'Telas do portal',keywords:'missões vídeos interativas Banco Central choque dos juros renda fixa duration cenas progresso narrativo',intro:'Missões apresenta episódios audiovisuais interativos estruturados em Carreira → Disciplina → Temporada → Missão → Cena → Interação → Evidência de aprendizagem.',steps:[
+    'Consulte em Missões os episódios declarativos publicados, a duração real calculada e a integridade dos vídeos locais (resolução, codecs e SHA-256).',
+    'Abra a experiência do estudante em /missoes/ (ou na aba Missões do aplicativo Android) para reproduzir as cenas com legendas e transcrição em português brasileiro.',
+    'Verifique a separação estrita em 3 dimensões: progresso narrativo, desempenho formativo nas decisões da cena e domínio demonstrado exclusivamente em questões humanas reais do acervo.'
+  ],notes:['Decisões narrativas da missão nunca são gravadas automaticamente em todasQuestoes nem conferem domínio formal sem avaliação independente no acervo.'],page:'missions',action:'Abrir Missões'}
 ];
 
 export function searchHelp(query) {

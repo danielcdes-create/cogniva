@@ -4,7 +4,7 @@ Plataforma inteligente de preparação de alta performance para concursos públi
 
 ---
 
-## 🚀 Versão Atual: `2.3.0` (`build 29`)
+## 🚀 Versão Atual: `2.4.0` (`build 30`)
 
 - **Arquitetura Disruptiva em 3 Camadas (`contract_version: 5`):**
   1. **Escassez — Diagnóstico por Evidências, Não por Geração:** Ficha Editorial Rastreável (`editorial_card` com dispositivos legais, regra cobrada, exceção, trecho decisivo e erros conceituais plausíveis), diagnóstico cruzando **3 sinais** (*resposta × confiança × evidência selecionada*, detectando inclusive `ILLUSORY_COMPETENCE`), restrição explícita **`< 15` questões humanas** (`MIN_QUESTIONS_FOR_MASTERY = 15`) e conjunto separado de **Transferência Cross-Banca (`TRANSFER_PROBE`)** com registro explícito de `TRANSFER_UNMEASURED` quando não há item válido de outra banca.
@@ -25,6 +25,7 @@ Toda a documentação técnica e operacional ativa está centralizada em [`docs/
 - **[Motores de Decisão, Grafo de Conceitos e Core Loop Diário](docs/MOTORES-DECISAO-CORE-LOOP.md):** Especificação matemática (`contract_version: 5`), regra de escassez `< 15`, Ficha Editorial e 3 sinais, Transferência Cross-Banca, Simulador de Decisão sob Incerteza ($p(t)$ em 300 min) e Protocolo de Entrada de 60 Segundos.
 - **[Política de Privacidade e LGPD](PRIVACY.md) & [Política de Segurança](SECURITY.md):** Governança de dados pessoais, exclusão Art. 18, invariantes de segurança e relato responsável de vulnerabilidades.
 - **[Manual de Operação e Produção](docs/OPERACAO.md):** Variáveis de ambiente, migração *read-only* `CNU → cogniva`, preparação do MongoDB (`--prepare-storage`), TLS + HSTS + rate limits IPv6 `/64`, promoção atômica, retenção de releases e rollback.
+- **[Módulo Missões (`/missoes/` e Android)](docs/MODULO-MISSOES.md):** Aprendizagem experiencial audiovisual interativa declarativa (`shared/missions-catalog.json`), streaming `HTTP Range` sem recompressão, gráficos financeiros nativos e separação epistemológica estrita entre percurso narrativo, decisões formativas e avaliação formal em questões humanas.
 - **[Administração Web (`/admin/`)](docs/ADMIN-WEB.md):** Login nativo com cookie `HttpOnly` + `Sec-Fetch-Site` + CSRF, acessibilidade WCAG 2.1 AA, gestão de templates globais, edição V2 de questões, **Reportes**, **Classificação IA** e ativação versionada do catálogo.
 - **[Guia de Administração (Central de Ajuda)](docs/GUIA-ADMINISTRACAO.md):** Guia operacional gerado diretamente de [`web-admin/help.js`](web-admin/help.js) e verificado em CI.
 - **[Estrutura de Estudos](docs/ESTRUTURA-ESTUDOS.md):** Relações entre troncos, templates globais, grades pessoais, componentes, disciplinas, assuntos, subassuntos e questões.
@@ -57,13 +58,16 @@ Toda a documentação técnica e operacional ativa está centralizada em [`docs/
 # 1. Contratos, catálogo, schemas de questões e links Markdown (Python)
 python3 scripts/knowledge_catalog.py --check
 python3 scripts/question_contracts.py --examples
+python3 scripts/missions_contracts.py --check
 python3 scripts/check_markdown_links.py
 pytest scripts/tests -v
 
-# 2. Painel Web Admin e sincronização da Ajuda (Node.js 20+)
+# 2. Portais Web (Missões e Admin) e sincronização da Ajuda (Node.js 20+)
 node scripts/export-admin-help.mjs --check
 npm --prefix web-admin run check
 npm --prefix web-admin test
+npm --prefix web-missions run check
+npm --prefix web-missions test
 
 # 3. Backend Rust (Clippy zero-warnings + testes unitários e contratos)
 cargo clippy --manifest-path backend-rust/Cargo.toml --all-targets --locked -- -D warnings

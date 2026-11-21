@@ -8,7 +8,9 @@ services:
     restart: unless-stopped
     env_file: .env
     ports: ['127.0.0.1:8001:8000']
-    volumes: ['./apk:/app/apk:ro']
+    volumes:
+      - './apk:/app/apk:ro'
+      - './missoes/videos:/app/missoes/videos:ro'
     read_only: true
     tmpfs: ['/tmp:size=16m']
     security_opt: ['no-new-privileges:true']

@@ -18,7 +18,7 @@ test('empty and unmatched help searches are safe and do not mutate the guide',()
 });
 
 test('every help action opens a supported portal view and article ids are unique',()=>{
-  const destinations=new Set(['overview','exams','edital','trunks','subjects','questions','import','classification','reports','catalog','drafts']);
+  const destinations=new Set(['overview','missions','exams','edital','trunks','subjects','questions','import','classification','reports','catalog','drafts']);
   assert.equal(new Set(helpTopics.map(topic=>topic.id)).size,helpTopics.length);
   for(const topic of helpTopics)assert.ok(destinations.has(topic.page),topic.id);
 });

@@ -244,28 +244,30 @@ def _promote_locked(release: pathlib.Path) -> None:
     size = json.loads(run('docker', 'image', 'inspect', image))[0]['Size']
     assert size < 50_000_000, f'Runtime exceeds 50 MB: {size}'
 
-    override = {
-        'services': {
-            SERVICE: {
-                'image': image,
-                'environment': {
-                    'APK_STORAGE_PATH': '/app/apk/current/cogniva.apk',
-                    'APK_METADATA_PATH': '/app/apk/current/output-metadata.json',
-                },
-                'read_only': True,
-                'tmpfs': ['/tmp:size=16m'],
-                'security_opt': ['no-new-privileges:true'],
-                'cap_drop': ['ALL'],
-                'mem_limit': '192m',
-                'cpus': 0.75,
-                'pids_limit': 128,
-                'logging': {
-                    'driver': 'json-file',
-                    'options': {'max-size': '10m', 'max-file': '3'},
-                },
-            }
-        }
+    missions_videos = ROOT / 'missoes' / 'videos'
+    service_override: dict = {
+        'image': image,
+        'environment': {
+            'APK_STORAGE_PATH': '/app/apk/current/cogniva.apk',
+            'APK_METADATA_PATH': '/app/apk/current/output-metadata.json',
+            'MISSIONS_MEDIA_DIR': '/app/missoes/videos',
+        },
+        'read_only': True,
+        'tmpfs': ['/tmp:size=16m'],
+        'security_opt': ['no-new-privileges:true'],
+        'cap_drop': ['ALL'],
+        'mem_limit': '192m',
+        'cpus': 0.75,
+        'pids_limit': 128,
+        'logging': {
+            'driver': 'json-file',
+            'options': {'max-size': '10m', 'max-file': '3'},
+        },
     }
+    if missions_videos.is_dir():
+        service_override['volumes'] = [f'{missions_videos}:/app/missoes/videos:ro']
+
+    override = {'services': {SERVICE: service_override}}
 
     controlled_failure = False
     try:

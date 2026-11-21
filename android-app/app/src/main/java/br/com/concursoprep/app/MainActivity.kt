@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.material.icons.filled.OndemandVideo
 import androidx.compose.material.icons.filled.Quiz
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Today
@@ -41,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.core.content.FileProvider
 import br.com.concursoprep.app.domain.model.AppThemeMode
 import br.com.concursoprep.app.domain.model.ContestStatus
@@ -58,6 +60,8 @@ import br.com.concursoprep.app.ui.ApkInstallEvent
 import br.com.concursoprep.app.ui.MainViewModel
 import br.com.concursoprep.app.ui.MainViewModelFactory
 import br.com.concursoprep.app.ui.screens.ContestsScreen
+import br.com.concursoprep.app.ui.screens.MissionPlayerScreen
+import br.com.concursoprep.app.ui.screens.MissionsCatalogScreen
 import br.com.concursoprep.app.ui.screens.OnboardingScreen
 import br.com.concursoprep.app.ui.screens.PracticeHubScreen
 import br.com.concursoprep.app.ui.screens.ProgressScreen
@@ -92,6 +96,7 @@ class MainActivity : ComponentActivity() {
 
 private enum class BottomTab(val label: String) {
     HOJE("Hoje"),
+    MISSOES("Missões"),
     CONCURSOS("Concursos"),
     PRATICAR("Praticar"),
     PROGRESSO("Progresso"),
@@ -133,6 +138,9 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
     val focusedTrunks by viewModel.focusedTrunks.collectAsState()
     val syllabusViewMode by viewModel.syllabusViewMode.collectAsState()
     val showExamBuilder by viewModel.showExamBuilder.collectAsState()
+    val missionsCatalog by viewModel.missionsCatalog.collectAsState()
+    val activeMissionDetail by viewModel.activeMissionDetail.collectAsState()
+    val isMissionBusy by viewModel.isMissionBusy.collectAsState()
     var trunkSlug by remember { mutableStateOf("fiscal") }
 
     // Ouve notificações e feedbacks do ViewModel
@@ -299,7 +307,37 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
         return
     }
 
-    // 3. Aplicação Principal: 4 Abas com Scaffold e Bottom Navigation Bar
+    // 2b. Rota Full-Screen Imersiva para o Player de Missões Interativas
+    if (activeMissionDetail != null) {
+        val currentMission = activeMissionDetail!!
+        MissionPlayerScreen(
+            detail = currentMission,
+            isBusy = isMissionBusy,
+            onExitMission = { sid, posMs -> viewModel.exitActiveMission(sid, posMs) },
+            onAdvanceScene = { doneId, nextId, viaTranscript ->
+                viewModel.advanceMissionScene(currentMission.missionId, doneId, nextId, viaTranscript)
+            },
+            onJumpToScene = { targetId ->
+                viewModel.jumpToMissionScene(currentMission.missionId, targetId)
+            },
+            onSubmitDecision = { sid, iid, optId, spentMs, viaTranscript ->
+                viewModel.submitMissionDecision(currentMission.missionId, sid, iid, optId, spentMs, viaTranscript)
+            },
+            onRepeatMission = { viewModel.repeatMission(currentMission.missionId) },
+            onStartRelatedPractice = {
+                viewModel.startMissionRelatedPractice(currentMission.missionId, currentMission.contestTemplateId)
+            },
+            onResolveVideoFile = { assetId, sha256 ->
+                viewModel.resolveMissionVideoFile(context.cacheDir, assetId, sha256)
+            },
+            onPreloadNextVideo = { assetId, sha256 ->
+                viewModel.preloadMissionVideoInBackground(context.cacheDir, assetId, sha256)
+            },
+        )
+        return
+    }
+
+    // 3. Aplicação Principal com Scaffold e Bottom Navigation Bar
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -309,31 +347,37 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                     selected = currentTab == BottomTab.HOJE,
                     onClick = { currentTab = BottomTab.HOJE },
                     icon = { Icon(Icons.Default.Today, contentDescription = null) },
-                    label = { Text(BottomTab.HOJE.label) }
+                    label = { Text(BottomTab.HOJE.label, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis) }
+                )
+                NavigationBarItem(
+                    selected = currentTab == BottomTab.MISSOES,
+                    onClick = { currentTab = BottomTab.MISSOES },
+                    icon = { Icon(Icons.Default.OndemandVideo, contentDescription = null) },
+                    label = { Text(BottomTab.MISSOES.label, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis) }
                 )
                 NavigationBarItem(
                     selected = currentTab == BottomTab.CONCURSOS,
                     onClick = { currentTab = BottomTab.CONCURSOS },
                     icon = { Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = null) },
-                    label = { Text(BottomTab.CONCURSOS.label) }
+                    label = { Text(BottomTab.CONCURSOS.label, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis) }
                 )
                 NavigationBarItem(
                     selected = currentTab == BottomTab.PRATICAR,
                     onClick = { currentTab = BottomTab.PRATICAR },
                     icon = { Icon(Icons.Default.Quiz, contentDescription = null) },
-                    label = { Text(BottomTab.PRATICAR.label) }
+                    label = { Text(BottomTab.PRATICAR.label, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis) }
                 )
                 NavigationBarItem(
                     selected = currentTab == BottomTab.PROGRESSO,
                     onClick = { currentTab = BottomTab.PROGRESSO },
                     icon = { Icon(Icons.Default.Assessment, contentDescription = null) },
-                    label = { Text(BottomTab.PROGRESSO.label) }
+                    label = { Text(BottomTab.PROGRESSO.label, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis) }
                 )
                 NavigationBarItem(
                     selected = currentTab == BottomTab.AJUSTES,
                     onClick = { currentTab = BottomTab.AJUSTES },
                     icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                    label = { Text(BottomTab.AJUSTES.label) }
+                    label = { Text(BottomTab.AJUSTES.label, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis) }
                 )
             }
         }
@@ -367,7 +411,19 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                             )
                         },
                         onChooseConsciousRest = { rested -> viewModel.chooseConsciousRestToday(rested) },
-                        onScreenVisible = { viewModel.recordEntryImpression() }
+                        onScreenVisible = { viewModel.recordEntryImpression() },
+                        onOpenMissions = { currentTab = BottomTab.MISSOES }
+                    )
+                }
+
+                BottomTab.MISSOES -> {
+                    MissionsCatalogScreen(
+                        catalog = missionsCatalog,
+                        isBusy = isMissionBusy,
+                        onOpenMission = { missionId, resume ->
+                            viewModel.openMission(missionId, resume)
+                        },
+                        onRefresh = { viewModel.refreshMissionsCatalog() }
                     )
                 }
 
@@ -418,7 +474,8 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                                     contestId = if (mode in listOf(QuizMode.SIMULADO, QuizMode.STRATEGY_BATTERY, QuizMode.TRANSFER_PROBE, QuizMode.ADAPTIVE_LOOP)) selectedContestId else null
                                 )
                             }
-                        }
+                        },
+                        onOpenMissions = { currentTab = BottomTab.MISSOES }
                     )
                 }
 

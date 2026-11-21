@@ -12,6 +12,7 @@ import br.com.concursoprep.app.data.repository.ConcursoRepository
 import br.com.concursoprep.app.data.sync.OfflineSyncWorker
 import br.com.concursoprep.app.data.update.AppUpdateManager
 import br.com.concursoprep.app.domain.exam.*
+import br.com.concursoprep.app.domain.missions.*
 import br.com.concursoprep.app.domain.model.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -87,6 +88,9 @@ class MainViewModel(
     private val _pendingReview=MutableStateFlow<List<PendingReviewItem>>(emptyList());val pendingReview=_pendingReview.asStateFlow()
     private val _showPendingReview=MutableStateFlow(false);val showPendingReview=_showPendingReview.asStateFlow()
     private val _pendingExport=MutableSharedFlow<File>();val pendingExport=_pendingExport.asSharedFlow()
+    private val _missionsCatalog=MutableStateFlow<MissionsCatalogView?>(null);val missionsCatalog=_missionsCatalog.asStateFlow()
+    private val _activeMissionDetail=MutableStateFlow<MissionDetailView?>(null);val activeMissionDetail=_activeMissionDetail.asStateFlow()
+    private val _isMissionBusy=MutableStateFlow(false);val isMissionBusy=_isMissionBusy.asStateFlow()
     fun openPendingReview(){operation{_pendingReview.value=repository.pendingReview();_showPendingReview.value=true}}
     fun dismissPendingReview(){_showPendingReview.value=false}
     fun dismissPendingReviewItem(item: PendingReviewItem) {
@@ -318,6 +322,7 @@ class MainViewModel(
                 _accountAuthState.value=_accountAuthState.value.copy(isAuthenticated=!isGuest)
             }
             val allStored=repository.loadStoredExams(includeDeleted=true);_pendingExamDeletions.value=allStored.filter { it.lifecycleStatus=="EXCLUIDO" && it.syncStatus!="SYNCED" };val stored=allStored.filter { it.lifecycleStatus!="EXCLUIDO" };_storedExams.value=stored
+            runCatching { _missionsCatalog.value = repository.loadMissionsCatalog() }
             val selected=PracticeScope.selected(stored,_selectedContestId.value)
             if(selected!=_selectedContestId.value){_selectedContestId.value=selected;prefs?.edit()?.putString("selected_contest_id",selected)?.apply()}
             _focusedTrunks.value=repository.focusedTrunkSlugs()
@@ -826,6 +831,165 @@ class MainViewModel(
             throw IllegalStateException(msg,e)
         }finally{_apkUpdateState.value=_apkUpdateState.value.copy(isDownloading=false)}
     }}
+
+    // --- Ações do Módulo Missões ---
+
+    fun refreshMissionsCatalog() {
+        operation {
+            _missionsCatalog.value = repository.loadMissionsCatalog()
+        }
+    }
+
+    fun openMission(missionId: String, resume: Boolean = true) {
+        operation {
+            _isMissionBusy.value = true
+            try {
+                var detail = repository.openMissionDetail(missionId, resume = resume)
+                if (detail.narrativeProgress.status == "NOT_STARTED" && detail.scenes.isNotEmpty()) {
+                    detail = repository.updateMissionProgressOfflineFirst(
+                        missionId = missionId,
+                        currentSceneId = detail.scenes.first().sceneId,
+                    )
+                }
+                _activeMissionDetail.value = detail
+                _missionsCatalog.value = repository.loadMissionsCatalog()
+            } finally {
+                _isMissionBusy.value = false
+            }
+        }
+    }
+
+    fun exitActiveMission(currentSceneId: String? = null, playbackPositionMs: Long? = null) {
+        val current = _activeMissionDetail.value
+        _activeMissionDetail.value = null
+        if (current != null && currentSceneId != null) {
+            operation {
+                repository.updateMissionProgressOfflineFirst(
+                    missionId = current.missionId,
+                    currentSceneId = currentSceneId,
+                    playbackPositionMs = playbackPositionMs,
+                )
+                _missionsCatalog.value = repository.loadMissionsCatalog()
+            }
+        }
+    }
+
+    fun advanceMissionScene(
+        missionId: String,
+        completedSceneId: String,
+        nextSceneId: String?,
+        viaTranscript: Boolean = false,
+    ) {
+        operation {
+            _isMissionBusy.value = true
+            try {
+                val updated = repository.updateMissionProgressOfflineFirst(
+                    missionId = missionId,
+                    currentSceneId = nextSceneId ?: completedSceneId,
+                    completedSceneId = completedSceneId,
+                    markMissionCompleted = nextSceneId == null,
+                    usedTranscriptFallback = viaTranscript,
+                )
+                _activeMissionDetail.value = updated
+                _missionsCatalog.value = repository.loadMissionsCatalog()
+            } finally {
+                _isMissionBusy.value = false
+            }
+        }
+    }
+
+    fun jumpToMissionScene(missionId: String, targetSceneId: String) {
+        operation {
+            val updated = repository.updateMissionProgressOfflineFirst(
+                missionId = missionId,
+                currentSceneId = targetSceneId,
+            )
+            _activeMissionDetail.value = updated
+        }
+    }
+
+    fun submitMissionDecision(
+        missionId: String,
+        sceneId: String,
+        interactionId: String,
+        selectedOptionId: String,
+        timeSpentMs: Long,
+        viaTranscript: Boolean = false,
+    ) {
+        operation {
+            _isMissionBusy.value = true
+            try {
+                val updated = repository.submitMissionDecisionOfflineFirst(
+                    missionId = missionId,
+                    sceneId = sceneId,
+                    interactionId = interactionId,
+                    selectedOptionId = selectedOptionId,
+                    timeSpentMs = timeSpentMs,
+                    usedTranscriptFallback = viaTranscript,
+                )
+                _activeMissionDetail.value = updated
+                _missionsCatalog.value = repository.loadMissionsCatalog()
+            } finally {
+                _isMissionBusy.value = false
+            }
+        }
+    }
+
+    fun repeatMission(missionId: String) {
+        operation {
+            _isMissionBusy.value = true
+            try {
+                val updated = repository.repeatMissionOfflineFirst(missionId)
+                _activeMissionDetail.value = updated
+                _missionsCatalog.value = repository.loadMissionsCatalog()
+            } finally {
+                _isMissionBusy.value = false
+            }
+        }
+    }
+
+    suspend fun resolveMissionVideoFile(
+        cacheDir: File,
+        assetId: String,
+        expectedSha256: String?,
+    ): File? = repository.ensureMissionVideoCached(cacheDir, assetId, expectedSha256)
+
+    fun preloadMissionVideoInBackground(cacheDir: File, assetId: String?, expectedSha256: String?) {
+        if (assetId.isNullOrBlank()) return
+        vmScope.launch(Dispatchers.IO) {
+            runCatching { repository.ensureMissionVideoCached(cacheDir, assetId, expectedSha256) }
+        }
+    }
+
+    fun startMissionRelatedPractice(missionId: String, contestTemplateId: String) {
+        operation {
+            _isMissionBusy.value = true
+            try {
+                val questions = repository.fetchMissionRelatedHumanQuestions(missionId, quantity = 5)
+                if (questions.isEmpty()) {
+                    _userFeedbackMessage.emit(
+                        "Nenhuma questão humana validada disponível neste ambiente para os subtópicos desta missão."
+                    )
+                    return@operation
+                }
+                val exam = repository.loadStoredExams().find { it.examId == contestTemplateId || it.templateSourceId == contestTemplateId }
+                val session = SessionSnapshot(
+                    sessionId = UUID.randomUUID().toString(),
+                    ownerUserId = repository.ownerUserId,
+                    questions = questions,
+                    mode = QuizMode.STANDARD,
+                    exam = exam,
+                    deadlineEpochMs = null,
+                    isSmartEntry = false,
+                )
+                repository.createSession(session)
+                _activeMissionDetail.value = null
+                showSession(session)
+            } finally {
+                _isMissionBusy.value = false
+            }
+        }
+    }
 }
 class MainViewModelFactory(
     private val repository: ConcursoRepository,

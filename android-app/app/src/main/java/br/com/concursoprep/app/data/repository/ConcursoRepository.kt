@@ -7,6 +7,7 @@ import br.com.concursoprep.app.data.local.*
 import br.com.concursoprep.app.data.remote.*
 import br.com.concursoprep.app.data.update.AppUpdateManager
 import br.com.concursoprep.app.domain.exam.*
+import br.com.concursoprep.app.domain.missions.*
 import br.com.concursoprep.app.domain.model.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -1774,6 +1775,461 @@ class ConcursoRepository(
         } catch (e: java.io.IOException) {
             runCatching { destination.delete() }
             throw java.io.IOException("Falha de conexão durante o download da atualização. Tente novamente.", e)
+        } finally {
+            client.dispatcher.executorService.shutdown()
+            client.connectionPool.evictAll()
+        }
+    }
+
+    // --- Módulo Missões (Sincronização Online + Persistência Local por Conta + Cache de Vídeo) ---
+
+    private suspend fun loadLocalMissionsEnvelope(): LocalMissionsStateEnvelope {
+        val raw = metadata("missions_state_v1")?.takeIf { it.isNotBlank() } ?: return LocalMissionsStateEnvelope(ownerUserId)
+        val parsed = runCatching { json.decodeFromString<LocalMissionsStateEnvelope>(raw) }.getOrNull()
+        return if (parsed != null && parsed.ownerUserId == ownerUserId) parsed else LocalMissionsStateEnvelope(ownerUserId)
+    }
+
+    private suspend fun saveLocalMissionsEnvelope(env: LocalMissionsStateEnvelope) {
+        metadata("missions_state_v1", json.encodeToString(env.copy(ownerUserId = ownerUserId)))
+    }
+
+    private fun parseRemoteNarrativeProgress(obj: JsonObject?, fallback: NarrativeProgressView): NarrativeProgressView {
+        if (obj == null) return fallback
+        val status = obj["status"]?.jsonPrimitive?.contentOrNull ?: fallback.status
+        val completedIds = obj["completed_scene_ids"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: fallback.completedSceneIds
+        val posMap = obj["scene_positions_ms"]?.jsonObject?.entries?.mapNotNull { (k, v) ->
+            v.jsonPrimitive.longOrNull?.let { k to it }
+        }?.toMap() ?: fallback.scenePositionsMs
+        return NarrativeProgressView(
+            status = status,
+            statusLabelPt = obj["status_label_pt"]?.jsonPrimitive?.contentOrNull ?: MissionsCatalogLoader.statusLabelPt(status),
+            currentSceneId = obj["current_scene_id"]?.jsonPrimitive?.contentOrNull ?: fallback.currentSceneId,
+            currentSceneOrder = obj["current_scene_order"]?.jsonPrimitive?.intOrNull ?: fallback.currentSceneOrder,
+            completedSceneIds = completedIds,
+            completedScenesCount = obj["completed_scenes_count"]?.jsonPrimitive?.intOrNull ?: completedIds.size,
+            totalScenesCount = obj["total_scenes_count"]?.jsonPrimitive?.intOrNull ?: fallback.totalScenesCount,
+            progressPct = obj["progress_pct"]?.jsonPrimitive?.doubleOrNull ?: fallback.progressPct,
+            scenePositionsMs = posMap,
+            completedRunsCount = obj["completed_runs_count"]?.jsonPrimitive?.intOrNull ?: fallback.completedRunsCount,
+        )
+    }
+
+    private fun parseRemoteInteractionPerformance(obj: JsonObject?, fallback: InteractionPerformanceView): InteractionPerformanceView {
+        if (obj == null) return fallback
+        return InteractionPerformanceView(
+            answeredDecisionsCount = obj["answered_decisions_count"]?.jsonPrimitive?.intOrNull ?: fallback.answeredDecisionsCount,
+            totalDecisionsCount = obj["total_decisions_count"]?.jsonPrimitive?.intOrNull ?: fallback.totalDecisionsCount,
+            firstAttemptCorrectCount = obj["first_attempt_correct_count"]?.jsonPrimitive?.intOrNull ?: fallback.firstAttemptCorrectCount,
+            latestCorrectCount = obj["latest_correct_count"]?.jsonPrimitive?.intOrNull ?: fallback.latestCorrectCount,
+            conceptsForReview = obj["concepts_for_review"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: fallback.conceptsForReview,
+        )
+    }
+
+    private suspend fun localMissionHumanQuestionStats(curriculum: CurriculumBindingSpec): Pair<Int, Int> {
+        val cachedDtos = runCatching { dao.getCachedQuestions(null, 10000).map { QuestionCacheMapping.toDto(it, json) } }.getOrDefault(emptyList())
+        val targetTopics = (curriculum.primaryTopicIds + curriculum.fallbackTopicIds).toSet()
+        val eligible = cachedDtos.filter { q ->
+            q.correctAnswerIndices.size == 1 &&
+                q.correctAnswerIndices[0] in q.answers.indices &&
+                ((q.canonicalTopicId != null && q.canonicalTopicId in targetTopics) || q.canonicalSubjectId == curriculum.canonicalSubjectId)
+        }
+        val learning = runCatching { projectedLearningForQuestions(eligible.map { it.id }) }.getOrDefault(emptyMap())
+        val practicedCount = eligible.count { (learning[it.id]?.attempts ?: 0) > 0 }
+        return eligible.size to practicedCount
+    }
+
+    suspend fun loadMissionsCatalog(): MissionsCatalogView {
+        val spec = MissionsCatalogLoader.loadBundled()
+        var env = loadLocalMissionsEnvelope()
+        val localView = MissionsCatalogLoader.buildCatalogView(spec, env.missions)
+
+        return try {
+            auth?.let { runCatching { it.ensureSession(api, ownerUserId) } }
+            val remote = api.listMissions()
+            val remoteByMission = mutableMapOf<String, Pair<JsonObject?, JsonObject?>>()
+            remote["careers"]?.jsonArray?.forEach { cEl ->
+                cEl.jsonObject["disciplines"]?.jsonArray?.forEach { dEl ->
+                    dEl.jsonObject["seasons"]?.jsonArray?.forEach { sEl ->
+                        sEl.jsonObject["missions"]?.jsonArray?.forEach { mEl ->
+                            val mObj = mEl.jsonObject
+                            val mid = mObj["mission_id"]?.jsonPrimitive?.contentOrNull ?: return@forEach
+                            remoteByMission[mid] = mObj["narrative_progress"]?.jsonObject to mObj["interaction_performance"]?.jsonObject
+                        }
+                    }
+                }
+            }
+            val mergedCards = localView.cards.map { card ->
+                val pair = remoteByMission[card.missionId]
+                if (pair == null) card else card.copy(
+                    narrativeProgress = parseRemoteNarrativeProgress(pair.first, card.narrativeProgress),
+                    interactionPerformance = parseRemoteInteractionPerformance(pair.second, card.interactionPerformance),
+                )
+            }
+            // Mirror server progress locally for offline resilience
+            mutationMutex.withLock {
+                val updatedMap = env.missions.toMutableMap()
+                for (card in mergedCards) {
+                    val prev = updatedMap[card.missionId] ?: LocalMissionProgressRecord(missionId = card.missionId)
+                    updatedMap[card.missionId] = prev.copy(
+                        status = card.narrativeProgress.status,
+                        currentSceneId = card.narrativeProgress.currentSceneId,
+                        completedSceneIds = card.narrativeProgress.completedSceneIds,
+                        scenePositionsMs = card.narrativeProgress.scenePositionsMs,
+                        completedRunsCount = card.narrativeProgress.completedRunsCount,
+                    )
+                }
+                env = env.copy(missions = updatedMap)
+                saveLocalMissionsEnvelope(env)
+            }
+            localView.copy(cards = mergedCards)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            localView
+        }
+    }
+
+    suspend fun openMissionDetail(missionId: String, resume: Boolean = true): MissionDetailView {
+        val spec = MissionsCatalogLoader.loadBundled()
+        val env = loadLocalMissionsEnvelope()
+        val missionSpec = spec.careers.asSequence()
+            .flatMap { it.disciplines.asSequence() }
+            .flatMap { it.seasons.asSequence() }
+            .flatMap { it.missions.asSequence() }
+            .firstOrNull { it.missionId == missionId }
+            ?: error("Missão não encontrada no catálogo declarativo.")
+
+        val (localAvail, localPracticed) = localMissionHumanQuestionStats(missionSpec.curriculum)
+        val fallbackDetail = MissionsCatalogLoader.buildDetailView(
+            spec = spec,
+            missionId = missionId,
+            record = env.missions[missionId],
+            availableHumanQuestions = localAvail,
+            practicedDistinctHumanQuestions = localPracticed,
+        ) ?: error("Detalhe da missão indisponível.")
+
+        return try {
+            auth?.let { runCatching { it.ensureSession(api, ownerUserId) } }
+            val remote = api.getMissionDetail(missionId, resume)
+            val prog = parseRemoteNarrativeProgress(remote["narrative_progress"]?.jsonObject, fallbackDetail.narrativeProgress)
+            val perf = parseRemoteInteractionPerformance(remote["interaction_performance"]?.jsonObject, fallbackDetail.interactionPerformance)
+            val masteryObj = remote["demonstrated_mastery"]?.jsonObject
+            val mastery = if (masteryObj != null) {
+                DemonstratedMasteryView(
+                    masteryState = masteryObj["mastery_state"]?.jsonPrimitive?.contentOrNull ?: fallbackDetail.demonstratedMastery.masteryState,
+                    masteryLabelPt = masteryObj["mastery_label_pt"]?.jsonPrimitive?.contentOrNull ?: fallbackDetail.demonstratedMastery.masteryLabelPt,
+                    availableHumanQuestionsCount = masteryObj["available_human_questions_count"]?.jsonPrimitive?.intOrNull ?: localAvail,
+                    distinctHumanQuestionsPracticed = masteryObj["distinct_human_questions_practiced"]?.jsonPrimitive?.intOrNull ?: localPracticed,
+                    minQuestionsForMastery = masteryObj["min_questions_for_mastery"]?.jsonPrimitive?.intOrNull ?: 15,
+                    practiceAvailable = masteryObj["practice_available"]?.jsonPrimitive?.booleanOrNull ?: (localAvail > 0),
+                )
+            } else {
+                fallbackDetail.demonstratedMastery
+            }
+
+            // Merge server scene media availability and answered decision states
+            val remoteScenesById = remote["mission"]?.jsonObject?.get("scenes")?.jsonArray
+                ?.associateBy { it.jsonObject["scene_id"]?.jsonPrimitive?.contentOrNull.orEmpty() }
+                .orEmpty()
+
+            val mergedScenes = fallbackDetail.scenes.map { sc ->
+                val rSc = remoteScenesById[sc.sceneId]?.jsonObject ?: return@map sc
+                val mediaAvail = rSc["media"]?.jsonObject?.get("available_on_server")?.jsonPrimitive?.booleanOrNull ?: true
+                val isDone = rSc["is_completed"]?.jsonPrimitive?.booleanOrNull ?: sc.isCompleted
+                val rAnswered = rSc["interaction"]?.jsonObject?.get("answered")?.jsonObject
+                val updatedInter = if (sc.interaction != null && rAnswered != null) {
+                    sc.interaction.copy(
+                        answered = AnsweredDecisionView(
+                            interactionId = rAnswered["interaction_id"]?.jsonPrimitive?.contentOrNull ?: sc.interaction.interactionId,
+                            sceneId = sc.sceneId,
+                            selectedOptionId = rAnswered["selected_option_id"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                            expectedOptionId = rAnswered["expected_option_id"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                            isCorrect = rAnswered["is_correct"]?.jsonPrimitive?.booleanOrNull ?: false,
+                            firstAttemptCorrect = rAnswered["first_attempt_correct"]?.jsonPrimitive?.booleanOrNull ?: false,
+                            attemptCount = rAnswered["attempt_count"]?.jsonPrimitive?.intOrNull ?: 1,
+                            optionFeedback = rAnswered["option_feedback"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                            conceptualExplanation = rAnswered["conceptual_explanation"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                        )
+                    )
+                } else {
+                    sc.interaction
+                }
+                sc.copy(isCompleted = isDone, availableOnServer = mediaAvail, interaction = updatedInter)
+            }
+
+            val reviewSet = perf.conceptsForReview.toSet()
+            fallbackDetail.copy(
+                scenes = mergedScenes,
+                workedConcepts = fallbackDetail.workedConcepts.map { it.copy(recommendedRevisit = reviewSet.contains(it.conceptKey)) },
+                narrativeProgress = prog,
+                interactionPerformance = perf,
+                demonstratedMastery = mastery,
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            fallbackDetail
+        }
+    }
+
+    suspend fun updateMissionProgressOfflineFirst(
+        missionId: String,
+        currentSceneId: String? = null,
+        completedSceneId: String? = null,
+        playbackPositionMs: Long? = null,
+        markMissionCompleted: Boolean = false,
+        usedTranscriptFallback: Boolean = false,
+    ): MissionDetailView {
+        val spec = MissionsCatalogLoader.loadBundled()
+        mutationMutex.withLock {
+            val env = loadLocalMissionsEnvelope()
+            val prev = env.missions[missionId] ?: LocalMissionProgressRecord(missionId = missionId)
+            val nextDone = if (completedSceneId != null && !prev.completedSceneIds.contains(completedSceneId)) {
+                prev.completedSceneIds + completedSceneId
+            } else {
+                prev.completedSceneIds
+            }
+            val nextStatus = when {
+                markMissionCompleted -> "COMPLETED"
+                prev.status == "NOT_STARTED" -> "IN_PROGRESS"
+                else -> prev.status
+            }
+            val nextScene = currentSceneId ?: prev.currentSceneId.ifBlank {
+                spec.careers.firstOrNull()?.disciplines?.firstOrNull()?.seasons?.firstOrNull()?.missions?.find { it.missionId == missionId }?.scenes?.firstOrNull()?.sceneId.orEmpty()
+            }
+            val nextPos = if (playbackPositionMs != null && nextScene.isNotBlank()) {
+                prev.scenePositionsMs + (nextScene to playbackPositionMs)
+            } else {
+                prev.scenePositionsMs
+            }
+            val updated = prev.copy(
+                status = nextStatus,
+                currentSceneId = nextScene,
+                completedSceneIds = nextDone,
+                scenePositionsMs = nextPos,
+                completedRunsCount = if (markMissionCompleted && prev.status != "COMPLETED") prev.completedRunsCount + 1 else prev.completedRunsCount,
+            )
+            saveLocalMissionsEnvelope(env.copy(missions = env.missions + (missionId to updated)))
+        }
+
+        runCatching {
+            auth?.ensureSession(api, ownerUserId)
+            val payload = buildJsonObject {
+                currentSceneId?.let { put("current_scene_id", it) }
+                completedSceneId?.let { put("completed_scene_id", it) }
+                playbackPositionMs?.let { put("playback_position_ms", it) }
+                if (markMissionCompleted) put("mark_mission_completed", true)
+                if (usedTranscriptFallback) put("used_transcript_fallback", true)
+            }
+            api.updateMissionProgress(missionId, payload)
+        }
+        return openMissionDetail(missionId, resume = false)
+    }
+
+    suspend fun submitMissionDecisionOfflineFirst(
+        missionId: String,
+        sceneId: String,
+        interactionId: String,
+        selectedOptionId: String,
+        timeSpentMs: Long,
+        usedTranscriptFallback: Boolean = false,
+    ): MissionDetailView {
+        val spec = MissionsCatalogLoader.loadBundled()
+        val missionSpec = spec.careers.asSequence()
+            .flatMap { it.disciplines.asSequence() }
+            .flatMap { it.seasons.asSequence() }
+            .flatMap { it.missions.asSequence() }
+            .firstOrNull { it.missionId == missionId }
+            ?: error("Missão não encontrada.")
+        val sceneSpec = missionSpec.scenes.find { it.sceneId == sceneId } ?: error("Cena não encontrada.")
+        val interSpec = sceneSpec.interaction ?: error("Cena sem decisão interativa.")
+        val isCorrect = interSpec.expectedOptionId == selectedOptionId
+
+        mutationMutex.withLock {
+            val env = loadLocalMissionsEnvelope()
+            val prev = env.missions[missionId] ?: LocalMissionProgressRecord(missionId = missionId)
+            val prevDec = prev.decisions[interactionId]
+            val recorded = if (prevDec == null) {
+                LocalRecordedDecision(
+                    interactionId = interactionId,
+                    sceneId = sceneId,
+                    firstSelectedOptionId = selectedOptionId,
+                    latestSelectedOptionId = selectedOptionId,
+                    firstAttemptCorrect = isCorrect,
+                    latestCorrect = isCorrect,
+                    attemptCount = 1,
+                )
+            } else {
+                prevDec.copy(
+                    latestSelectedOptionId = selectedOptionId,
+                    latestCorrect = isCorrect,
+                    attemptCount = prevDec.attemptCount + 1,
+                )
+            }
+            val nextDone = if (prev.completedSceneIds.contains(sceneId)) prev.completedSceneIds else prev.completedSceneIds + sceneId
+            val isTerminal = sceneSpec.nextSceneId == null
+            val nextStatus = if (isTerminal) "COMPLETED" else if (prev.status == "NOT_STARTED") "IN_PROGRESS" else prev.status
+            val updated = prev.copy(
+                status = nextStatus,
+                currentSceneId = sceneId,
+                completedSceneIds = if (isTerminal) missionSpec.scenes.map { it.sceneId } else nextDone,
+                decisions = prev.decisions + (interactionId to recorded),
+                completedRunsCount = if (isTerminal && prev.status != "COMPLETED") prev.completedRunsCount + 1 else prev.completedRunsCount,
+            )
+            saveLocalMissionsEnvelope(env.copy(missions = env.missions + (missionId to updated)))
+        }
+
+        runCatching {
+            auth?.ensureSession(api, ownerUserId)
+            api.submitMissionDecision(
+                missionId,
+                buildJsonObject {
+                    put("scene_id", sceneId)
+                    put("interaction_id", interactionId)
+                    put("selected_option_id", selectedOptionId)
+                    put("time_spent_ms", timeSpentMs)
+                    put("used_transcript_fallback", usedTranscriptFallback)
+                }
+            )
+        }
+        return openMissionDetail(missionId, resume = false)
+    }
+
+    suspend fun repeatMissionOfflineFirst(missionId: String): MissionDetailView {
+        val spec = MissionsCatalogLoader.loadBundled()
+        val firstScene = spec.careers.asSequence()
+            .flatMap { it.disciplines.asSequence() }
+            .flatMap { it.seasons.asSequence() }
+            .flatMap { it.missions.asSequence() }
+            .firstOrNull { it.missionId == missionId }
+            ?.scenes?.firstOrNull()?.sceneId.orEmpty()
+
+        mutationMutex.withLock {
+            val env = loadLocalMissionsEnvelope()
+            val prev = env.missions[missionId] ?: LocalMissionProgressRecord(missionId = missionId)
+            val reset = prev.copy(
+                status = "IN_PROGRESS",
+                currentSceneId = firstScene,
+                completedSceneIds = emptyList(),
+                scenePositionsMs = emptyMap(),
+                decisions = emptyMap(),
+                runCount = prev.runCount + 1,
+            )
+            saveLocalMissionsEnvelope(env.copy(missions = env.missions + (missionId to reset)))
+        }
+        runCatching {
+            auth?.ensureSession(api, ownerUserId)
+            api.repeatMission(missionId)
+        }
+        return openMissionDetail(missionId, resume = false)
+    }
+
+    suspend fun fetchMissionRelatedHumanQuestions(missionId: String, quantity: Int = 5): List<QuestionDto> {
+        val spec = MissionsCatalogLoader.loadBundled()
+        val missionSpec = spec.careers.asSequence()
+            .flatMap { it.disciplines.asSequence() }
+            .flatMap { it.seasons.asSequence() }
+            .flatMap { it.missions.asSequence() }
+            .firstOrNull { it.missionId == missionId }
+            ?: return emptyList()
+
+        try {
+            auth?.ensureSession(api, ownerUserId)
+            val resp = api.getMissionPracticeQuestions(missionId, buildJsonObject { put("quantity", quantity) })
+            val arr = resp["questions"]?.jsonArray
+            if (arr != null && arr.isNotEmpty()) {
+                val remoteDtos = arr.map { json.decodeFromJsonElement<QuestionDto>(it) }
+                    .map(QuestionCacheMapping::withRevision)
+                val valid = objectivePracticeQuestions(remoteDtos)
+                if (valid.isNotEmpty()) {
+                    dao.insertQuestions(valid.map { QuestionCacheMapping.toEntity(it, json) })
+                    return decorateQuestions(valid)
+                }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Fall back to offline Room cache below
+        }
+
+        val targetTopics = (missionSpec.curriculum.primaryTopicIds + missionSpec.curriculum.fallbackTopicIds).toSet()
+        val cached = runCatching {
+            dao.getCachedQuestions(null, 10000).map { QuestionCacheMapping.toDto(it, json) }
+        }.getOrDefault(emptyList())
+        val matched = objectivePracticeQuestions(
+            cached.filter { q ->
+                (q.canonicalTopicId != null && q.canonicalTopicId in targetTopics) ||
+                    q.canonicalSubjectId == missionSpec.curriculum.canonicalSubjectId
+            }
+        ).take(quantity)
+        return decorateQuestions(matched)
+    }
+
+    suspend fun ensureMissionVideoCached(
+        cacheRootDir: File,
+        assetId: String,
+        expectedSha256: String? = null,
+    ): File? = withContext(Dispatchers.IO) {
+        val cleanAssetId = assetId.replace(Regex("[^a-zA-Z0-9_-]"), "")
+        if (cleanAssetId.isEmpty()) return@withContext null
+        val missionsDir = File(cacheRootDir, "missions").apply { mkdirs() }
+        val target = File(missionsDir, "$cleanAssetId.mp4")
+        if (target.isFile && target.length() > 1024L) {
+            return@withContext target
+        }
+
+        val token = auth?.let { store ->
+            store.token(ownerUserId) ?: runCatching {
+                store.ensureSession(api, ownerUserId)
+                store.token(ownerUserId)
+            }.getOrNull()
+        } ?: return@withContext null
+
+        val baseUrl = BuildConfig.API_BASE_URL.trimEnd('/')
+        val url = "$baseUrl/missions/media/$cleanAssetId"
+        val tmpFile = File(missionsDir, "$cleanAssetId.part")
+        val client = OkHttpClient.Builder()
+            .connectTimeout(12, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .build()
+        try {
+            val req = Request.Builder()
+                .url(url)
+                .header("Authorization", "Bearer $token")
+                .header("Accept-Encoding", "identity")
+                .build()
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@withContext null
+                val body = resp.body ?: return@withContext null
+                val digest = java.security.MessageDigest.getInstance("SHA-256")
+                body.byteStream().use { input ->
+                    FileOutputStream(tmpFile).use { out ->
+                        val buf = ByteArray(64 * 1024)
+                        while (true) {
+                            val read = input.read(buf)
+                            if (read <= 0) break
+                            digest.update(buf, 0, read)
+                            out.write(buf, 0, read)
+                        }
+                    }
+                }
+                if (!expectedSha256.isNullOrBlank()) {
+                    val actualHex = digest.digest().joinToString("") { "%02x".format(it) }
+                    if (!actualHex.equals(expectedSha256, ignoreCase = true)) {
+                        tmpFile.delete()
+                        return@withContext null
+                    }
+                }
+                if (target.exists()) target.delete()
+                if (!tmpFile.renameTo(target)) {
+                    tmpFile.copyTo(target, overwrite = true)
+                    tmpFile.delete()
+                }
+                target
+            }
+        } catch (_: Exception) {
+            runCatching { tmpFile.delete() }
+            null
         } finally {
             client.dispatcher.executorService.shutdown()
             client.connectionPool.evictAll()

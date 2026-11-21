@@ -75,7 +75,8 @@ fun TodayScreen(
     onStartSmartEntry: () -> Unit = { onStartQuizMode(QuizMode.ENTRY_60S, null) },
     onStartStrategyBattery: () -> Unit = { onStartQuizMode(QuizMode.STRATEGY_BATTERY, null) },
     onChooseConsciousRest: (Boolean) -> Unit = {},
-    onScreenVisible: () -> Unit = {}
+    onScreenVisible: () -> Unit = {},
+    onOpenMissions: (() -> Unit)? = null
 ) {
     val ext = LocalExtendedColors.current
     val nextAction = dashboard.nextAction
@@ -226,6 +227,24 @@ fun TodayScreen(
             }
 
             // 3. Simulador Diário de Decisão sob Incerteza (8–12 min, opcional)
+            if (onOpenMissions != null) {
+                item(key = "missions_shortcut") {
+                    CalmOptionCard(
+                        title = "Missões Interativas · Episódio Piloto",
+                        subtitle = "Banco Central (Finanças · Renda Fixa) · ~3 min audiovisuais com decisões guiadas",
+                        accentColor = MaterialTheme.colorScheme.primary,
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        },
+                        onClick = onOpenMissions
+                    )
+                }
+            }
+
             item(key = "decision_simulator_shortcut") {
                 val penalty = nextAction?.examGapSummary?.wrongAnswerPenalty ?: 0.0
                 val subtitle = if (penalty > 0.0) {

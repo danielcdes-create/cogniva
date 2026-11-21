@@ -4,6 +4,19 @@ Todas as mudanças arquiteturais, de segurança, acessibilidade e operacionais r
 
 ---
 
+## [2.4.0] - 2026-11-20 (build 30)
+
+Implementação e integração completa do módulo **Missões** (`shared/missions-catalog.json`, `backend-rust`, `/missoes/`, `/admin/` e aplicativo nativo Android), entregando o episódio piloto **Missão 01: O Choque dos Juros** (*Banco Central do Brasil · Analista — Economia e Finanças · Finanças / Renda Fixa*).
+
+- **Catálogo Declarativo Multi-Runtime (`shared/schemas/missions.schema.json`, `shared/missions-catalog.json`, `scripts/missions_contracts.py`):**
+  - Hierarquia declarativa `Carreira → Disciplina → Temporada → Missão → Cena → Interação → Evidência` validada por schema JSON e SHA-256 dos ativos locais, permitindo adicionar novas carreiras, temporadas e missões sem alterar o código dos players.
+- **Backend Rust & Streaming `HTTP Range` (`services/missions.rs`, `routes/missions.rs`, `routes/web_missions.rs`):**
+  - Streaming binário em blocos de 64 KB fora do `CompressionLayer` (`206 Partial Content`, `Accept-Ranges: bytes`, `ETag`/`304`, `416`), legendas `WEBVTT` sincronizadas em PT-BR, guarda sequencial anti-adulteração, sessões web `student_web` com cookie `HttpOnly` + CSRF e expurgo LGPD Art. 18 em `mission_progress`.
+- **Portais Web (`/missoes/` e `/admin/`) e Aplicativo Android (`MissionsScreen.kt`, `MissionsModels.kt`):**
+  - Player imersivo 16:9 com **Modo Transcrição Ativo** automático em indisponibilidade de vídeo, gráficos matemáticos nativos na Cena 4 ($PU = VF / (1+i)^n$) e na Cena 5 ($\Delta P / P$ por *Duration*), e separação epistemológica estrita entre progresso narrativo, decisões formativas e avaliação formal em questões humanas reais (`todasQuestoes`).
+
+---
+
 ## [2.3.0] - 2026-11-20 (build 29)
 
 Evolução disruptiva do Cogniva em três camadas epistemológicas e comportamentais (**Escassez com Diagnóstico por Evidências**, **Simulador de Decisão sob Incerteza & Curva de 300 Minutos** e **Protocolo de Entrada de 60 Segundos "Terça · 22h"**), somada à **Consulta Contextual em Camada (Catálogo + IA + Google Overlay)**, estatísticas aprofundadas em **Progresso** e correção de sincronização pós-resposta (`contract_version: 5`).

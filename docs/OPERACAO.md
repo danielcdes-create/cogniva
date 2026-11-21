@@ -1,6 +1,6 @@
 # Manual de Operação e Produção — Cogniva 2.0
 
-Este guia documenta a operação segura do **Cogniva `2.3.0`** (`build 29`) na VPS DigitalOcean, incluindo credenciais, migração do acervo `CNU → cogniva`, administração de contas, conformidade LGPD, TLS IPv4/IPv6, promoção atômica e rollback verificado.
+Este guia documenta a operação segura do **Cogniva `2.4.0`** (`build 30`) na VPS DigitalOcean, incluindo credenciais, migração do acervo `CNU → cogniva`, administração de contas, conformidade LGPD, TLS IPv4/IPv6, promoção atômica e rollback verificado.
 
 ---
 

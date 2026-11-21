@@ -20,6 +20,20 @@ pub struct AppConfig {
     pub xai_daily_user_limit: i64,
     pub apk_storage_path: PathBuf,
     pub apk_metadata_path: PathBuf,
+    pub missions_media_dir: PathBuf,
+}
+
+pub fn resolve_default_missions_media_dir() -> PathBuf {
+    for candidate in [
+        PathBuf::from("missoes/videos"),
+        PathBuf::from("../missoes/videos"),
+        PathBuf::from("/app/missoes/videos"),
+    ] {
+        if candidate.is_dir() {
+            return candidate;
+        }
+    }
+    PathBuf::from("/app/missoes/videos")
 }
 
 impl AppConfig {
@@ -95,6 +109,12 @@ impl AppConfig {
             env::var("APK_METADATA_PATH")
                 .unwrap_or_else(|_| "/opt/cogniva/releases/apk-info.json".to_string()),
         );
+        let missions_media_dir = env::var("MISSIONS_MEDIA_DIR")
+            .ok()
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(resolve_default_missions_media_dir);
 
         Self {
             bind_ip,
@@ -111,6 +131,7 @@ impl AppConfig {
             xai_daily_user_limit,
             apk_storage_path,
             apk_metadata_path,
+            missions_media_dir,
         }
     }
 
@@ -184,6 +205,7 @@ mod tests {
             xai_daily_user_limit: 120,
             apk_storage_path: PathBuf::from("/tmp/latest.apk"),
             apk_metadata_path: PathBuf::from("/tmp/apk-info.json"),
+            missions_media_dir: PathBuf::from("/tmp/missions-videos"),
         };
         assert!(cfg.validate_server().is_err());
         cfg.xai_model = Some("grok-4-fast-non-reasoning".into());

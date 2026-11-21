@@ -47,6 +47,7 @@ pub struct GuestSessionRequest {
     pub installation_id: Option<String>,
     pub installation_secret: Option<String>,
     pub display_name: Option<String>,
+    pub client: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -312,6 +313,14 @@ pub async fn handle_guest_session(
     let client_ip = rate_limit::extract_client_ip(&headers, connect_info.map(|c| c.0.ip()));
     rate_limit::check_ip_rate_limit("auth_guest_ip", client_ip, 20, 60)?;
 
+    let is_student_web = req
+        .client
+        .as_deref()
+        .is_some_and(|c| c.eq_ignore_ascii_case("student_web"));
+    if is_student_web {
+        security::verify_csrf_same_origin(&headers, &Method::POST, &state.config.public_origin)?;
+    }
+
     let users = state.db.collection::<UserDocument>("usuarios");
     let now = bson::DateTime::now();
 
@@ -438,7 +447,8 @@ pub async fn handle_guest_session(
         }
     };
 
-    build_auth_response(&state, &user, "mobile", &headers).await
+    let purpose = if is_student_web { "web" } else { "mobile" };
+    build_auth_response(&state, &user, purpose, &headers).await
 }
 
 /// `POST /api/v1/auth/register`: cadastra e-mail + senha Argon2id ou promove conta convidada in-place.
@@ -451,10 +461,15 @@ pub async fn handle_register(
     let client_ip = rate_limit::extract_client_ip(&headers, connect_info.map(|c| c.0.ip()));
     rate_limit::check_ip_rate_limit("auth_register_ip", client_ip, 10, 60)?;
 
-    let is_web = req
+    let is_admin_web = req
         .client
         .as_deref()
         .is_some_and(|c| c.eq_ignore_ascii_case("web"));
+    let is_student_web = req
+        .client
+        .as_deref()
+        .is_some_and(|c| c.eq_ignore_ascii_case("student_web"));
+    let is_web = is_admin_web || is_student_web;
     if is_web {
         security::verify_csrf_same_origin(&headers, &Method::POST, &state.config.public_origin)?;
     }
@@ -464,7 +479,7 @@ pub async fn handle_register(
     rate_limit::check_auth_rate_limit(&state.db, "register", &email_norm, 10, 300).await?;
 
     let is_bootstrap_admin = state.config.is_bootstrap_admin_email(&email_norm);
-    if is_web && !is_bootstrap_admin {
+    if is_admin_web && !is_bootstrap_admin {
         return Err(AppError::Forbidden(
             "Apenas e-mails autorizados em ADMIN_EMAILS podem inaugurar acesso administrativo pelo navegador."
                 .into(),
@@ -490,10 +505,13 @@ pub async fn handle_register(
         "student".to_string()
     };
 
-    // Verifica se há sessão Bearer convidada ativa para upgrade in-place (preservando todo o progresso!)
+    // Verifica se há sessão Bearer ou Cookie convidada ativa para upgrade in-place (preservando todo o progresso!)
     let mut upgraded_user: Option<UserDocument> = None;
+    let mut active_guest_claims: Option<security::TokenClaims> = None;
     if let Some(bearer) = security::extract_bearer_token(&headers) {
-        if let Ok(claims) = security::verify_session_token(&state.config.jwt_secret, &bearer, "mobile") {
+        if let Ok(claims) =
+            security::verify_session_token(&state.config.jwt_secret, &bearer, "mobile")
+        {
             let active_session = state
                 .db
                 .collection::<Document>("sessions")
@@ -506,6 +524,36 @@ pub async fn handle_register(
                 })
                 .await?;
             if active_session.is_some() {
+                active_guest_claims = Some(claims);
+            }
+        }
+    } else if is_student_web {
+        for cookie_tok in security::extract_web_cookies(&headers) {
+            if let Ok(claims) =
+                security::verify_session_token(&state.config.jwt_secret, &cookie_tok, "web")
+            {
+                let active_session = state
+                    .db
+                    .collection::<Document>("sessions")
+                    .find_one(doc! {
+                        "_id": &claims.sid,
+                        "user_id": claims.uid,
+                        "purpose": "web",
+                        "revoked": false,
+                        "expires_at": { "$gt": now }
+                    })
+                    .await?;
+                if active_session.is_some() {
+                    active_guest_claims = Some(claims);
+                    break;
+                }
+            }
+        }
+    }
+
+    if let Some(claims) = active_guest_claims {
+        {
+            {
                 if let Ok(existing) = load_user(&state.db, claims.uid).await {
                     if existing.is_guest && existing.email_normalized.is_none() {
                         let mut set_doc = doc! {
@@ -679,10 +727,15 @@ async fn login_inner(
     headers: HeaderMap,
     req: LoginRequest,
 ) -> Result<Response, AppError> {
-    let is_web = req
+    let is_admin_web = req
         .client
         .as_deref()
         .is_some_and(|c| c.eq_ignore_ascii_case("web"));
+    let is_student_web = req
+        .client
+        .as_deref()
+        .is_some_and(|c| c.eq_ignore_ascii_case("student_web"));
+    let is_web = is_admin_web || is_student_web;
     if is_web {
         security::verify_csrf_same_origin(&headers, &Method::POST, &state.config.public_origin)?;
     }
@@ -718,7 +771,7 @@ async fn login_inner(
             .await;
     }
 
-    if is_web && !user.is_admin() {
+    if is_admin_web && !user.is_admin() {
         return Err(AppError::Forbidden(
             "A conta autenticada não possui permissão administrativa".into(),
         ));
@@ -869,6 +922,7 @@ pub fn lgpd_deletion_plan(uid: i64) -> LgpdDeletionPlan {
             "question_import_ai_requests",
             doc! { "$or": [{ "actor_user_id": uid }, { "user_id": uid }, { "_id": { "$regex": &uid_prefix } }] },
         ),
+        ("mission_progress", doc! { "user_id": uid }),
     ];
 
     let report_anonymize_filter = doc! {
@@ -1141,6 +1195,7 @@ mod tests {
             "tutor_budgets",
             "catalog_editor_drafts",
             "question_import_ai_requests",
+            "mission_progress",
         ] {
             assert!(targeted.contains(required), "missing {required}");
         }
@@ -1157,6 +1212,7 @@ mod tests {
             "cogniva_schema_versions",
             "ai_explanations",
             "reportedQuestoes",
+            "mission_definitions",
         ] {
             assert!(!targeted.contains(shared), "must preserve {shared}");
         }

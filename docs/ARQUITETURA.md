@@ -1,6 +1,6 @@
 # Arquitetura do Ecossistema Cogniva 2.0
 
-Este documento descreve a arquitetura unificada do **Cogniva `2.3.0`** (`build 29`), consolidando os contratos compartilhados (`contract_version: 5`), o backend Rust (`cogniva-api`), a arquitetura em 3 camadas (Diagnóstico de 3 Sinais sob Escassez `< 15`, Simulador de Decisão sob Incerteza & Curva de 300 min e Protocolo de Entrada de 60s), o painel administrativo web (`/admin/`), o aplicativo Android *offline-first* (`Room v7`), a governança LGPD e a infraestrutura de entrega contínua.
+Este documento descreve a arquitetura unificada do **Cogniva `2.4.0`** (`build 30`), consolidando os contratos compartilhados (`contract_version: 5`), o backend Rust (`cogniva-api`), o módulo experiencial **Missões**, a arquitetura em 3 camadas (Diagnóstico de 3 Sinais sob Escassez `< 15`, Simulador de Decisão sob Incerteza & Curva de 300 min e Protocolo de Entrada de 60s), o painel administrativo web (`/admin/`), o aplicativo Android *offline-first* (`Room v7`), a governança LGPD e a infraestrutura de entrega contínua.
 
 ---
 
@@ -35,6 +35,7 @@ flowchart LR
   - [`shared/exam-templates.json`](../shared/exam-templates.json): Templates globais oficiais de concursos (`CPNU`, `RFB`, `BNDES`, `AFT`).
   - [`shared/domain-contracts.json`](../shared/domain-contracts.json): Vetores normativos (`contract_version: 5`, `min_questions_for_mastery: 15`) de revisão JCS SHA-256, cálculo de domínio, pontuação líquida ponderada, curvas SRS, fuso de estudo (`America/Sao_Paulo`, `UTC-3`), protocolo `entry_60s`, diagnóstico de 3 sinais (`diagnostics`), transferência cross-banca (`transfer`), curva logística de 300 minutos (`performance_300m`), simulador de decisão sob incerteza (`decision_uncertainty`) e fadiga controlada por dificuldade (`fatigue` — detalhados em [`MOTORES-DECISAO-CORE-LOOP.md`](MOTORES-DECISAO-CORE-LOOP.md)).
   - [`shared/schemas/question-contracts.schema.json`](../shared/schemas/question-contracts.schema.json): Contrato JSON Schema 2020-12 de questões 100% V2 (`question-v2-validator-2.3.0`, `validator_revision = 6`), incluindo `concept_id` opcional, `evidence_challenge` e Ficha Editorial Rastreável (`editorial_card`).
+  - [`shared/missions-catalog.json`](../shared/missions-catalog.json) & [`shared/schemas/missions.schema.json`](../shared/schemas/missions.schema.json): Catálogo declarativo hierárquico do módulo **Missões** (`Carreira → Disciplina → Temporada → Missão → Cena → Interação → Evidência`, detalhado em [`MODULO-MISSOES.md`](MODULO-MISSOES.md)).
 
 ---
 

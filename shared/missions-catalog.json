@@ -1,0 +1,513 @@
+{
+  "$schema": "schemas/missions.schema.json",
+  "schema_version": 1,
+  "catalog_id": "cogniva-missions",
+  "catalog_version": 1,
+  "updated_at": "2026-11-20",
+  "language": "pt-BR",
+  "media_assets": [
+    {
+      "asset_id": "asset-bcb-m01-v01-alerta",
+      "kind": "VIDEO_MP4",
+      "relative_file_name": "Vídeo 1 — O alerta.mp4",
+      "mime_type": "video/mp4",
+      "size_bytes": 3478382,
+      "sha256": "ac699890e4ad6aee4a1e2086510f535c3c04c5cabe7306352218557dd18c1c14",
+      "duration_seconds": 8.042,
+      "width": 1280,
+      "height": 720,
+      "aspect_ratio": "16:9",
+      "video_codec": "avc1",
+      "audio_codec": "mp4a",
+      "audio_sample_rate_hz": 48000,
+      "audio_channels": 2,
+      "has_embedded_voice": true,
+      "language": "pt-BR",
+      "scene_mapping_rationale": "Inspeção audiovisual direta confirmou a abertura narrativa: a analista em sala de monitoramento recebe o alerta e narra que uma alta inesperada dos juros acaba de atingir o mercado de títulos públicos.",
+      "captions": [
+        {
+          "cue_id": "v1-c1",
+          "start_ms": 1800,
+          "end_ms": 6200,
+          "speaker": "Helena Duarte (Analista)",
+          "text": "Uma alta inesperada dos juros acaba de atingir o mercado de títulos públicos."
+        }
+      ]
+    },
+    {
+      "asset_id": "asset-bcb-m01-v02-problema",
+      "kind": "VIDEO_MP4",
+      "relative_file_name": "Vídeo 2 — O problema.mp4",
+      "mime_type": "video/mp4",
+      "size_bytes": 4928716,
+      "sha256": "ad71815080f169d4bd12574fa2a879bf962ccd25d5587fb4c1baf1399c0cfbd6",
+      "duration_seconds": 10.042,
+      "width": 1280,
+      "height": 720,
+      "aspect_ratio": "16:9",
+      "video_codec": "avc1",
+      "audio_codec": "mp4a",
+      "audio_sample_rate_hz": 48000,
+      "audio_channels": 2,
+      "has_embedded_voice": true,
+      "language": "pt-BR",
+      "scene_mapping_rationale": "Inspeção audiovisual direta confirmou a formulação do problema: a analista aponta para a desvalorização nos monitores e indaga por que os títulos prefixados perderam valor de mercado.",
+      "captions": [
+        {
+          "cue_id": "v2-c1",
+          "start_ms": 800,
+          "end_ms": 3400,
+          "speaker": "Helena Duarte (Analista)",
+          "text": "Os títulos prefixados perderam valor de mercado."
+        },
+        {
+          "cue_id": "v2-c2",
+          "start_ms": 3400,
+          "end_ms": 5600,
+          "speaker": "Helena Duarte (Analista)",
+          "text": "Mas por que isso aconteceu?"
+        }
+      ]
+    },
+    {
+      "asset_id": "asset-bcb-m01-v03-decisao",
+      "kind": "VIDEO_MP4",
+      "relative_file_name": "Vídeo 3 — A decisão do aluno.mp4",
+      "mime_type": "video/mp4",
+      "size_bytes": 3709052,
+      "sha256": "1fd94500c7a82d6375bcf5b006c0156442c35144e56175721f663e2ac3a44591",
+      "duration_seconds": 10.042,
+      "width": 1280,
+      "height": 720,
+      "aspect_ratio": "16:9",
+      "video_codec": "avc1",
+      "audio_codec": "mp4a",
+      "audio_sample_rate_hz": 48000,
+      "audio_channels": 2,
+      "has_embedded_voice": true,
+      "language": "pt-BR",
+      "scene_mapping_rationale": "Inspeção audiovisual direta confirmou a interpelação direta ao estudante: a protagonista olha para a câmera e pergunta o efeito da alta de juros sobre o preço do título prefixado.",
+      "captions": [
+        {
+          "cue_id": "v3-c1",
+          "start_ms": 800,
+          "end_ms": 5200,
+          "speaker": "Helena Duarte (Analista)",
+          "text": "Se os juros de mercado subirem, o que acontece com o preço de um título prefixado?"
+        }
+      ]
+    },
+    {
+      "asset_id": "asset-bcb-m01-v04-explicacao",
+      "kind": "VIDEO_MP4",
+      "relative_file_name": "Vídeo 4 — A explicação visual.mp4",
+      "mime_type": "video/mp4",
+      "size_bytes": 4927236,
+      "sha256": "0f673b2a3b1d288f7d168242d10aa56f93e7a50db31868c1f800dddba5027da4",
+      "duration_seconds": 10.042,
+      "width": 1280,
+      "height": 720,
+      "aspect_ratio": "16:9",
+      "video_codec": "avc1",
+      "audio_codec": "mp4a",
+      "audio_sample_rate_hz": 48000,
+      "audio_channels": 2,
+      "has_embedded_voice": true,
+      "language": "pt-BR",
+      "scene_mapping_rationale": "Inspeção audiovisual direta confirmou a síntese conceitual de desconto a valor presente: a analista explica no tablet que pagamentos futuros fixos valem menos hoje quando os juros sobem.",
+      "captions": [
+        {
+          "cue_id": "v4-c1",
+          "start_ms": 800,
+          "end_ms": 3300,
+          "speaker": "Helena Duarte (Analista)",
+          "text": "Quando os juros sobem, o preço do título cai."
+        },
+        {
+          "cue_id": "v4-c2",
+          "start_ms": 3300,
+          "end_ms": 6800,
+          "speaker": "Helena Duarte (Analista)",
+          "text": "Isso acontece porque seus pagamentos futuros valem menos hoje."
+        }
+      ]
+    },
+    {
+      "asset_id": "asset-bcb-m01-v05-duration",
+      "kind": "VIDEO_MP4",
+      "relative_file_name": "Vídeo 5 — O novo desafio duration.mp4",
+      "mime_type": "video/mp4",
+      "size_bytes": 4729705,
+      "sha256": "f5c5303ab85f20eac87a84d00b1cc1d66152b060cd7df7936221b186c5a7839b",
+      "duration_seconds": 10.042,
+      "width": 1280,
+      "height": 720,
+      "aspect_ratio": "16:9",
+      "video_codec": "avc1",
+      "audio_codec": "mp4a",
+      "audio_sample_rate_hz": 48000,
+      "audio_channels": 2,
+      "has_embedded_voice": true,
+      "language": "pt-BR",
+      "scene_mapping_rationale": "Inspeção audiovisual direta confirmou o desafio final de sensibilidade por prazo: comparação entre títulos de 1 ano e de 5 anos diante da alta de juros.",
+      "captions": [
+        {
+          "cue_id": "v5-c1",
+          "start_ms": 800,
+          "end_ms": 6200,
+          "speaker": "Helena Duarte (Analista)",
+          "text": "Agora um desafio: qual título perde mais valor quando os juros sobem, um de um ano ou de cinco anos?"
+        }
+      ]
+    }
+  ],
+  "characters": [
+    {
+      "character_id": "helena-duarte-analista-bcb",
+      "name": "Helena Duarte",
+      "role_title": "Analista de Mercado Aberto e Renda Fixa",
+      "institution_context": "Mesa de acompanhamento de títulos públicos federais"
+    }
+  ],
+  "careers": [
+    {
+      "career_id": "bcb-economia-financas",
+      "trunk_id": "bancaria",
+      "contest_template_id": "c02bb92e-f015-4fae-8d52-92814babe02c",
+      "display_header": "Banco Central — Economia e Finanças",
+      "institution": "Banco Central do Brasil",
+      "role": "Analista — Economia e Finanças",
+      "status": "ACTIVE",
+      "disciplines": [
+        {
+          "discipline_id": "bcb-ef-financas",
+          "canonical_subject_id": "MFIN",
+          "exam_component_id": "bcb2027-ef-FIN",
+          "display_name": "Finanças",
+          "seasons": [
+            {
+              "season_id": "bcb-ef-t1-mercado-financeiro",
+              "season_number": 1,
+              "title": "Temporada 1: Mercado Financeiro",
+              "theme": "Renda Fixa",
+              "summary": "Apreçamento a valor presente, marcação a mercado e sensibilidade de títulos públicos frente a choques na estrutura a termo de juros.",
+              "missions": [
+                {
+                  "mission_id": "bcb-ef-t1-m01-choque-dos-juros",
+                  "mission_number": 1,
+                  "version": 1,
+                  "publication_state": "PUBLISHED",
+                  "display_code": "Missão 01",
+                  "title": "O Choque dos Juros",
+                  "full_title": "Missão 01: O Choque dos Juros",
+                  "summary": "Investigue na mesa de monitoramento por que uma alta inesperada nas taxas de mercado reduz o preço dos títulos prefixados e amplifica oscilações nos prazos longos.",
+                  "description": "Uma abertura abrupta na curva de juros atinge o mercado de títulos públicos. Ao lado da analista Helena Duarte, observe o efeito imediato da marcação a mercado sobre títulos prefixados existentes, explore o modelo exato de valor presente e avalie o impacto do prazo (duration) entre vencimentos de 1 e 5 anos.",
+                  "curriculum": {
+                    "contest_name": "Banco Central do Brasil",
+                    "contest_template_id": "c02bb92e-f015-4fae-8d52-92814babe02c",
+                    "role_name": "Analista — Economia e Finanças",
+                    "exam_component_id": "bcb2027-ef-FIN",
+                    "discipline_label": "Finanças",
+                    "theme_label": "Renda Fixa",
+                    "canonical_subject_id": "MFIN",
+                    "related_subject_ids": [
+                      "MAT_FIN"
+                    ],
+                    "primary_topic_ids": [
+                      "MFIN_07_001",
+                      "MFIN_07_003",
+                      "MFIN_07_002",
+                      "MFIN_02_001",
+                      "MFIN_06_003"
+                    ],
+                    "fallback_topic_ids": [
+                      "MFIN_01_004",
+                      "MAT_FIN_01_002",
+                      "MAT_FIN_02_001",
+                      "MAT_FIN_02_002"
+                    ],
+                    "worked_concepts": [
+                      {
+                        "concept_key": "titulos_prefixados",
+                        "label": "Títulos prefixados",
+                        "summary": "Títulos públicos ou privados cujos fluxos nominais futuros (valor de face e eventuais cupons, como LTN e NTN-F) são fixados contratualmente na emissão.",
+                        "canonical_subject_id": "MFIN",
+                        "canonical_topic_ids": [
+                          "MFIN_02_001",
+                          "MFIN_07_001",
+                          "MFIN_01_004"
+                        ],
+                        "fallback_subject_ids": [
+                          "MAT_FIN"
+                        ],
+                        "related_scene_ids": [
+                          "cena-01-o-alerta",
+                          "cena-02-o-problema",
+                          "cena-03-primeira-decisao"
+                        ]
+                      },
+                      {
+                        "concept_key": "valor_presente",
+                        "label": "Valor presente",
+                        "summary": "Preço econômico de um instrumento financeiro equivalente à soma dos seus fluxos de caixa futuros descontados pela taxa de retorno exigida pelo mercado.",
+                        "canonical_subject_id": "MFIN",
+                        "canonical_topic_ids": [
+                          "MFIN_07_001",
+                          "MAT_FIN_01_002",
+                          "MAT_FIN_02_001"
+                        ],
+                        "fallback_subject_ids": [
+                          "MAT_FIN"
+                        ],
+                        "related_scene_ids": [
+                          "cena-03-primeira-decisao",
+                          "cena-04-explicacao"
+                        ]
+                      },
+                      {
+                        "concept_key": "relacao_taxas_precos",
+                        "label": "Relação entre taxas e preços",
+                        "summary": "Propriedade fundamental de títulos com fluxos fixos: como a taxa exigida atua no denominador do desconto, variações na taxa e no preço unitário ocorrem em sentidos opostos.",
+                        "canonical_subject_id": "MFIN",
+                        "canonical_topic_ids": [
+                          "MFIN_07_001",
+                          "MFIN_06_003",
+                          "MFIN_01_004"
+                        ],
+                        "fallback_subject_ids": [
+                          "MAT_FIN"
+                        ],
+                        "related_scene_ids": [
+                          "cena-02-o-problema",
+                          "cena-03-primeira-decisao",
+                          "cena-04-explicacao"
+                        ]
+                      },
+                      {
+                        "concept_key": "risco_taxa_juros",
+                        "label": "Risco de taxa de juros",
+                        "summary": "Risco de mercado decorrente da remarcação de preços de ativos prefixados em carteira antes do vencimento quando a curva de juros se desloca.",
+                        "canonical_subject_id": "MFIN",
+                        "canonical_topic_ids": [
+                          "MFIN_07_002",
+                          "MFIN_06_003",
+                          "MFIN_01_004"
+                        ],
+                        "fallback_subject_ids": [],
+                        "related_scene_ids": [
+                          "cena-01-o-alerta",
+                          "cena-02-o-problema",
+                          "cena-05-desafio-duration"
+                        ]
+                      },
+                      {
+                        "concept_key": "duration",
+                        "label": "Duration",
+                        "summary": "Prazo médio ponderado pelo valor presente dos fluxos (Macaulay) que governa a sensibilidade percentual do preço do título a variações na taxa de juros.",
+                        "canonical_subject_id": "MFIN",
+                        "canonical_topic_ids": [
+                          "MFIN_07_003",
+                          "MFIN_07_001",
+                          "MAT_FIN_02_002"
+                        ],
+                        "fallback_subject_ids": [
+                          "MAT_FIN"
+                        ],
+                        "related_scene_ids": [
+                          "cena-05-desafio-duration"
+                        ]
+                      }
+                    ],
+                    "learning_evidence_policy": {
+                      "video_completion_grants_mastery": false,
+                      "narrative_decisions_grant_mastery": false,
+                      "requires_independent_human_questions": true,
+                      "min_human_questions_for_mastery": 15
+                    }
+                  },
+                  "scenes": [
+                    {
+                      "scene_id": "cena-01-o-alerta",
+                      "order": 1,
+                      "title": "Cena 1 — O Alerta",
+                      "pedagogical_goal": "Apresentar o conflito narrativo de uma abertura inesperada na curva de juros e despertar curiosidade sobre seu efeito imediato nos títulos públicos.",
+                      "asset_id": "asset-bcb-m01-v01-alerta",
+                      "character_id": "helena-duarte-analista-bcb",
+                      "narrative_context": "Noite na sala de monitoramento do mercado secundário de títulos públicos. Os terminais registram uma reprecificação súbita após um choque inesperado nas taxas de juros.",
+                      "transcript_pt_br": "Helena Duarte (Analista): \"Uma alta inesperada dos juros acaba de atingir o mercado de títulos públicos.\"",
+                      "estimated_interaction_seconds": 5,
+                      "auto_advance_on_video_end": true,
+                      "requires_decision_to_advance": false,
+                      "next_scene_id": "cena-02-o-problema"
+                    },
+                    {
+                      "scene_id": "cena-02-o-problema",
+                      "order": 2,
+                      "title": "Cena 2 — O Problema",
+                      "pedagogical_goal": "Estabelecer o problema concreto da marcação a mercado: títulos prefixados já emitidos perdem valor negociado quando as taxas exigidas sobem.",
+                      "asset_id": "asset-bcb-m01-v02-problema",
+                      "character_id": "helena-duarte-analista-bcb",
+                      "narrative_context": "Ao inspecionar as carteiras marcadas a mercado, Helena observa recuo imediato nas cotações das posições prefixadas existentes.",
+                      "problem_statement": "Títulos prefixados prometem pagamento nominal fixo no vencimento, mas suas cotações no mercado secundário caíram logo após a alta dos juros.",
+                      "transcript_pt_br": "Helena Duarte (Analista): \"Os títulos prefixados perderam valor de mercado. Mas por que isso aconteceu?\"",
+                      "estimated_interaction_seconds": 10,
+                      "auto_advance_on_video_end": false,
+                      "requires_decision_to_advance": false,
+                      "next_scene_id": "cena-03-primeira-decisao"
+                    },
+                    {
+                      "scene_id": "cena-03-primeira-decisao",
+                      "order": 3,
+                      "title": "Cena 3 — A Primeira Decisão",
+                      "pedagogical_goal": "Mobilizar tomada de decisão ativa sobre a direção do preço unitário de um título prefixado diante de uma elevação na taxa de juros de mercado.",
+                      "asset_id": "asset-bcb-m01-v03-decisao",
+                      "character_id": "helena-duarte-analista-bcb",
+                      "narrative_context": "Antes de consolidar o relatório técnico da mesa, Helena convoca sua análise sobre a mecânica de apreçamento de um título prefixado já em circulação.",
+                      "transcript_pt_br": "Helena Duarte (Analista): \"Se os juros de mercado subirem, o que acontece com o preço de um título prefixado?\"",
+                      "estimated_interaction_seconds": 45,
+                      "auto_advance_on_video_end": false,
+                      "requires_decision_to_advance": true,
+                      "next_scene_id": "cena-04-explicacao",
+                      "interaction": {
+                        "interaction_id": "decisao-01-juros-preco-prefixado",
+                        "kind": "SINGLE_CHOICE_DECISION",
+                        "is_editorial_question": false,
+                        "contributes_to_formal_mastery": false,
+                        "context_lead": "Considere um título público prefixado já emitido, com fluxos de caixa nominais fixos e demais condições constantes.",
+                        "prompt": "Se os juros de mercado subirem, o que acontece com o preço de um título prefixado?",
+                        "ceteris_paribus_note": "Premissa: título prefixado com fluxos de caixa futuros fixos, sem alteração de risco de crédito ou liquidez (ceteris paribus).",
+                        "options": [
+                          {
+                            "option_id": "A",
+                            "label": "O preço aumenta.",
+                            "feedback": "Ainda não. Como o valor pago no vencimento é fixo, para que esse título passe a oferecer ao comprador a nova taxa de juros mais alta exigida pelo mercado, seu preço de aquisição hoje precisa cair — e não subir."
+                          },
+                          {
+                            "option_id": "B",
+                            "label": "O preço diminui.",
+                            "feedback": "Exato! Com fluxos futuros fixos, uma alta na taxa de desconto exigida pelo mercado reduz o valor presente desses pagamentos. O preço atual cai para que quem compre o título hoje obtenha a nova rentabilidade mais elevada até o vencimento."
+                          },
+                          {
+                            "option_id": "C",
+                            "label": "O preço permanece igual.",
+                            "feedback": "Atenção à distinção entre valor no vencimento e preço de mercado hoje: o valor nominal prometido no vencimento permanece fixo, mas o preço negociado hoje (marcação a mercado) cai quando a taxa de desconto sobe."
+                          }
+                        ],
+                        "expected_option_id": "B",
+                        "conceptual_explanation": "O preço unitário (PU) de um título prefixado é o valor presente dos seus fluxos fixos descontados pela taxa exigida pelo mercado: PU = VF / (1 + i)^n. Mantidos os fluxos constantes, aumentar a taxa i no denominador reduz matematicamente o PU.",
+                        "revisit_concept_keys": [
+                          "titulos_prefixados",
+                          "valor_presente",
+                          "relacao_taxas_precos"
+                        ]
+                      }
+                    },
+                    {
+                      "scene_id": "cena-04-explicacao",
+                      "order": 4,
+                      "title": "Cena 4 — A Explicação",
+                      "pedagogical_goal": "Consolidar visual e matematicamente a relação inversa entre taxa de desconto exigida e valor presente de fluxos de caixa fixos.",
+                      "asset_id": "asset-bcb-m01-v04-explicacao",
+                      "character_id": "helena-duarte-analista-bcb",
+                      "narrative_context": "Helena projeta o modelo de apreçamento para demonstrar como o choque na taxa exigida comprime o valor presente de um título prefixado.",
+                      "transcript_pt_br": "Helena Duarte (Analista): \"Quando os juros sobem, o preço do título cai. Isso acontece porque seus pagamentos futuros valem menos hoje.\"",
+                      "estimated_interaction_seconds": 35,
+                      "auto_advance_on_video_end": false,
+                      "requires_decision_to_advance": false,
+                      "next_scene_id": "cena-05-desafio-duration",
+                      "native_visual": {
+                        "visual_id": "visual-01-curva-valor-presente",
+                        "visual_type": "BOND_PRESENT_VALUE_CURVE",
+                        "title": "Modelo Nativo Cogniva · Curva Preço × Taxa (Título Prefixado)",
+                        "subtitle": "Título zero cupom com valor nominal fixo de R$ 1.000,00 e prazo de 3 anos — simulação exata de marcação a mercado.",
+                        "formula_label": "PU = VF / (1 + i)^n",
+                        "highlights": [
+                          "O preço de um título corresponde ao valor presente de seus fluxos de caixa futuros.",
+                          "Quando a taxa de desconto aumenta, esse valor presente diminui.",
+                          "A relação pressupõe fluxos de caixa fixos e ausência de outras alterações relevantes."
+                        ],
+                        "parameters": {
+                          "face_value_brl": 1000.0,
+                          "maturity_years": 3,
+                          "initial_rate_pct": 10.0,
+                          "shocked_rate_pct": 14.0,
+                          "min_rate_pct": 4.0,
+                          "max_rate_pct": 20.0
+                        }
+                      }
+                    },
+                    {
+                      "scene_id": "cena-05-desafio-duration",
+                      "order": 5,
+                      "title": "Cena 5 — O Desafio de Duration",
+                      "pedagogical_goal": "Comparar a sensibilidade percentual de preço de dois títulos zero cupom (1 ano vs. 5 anos) sob o mesmo choque de juros e introduzir o conceito de duration.",
+                      "asset_id": "asset-bcb-m01-v05-duration",
+                      "character_id": "helena-duarte-analista-bcb",
+                      "narrative_context": "Para encerrar o diagnóstico de risco da carteira, Helena compara duas posições prefixadas zero cupom de prazos distintos submetidas exatamente ao mesmo choque na curva.",
+                      "transcript_pt_br": "Helena Duarte (Analista): \"Agora um desafio: qual título perde mais valor quando os juros sobem, um de um ano ou de cinco anos?\"",
+                      "estimated_interaction_seconds": 50,
+                      "auto_advance_on_video_end": false,
+                      "requires_decision_to_advance": true,
+                      "interaction": {
+                        "interaction_id": "decisao-02-desafio-duration",
+                        "kind": "SINGLE_CHOICE_DECISION",
+                        "is_editorial_question": false,
+                        "contributes_to_formal_mastery": false,
+                        "context_lead": "Compare dois títulos públicos prefixados zero cupom (sem cupons intermediários), um com vencimento em 1 ano e outro em 5 anos, partindo da mesma taxa inicial e sofrendo o mesmo aumento de taxa.",
+                        "prompt": "Qual título sofre maior queda percentual de preço quando os juros sobem?",
+                        "ceteris_paribus_note": "Premissa: ambos são zero cupom (valor de face R$ 1.000,00), partem da mesma taxa inicial (ex.: 10% a.a.) e sofrem o mesmo choque paralelo (ex.: +2 p.p., indo a 12% a.a.).",
+                        "options": [
+                          {
+                            "option_id": "A",
+                            "label": "Título com vencimento em um ano.",
+                            "feedback": "Observe o efeito exponencial do prazo no denominador (1 + i)^n: em 1 ano, o novo juro mais alto incide por apenas um período (queda de 1,79% de 10% para 12% a.a.). No título de 5 anos, o desconto maior se acumula por cinco períodos compostos, gerando queda muito mais intensa."
+                          },
+                          {
+                            "option_id": "B",
+                            "label": "Título com vencimento em cinco anos.",
+                            "feedback": "Correto! No título zero cupom de 5 anos, a maior taxa de desconto atua exponencialmente em (1 + i)^5, provocando queda de 8,62% (contra apenas 1,79% no título de 1 ano, para uma alta de 10% para 12% a.a.)."
+                          }
+                        ],
+                        "expected_option_id": "B",
+                        "conceptual_explanation": "Em um título zero cupom, a Duration de Macaulay coincide exatamente com o prazo até o vencimento (1 ano vs. 5 anos). Pela Duration Modificada (D_mod = D / (1 + i)), a variação percentual aproximada do preço é ΔP/P ≈ -D_mod × Δi: quanto maior a duration, maior a sensibilidade do preço ao risco de taxa de juros.",
+                        "revisit_concept_keys": [
+                          "risco_taxa_juros",
+                          "duration"
+                        ]
+                      },
+                      "native_visual": {
+                        "visual_id": "visual-02-comparativo-duration",
+                        "visual_type": "ZERO_COUPON_DURATION_COMPARISON",
+                        "title": "Sensibilidade por Prazo (Duration) · Zero Cupom 1 Ano vs. 5 Anos",
+                        "subtitle": "Impacto percentual exato sobre o preço unitário para um choque paralelo de +2,00 p.p. (de 10% a.a. para 12% a.a.).",
+                        "formula_label": "ΔP / P ≈ −[D / (1 + i)] × Δi",
+                        "highlights": [
+                          "Em títulos zero cupom, a Duration de Macaulay é igual ao próprio prazo até o vencimento (D = 1 ano vs. D = 5 anos).",
+                          "Sob alta de 10% para 12% a.a., o título de 1 ano recua −1,79% (R$ 909,09 → R$ 892,86), enquanto o de 5 anos recua −8,62% (R$ 620,92 → R$ 567,43).",
+                          "Maior duration implica maior exposição ao risco de taxa de juros na marcação a mercado."
+                        ],
+                        "parameters": {
+                          "face_value_brl": 1000.0,
+                          "short_maturity_years": 1,
+                          "long_maturity_years": 5,
+                          "initial_rate_pct": 10.0,
+                          "shocked_rate_pct": 12.0
+                        }
+                      }
+                    }
+                  ],
+                  "conclusion": {
+                    "headline": "Diagnóstico da Mesa Concluído · O Choque dos Juros",
+                    "narrative_closure": "Com a análise consolidada, Helena demonstra ao comitê que a desvalorização observada decorre da remarcação a valor presente dos fluxos fixos sob a nova curva de juros — sendo substancialmente mais intensa nos vértices longos de maior duration.",
+                    "epistemological_note": "Concluir uma missão comprova seu percurso narrativo e registra seu desempenho formativo nas decisões guiadas, mas o domínio formal no Cogniva exige validação independente em questões humanas reais do acervo.",
+                    "next_step_guidance": "Pratique agora com questões humanas reais classificadas em Renda Fixa / Finanças para verificar retenção e transferência em condições autênticas de prova."
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

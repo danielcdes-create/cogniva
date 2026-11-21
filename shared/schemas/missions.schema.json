@@ -1,0 +1,893 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Cogniva Missions declarative catalog and mission contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "catalog_id",
+    "catalog_version",
+    "updated_at",
+    "language",
+    "media_assets",
+    "characters",
+    "careers"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "schemas/missions.schema.json"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "catalog_id": {
+      "const": "cogniva-missions"
+    },
+    "catalog_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "updated_at": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "language": {
+      "const": "pt-BR"
+    },
+    "media_assets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/media_asset"
+      }
+    },
+    "characters": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/character"
+      }
+    },
+    "careers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/career"
+      }
+    }
+  },
+  "$defs": {
+    "id_slug": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 96,
+      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+    },
+    "sha256_hex": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "caption_cue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cue_id",
+        "start_ms",
+        "end_ms",
+        "text"
+      ],
+      "properties": {
+        "cue_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "start_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end_ms": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "speaker": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 600
+        }
+      }
+    },
+    "media_asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "asset_id",
+        "kind",
+        "relative_file_name",
+        "mime_type",
+        "size_bytes",
+        "sha256",
+        "duration_seconds",
+        "width",
+        "height",
+        "aspect_ratio",
+        "video_codec",
+        "audio_codec",
+        "has_embedded_voice",
+        "language",
+        "captions"
+      ],
+      "properties": {
+        "asset_id": {
+          "$ref": "#/$defs/id_slug"
+        },
+        "kind": {
+          "enum": [
+            "VIDEO_MP4"
+          ]
+        },
+        "relative_file_name": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 180,
+          "pattern": "^[^/\\\\]+\\.mp4$"
+        },
+        "mime_type": {
+          "const": "video/mp4"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256_hex"
+        },
+        "duration_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 320
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 180
+        },
+        "aspect_ratio": {
+          "type": "string",
+          "pattern": "^[0-9]+:[0-9]+$"
+        },
+        "video_codec": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 32
+        },
+        "audio_codec": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 32
+        },
+        "audio_sample_rate_hz": {
+          "type": "integer",
+          "minimum": 8000
+        },
+        "audio_channels": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "has_embedded_voice": {
+          "type": "boolean"
+        },
+        "language": {
+          "const": "pt-BR"
+        },
+        "scene_mapping_rationale": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 600
+        },
+        "captions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/caption_cue"
+          }
+        }
+      }
+    },
+    "character": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "character_id",
+        "name",
+        "role_title",
+        "institution_context"
+      ],
+      "properties": {
+        "character_id": {
+          "$ref": "#/$defs/id_slug"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "role_title": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "institution_context": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 160
+        }
+      }
+    },
+    "career": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "career_id",
+        "trunk_id",
+        "display_header",
+        "institution",
+        "role",
+        "status",
+        "disciplines"
+      ],
+      "properties": {
+        "career_id": {
+          "$ref": "#/$defs/id_slug"
+        },
+        "trunk_id": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64
+        },
+        "contest_template_id": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "display_header": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 140
+        },
+        "institution": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 140
+        },
+        "role": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 140
+        },
+        "status": {
+          "enum": [
+            "ACTIVE",
+            "COMING_SOON",
+            "ARCHIVED"
+          ]
+        },
+        "disciplines": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/discipline"
+          }
+        }
+      }
+    },
+    "discipline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "discipline_id",
+        "canonical_subject_id",
+        "display_name",
+        "seasons"
+      ],
+      "properties": {
+        "discipline_id": {
+          "$ref": "#/$defs/id_slug"
+        },
+        "canonical_subject_id": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64
+        },
+        "exam_component_id": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "seasons": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/season"
+          }
+        }
+      }
+    },
+    "season": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "season_id",
+        "season_number",
+        "title",
+        "theme",
+        "summary",
+        "missions"
+      ],
+      "properties": {
+        "season_id": {
+          "$ref": "#/$defs/id_slug"
+        },
+        "season_number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 140
+        },
+        "theme": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 400
+        },
+        "missions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/mission"
+          }
+        }
+      }
+    },
+    "worked_concept": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "concept_key",
+        "label",
+        "summary",
+        "canonical_subject_id",
+        "canonical_topic_ids",
+        "related_scene_ids"
+      ],
+      "properties": {
+        "concept_key": {
+          "$ref": "#/$defs/id_slug"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 360
+        },
+        "canonical_subject_id": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64
+        },
+        "canonical_topic_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 64
+          }
+        },
+        "fallback_subject_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 64
+          }
+        },
+        "related_scene_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/id_slug"
+          }
+        }
+      }
+    },
+    "curriculum_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contest_name",
+        "role_name",
+        "discipline_label",
+        "theme_label",
+        "canonical_subject_id",
+        "primary_topic_ids",
+        "fallback_topic_ids",
+        "worked_concepts",
+        "learning_evidence_policy"
+      ],
+      "properties": {
+        "contest_name": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 140
+        },
+        "contest_template_id": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "role_name": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 140
+        },
+        "exam_component_id": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "discipline_label": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "theme_label": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "canonical_subject_id": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64
+        },
+        "related_subject_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 64
+          }
+        },
+        "primary_topic_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 64
+          }
+        },
+        "fallback_topic_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 64
+          }
+        },
+        "curated_question_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{24}$"
+          }
+        },
+        "worked_concepts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/worked_concept"
+          }
+        },
+        "learning_evidence_policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "video_completion_grants_mastery",
+            "narrative_decisions_grant_mastery",
+            "requires_independent_human_questions",
+            "min_human_questions_for_mastery"
+          ],
+          "properties": {
+            "video_completion_grants_mastery": {
+              "const": false
+            },
+            "narrative_decisions_grant_mastery": {
+              "const": false
+            },
+            "requires_independent_human_questions": {
+              "const": true
+            },
+            "min_human_questions_for_mastery": {
+              "const": 15
+            }
+          }
+        }
+      }
+    },
+    "decision_option": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "option_id",
+        "label",
+        "feedback"
+      ],
+      "properties": {
+        "option_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16,
+          "pattern": "^[A-Z0-9_-]+$"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 300
+        },
+        "feedback": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 800
+        },
+        "branch_scene_id": {
+          "$ref": "#/$defs/id_slug"
+        }
+      }
+    },
+    "didactic_interaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "interaction_id",
+        "kind",
+        "is_editorial_question",
+        "contributes_to_formal_mastery",
+        "prompt",
+        "ceteris_paribus_note",
+        "options",
+        "expected_option_id",
+        "conceptual_explanation",
+        "revisit_concept_keys"
+      ],
+      "properties": {
+        "interaction_id": {
+          "$ref": "#/$defs/id_slug"
+        },
+        "kind": {
+          "enum": [
+            "SINGLE_CHOICE_DECISION"
+          ]
+        },
+        "is_editorial_question": {
+          "const": false
+        },
+        "contributes_to_formal_mastery": {
+          "const": false
+        },
+        "context_lead": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 400
+        },
+        "prompt": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 400
+        },
+        "ceteris_paribus_note": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 400
+        },
+        "options": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 5,
+          "items": {
+            "$ref": "#/$defs/decision_option"
+          }
+        },
+        "expected_option_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16
+        },
+        "conceptual_explanation": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 1200
+        },
+        "revisit_concept_keys": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/id_slug"
+          }
+        }
+      }
+    },
+    "native_visual": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "visual_id",
+        "visual_type",
+        "title",
+        "subtitle",
+        "formula_label",
+        "highlights",
+        "parameters"
+      ],
+      "properties": {
+        "visual_id": {
+          "$ref": "#/$defs/id_slug"
+        },
+        "visual_type": {
+          "enum": [
+            "BOND_PRESENT_VALUE_CURVE",
+            "ZERO_COUPON_DURATION_COMPARISON"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 160
+        },
+        "subtitle": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 320
+        },
+        "formula_label": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 160
+        },
+        "highlights": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 6,
+          "items": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 320
+          }
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "number",
+              "integer",
+              "string",
+              "boolean"
+            ]
+          }
+        }
+      }
+    },
+    "scene": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scene_id",
+        "order",
+        "title",
+        "pedagogical_goal",
+        "asset_id",
+        "character_id",
+        "narrative_context",
+        "transcript_pt_br",
+        "estimated_interaction_seconds",
+        "auto_advance_on_video_end",
+        "requires_decision_to_advance"
+      ],
+      "properties": {
+        "scene_id": {
+          "$ref": "#/$defs/id_slug"
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 140
+        },
+        "pedagogical_goal": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 360
+        },
+        "asset_id": {
+          "$ref": "#/$defs/id_slug"
+        },
+        "character_id": {
+          "$ref": "#/$defs/id_slug"
+        },
+        "narrative_context": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 800
+        },
+        "problem_statement": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 600
+        },
+        "transcript_pt_br": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 2000
+        },
+        "estimated_interaction_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 600
+        },
+        "auto_advance_on_video_end": {
+          "type": "boolean"
+        },
+        "requires_decision_to_advance": {
+          "type": "boolean"
+        },
+        "next_scene_id": {
+          "$ref": "#/$defs/id_slug"
+        },
+        "interaction": {
+          "$ref": "#/$defs/didactic_interaction"
+        },
+        "native_visual": {
+          "$ref": "#/$defs/native_visual"
+        }
+      }
+    },
+    "mission_conclusion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "headline",
+        "narrative_closure",
+        "epistemological_note",
+        "next_step_guidance"
+      ],
+      "properties": {
+        "headline": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 160
+        },
+        "narrative_closure": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 1000
+        },
+        "epistemological_note": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 600
+        },
+        "next_step_guidance": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 500
+        }
+      }
+    },
+    "mission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mission_id",
+        "mission_number",
+        "version",
+        "publication_state",
+        "display_code",
+        "title",
+        "full_title",
+        "summary",
+        "description",
+        "curriculum",
+        "scenes",
+        "conclusion"
+      ],
+      "properties": {
+        "mission_id": {
+          "$ref": "#/$defs/id_slug"
+        },
+        "mission_number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "publication_state": {
+          "enum": [
+            "DRAFT",
+            "REVIEW",
+            "PUBLISHED",
+            "ARCHIVED"
+          ]
+        },
+        "display_code": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 40
+        },
+        "title": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "full_title": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 160
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 260
+        },
+        "description": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 800
+        },
+        "curriculum": {
+          "$ref": "#/$defs/curriculum_binding"
+        },
+        "scenes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/scene"
+          }
+        },
+        "conclusion": {
+          "$ref": "#/$defs/mission_conclusion"
+        }
+      }
+    }
+  }
+}
