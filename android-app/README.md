@@ -6,7 +6,7 @@ Aplicativo nativo Android construído em **Kotlin + Jetpack Compose (Material 3)
 
 ---
 
-## 1. Arquitetura do Cliente (`2.3.0`)
+## 1. Arquitetura do Cliente (`2.4.0`)
 
 - **Autenticação Nativa, Modo Convidado e Direitos LGPD ([`AuthStore.kt`](app/src/main/java/br/com/concursoprep/app/data/AuthStore.kt), [`OnboardingScreen.kt`](app/src/main/java/br/com/concursoprep/app/ui/screens/OnboardingScreen.kt), [`AccountLinkForm.kt`](app/src/main/java/br/com/concursoprep/app/ui/screens/AccountLinkForm.kt), [`SettingsScreen.kt`](app/src/main/java/br/com/concursoprep/app/ui/screens/SettingsScreen.kt)):**
   - Início imediato como convidado (online ou offline) ou autenticação por e-mail e senha (`Entrar` / `Criar conta`).

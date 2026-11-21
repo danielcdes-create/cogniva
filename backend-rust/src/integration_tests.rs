@@ -278,7 +278,7 @@ async fn protected_routes_reject_untrusted_identity_before_database_access() {
         .unwrap();
     let health: Value = serde_json::from_slice(&health_bytes).unwrap();
     assert_eq!(health["service"], "cogniva-api");
-    assert_eq!(health["version"], "2.3.0");
+    assert_eq!(health["version"], "2.4.0");
     assert_eq!(health["contract_version"], 5);
 }
 
