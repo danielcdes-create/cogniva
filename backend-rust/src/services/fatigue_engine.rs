@@ -51,8 +51,16 @@ pub fn sigmoid(z: f64) -> f64 {
     }
 }
 
+fn finite_or(val: f64, fallback: f64) -> f64 {
+    if val.is_finite() {
+        val
+    } else {
+        fallback
+    }
+}
+
 pub fn logit(p: f64) -> f64 {
-    let c = p.clamp(0.02, 0.98);
+    let c = finite_or(p, 0.50).clamp(0.02, 0.98);
     (c / (1.0 - c)).ln()
 }
 
@@ -66,13 +74,9 @@ pub fn performance_at_minute(
     lambda_i: f64,
     elapsed_minutes: f64,
 ) -> (f64, f64) {
-    let d = item_difficulty.clamp(0.0, 1.0);
-    let t = elapsed_minutes.clamp(0.0, 300.0);
-    let lam = if lambda_i.is_finite() {
-        lambda_i.clamp(-2.5, 2.5)
-    } else {
-        0.0
-    };
+    let d = finite_or(item_difficulty, 0.50).clamp(0.0, 1.0);
+    let t = finite_or(elapsed_minutes, 0.0).clamp(0.0, 300.0);
+    let lam = finite_or(lambda_i, 0.0).clamp(-2.5, 2.5);
     let z0 = logit(p_base) - 0.80 * (d - 0.50);
     let p0 = sigmoid(z0);
     let pt = sigmoid(z0 - lam * (t / 300.0));
@@ -122,10 +126,10 @@ pub fn evaluate_fatigue_with_difficulty(
         };
     }
 
-    let d_early = early_avg_difficulty.clamp(0.0, 1.0);
-    let d_late = late_avg_difficulty.clamp(0.0, 1.0);
-    let u_early = (early_mean_minutes / 300.0).clamp(0.0, 1.0);
-    let u_late = (late_mean_minutes / 300.0).clamp(u_early + 0.15, 1.0);
+    let d_early = finite_or(early_avg_difficulty, 0.50).clamp(0.0, 1.0);
+    let d_late = finite_or(late_avg_difficulty, 0.50).clamp(0.0, 1.0);
+    let u_early = (finite_or(early_mean_minutes, 30.0) / 300.0).clamp(0.0, 0.85);
+    let u_late = (finite_or(late_mean_minutes, 210.0) / 300.0).clamp(u_early + 0.15, 1.0);
 
     let p_early = ((early_correct.min(early_total) as f64) + 0.5) / ((early_total as f64) + 1.0);
     let p_late = ((late_correct.min(late_total) as f64) + 0.5) / ((late_total as f64) + 1.0);
@@ -202,7 +206,7 @@ pub fn evaluate_from_activities(activities: &[UserActivityDocument]) -> FatigueR
 
     let mut sessions: HashMap<String, SessionObs> = HashMap::new();
     for act in activities {
-        let item_diff = (act.memory_difficulty / 10.0).clamp(0.10, 0.90);
+        let item_diff = (finite_or(act.memory_difficulty, 5.0) / 10.0).clamp(0.10, 0.90);
         for s in &act.past_sessions {
             if s.is_blank || !s.modo_sessao.eq_ignore_ascii_case("SIMULADO") {
                 continue;
@@ -288,4 +292,28 @@ pub fn evaluate_from_activities(activities: &[UserActivityDocument]) -> FatigueR
         early_avg_m,
         late_avg_m,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn high_early_minutes_and_nan_inputs_never_panic_or_produce_nan() {
+        let rep = evaluate_fatigue_with_difficulty(
+            4,
+            50,
+            65,
+            42,
+            65,
+            f64::NAN,
+            f64::INFINITY,
+            290.0,
+            295.0,
+        );
+        assert!(rep.estimated_lambda.unwrap().is_finite());
+        assert!(rep.shrunk_accuracy_delta.unwrap().is_finite());
+        let (p0, pt) = performance_at_minute(f64::NAN, f64::NAN, f64::NAN, f64::NAN);
+        assert!(p0.is_finite() && pt.is_finite());
+    }
 }

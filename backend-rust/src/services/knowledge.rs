@@ -21,6 +21,29 @@ pub struct Evidence {
     pub review_due_on: Option<String>,
 }
 
+pub fn normalize_board_key(raw: &str) -> String {
+    let clean = raw.trim().to_lowercase();
+    if clean.is_empty() || clean == "a definir" || clean == "origem não informada" {
+        return String::new();
+    }
+    if clean.contains("cebraspe") || clean.contains("cespe") {
+        "cebraspe".to_string()
+    } else if clean.contains("fgv")
+        || clean.contains("getulio vargas")
+        || clean.contains("getúlio vargas")
+    {
+        "fgv".to_string()
+    } else if clean.contains("cesgranrio") {
+        "cesgranrio".to_string()
+    } else if clean.contains("fcc") || clean.contains("carlos chagas") {
+        "fcc".to_string()
+    } else if clean.contains("vunesp") {
+        "vunesp".to_string()
+    } else {
+        clean
+    }
+}
+
 pub fn project(activity: &Document, question: &Document) -> Option<Evidence> {
     let q = question_compatibility::decode(question.clone()).ok()?;
     let subject = q.canonical_subject_id.as_ref()?;
@@ -207,7 +230,7 @@ pub fn project_units(activity: &Document, question: &Document) -> Vec<UnitQuesti
         _ => None,
     };
 
-    let board_key = question
+    let raw_board = question
         .get_array("origins")
         .ok()
         .and_then(|arr| {
@@ -216,16 +239,8 @@ pub fn project_units(activity: &Document, question: &Document) -> Vec<UnitQuesti
                 .find_map(|o| o.get_str("organizer").ok())
         })
         .or(q.source.as_deref())
-        .unwrap_or("")
-        .trim()
-        .to_lowercase();
-    let normalized_board = if board_key == "cespe" || board_key == "cebraspe" {
-        "cebraspe".to_string()
-    } else if board_key == "origem não informada" {
-        String::new()
-    } else {
-        board_key
-    };
+        .unwrap_or("");
+    let normalized_board = normalize_board_key(raw_board);
 
     let mut targets: Vec<(String, String, Option<String>)> = Vec::new();
     if let Ok(cls) = question.get_document("classification") {

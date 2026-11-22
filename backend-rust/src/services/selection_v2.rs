@@ -45,6 +45,7 @@ async fn fetch_user_history_buckets(
     let mut cursor = db
         .collection::<Document>("userActivityLog")
         .find(doc! { "user_id": user_id })
+        .projection(doc! { "question_id": 1, "dominada": 1 })
         .sort(doc! { "datas.ultima_sessao": -1 })
         .await?;
 

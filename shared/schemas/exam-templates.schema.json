@@ -123,7 +123,7 @@
             "AUTORIZADO",
             "BANCA_DEFINIDA",
             "EDITAL_PUBLICADO",
-            "POS_PROVA",
+            "PROVA_REALIZADA",
             "ARQUIVADO",
             "EXCLUIDO"
           ]

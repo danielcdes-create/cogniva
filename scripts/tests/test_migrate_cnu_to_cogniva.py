@@ -406,6 +406,16 @@ class MigrateCnuToCognivaTest(unittest.TestCase):
         self.assertIsInstance(patched_act["actor_user_id"], FakeInt64)
         self.assertIsInstance(patched_act["draft_revision"], FakeInt64)
 
+    def test_cli_defaults_to_dry_run_without_apply_and_exam_schema_has_prova_realizada(self):
+        import json
+
+        src = (kc.ROOT / "scripts/migrate_cnu_to_cogniva.py").read_text(encoding="utf-8")
+        self.assertNotIn("effective_dry_run = False", src)
+        exam_schema = json.loads((kc.ROOT / "shared/schemas/exam-templates.schema.json").read_text(encoding="utf-8"))
+        statuses = exam_schema["$defs"]["exam_template"]["properties"]["status"]["enum"]
+        self.assertIn("PROVA_REALIZADA", statuses)
+        self.assertNotIn("POS_PROVA", statuses)
+
 
 if __name__ == "__main__":
     unittest.main()

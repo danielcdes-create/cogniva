@@ -74,16 +74,27 @@ fn round9(val: f64) -> f64 {
     }
 }
 
+fn finite_or(val: f64, fallback: f64) -> f64 {
+    if val.is_finite() {
+        val
+    } else {
+        fallback
+    }
+}
+
 /// Normalização de complementaridade em item estritamente binário (`Certo`/`Errado`):
 /// se uma alternativa tem probabilidade estimada de 48%, a outra possui 52%.
 pub fn normalize_binary_choice_probability(p_alternative: f64) -> f64 {
-    let p = p_alternative.clamp(0.0, 1.0);
+    let p = finite_or(p_alternative, 0.5).clamp(0.0, 1.0);
     round9(p.max(1.0 - p))
 }
 
 /// CDF da distribuição normal padrão via aproximação racional Abramowitz & Stegun 7.1.26,
 /// idêntica bit a bit entre Python, Rust e Kotlin.
 pub fn normal_cdf(z: f64) -> f64 {
+    if !z.is_finite() {
+        return 0.5;
+    }
     if z <= -8.0 {
         return 0.0;
     }
@@ -138,10 +149,13 @@ pub fn simulate_decision_under_uncertainty(
         0.0
     };
     let rem = input.remaining_items.max(1);
-    let goal = input.target_score.max(input.minimum_score);
-    let sd_u = input.uncertainty_sd.clamp(0.0, 0.35);
+    let target_clean = finite_or(input.target_score, 0.0);
+    let min_clean = finite_or(input.minimum_score, 0.0);
+    let cur_clean = finite_or(input.current_net_score, 0.0);
+    let goal = target_clean.max(min_clean);
+    let sd_u = finite_or(input.uncertainty_sd, 0.0).clamp(0.0, 0.35);
 
-    let pf = input.baseline_future_p.clamp(0.10, 0.95);
+    let pf = finite_or(input.baseline_future_p, 0.72).clamp(0.10, 0.95);
     let qf = if pen > 0.0 { 0.85 } else { 1.0 };
     let mu_item = qf * ((1.0 + pen) * pf - pen);
     let e_x2 = qf * (pf * 1.0 + (1.0 - pf) * pen * pen);
@@ -163,11 +177,11 @@ pub fn simulate_decision_under_uncertainty(
         }
     };
 
-    let prob_omit = continuation_prob(input.current_net_score, rem - 1);
+    let prob_omit = continuation_prob(cur_clean, rem - 1);
     let p_minus = (pt - sd_u).clamp(0.01, 0.99);
     let p_plus = (pt + sd_u).clamp(0.01, 0.99);
-    let prob_hit = continuation_prob(input.current_net_score + 1.0, rem - 1);
-    let prob_miss = continuation_prob(input.current_net_score - pen, rem - 1);
+    let prob_hit = continuation_prob(cur_clean + 1.0, rem - 1);
+    let prob_miss = continuation_prob(cur_clean - pen, rem - 1);
     let prob_ans = 0.5 * (p_minus * prob_hit + (1.0 - p_minus) * prob_miss)
         + 0.5 * (p_plus * prob_hit + (1.0 - p_plus) * prob_miss);
 
@@ -268,12 +282,11 @@ pub fn evaluate_strategy(
     current_projected_pct: f64,
     remaining_fraction: f64,
 ) -> StrategyDecision {
-    let p = p_calibrated.clamp(0.0, 1.0);
-    let lam = if penalty.is_finite() {
-        penalty.max(0.0)
-    } else {
-        0.0
-    };
+    let p = finite_or(p_calibrated, 0.5).clamp(0.0, 1.0);
+    let lam = finite_or(penalty, 0.0).max(0.0);
+    let cutoff = finite_or(cutoff_pct, 0.0);
+    let proj = finite_or(current_projected_pct, 0.0);
+    let rem_frac = finite_or(remaining_fraction, 1.0);
     let ev = round9((1.0 + lam) * p - lam);
 
     if lam <= 0.0 {
@@ -288,8 +301,8 @@ pub fn evaluate_strategy(
 
     let p_star = round9(lam / (1.0 + lam));
     let (eff, posture) =
-        if cutoff_pct > 0.0 && remaining_fraction > 0.0 && remaining_fraction <= 0.35 {
-            let margin = current_projected_pct - cutoff_pct;
+        if cutoff > 0.0 && rem_frac > 0.0 && rem_frac <= 0.35 {
+            let margin = proj - cutoff;
             if margin >= 6.0 {
                 (
                     round9((p_star + 0.05).min(0.95)),

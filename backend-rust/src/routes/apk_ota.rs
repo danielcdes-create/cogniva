@@ -187,25 +187,35 @@ pub async fn download_apk(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Response, (StatusCode, String)> {
-    let meta = read_apk_meta(&state.config.apk_storage_path).await?;
+    let mut meta = read_apk_meta(&state.config.apk_storage_path).await?;
     if meta.size_bytes == 0 {
         return Err(apk_missing());
     }
-    let etag = format_apk_etag(&meta.sha256);
+    let mut etag = format_apk_etag(&meta.sha256);
     if if_none_match_hit(&headers, &etag) {
         return Response::builder()
             .status(StatusCode::NOT_MODIFIED)
             .header(header::ETAG, &etag)
             .header(header::CACHE_CONTROL, "no-cache, no-transform")
+            .header(header::X_CONTENT_TYPE_OPTIONS, "nosniff")
             .body(Body::empty())
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()));
+            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Erro interno".into()));
     }
 
-    let file = tokio::fs::File::open(&meta.path)
+    let mut file = tokio::fs::File::open(&meta.path)
         .await
         .map_err(|_| apk_missing())?;
+    let opened_len = file.metadata().await.map_err(|_| apk_missing())?.len();
+    if opened_len != meta.size_bytes {
+        meta = read_apk_meta(&state.config.apk_storage_path).await?;
+        etag = format_apk_etag(&meta.sha256);
+        file = tokio::fs::File::open(&meta.path)
+            .await
+            .map_err(|_| apk_missing())?;
+    }
+    let limited = file.take(meta.size_bytes);
 
-    let stream = futures::stream::unfold(file, |mut file| async move {
+    let stream = futures::stream::unfold(limited, |mut file| async move {
         let mut buf = vec![0u8; 64 * 1024];
         match file.read(&mut buf).await {
             Ok(0) => None,
@@ -230,9 +240,10 @@ pub async fn download_apk(
         .header(header::CONTENT_LENGTH, meta.size_bytes)
         .header(header::ETAG, &etag)
         .header(header::CACHE_CONTROL, "no-cache, no-transform")
+        .header(header::X_CONTENT_TYPE_OPTIONS, "nosniff")
         .header("X-Accel-Buffering", "no")
         .body(Body::from_stream(stream))
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Erro interno".into()))
 }
 
 #[cfg(test)]

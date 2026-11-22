@@ -232,7 +232,7 @@ Ao produzir novos pacotes (manualmente ou orquestrando subagentes de IA), siga s
    - Distribua `level` em aproximadamente `25% Fácil`, `50% Média` e `25% Difícil`.
 3. **Verificação Matemática e Normativa Determinística (Obrigatória):**
    - Toda questão que envolva cálculo (preço/PU, *duration*, VaR, CAPM, elasticidades, multiplicadores, tributos, estatística, contabilidade) **deve ter suas equações conferidas em script Python** antes da exportação do JSON, garantindo que o valor exato conste nas alternativas e na `explanation`.
-   - Em disciplinas jurídicas ou regulatórias (Direito Constitucional, Administrativo, Tributário, Normativos CMN/BCB/CVM), confira vigência atual e passe `--validity-basis NORMATIVE` (ou `JURISPRUDENTIAL` para súmulas/teses STF/STJ) na importação.
+   - Em disciplinas jurídicas ou regulatórias (Direito Constitucional, Administrativo, Tributário, Normativos CMN/BCB/CVM), confira vigência atual e passe `--validity-basis LEGAL` (o importador também converte automaticamente os apelidos `NORMATIVE`/`JURISPRUDENTIAL` para `LEGAL` e preenche `review_due_on` padrão `+365d` caso `--review-due-on` não seja informado).
 4. **Zero Duplicidades e Zero Referências Fantasmas:**
    - Nunca escreva *"Conforme o gráfico acima"* ou *"De acordo com o texto I"* sem incluir integralmente os dados no próprio campo `question`.
    - Nunca atribua `origin_kind = "OFFICIAL_EXAM"` a uma questão autoral ou adaptada; questões criadas devem usar sempre `origin_kind = "AUTHOR_CREATED"`.

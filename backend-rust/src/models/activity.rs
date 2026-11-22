@@ -150,13 +150,19 @@ pub struct UserActivityDocument {
 
 impl UserActivityDocument {
     pub fn review_due(&self, now: DateTime<Utc>) -> bool {
-        self.revisao_necessaria || now >= self.datas.ultima_sessao + chrono::Duration::days(self.spaced_repetition_interval.max(1) as i64)
+        let has_answered =
+            self.quantidade_praticas > 0 || self.past_sessions.iter().any(|s| !s.is_blank);
+        if !has_answered {
+            return false;
+        }
+        let clamped_days = self.spaced_repetition_interval.clamp(1, 3650) as i64;
+        self.revisao_necessaria || now >= self.datas.ultima_sessao + chrono::Duration::days(clamped_days)
     }
     pub fn error_notebook(&self) -> bool {
         if self.dominada {
             return false;
         }
-        if let Some(last) = self.past_sessions.last() {
+        if let Some(last) = self.past_sessions.iter().rev().find(|s| !s.is_blank) {
             if last.status && (self.streak_atual >= 2 || last.nivel_confianca >= 2) {
                 return false;
             }

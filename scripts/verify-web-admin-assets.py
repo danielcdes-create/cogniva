@@ -1,4 +1,4 @@
-"""Compare public web-admin bytes with an immutable Git revision (read-only)."""
+"""Compare public web-admin and web-missions bytes with an immutable Git revision (read-only)."""
 import argparse
 import datetime
 import hashlib
@@ -18,23 +18,29 @@ assert len(args.revision) == 40 and all(c in '0123456789abcdef' for c in args.re
 root = Path(__file__).resolve().parents[1]
 origin = args.origin.rstrip('/')
 files = {
-    '/admin/': 'index.html',
-    '/admin/assets/app.js': 'app.js',
-    '/admin/assets/help.js': 'help.js',
-    '/admin/assets/domain.js': 'domain.js',
-    '/admin/assets/style.css': 'style.css',
+    '/admin/': ('web-admin', 'index.html'),
+    '/admin/assets/app.js': ('web-admin', 'app.js'),
+    '/admin/assets/help.js': ('web-admin', 'help.js'),
+    '/admin/assets/domain.js': ('web-admin', 'domain.js'),
+    '/admin/assets/style.css': ('web-admin', 'style.css'),
+    '/missoes/': ('web-missions', 'index.html'),
+    '/missoes/assets/app.js': ('web-missions', 'app.js'),
+    '/missoes/assets/domain.js': ('web-missions', 'domain.js'),
+    '/missoes/assets/style.css': ('web-missions', 'style.css'),
 }
 checked = {}
-for url, name in files.items():
-    expected = subprocess.check_output(['git', 'show', f'{args.revision}:web-admin/{name}'], cwd=root)
+for url, (folder, name) in files.items():
+    git_rel = f'{folder}/{name}'
+    expected = subprocess.check_output(['git', 'show', f'{args.revision}:{git_rel}'], cwd=root)
     with urllib.request.urlopen(origin + url, timeout=45) as response:
         received = response.read()
         assert response.status == 200
         assert 'no-store' in response.headers.get('Cache-Control', '')
-        if url == '/admin/':
+        if url in ('/admin/', '/missoes/'):
             assert "frame-ancestors 'none'" in response.headers.get('Content-Security-Policy', '')
-    assert received == expected, f'{name}: served bytes differ from release revision'
-    checked[name] = {
+    assert received == expected, f'{git_rel}: served bytes differ from release revision'
+    key = name if folder == 'web-admin' else git_rel
+    checked[key] = {
         'bytes': len(received),
         'sha256': hashlib.sha256(received).hexdigest(),
         'matches_release': True,

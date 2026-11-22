@@ -52,7 +52,7 @@ class MissionsContractsTest(unittest.TestCase):
         base = mc.load_missions_catalog()
 
         with_windows_path = copy.deepcopy(base)
-        with_windows_path["media_assets"][0]["relative_file_name"] = r"C:\Users\danie\video.mp4"
+        with_windows_path["media_assets"][0]["relative_file_name"] = r"C:\fixtures\video.mp4"
         with self.assertRaises(mc.MissionContractError):
             mc.validate_missions_catalog(with_windows_path)
 

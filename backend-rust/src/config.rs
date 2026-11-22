@@ -4,7 +4,7 @@ use std::env;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct AppConfig {
     pub bind_ip: IpAddr,
     pub port: u16,
@@ -21,6 +21,31 @@ pub struct AppConfig {
     pub apk_storage_path: PathBuf,
     pub apk_metadata_path: PathBuf,
     pub missions_media_dir: PathBuf,
+}
+
+impl std::fmt::Debug for AppConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AppConfig")
+            .field("bind_ip", &self.bind_ip)
+            .field("port", &self.port)
+            .field("mongodb_uri", &"<redacted>")
+            .field("mongodb_db", &self.mongodb_db)
+            .field("jwt_secret", &"<redacted>")
+            .field("public_origin", &self.public_origin)
+            .field("admin_emails_count", &self.admin_emails.len())
+            .field(
+                "xai_api_key",
+                &self.xai_api_key.as_ref().map(|_| "<redacted>"),
+            )
+            .field("xai_base_url", &self.xai_base_url)
+            .field("xai_model", &self.xai_model)
+            .field("xai_daily_global_limit", &self.xai_daily_global_limit)
+            .field("xai_daily_user_limit", &self.xai_daily_user_limit)
+            .field("apk_storage_path", &self.apk_storage_path)
+            .field("apk_metadata_path", &self.apk_metadata_path)
+            .field("missions_media_dir", &self.missions_media_dir)
+            .finish()
+    }
 }
 
 pub fn resolve_default_missions_media_dir() -> PathBuf {
@@ -42,8 +67,14 @@ impl AppConfig {
 
         let (bind_ip, parsed_port) = env::var("BIND_ADDRESS")
             .ok()
-            .and_then(|raw| raw.parse::<SocketAddr>().ok())
-            .map(|addr| (addr.ip(), Some(addr.port())))
+            .and_then(|raw| {
+                let trimmed = raw.trim();
+                trimmed
+                    .parse::<SocketAddr>()
+                    .map(|addr| (addr.ip(), Some(addr.port())))
+                    .or_else(|_| trimmed.parse::<IpAddr>().map(|ip| (ip, None)))
+                    .ok()
+            })
             .unwrap_or((IpAddr::V4(Ipv4Addr::UNSPECIFIED), None));
 
         let port = env::var("PORT")
@@ -153,7 +184,23 @@ impl AppConfig {
                     .into(),
             ));
         }
+        let parsed_origin = reqwest::Url::parse(self.public_origin.trim()).map_err(|_| {
+            AppError::Internal("COGNIVA_PUBLIC_ORIGIN deve ser uma URL HTTP/HTTPS válida".into())
+        })?;
+        if !matches!(parsed_origin.scheme(), "http" | "https")
+            || parsed_origin.host_str().is_none()
+            || !parsed_origin.username().is_empty()
+            || parsed_origin.password().is_some()
+        {
+            return Err(AppError::Internal(
+                "COGNIVA_PUBLIC_ORIGIN deve usar esquema http:// ou https:// sem credenciais".into(),
+            ));
+        }
         Ok(())
+    }
+
+    pub fn bind_addr(&self) -> SocketAddr {
+        SocketAddr::new(self.bind_ip, self.port)
     }
 
     pub fn require_xai_model(&self) -> Result<&str, AppError> {

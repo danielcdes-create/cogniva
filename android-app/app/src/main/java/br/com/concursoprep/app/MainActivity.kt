@@ -1,5 +1,6 @@
 package br.com.concursoprep.app
 
+import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -13,6 +14,7 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -225,7 +227,11 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
 
     LaunchedEffect(Unit){viewModel.pendingExport.collectLatest { file ->
         val uri=FileProvider.getUriForFile(context,"${context.packageName}.fileprovider",file)
-        val intent=Intent(Intent.ACTION_SEND).setType("application/json").putExtra(Intent.EXTRA_STREAM,uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        val intent=Intent(Intent.ACTION_SEND)
+            .setType("application/json")
+            .putExtra(Intent.EXTRA_STREAM,uri)
+            .apply { clipData = ClipData.newRawUri("Exportar registros preservados", uri) }
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         context.startActivity(Intent.createChooser(intent,"Exportar registros preservados"))
     }}
     // 1. Rota de Onboarding (boas-vindas nativas Cogniva com modo convidado imediato ou conta por e-mail)
@@ -314,6 +320,9 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
             detail = currentMission,
             isBusy = isMissionBusy,
             onExitMission = { sid, posMs -> viewModel.exitActiveMission(sid, posMs) },
+            onSavePlaybackPosition = { sid, posMs ->
+                viewModel.saveMissionPlaybackPosition(currentMission.missionId, sid, posMs)
+            },
             onAdvanceScene = { doneId, nextId, viaTranscript ->
                 viewModel.advanceMissionScene(currentMission.missionId, doneId, nextId, viaTranscript)
             },
@@ -382,7 +391,7 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
             }
         }
     ) { innerPadding ->
-        Box(modifier = Modifier.padding(innerPadding)) {
+        Box(modifier = Modifier.padding(innerPadding).consumeWindowInsets(innerPadding)) {
             when (currentTab) {
                 BottomTab.HOJE -> {
                     val safeDashboard = todayDashboard ?: buildOfflineFallbackDashboard()

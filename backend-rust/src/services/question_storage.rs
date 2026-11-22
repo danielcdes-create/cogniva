@@ -853,6 +853,21 @@ pub async fn ensure_indexes(db: &Database) -> Result<Vec<String>, AppError> {
             "idx_activity_user_srs",
         ),
         (
+            "userActivityLog",
+            doc! { "user_id": 1, "datas.ultima_sessao": -1 },
+            "idx_activity_user_last_session",
+        ),
+        (
+            "question_commands",
+            doc! { "kind": 1, "status": 1 },
+            "idx_question_commands_kind_status",
+        ),
+        (
+            "todasQuestoes",
+            doc! { "schema_version": 1, "audit_outbox.0": 1 },
+            "idx_questions_schema_outbox",
+        ),
+        (
             "attempt_receipts",
             doc! { "recorded_at": 1 },
             "idx_attempt_receipts_recorded_at",
@@ -1027,22 +1042,28 @@ pub async fn ensure_indexes(db: &Database) -> Result<Vec<String>, AppError> {
     .await?;
     created.push("idx_mission_progress_user_mission".to_string());
 
+    let _ = collection(db, "mission_definitions")
+        .drop_index("idx_mission_definitions_id")
+        .await;
     create_index_tolerant(
         db,
         "mission_definitions",
         IndexModel::builder()
-            .keys(doc! { "mission_id": 1 })
+            .keys(doc! { "mission.mission_id": 1 })
             .options(
                 IndexOptions::builder()
-                    .name("idx_mission_definitions_id".to_string())
+                    .name("idx_mission_definitions_nested_id".to_string())
                     .unique(true)
+                    .partial_filter_expression(doc! {
+                        "mission.mission_id": { "$type": "string" }
+                    })
                     .build(),
             )
             .build(),
-        "idx_mission_definitions_id",
+        "idx_mission_definitions_nested_id",
     )
     .await?;
-    created.push("idx_mission_definitions_id".to_string());
+    created.push("idx_mission_definitions_nested_id".to_string());
 
     Ok(created)
 }

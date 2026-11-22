@@ -44,6 +44,8 @@ class QuestionImportViewModel(private val repository: ConcursoRepository) : View
                 val draft = saved?.takeIf { it.isNotBlank() }?.let { json.decodeFromString<QuestionImportDraft>(it) } ?: QuestionImportDraft()
                 mutable.value = mutable.value.copy(draft = draft, loading = false, storageReady = true)
                 unreadableDraft = null
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 mutable.value = mutable.value.copy(loading = false, message = "Não foi possível abrir o rascunho salvo: ${e.message}")
             }

@@ -10,7 +10,7 @@ pub struct RetentionUpdate {
 /// Curva contínua de recuperabilidade de memória: `R(t, S) = (1 + (19/81)*(t/S))^-0.5`.
 /// Em `t == S`, `R == 0.90` exatamente.
 pub fn retrievability(elapsed_days: f64, stability_days: f64) -> f64 {
-    if stability_days <= 0.0 || !stability_days.is_finite() {
+    if stability_days <= 0.0 || !stability_days.is_finite() || !elapsed_days.is_finite() {
         return 0.0;
     }
     let t = elapsed_days.max(0.0);
@@ -34,12 +34,32 @@ pub fn update_retention(
     response_seconds: i32,
     expected_seconds: f64,
 ) -> RetentionUpdate {
-    let d = if prior_stability <= 0.0 {
+    let safe_stab = if prior_stability.is_finite() {
+        prior_stability
+    } else {
+        0.0
+    };
+    let safe_diff = if prior_difficulty.is_finite() {
+        prior_difficulty
+    } else {
+        5.0
+    };
+    let safe_elapsed = if elapsed_days.is_finite() {
+        elapsed_days.max(0.0)
+    } else {
+        0.0
+    };
+    let safe_expected = if expected_seconds.is_finite() {
+        expected_seconds
+    } else {
+        0.0
+    };
+    let d = if safe_stab <= 0.0 {
         5.0
     } else {
-        prior_difficulty.clamp(1.0, 10.0)
+        safe_diff.clamp(1.0, 10.0)
     };
-    let s = prior_stability.max(0.0);
+    let s = safe_stab.max(0.0);
 
     let (s_next, d_next) = if !is_correct {
         let delta_d = if confidence >= 3 { 1.5 } else { 1.0 };
@@ -55,7 +75,7 @@ pub fn update_retention(
         let sn = s.clamp(1.0, 1.5);
         (sn, dn)
     } else {
-        let slow = expected_seconds > 0.0 && (response_seconds as f64) > 1.5 * expected_seconds;
+        let slow = safe_expected > 0.0 && (response_seconds as f64) > 1.5 * safe_expected;
         let g = if confidence >= 3 && !slow { 1.0 } else { 0.6 };
         let dn = (d - 0.3 * g + 0.15 * (1.0 - g)).clamp(1.0, 10.0);
         let sn = if s <= 0.0 {
@@ -65,7 +85,7 @@ pub fn update_retention(
                 2.0
             }
         } else {
-            let r = retrievability(elapsed_days, s);
+            let r = retrievability(safe_elapsed, s);
             let mult = 1.0 + g * ((11.0 - dn) / 9.0) * (1.2 + 1.8 * (1.0 - r));
             (s * mult).clamp(1.0, 180.0)
         };

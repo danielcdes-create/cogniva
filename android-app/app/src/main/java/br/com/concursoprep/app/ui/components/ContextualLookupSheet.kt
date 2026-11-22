@@ -495,9 +495,15 @@ fun ContextualLookupBottomSheet(
                             )
                         }
                     } else if (lookupState.aiExplanationMarkdown != null) {
+                        val codeBg = MaterialTheme.colorScheme.surfaceContainerHighest
+                        val linkColor = MaterialTheme.colorScheme.primary
                         Text(
-                            text = remember(lookupState.aiExplanationMarkdown) {
-                                MarkdownParser.parse(lookupState.aiExplanationMarkdown)
+                            text = remember(lookupState.aiExplanationMarkdown, codeBg, linkColor) {
+                                MarkdownParser.parse(
+                                    lookupState.aiExplanationMarkdown,
+                                    codeBackgroundColor = codeBg,
+                                    linkColor = linkColor
+                                )
                             },
                             style = MaterialTheme.typography.bodyMedium
                         )

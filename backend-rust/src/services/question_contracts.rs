@@ -1715,7 +1715,7 @@ mod tests {
         validate_http_uri("HTTP://example.org/edital.pdf").unwrap();
         validate_http_uri("HTTPS://example.org/prova.pdf").unwrap();
         validate_http_uri("urn:cogniva:admin-review:672f8b2c4e1a2b3c4d5e6f70").unwrap();
-        validate_http_uri("file:///C:/Users/danie/Cogniva/questoes/959_BCB_CB1_01.pdf").unwrap();
+        validate_http_uri("file:///C:/fixtures/959_BCB_CB1_01.pdf").unwrap();
         for bad_uri in [
             "javascript:alert(1)",
             "JAVASCRIPT:alert(1)",

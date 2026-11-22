@@ -113,6 +113,7 @@ static SPOILER_INTERNAL_KEY_RE: OnceLock<Regex> = OnceLock::new();
 static SPOILER_HEADER_RE: OnceLock<Regex> = OnceLock::new();
 static SPOILER_DECLARATIVE_RE: OnceLock<Regex> = OnceLock::new();
 static SPOILER_LETTER_RE: OnceLock<Regex> = OnceLock::new();
+static SPOILER_ORDINAL_RE: OnceLock<Regex> = OnceLock::new();
 static SPOILER_VERDICT_RE: OnceLock<Regex> = OnceLock::new();
 
 pub(crate) fn neutralize_untrusted_tags(raw: &str) -> String {
@@ -220,6 +221,15 @@ pub(crate) fn detect_pre_answer_spoiler(raw: &str) -> Option<&'static str> {
     });
     if letter_re.is_match(raw) {
         return Some("indicação de letra de alternativa");
+    }
+    let ordinal_re = SPOILER_ORDINAL_RE.get_or_init(|| {
+        Regex::new(
+            r"(?i)\b(?:a\s+)?(?:primeira|segunda|terceira|quarta|quinta|[uú]ltima|[1-5][ªa])\s+(?:alternativa|op[çc][ãa]o)\s+(?:[ée]\s+(?:a\s+)?correta|est[áa]\s+(?:certa|correta|errada|incorreta))\b",
+        )
+        .unwrap()
+    });
+    if ordinal_re.is_match(raw) {
+        return Some("indicação ordinal de alternativa");
     }
     let verdict_re = SPOILER_VERDICT_RE.get_or_init(|| {
         Regex::new(
@@ -702,8 +712,9 @@ pub async fn get_or_generate_ai_assist_with_context(
     // ANTES da API paga e devolve se a chamada xAI falhar.
     let user_daily_limit =
         crate::services::rate_limit::effective_user_daily_limit(config.xai_daily_user_limit, is_guest);
-    let reservation = if budget_user.is_some() {
-        Some(
+    let quota_guard = if budget_user.is_some() {
+        Some(crate::services::rate_limit::QuotaGuard::new(
+            db.clone(),
             crate::services::rate_limit::reserve_xai_quota(
                 db,
                 budget_user,
@@ -711,7 +722,7 @@ pub async fn get_or_generate_ai_assist_with_context(
                 config.xai_daily_global_limit,
             )
             .await?,
-        )
+        ))
     } else {
         None
     };
@@ -730,16 +741,16 @@ pub async fn get_or_generate_ai_assist_with_context(
     let generated_text = match generated_result {
         Ok(text) if crate::services::rate_limit::charges_tutor_budget(false, Some(&text)) => text,
         Ok(_) => {
-            if let Some(res) = &reservation {
-                crate::services::rate_limit::release_xai_quota(db, res).await;
+            if let Some(g) = quota_guard {
+                g.release_now().await;
             }
             return Err(AppError::ExternalAiError(
                 "xAI devolveu conteúdo vazio".into(),
             ));
         }
         Err(err) => {
-            if let Some(res) = &reservation {
-                crate::services::rate_limit::release_xai_quota(db, res).await;
+            if let Some(g) = quota_guard {
+                g.release_now().await;
             }
             return Err(err);
         }
@@ -750,6 +761,9 @@ pub async fn get_or_generate_ai_assist_with_context(
     // Se houve entrada pessoal do estudante (`user_note` / `student_answer`), retorna imediatamente
     // SEM gravar no cache compartilhado de `todasQuestoes`.
     if has_personal_student_input {
+        if let Some(g) = quota_guard {
+            g.commit();
+        }
         return Ok(AiAssistResponse {
             question_id: question_id.to_string(),
             kind,
@@ -759,73 +773,110 @@ pub async fn get_or_generate_ai_assist_with_context(
         });
     }
 
-    // 3. Persistir no cache compartilhado `todasQuestoes` com `ai_resource_meta` aderente ao contrato v2
-    let ai_meta = build_schema_compliant_ai_meta(
-        original.get("ai_resource_meta"),
-        &kind,
-        hint_index,
-        &model_name,
-        &content_revision,
-    );
-
-    let mut set_doc = match &kind {
-        AiAssistKind::Explanation => doc! { "explanation": &generated_text },
-        AiAssistKind::ContextualHint => {
-            let index = hint_index.unwrap_or(0);
-            let mut hints = questao.contextual_hint.clone();
-            hints.resize(hints.len().max(index + 1), String::new());
-            hints[index] = generated_text.clone();
-            doc! { "contextualHint": hints }
-        }
-        AiAssistKind::DrSincero => doc! { "drSincero": &generated_text },
-        AiAssistKind::ChildFriendlyPre => doc! { "ajudaInfantil": &generated_text },
-        AiAssistKind::ChildFriendlyPost => doc! { "explicacaoInfantil": &generated_text },
-        AiAssistKind::ExtraConcepts => doc! { "explanationExtra": &generated_text },
-        AiAssistKind::Mnemonic => doc! { "mnemonico": &generated_text },
-        AiAssistKind::Plausibility => doc! { "plausibilityMarkdown": &generated_text },
-        AiAssistKind::TermLookup | AiAssistKind::TermLookupPost => {
-            unreachable!("TermLookup nunca é persistido no cache compartilhado")
-        }
-    };
-    set_doc.insert("ai_resource_meta", ai_meta);
-    let update_doc = doc! { "$set": set_doc };
-
-    let mut guard = doc! { "_id": oid };
-    for field in [
-        "question",
-        "answers",
-        "correct_answers",
-        "correct_answer_indices",
-        "content_revision",
-        "grading",
-        "status",
-        "validity",
-        "ai_resource_meta",
-    ] {
-        guard.insert(
-            field,
-            original
-                .get(field)
-                .cloned()
-                .unwrap_or_else(|| Bson::Document(doc! { "$exists": false })),
+    // 3. Persistir no cache compartilhado `todasQuestoes` com `ai_resource_meta` aderente ao contrato v2,
+    // com até 3 tentativas CAS caso outro tipo de ajuda (`kind` paralelo) tenha atualizado `ai_resource_meta`
+    // sem alterar o conteúdo/gabarito da questão.
+    let mut base_doc = original;
+    let mut base_questao = questao;
+    let mut persisted = false;
+    for attempt in 0..3 {
+        let ai_meta = build_schema_compliant_ai_meta(
+            base_doc.get("ai_resource_meta"),
+            &kind,
+            hint_index,
+            &model_name,
+            &content_revision,
         );
-    }
-    let result = match coll.update_one(guard, update_doc).await {
-        Ok(res) => res,
-        Err(err) => {
-            if let Some(res) = &reservation {
-                crate::services::rate_limit::release_xai_quota(db, res).await;
+
+        let mut set_doc = match &kind {
+            AiAssistKind::Explanation => doc! { "explanation": &generated_text },
+            AiAssistKind::ContextualHint => {
+                let index = hint_index.unwrap_or(0);
+                let mut hints = base_questao.contextual_hint.clone();
+                hints.resize(hints.len().max(index + 1), String::new());
+                hints[index] = generated_text.clone();
+                doc! { "contextualHint": hints }
             }
-            return Err(err.into());
+            AiAssistKind::DrSincero => doc! { "drSincero": &generated_text },
+            AiAssistKind::ChildFriendlyPre => doc! { "ajudaInfantil": &generated_text },
+            AiAssistKind::ChildFriendlyPost => doc! { "explicacaoInfantil": &generated_text },
+            AiAssistKind::ExtraConcepts => doc! { "explanationExtra": &generated_text },
+            AiAssistKind::Mnemonic => doc! { "mnemonico": &generated_text },
+            AiAssistKind::Plausibility => doc! { "plausibilityMarkdown": &generated_text },
+            AiAssistKind::TermLookup | AiAssistKind::TermLookupPost => {
+                unreachable!("TermLookup nunca é persistido no cache compartilhado")
+            }
+        };
+        set_doc.insert("ai_resource_meta", ai_meta);
+        let update_doc = doc! { "$set": set_doc };
+
+        let mut guard = doc! { "_id": oid };
+        for field in [
+            "question",
+            "answers",
+            "correct_answers",
+            "correct_answer_indices",
+            "content_revision",
+            "grading",
+            "status",
+            "validity",
+            "ai_resource_meta",
+        ] {
+            guard.insert(
+                field,
+                base_doc
+                    .get(field)
+                    .cloned()
+                    .unwrap_or_else(|| Bson::Document(doc! { "$exists": false })),
+            );
         }
-    };
-    if result.matched_count != 1 {
-        if let Some(res) = &reservation {
-            crate::services::rate_limit::release_xai_quota(db, res).await;
+        let result = match coll.update_one(guard, update_doc).await {
+            Ok(res) => res,
+            Err(err) => {
+                if let Some(g) = quota_guard {
+                    g.release_now().await;
+                }
+                return Err(err.into());
+            }
+        };
+        if result.matched_count == 1 {
+            persisted = true;
+            break;
+        }
+        if attempt + 1 < 3 {
+            if let Ok(Some(fresh_doc)) = db
+                .collection::<Document>("todasQuestoes")
+                .find_one(doc! { "_id": oid })
+                .await
+            {
+                if let Ok(fresh_q) =
+                    crate::services::question_compatibility::decode(fresh_doc.clone())
+                {
+                    let same_rev = fresh_q.revision().ok().as_deref() == Some(content_revision.as_str());
+                    let same_status = fresh_doc.get("status") == base_doc.get("status");
+                    let same_validity = fresh_doc.get("validity") == base_doc.get("validity");
+                    if same_rev && same_status && same_validity {
+                        base_doc = fresh_doc;
+                        base_questao = fresh_q;
+                        continue;
+                    }
+                }
+            }
+        }
+        break;
+    }
+
+    if !persisted {
+        if let Some(g) = quota_guard {
+            g.release_now().await;
         }
         return Err(AppError::Conflict(
             "Questão alterada ou removida durante a geração; conteúdo não confirmado".into(),
         ));
+    }
+
+    if let Some(g) = quota_guard {
+        g.commit();
     }
 
     Ok(AiAssistResponse {

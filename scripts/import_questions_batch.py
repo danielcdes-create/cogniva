@@ -496,7 +496,11 @@ def inspect_and_import_mongo(
                             }
                         )
 
+        if not batch_dir.is_dir():
+            raise FileNotFoundError(f"Diretório de lotes não encontrado: {batch_dir}")
         batch_files = sorted(batch_dir.glob("*.json"))
+        if not batch_files:
+            raise ValueError(f"Nenhum arquivo JSON de lote encontrado em: {batch_dir}")
         records = load_batch_files(batch_files)
         now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 

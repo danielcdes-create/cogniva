@@ -110,24 +110,26 @@ object LearningProjection {
     }
     private fun projectHistory(base: LearningRecord?, question: QuestionDto, pending: List<LearningEvent>): LearningRecord {
         val confirmed = base?.events.orEmpty().map { it.attemptId }.toSet()
-        val fresh = pending.filter { !it.isBlank && it.attemptId !in confirmed }.distinctBy { it.attemptId }
-        if (fresh.isEmpty() && base != null) return base
-        val events = (base?.events.orEmpty() + fresh).sortedWith(compareBy<LearningEvent> { Instant.parse(it.occurredAt) }.thenBy { it.attemptId })
+        val freshAll = pending.filter { it.attemptId !in confirmed }.distinctBy { it.attemptId }
+        val fresh = freshAll.filter { !it.isBlank }
+        if (freshAll.isEmpty() && base != null) return base
+        val events = (base?.events.orEmpty() + freshAll).sortedWith(compareBy<LearningEvent> { Instant.parse(it.occurredAt) }.thenBy { it.attemptId })
+        val nonBlankEvents = events.filter { !it.isBlank }
         val attempts = (base?.attempts ?: 0) + fresh.size
         val correct = (base?.correct ?: 0) + fresh.count { it.isCorrect }
-        if(base!=null&&base.events.size<base.attempts){
+        if (base != null && base.events.count { !it.isBlank } < base.attempts) {
             // An ACK can precede a full pull. Unknown older events must never
             // be replaced with an invented streak starting at zero.
             val nextReviewMillis = runCatching { Instant.parse(base.nextReviewAt).toEpochMilli() }.getOrDefault(Long.MAX_VALUE)
-            return base.copy(attempts=attempts,correct=correct,accuracyPct=correct*100.0/attempts,
+            return base.copy(attempts=attempts,correct=correct,accuracyPct=if (attempts > 0) correct*100.0/attempts else 0.0,
                 isMastered=base.isMastered&&fresh.none { !it.isCorrect },
                 inErrorNotebook=base.inErrorNotebook||fresh.any { !it.isCorrect },events=events,
-                reviewRequired=if (events.isEmpty()) base.reviewRequired else System.currentTimeMillis() >= nextReviewMillis,
+                reviewRequired=if (nonBlankEvents.isEmpty()) base.reviewRequired else System.currentTimeMillis() >= nextReviewMillis,
                 practiceAvailable=true)
         }
         var points = 0.0; var streak = 0; var errors = 0; var notebook = false
         val recentWindow = ArrayDeque<Int>()
-        events.forEach { event ->
+        nonBlankEvents.forEach { event ->
             if (event.isCorrect) { streak++; errors = 0; points += listOf(.2,.3,.5,.1)[(streak-1).coerceAtMost(3)] }
             else { streak = 0; errors++; points = (points + listOf(-.2,-.3,-.5,-.1)[(errors-1).coerceAtMost(3)]).coerceAtLeast(0.0) }
             recentWindow.addLast(event.confidenceLevel.coerceIn(0, 3))
@@ -137,19 +139,19 @@ object LearningProjection {
             notebook = if (!event.isCorrect) true else if (masteredNow || streak >= 2 || event.confidenceLevel >= 2) false else notebook
         }
         points = kotlin.math.round(points * 1000.0) / 1000.0
-        val last = events.lastOrNull()
-        val recent=events.takeLast(3)
-        val confidence=if(recent.isEmpty())null else kotlin.math.floor(recent.map { it.confidenceLevel }.average()+0.5).toInt()
-        val mastered = points >= 1.0 - 1e-6 && (confidence?:0)>=2
+        val last = nonBlankEvents.lastOrNull()
+        val recent = nonBlankEvents.takeLast(3)
+        val confidence = if (recent.isEmpty()) null else kotlin.math.floor(recent.map { it.confidenceLevel }.average() + 0.5).toInt()
+        val mastered = points >= 1.0 - 1e-6 && (confidence ?: 0) >= 2
         val interval = if (last == null || !last.isCorrect || last.confidenceLevel <= 1) 1 else if (streak <= 2) 7 else 30
-        val nextReviewAt = last?.let { Instant.parse(it.occurredAt).plusSeconds(interval * 86400L).toString() } ?: Instant.EPOCH.toString()
+        val nextReviewAt = last?.let { Instant.parse(it.occurredAt).plusSeconds(interval * 86400L).toString() } ?: (base?.nextReviewAt ?: Instant.EPOCH.toString())
         val nextReviewMillis = runCatching { Instant.parse(nextReviewAt).toEpochMilli() }.getOrDefault(Long.MAX_VALUE)
-        val reviewRequired = if (events.isEmpty()) (base?.reviewRequired ?: false) else System.currentTimeMillis() >= nextReviewMillis
+        val reviewRequired = if (nonBlankEvents.isEmpty()) (base?.reviewRequired ?: false) else System.currentTimeMillis() >= nextReviewMillis
         return LearningRecord(question.id, question.disciplina, question.canonicalSubjectId, question.canonicalTopicId,
             attempts, correct, if (attempts > 0) correct * 100.0 / attempts else 0.0, mastered,
             notebook,
             last?.let { !it.isCorrect && it.confidenceLevel >= 2 } ?: false, points,
             nextReviewAt,
-            base?.revision ?: 0, events,confidence,reviewRequired=reviewRequired,practiceAvailable=true)
+            base?.revision ?: 0, events, confidence, reviewRequired = reviewRequired, practiceAvailable = true)
     }
 }

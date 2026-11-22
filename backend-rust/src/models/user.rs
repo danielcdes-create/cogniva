@@ -14,7 +14,7 @@ fn default_daily_hours() -> f64 {
 }
 
 /// Documento nativo da coleção `usuarios` no Cogniva 2.0 (100% independente de Telegram).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct UserDocument {
     #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
     pub id: Option<ObjectId>,
@@ -47,6 +47,29 @@ pub struct UserDocument {
     pub created_at: Option<bson::DateTime>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<bson::DateTime>,
+}
+
+impl std::fmt::Debug for UserDocument {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("UserDocument")
+            .field("id", &self.id)
+            .field("user_id", &self.user_id)
+            .field("email", &self.email)
+            .field("role", &self.role)
+            .field("is_guest", &self.is_guest)
+            .field(
+                "password_hash",
+                &self.password_hash.as_ref().map(|_| "<redacted>"),
+            )
+            .field(
+                "installation_secret_sha256",
+                &self
+                    .installation_secret_sha256
+                    .as_ref()
+                    .map(|_| "<redacted>"),
+            )
+            .finish()
+    }
 }
 
 impl UserDocument {

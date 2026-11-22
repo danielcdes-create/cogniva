@@ -64,7 +64,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = AppConfig::from_env();
     if args.get(1).map(String::as_str) == Some("--health-check") {
         reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(5))
+            .timeout(std::time::Duration::from_millis(3500))
             .build()?
             .get(format!("http://127.0.0.1:{}/api/v1/ready", config.port))
             .send()
@@ -81,7 +81,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config.mongodb_db
     );
 
-    let client = Client::with_uri_str(&config.mongodb_uri).await?;
+    let mut client_opts = mongodb::options::ClientOptions::parse(&config.mongodb_uri).await?;
+    if client_opts.max_pool_size.is_none() {
+        client_opts.max_pool_size = Some(20);
+    }
+    let client = Client::with_options(client_opts)?;
     let db = client.database(&config.mongodb_db);
 
     if args.get(1).map(String::as_str) == Some("--grant-admin") {
@@ -90,6 +94,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .ok_or("Informe o e-mail da conta cadastrada: cogniva-api --grant-admin <email>")?;
         let updated = routes::auth::grant_admin_by_email(&db, email).await?;
         println!("{}", serde_json::to_string_pretty(&updated)?);
+        return Ok(());
+    }
+
+    if args.get(1).map(String::as_str) == Some("--mint-admin-token") {
+        let minted = routes::auth::mint_ephemeral_admin_token(
+            &db,
+            &config.jwt_secret,
+            args.get(2).map(String::as_str),
+        )
+        .await?;
+        println!("{}", serde_json::to_string(&minted)?);
         return Ok(());
     }
 
@@ -127,13 +142,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let app = build_router(state);
 
-    let addr = match std::env::var("BIND_ADDRESS") {
-        Ok(raw) if !raw.trim().is_empty() => raw
-            .trim()
-            .parse::<SocketAddr>()
-            .or_else(|_| raw.trim().parse::<std::net::IpAddr>().map(|ip| SocketAddr::new(ip, config.port)))?,
-        _ => SocketAddr::new(config.bind_ip, config.port),
-    };
+    let addr = config.bind_addr();
     tracing::info!("🚀 cogniva-api v{} escutando em http://{}", env!("CARGO_PKG_VERSION"), addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;

@@ -22,12 +22,15 @@ import java.util.concurrent.TimeUnit
 
 class ConcursoApp : Application() {
 
+    @Volatile
     lateinit var database: AppDatabase
         private set
 
+    @Volatile
     lateinit var repository: ConcursoRepository
         private set
 
+    @Volatile
     lateinit var authStore: AuthStore
         private set
 
@@ -35,11 +38,14 @@ class ConcursoApp : Application() {
     private var activeHttpClient: OkHttpClient? = null
 
     suspend fun selectAccount(userId: Long) {
+        runCatching { WorkManager.getInstance(this).cancelUniqueWork("CognivaImmediateSync") }
+        runCatching { WorkManager.getInstance(this).cancelUniqueWork("CognivaOfflineSync") }
         if (::repository.isInitialized) {
             repository.awaitIdleForClose()
         }
         authStore.select(userId)
         openAccount(userId)
+        OfflineSyncWorker.schedulePeriodicSync(this)
     }
 
     /**
@@ -48,6 +54,7 @@ class ConcursoApp : Application() {
      */
     suspend fun wipeLocalAccountDatabaseAndOpenGuest(deletedUserId: Long, nextGuestUserId: Long) {
         runCatching { WorkManager.getInstance(this).cancelUniqueWork("CognivaImmediateSync") }
+        runCatching { WorkManager.getInstance(this).cancelUniqueWork("CognivaOfflineSync") }
         if (::repository.isInitialized) {
             repository.awaitIdleForClose()
         }
@@ -57,6 +64,7 @@ class ConcursoApp : Application() {
 
         authStore.select(nextGuestUserId)
         openAccount(nextGuestUserId)
+        OfflineSyncWorker.schedulePeriodicSync(this)
 
         if (deletedUserId != nextGuestUserId) {
             runCatching { deleteDatabase(deletedDbName) }
@@ -68,6 +76,8 @@ class ConcursoApp : Application() {
         }
         runCatching {
             File(cacheDir, "preserved").listFiles()?.forEach { it.delete() }
+            File(cacheDir, "missions").listFiles()?.forEach { it.delete() }
+            File(cacheDir, "updates").listFiles()?.forEach { it.delete() }
         }
     }
 

@@ -5,6 +5,7 @@ use axum::http::HeaderMap;
 use bson::{doc, Bson, Document};
 use chrono::{DateTime, Duration, FixedOffset, Utc};
 use mongodb::Database;
+use sha2::{Digest, Sha256};
 use std::{
     collections::{HashMap, VecDeque},
     net::{IpAddr, Ipv4Addr},
@@ -22,6 +23,45 @@ pub struct QuotaReservation {
     pub day: String,
     pub user_id: Option<i64>,
     pub global_reserved: bool,
+}
+
+/// Guarda RAII para estorno garantido de reserva de cota xAI em caso de erro precoce,
+/// cancelamento de future ou pânico, desarmada apenas após entrega válida (`commit()`).
+pub struct QuotaGuard {
+    db: Database,
+    reservation: Option<QuotaReservation>,
+}
+
+impl QuotaGuard {
+    pub fn new(db: Database, reservation: QuotaReservation) -> Self {
+        Self {
+            db,
+            reservation: Some(reservation),
+        }
+    }
+
+    pub fn commit(mut self) {
+        self.reservation = None;
+    }
+
+    pub async fn release_now(mut self) {
+        if let Some(res) = self.reservation.take() {
+            release_xai_quota(&self.db, &res).await;
+        }
+    }
+}
+
+impl Drop for QuotaGuard {
+    fn drop(&mut self) {
+        if let Some(res) = self.reservation.take() {
+            if let Ok(handle) = tokio::runtime::Handle::try_current() {
+                let db = self.db.clone();
+                handle.spawn(async move {
+                    release_xai_quota(&db, &res).await;
+                });
+            }
+        }
+    }
 }
 
 /// Dia de referência do orçamento diário no fuso `America/Sao_Paulo` (`UTC-3`).
@@ -300,6 +340,10 @@ pub async fn release_tutor(db: &Database, user_id: i64) {
     release_bucket(db, Bson::String("global".to_string()), &day).await;
 }
 
+pub fn hash_rate_limit_subject(subject_key: &str) -> String {
+    format!("{:x}", Sha256::digest(subject_key.trim().as_bytes()))
+}
+
 pub async fn check_auth_rate_limit(
     db: &Database,
     scope: &str,
@@ -309,7 +353,8 @@ pub async fn check_auth_rate_limit(
 ) -> Result<(), AppError> {
     let now = Utc::now();
     let window_bucket = now.timestamp().div_euclid(window_secs.max(1));
-    let id = format!("{scope}:{subject_key}:{window_bucket}");
+    let subject_hash = hash_rate_limit_subject(subject_key);
+    let id = format!("{scope}:{subject_hash}:{window_bucket}");
     let expires_at = bson::DateTime::from_chrono(now + Duration::seconds(window_secs.max(60) * 2));
     let coll = db.collection::<Document>("auth_rate_limits");
     let res = coll
@@ -401,5 +446,9 @@ mod tests {
             let _ = limiter.check("guest", flood_ip, 5, win);
             assert!(limiter.tracked_key_count() <= 4);
         }
+
+        let h = hash_rate_limit_subject("Admin@Cogniva.App");
+        assert_eq!(h.len(), 64);
+        assert!(!h.contains('@'));
     }
 }

@@ -172,11 +172,17 @@ pub async fn list_proposals(
 
 pub async fn generate_proposals(
     State(state): State<Arc<AppState>>,
+    Extension(user): Extension<SessionUser>,
     Json(body): Json<Value>,
 ) -> Result<Json<Value>, AppError> {
-    crate::services::classification::generate(&state.db, &state.config, &body)
-        .await
-        .map(Json)
+    crate::services::classification::generate_for_actor(
+        &state.db,
+        &state.config,
+        Some(user.user_id),
+        &body,
+    )
+    .await
+    .map(Json)
 }
 
 pub async fn review_proposals(

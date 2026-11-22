@@ -531,6 +531,9 @@ export async function bootstrap() {
   bootstrapInFlight = (async () => {
     const mePayload = await api('admin/web/me', {skipAuthRedirect: true});
     me = mePayload;
+    const loginMsg = $('#login-message');
+    if (loginMsg) loginMsg.textContent = '';
+    notice('');
     $('#login').hidden = true;
     $('#app').hidden = false;
     $('#account-name').textContent = me.profile.display_name || me.profile.email || `Conta ${me.user_id}`;
@@ -1419,6 +1422,7 @@ function questionView() {
       decisiveStemExcerpt: edCard.decisive_stem_excerpt || '',
       officialSourceExcerpt: edCard.official_source_excerpt || ''
     };
+    const edErrorNode = h('p',{class:'field-error',hidden:!draft.editorialError},draft.editorialError || '');
     const syncEditorial = () => {
       draft.editorialDraft = edState;
       try {
@@ -1426,11 +1430,17 @@ function questionView() {
           ...edState,
           plausibleConceptualErrors: edCard.plausible_conceptual_errors || []
         });
+        draft.editorialError = null;
+        edErrorNode.textContent = '';
+        edErrorNode.hidden = true;
         update(q => {
           if (built) q.editorial_card = built;
           else delete q.editorial_card;
         });
-      } catch {
+      } catch (err) {
+        draft.editorialError = err.message || 'Ficha editorial incompleta.';
+        edErrorNode.textContent = draft.editorialError;
+        edErrorNode.hidden = false;
         persist();
       }
     };
@@ -1438,6 +1448,7 @@ function questionView() {
       h('details',{'data-panel-key':`editorial-card:${selectedQuestion}`},
         h('summary',{},'Ficha Editorial Rastreável (Dispositivos, Regra, Exceção e Trecho Decisivo)'),
         h('p',{class:'muted'},'Opcional e fora do hash semântico: enriquece o diagnóstico de 3 sinais pós-resposta sem invalidar a validade vigente.'),
+        edErrorNode,
         field('Dispositivos legais / normativos envolvidos (1 por linha)',edState.legalProvisionsText,v=>{edState.legalProvisionsText=v;syncEditorial();},{multiline:true,rows:2,maxlength:2000}),
         field('Regra cobrada',edState.testedRule,v=>{edState.testedRule=v;syncEditorial();},{multiline:true,rows:2,maxlength:2000}),
         field('Exceção cobrada ou aplicável (opcional)',edState.exceptionClause,v=>{edState.exceptionClause=v;syncEditorial();},{multiline:true,rows:2,maxlength:2000}),
@@ -1500,16 +1511,19 @@ function questionView() {
         q.validity.evaluated_content_revision=null;
         q.validity.evaluated_semantic_revision=null;
         q.validity.evaluation_mode=null;
+        if((v==='CURRENT' || v==='OBSOLETE') && !q.validity.reference_date){
+          q.validity.reference_date=new Date().toLocaleDateString('en-CA',{timeZone:'America/Sao_Paulo'});
+        }
         if(v==='CURRENT')q.validity.reason_codes=[];
         else if(v==='UNDER_REVIEW' && (!Array.isArray(q.validity.reason_codes) || !q.validity.reason_codes.length))q.validity.reason_codes=['REVIEW_REQUESTED'];
         else if(v==='OBSOLETE' && (!Array.isArray(q.validity.reason_codes) || !q.validity.reason_codes.length))q.validity.reason_codes=['FACT_CHANGED'];
       },true),{options:Object.entries(statuses)}),
-      field('Base da avaliação',val.basis || 'TIMELESS',v=>update(q=>{q.validity.basis=v;}),{options:Object.entries(validityBases)}),
+      field('Base da avaliação',val.basis || 'TIMELESS',v=>update(q=>{q.validity.basis=v;},true),{options:Object.entries(validityBases)}),
       val.status==='CURRENT' || val.status==='OBSOLETE'
         ? field('Data de referência (YYYY-MM-DD)',val.reference_date || new Date().toLocaleDateString('en-CA',{timeZone:'America/Sao_Paulo'}),v=>update(q=>{q.validity.reference_date=v.trim() || null;}),{type:'date'})
         : null,
       val.status==='CURRENT'
-        ? field('Próxima revisão prevista (opcional)',val.review_due_on || '',v=>update(q=>{q.validity.review_due_on=v.trim() || null;}),{type:'date'})
+        ? field(val.basis==='LEGAL'?'Próxima revisão obrigatória (YYYY-MM-DD)':'Próxima revisão prevista (opcional)',val.review_due_on || '',v=>update(q=>{q.validity.review_due_on=v.trim() || null;}),{type:'date'})
         : null
     ),
     val.status==='OBSOLETE' || val.status==='UNDER_REVIEW'
@@ -1533,6 +1547,7 @@ function questionView() {
   );
 
   const validate=button('Validar edição',()=>run('Validando contrato…',async()=>{
+    if(draft.editorialError)throw new Error(`Ficha editorial inválida: ${draft.editorialError}`);
     if(draft.classificationChoice && !draft.classificationChoice.confirmed)throw new Error('Confira e aplique a classificação selecionada antes de validar.');
     let docPayload;
     try { docPayload = JSON.parse(draft.text); }

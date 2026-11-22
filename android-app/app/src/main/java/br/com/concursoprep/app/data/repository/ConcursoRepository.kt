@@ -78,10 +78,13 @@ class ConcursoRepository(
     } ?: kotlinx.coroutines.flow.flowOf(null)
     private val syncMutex = Mutex()
     private val mutationMutex = Mutex()
+    private val videoCacheMutex = Mutex()
+    private fun apiUserId(userId: Long): Long = if (userId > 0L) userId else 0L
     suspend fun awaitIdleForClose() {
         syncMutex.withLock {
             mutationMutex.withLock { }
         }
+        videoCacheMutex.withLock { }
     }
     private suspend fun <T> transaction(block: suspend () -> T): T = if (database != null) database.withTransaction { block() } else block()
     private fun owner(userId: Long) { require(ownerUserId == 0L || ownerUserId == userId) { "As pendências pertencem a outra conta e foram preservadas." } }
@@ -174,12 +177,9 @@ class ConcursoRepository(
                     .forEach { durable?.acknowledgeReport(it.eventId, ownerUserId) }
                 durable?.pausedSession(ownerUserId)
                     ?.let { durable?.completeSession(it.sessionId, ownerUserId) }
-                durable?.deleteMetadata("pending_profile")
-                durable?.deleteMetadata("pending_evidence_patches")
-                durable?.deleteMetadata("entry_60s_telemetry:$ownerUserId")
-                durable?.deleteMetadata("cached_next_action:GLOBAL")
-                durable?.deleteMetadata("sync_error")
-                durable?.deleteMetadata("last_sync")
+                durable?.clearAllLearning()
+                durable?.clearAllMetadata()
+                dao.clearCachedQuestions()
             }
         }
         return auth?.wipeAccountAndResetToGuest(ownerUserId, postSwitchMessage) ?: 0L
@@ -202,10 +202,12 @@ class ConcursoRepository(
             examDao.listExams().forEach { examDao.setActive(it.examId, it.examId in contestIds) }
         }
         return try {
-            api.saveOnboardingPreferences(payload).also {
+            auth?.let { if (userId == ownerUserId) runCatching { it.ensureSession(api, ownerUserId) } }
+            val remote = api.saveOnboardingPreferences(payload.copy(userId = apiUserId(userId))).also {
                 auth?.clearPendingProfile(userId, serialized)
                 if (userId == ownerUserId) metadata("pending_profile", "")
             }
+            if (remote.userId == 0L && userId != 0L) remote.copy(userId = userId) else remote
         } catch (e: CancellationException) { throw e } catch (_: Exception) {
             UserProfileDto(userId, displayName = displayName, dailyQuestionsTarget = dailyQuestionsTarget, dailyStudyHoursTarget = dailyHours, activeContestIds = contestIds, currentDailyStreak = 0, streakFreezesAvailable = 0)
         }
@@ -236,7 +238,11 @@ class ConcursoRepository(
     }
     suspend fun loadStoredExams(includeDeleted: Boolean = false): List<StoredExam> {
         ensureExamSeed()
-        return examDao.listExams().map { ExamLocalMapping.assemble(it, examDao.subjectsFor(it.examId), examDao.topicsFor(it.examId)) }.filter { includeDeleted || it.lifecycleStatus != "EXCLUIDO" }
+        return transaction {
+            examDao.listExams()
+                .map { ExamLocalMapping.assemble(it, examDao.subjectsFor(it.examId), examDao.topicsFor(it.examId)) }
+                .filter { includeDeleted || it.lifecycleStatus != "EXCLUIDO" }
+        }
     }
     private suspend fun saveExamAggregate(exam: StoredExam) = transaction {
         examDao.upsertExam(ExamLocalMapping.toEntity(exam))
@@ -483,6 +489,7 @@ class ConcursoRepository(
     private fun normalizeBoardKey(raw: String): String {
         val norm = raw.trim().lowercase()
         return when {
+            norm.isEmpty() || norm == "a definir" || norm == "origem não informada" -> ""
             norm.contains("cebraspe") || norm.contains("cespe") -> "cebraspe"
             norm.contains("fgv") || norm.contains("getulio") || norm.contains("getúlio") -> "fgv"
             norm.contains("fcc") || norm.contains("carlos chagas") -> "fcc"
@@ -631,6 +638,13 @@ class ConcursoRepository(
                     }
                     val retr = RetentionEngine.retrievability(elapsedDays, approxStability)
                     val avgSec = if (nonBlankEvents.isNotEmpty()) nonBlankEvents.map { it.timeSpentSeconds }.average() else 60.0
+                    val entryBoost = if (distinctQuestions >= 1 && retr < 0.90) {
+                        1.65
+                    } else if (distinctQuestions >= 1) {
+                        1.20
+                    } else {
+                        1.0
+                    }
                     val u = PrioritizationEngine.priorityUtility(
                         PrioritizationInputs(
                             editalWeight = normW,
@@ -642,7 +656,7 @@ class ConcursoRepository(
                             unmetPrerequisitesCount = 0,
                             dependentCount = 0
                         )
-                    )
+                    ) * entryBoost
                     if (u > bestUtility) {
                         bestUtility = u
                         bestTopicId = top.canonicalTopicId
@@ -983,7 +997,7 @@ class ConcursoRepository(
         val scope = PracticeScope.contest(mode, contestId)
         try {
             auth?.ensureSession(api, ownerUserId)
-            val remote = objectivePracticeQuestions(api.generateQuizQuestions(QuizGeneratePayload(userId, mode, count, trunkFocusSlugs = focusedTrunkSlugs().toList(), contestId = scope, disciplina = disciplina, syllabusTopicId = syllabusTopicId, componentId = componentId)).map(QuestionCacheMapping::withRevision))
+            val remote = objectivePracticeQuestions(api.generateQuizQuestions(QuizGeneratePayload(apiUserId(userId), mode, count, trunkFocusSlugs = focusedTrunkSlugs().toList(), contestId = scope, disciplina = disciplina, syllabusTopicId = syllabusTopicId, componentId = componentId)).map(QuestionCacheMapping::withRevision))
             require(componentId == null || remote.all { it.examComponentId == componentId }) { "O servidor precisa confirmar o componente selecionado. Atualize e tente novamente." }
             if (remote.isNotEmpty()) dao.insertQuestions(remote.map { QuestionCacheMapping.toEntity(it, json) })
             return decorateQuestions(remote)
@@ -1249,7 +1263,7 @@ class ConcursoRepository(
             return false
         }
         return try {
-            api.saveOnboardingPreferences(profile)
+            api.saveOnboardingPreferences(profile.copy(userId = apiUserId(userId)))
             auth?.clearPendingProfile(userId, raw)
             metadata("pending_profile", "")
             false
@@ -1283,7 +1297,7 @@ class ConcursoRepository(
             while (batchCount++ < 20) {
                 val pending = dao.getAllPendingAttempts().filter { it.ownerUserId == userId && it.syncError == null }.take(120)
                 if (pending.isEmpty()) break
-                val payload = SubmitBatchPayload(userId, pending.map { it.payload() })
+                val payload = SubmitBatchPayload(apiUserId(userId), pending.map { it.payload() })
                 val response = api.submitAttemptsBatch(payload)
                 val byId = pending.associateBy { it.attemptId }
                 require(response.results.map { it.attemptId }.distinct().size == response.results.size && response.results.all { byId[it.attemptId]?.questionId == it.questionId }) { "Recibos inválidos; fila preservada." }
@@ -1385,7 +1399,7 @@ class ConcursoRepository(
             durable?.reports(userId)?.forEach { report ->
                 if (metadata("report_error:${report.eventId}").isNullOrBlank()) {
                     try {
-                        api.reportQuestionProblem(report.questionId, ReportProblemPayload(userId, report.category))
+                        api.reportQuestionProblem(report.questionId, ReportProblemPayload(apiUserId(userId), report.category))
                         durable.acknowledgeReport(report.eventId, userId)
                         synced++
                     } catch (e: retrofit2.HttpException) {
@@ -1403,7 +1417,26 @@ class ConcursoRepository(
                     mutationMutex.withLock {
                         transaction {
                             val current = learningMapForQuestions(page.records.map { it.questionId })
-                            val accepted = page.records.filter { incoming -> (current[incoming.questionId]?.attempts ?: 0) <= incoming.attempts }
+                            val accepted = page.records
+                                .filter { incoming -> (current[incoming.questionId]?.attempts ?: 0) <= incoming.attempts }
+                                .map { incoming ->
+                                    val localRec = current[incoming.questionId]
+                                    if (localRec == null) {
+                                        incoming
+                                    } else {
+                                        val localEvById = localRec.events.associateBy { it.attemptId }
+                                        incoming.copy(
+                                            events = incoming.events.map { incEv ->
+                                                val locEv = localEvById[incEv.attemptId]
+                                                if (incEv.selectedEvidenceId == null && locEv?.selectedEvidenceId != null) {
+                                                    incEv.copy(selectedEvidenceId = locEv.selectedEvidenceId)
+                                                } else {
+                                                    incEv
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
                             if (accepted.isNotEmpty()) {
                                 durable.putLearning(accepted.map { LearningRecordEntity(it.questionId, it.revision, json.encodeToString(it)) })
                                 accepted.forEach { dao.updateLearningFlags(it.questionId, it.inErrorNotebook, it.isMastered) }
@@ -1484,7 +1517,7 @@ class ConcursoRepository(
             try {
                 val result = when (snapshot.syncStatus) {
                     "PENDING_CREATE" -> api.createExam(snapshot.toPayload())
-                    "PENDING_PUBLISH" -> api.publishEdital(snapshot.examId, PublishEditalPayload(snapshot.revision, snapshot.subjects.flatMap { it.topics }.filter { it.diffStatus != "ARQUIVADO" }.map { PublishedTopicPayload(it.canonicalTopicId, it.canonicalSubjectId, it.displayTitle) }))
+                    "PENDING_PUBLISH" -> api.publishEdital(snapshot.examId, PublishEditalPayload(snapshot.revision, snapshot.subjects.flatMap { s -> s.topics.filter { it.diffStatus != "ARQUIVADO" }.map { PublishedTopicPayload(it.canonicalTopicId, it.canonicalSubjectId, it.displayTitle, localSubjectId = s.localSubjectId) } }))
                     else -> try {
                         api.updateExam(snapshot.examId, snapshot.toPayload())
                     } catch (conflict: retrofit2.HttpException) {
@@ -1825,7 +1858,13 @@ class ConcursoRepository(
         )
     }
 
-    private suspend fun localMissionHumanQuestionStats(curriculum: CurriculumBindingSpec): Pair<Int, Int> {
+    private data class LocalMissionQuestionCounts(
+        val available: Int,
+        val practiced: Int,
+        val mastered: Int,
+    )
+
+    private suspend fun localMissionHumanQuestionStats(curriculum: CurriculumBindingSpec): LocalMissionQuestionCounts {
         val cachedDtos = runCatching { dao.getCachedQuestions(null, 10000).map { QuestionCacheMapping.toDto(it, json) } }.getOrDefault(emptyList())
         val targetTopics = (curriculum.primaryTopicIds + curriculum.fallbackTopicIds).toSet()
         val eligible = cachedDtos.filter { q ->
@@ -1835,7 +1874,52 @@ class ConcursoRepository(
         }
         val learning = runCatching { projectedLearningForQuestions(eligible.map { it.id }) }.getOrDefault(emptyMap())
         val practicedCount = eligible.count { (learning[it.id]?.attempts ?: 0) > 0 }
-        return eligible.size to practicedCount
+        val masteredCount = eligible.count { learning[it.id]?.isMastered == true }
+        return LocalMissionQuestionCounts(eligible.size, practicedCount, masteredCount)
+    }
+
+    private suspend fun flushDirtyMissionRecord(missionId: String, rec: LocalMissionProgressRecord): Boolean {
+        if (!rec.dirty) return true
+        return runCatching {
+            auth?.ensureSession(api, ownerUserId)
+            for ((_, dec) in rec.decisions) {
+                api.submitMissionDecision(
+                    missionId,
+                    buildJsonObject {
+                        put("scene_id", dec.sceneId)
+                        put("interaction_id", dec.interactionId)
+                        put("selected_option_id", dec.latestSelectedOptionId)
+                        put("time_spent_ms", 1000L)
+                        put("used_transcript_fallback", false)
+                    }
+                )
+            }
+            for (doneId in rec.completedSceneIds) {
+                api.updateMissionProgress(
+                    missionId,
+                    buildJsonObject {
+                        put("completed_scene_id", doneId)
+                    }
+                )
+            }
+            val curScene = rec.currentSceneId.takeIf { it.isNotBlank() }
+            api.updateMissionProgress(
+                missionId,
+                buildJsonObject {
+                    curScene?.let { put("current_scene_id", it) }
+                    curScene?.let { sid -> rec.scenePositionsMs[sid]?.let { pos -> put("playback_position_ms", pos) } }
+                    if (rec.status == "COMPLETED") put("mark_mission_completed", true)
+                }
+            )
+            mutationMutex.withLock {
+                val latestEnv = loadLocalMissionsEnvelope()
+                val cur = latestEnv.missions[missionId]
+                if (cur == rec) {
+                    saveLocalMissionsEnvelope(latestEnv.copy(missions = latestEnv.missions + (missionId to cur.copy(dirty = false))))
+                }
+            }
+            true
+        }.getOrDefault(false)
     }
 
     suspend fun loadMissionsCatalog(): MissionsCatalogView {
@@ -1845,6 +1929,11 @@ class ConcursoRepository(
 
         return try {
             auth?.let { runCatching { it.ensureSession(api, ownerUserId) } }
+            for ((mid, rec) in env.missions) {
+                if (rec.dirty) flushDirtyMissionRecord(mid, rec)
+            }
+            env = loadLocalMissionsEnvelope()
+            val refreshedLocalView = MissionsCatalogLoader.buildCatalogView(spec, env.missions)
             val remote = api.listMissions()
             val remoteByMission = mutableMapOf<String, Pair<JsonObject?, JsonObject?>>()
             remote["careers"]?.jsonArray?.forEach { cEl ->
@@ -1858,18 +1947,21 @@ class ConcursoRepository(
                     }
                 }
             }
-            val mergedCards = localView.cards.map { card ->
+            val mergedCards = refreshedLocalView.cards.map { card ->
+                val localRec = env.missions[card.missionId]
                 val pair = remoteByMission[card.missionId]
-                if (pair == null) card else card.copy(
+                if (pair == null || localRec?.dirty == true) card else card.copy(
                     narrativeProgress = parseRemoteNarrativeProgress(pair.first, card.narrativeProgress),
                     interactionPerformance = parseRemoteInteractionPerformance(pair.second, card.interactionPerformance),
                 )
             }
-            // Mirror server progress locally for offline resilience
+            // Mirror server progress locally for offline resilience without clobbering unsynced dirty edits
             mutationMutex.withLock {
-                val updatedMap = env.missions.toMutableMap()
+                val currentEnv = loadLocalMissionsEnvelope()
+                val updatedMap = currentEnv.missions.toMutableMap()
                 for (card in mergedCards) {
                     val prev = updatedMap[card.missionId] ?: LocalMissionProgressRecord(missionId = card.missionId)
+                    if (prev.dirty) continue
                     updatedMap[card.missionId] = prev.copy(
                         status = card.narrativeProgress.status,
                         currentSceneId = card.narrativeProgress.currentSceneId,
@@ -1878,10 +1970,10 @@ class ConcursoRepository(
                         completedRunsCount = card.narrativeProgress.completedRunsCount,
                     )
                 }
-                env = env.copy(missions = updatedMap)
+                env = currentEnv.copy(missions = updatedMap)
                 saveLocalMissionsEnvelope(env)
             }
-            localView.copy(cards = mergedCards)
+            refreshedLocalView.copy(cards = mergedCards)
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
@@ -1891,7 +1983,7 @@ class ConcursoRepository(
 
     suspend fun openMissionDetail(missionId: String, resume: Boolean = true): MissionDetailView {
         val spec = MissionsCatalogLoader.loadBundled()
-        val env = loadLocalMissionsEnvelope()
+        var env = loadLocalMissionsEnvelope()
         val missionSpec = spec.careers.asSequence()
             .flatMap { it.disciplines.asSequence() }
             .flatMap { it.seasons.asSequence() }
@@ -1899,17 +1991,27 @@ class ConcursoRepository(
             .firstOrNull { it.missionId == missionId }
             ?: error("Missão não encontrada no catálogo declarativo.")
 
-        val (localAvail, localPracticed) = localMissionHumanQuestionStats(missionSpec.curriculum)
+        val counts = localMissionHumanQuestionStats(missionSpec.curriculum)
         val fallbackDetail = MissionsCatalogLoader.buildDetailView(
             spec = spec,
             missionId = missionId,
             record = env.missions[missionId],
-            availableHumanQuestions = localAvail,
-            practicedDistinctHumanQuestions = localPracticed,
+            availableHumanQuestions = counts.available,
+            practicedDistinctHumanQuestions = counts.practiced,
+            masteredHumanQuestions = counts.mastered,
         ) ?: error("Detalhe da missão indisponível.")
 
         return try {
             auth?.let { runCatching { it.ensureSession(api, ownerUserId) } }
+            env.missions[missionId]?.let { rec ->
+                if (rec.dirty) {
+                    flushDirtyMissionRecord(missionId, rec)
+                    env = loadLocalMissionsEnvelope()
+                }
+            }
+            if (env.missions[missionId]?.dirty == true) {
+                return fallbackDetail
+            }
             val remote = api.getMissionDetail(missionId, resume)
             val prog = parseRemoteNarrativeProgress(remote["narrative_progress"]?.jsonObject, fallbackDetail.narrativeProgress)
             val perf = parseRemoteInteractionPerformance(remote["interaction_performance"]?.jsonObject, fallbackDetail.interactionPerformance)
@@ -1918,10 +2020,10 @@ class ConcursoRepository(
                 DemonstratedMasteryView(
                     masteryState = masteryObj["mastery_state"]?.jsonPrimitive?.contentOrNull ?: fallbackDetail.demonstratedMastery.masteryState,
                     masteryLabelPt = masteryObj["mastery_label_pt"]?.jsonPrimitive?.contentOrNull ?: fallbackDetail.demonstratedMastery.masteryLabelPt,
-                    availableHumanQuestionsCount = masteryObj["available_human_questions_count"]?.jsonPrimitive?.intOrNull ?: localAvail,
-                    distinctHumanQuestionsPracticed = masteryObj["distinct_human_questions_practiced"]?.jsonPrimitive?.intOrNull ?: localPracticed,
+                    availableHumanQuestionsCount = masteryObj["available_human_questions_count"]?.jsonPrimitive?.intOrNull ?: counts.available,
+                    distinctHumanQuestionsPracticed = masteryObj["distinct_human_questions_practiced"]?.jsonPrimitive?.intOrNull ?: counts.practiced,
                     minQuestionsForMastery = masteryObj["min_questions_for_mastery"]?.jsonPrimitive?.intOrNull ?: 15,
-                    practiceAvailable = masteryObj["practice_available"]?.jsonPrimitive?.booleanOrNull ?: (localAvail > 0),
+                    practiceAvailable = masteryObj["practice_available"]?.jsonPrimitive?.booleanOrNull ?: (counts.available > 0),
                 )
             } else {
                 fallbackDetail.demonstratedMastery
@@ -1981,6 +2083,7 @@ class ConcursoRepository(
         usedTranscriptFallback: Boolean = false,
     ): MissionDetailView {
         val spec = MissionsCatalogLoader.loadBundled()
+        var savedRecord: LocalMissionProgressRecord? = null
         mutationMutex.withLock {
             val env = loadLocalMissionsEnvelope()
             val prev = env.missions[missionId] ?: LocalMissionProgressRecord(missionId = missionId)
@@ -1995,7 +2098,12 @@ class ConcursoRepository(
                 else -> prev.status
             }
             val nextScene = currentSceneId ?: prev.currentSceneId.ifBlank {
-                spec.careers.firstOrNull()?.disciplines?.firstOrNull()?.seasons?.firstOrNull()?.missions?.find { it.missionId == missionId }?.scenes?.firstOrNull()?.sceneId.orEmpty()
+                spec.careers.asSequence()
+                    .flatMap { it.disciplines.asSequence() }
+                    .flatMap { it.seasons.asSequence() }
+                    .flatMap { it.missions.asSequence() }
+                    .firstOrNull { it.missionId == missionId }
+                    ?.scenes?.firstOrNull()?.sceneId.orEmpty()
             }
             val nextPos = if (playbackPositionMs != null && nextScene.isNotBlank()) {
                 prev.scenePositionsMs + (nextScene to playbackPositionMs)
@@ -2008,11 +2116,13 @@ class ConcursoRepository(
                 completedSceneIds = nextDone,
                 scenePositionsMs = nextPos,
                 completedRunsCount = if (markMissionCompleted && prev.status != "COMPLETED") prev.completedRunsCount + 1 else prev.completedRunsCount,
+                dirty = true,
             )
+            savedRecord = updated
             saveLocalMissionsEnvelope(env.copy(missions = env.missions + (missionId to updated)))
         }
 
-        runCatching {
+        val pushed = runCatching {
             auth?.ensureSession(api, ownerUserId)
             val payload = buildJsonObject {
                 currentSceneId?.let { put("current_scene_id", it) }
@@ -2022,6 +2132,15 @@ class ConcursoRepository(
                 if (usedTranscriptFallback) put("used_transcript_fallback", true)
             }
             api.updateMissionProgress(missionId, payload)
+            true
+        }.getOrDefault(false)
+        if (pushed && savedRecord != null) {
+            mutationMutex.withLock {
+                val env = loadLocalMissionsEnvelope()
+                if (env.missions[missionId] == savedRecord) {
+                    saveLocalMissionsEnvelope(env.copy(missions = env.missions + (missionId to savedRecord!!.copy(dirty = false))))
+                }
+            }
         }
         return openMissionDetail(missionId, resume = false)
     }
@@ -2045,6 +2164,7 @@ class ConcursoRepository(
         val interSpec = sceneSpec.interaction ?: error("Cena sem decisão interativa.")
         val isCorrect = interSpec.expectedOptionId == selectedOptionId
 
+        var savedRecord: LocalMissionProgressRecord? = null
         mutationMutex.withLock {
             val env = loadLocalMissionsEnvelope()
             val prev = env.missions[missionId] ?: LocalMissionProgressRecord(missionId = missionId)
@@ -2075,11 +2195,13 @@ class ConcursoRepository(
                 completedSceneIds = if (isTerminal) missionSpec.scenes.map { it.sceneId } else nextDone,
                 decisions = prev.decisions + (interactionId to recorded),
                 completedRunsCount = if (isTerminal && prev.status != "COMPLETED") prev.completedRunsCount + 1 else prev.completedRunsCount,
+                dirty = true,
             )
+            savedRecord = updated
             saveLocalMissionsEnvelope(env.copy(missions = env.missions + (missionId to updated)))
         }
 
-        runCatching {
+        val pushed = runCatching {
             auth?.ensureSession(api, ownerUserId)
             api.submitMissionDecision(
                 missionId,
@@ -2091,6 +2213,15 @@ class ConcursoRepository(
                     put("used_transcript_fallback", usedTranscriptFallback)
                 }
             )
+            true
+        }.getOrDefault(false)
+        if (pushed && savedRecord != null) {
+            mutationMutex.withLock {
+                val env = loadLocalMissionsEnvelope()
+                if (env.missions[missionId] == savedRecord) {
+                    saveLocalMissionsEnvelope(env.copy(missions = env.missions + (missionId to savedRecord!!.copy(dirty = false))))
+                }
+            }
         }
         return openMissionDetail(missionId, resume = false)
     }
@@ -2104,6 +2235,7 @@ class ConcursoRepository(
             .firstOrNull { it.missionId == missionId }
             ?.scenes?.firstOrNull()?.sceneId.orEmpty()
 
+        var savedRecord: LocalMissionProgressRecord? = null
         mutationMutex.withLock {
             val env = loadLocalMissionsEnvelope()
             val prev = env.missions[missionId] ?: LocalMissionProgressRecord(missionId = missionId)
@@ -2114,12 +2246,23 @@ class ConcursoRepository(
                 scenePositionsMs = emptyMap(),
                 decisions = emptyMap(),
                 runCount = prev.runCount + 1,
+                dirty = true,
             )
+            savedRecord = reset
             saveLocalMissionsEnvelope(env.copy(missions = env.missions + (missionId to reset)))
         }
-        runCatching {
+        val pushed = runCatching {
             auth?.ensureSession(api, ownerUserId)
             api.repeatMission(missionId)
+            true
+        }.getOrDefault(false)
+        if (pushed && savedRecord != null) {
+            mutationMutex.withLock {
+                val env = loadLocalMissionsEnvelope()
+                if (env.missions[missionId] == savedRecord) {
+                    saveLocalMissionsEnvelope(env.copy(missions = env.missions + (missionId to savedRecord!!.copy(dirty = false))))
+                }
+            }
         }
         return openMissionDetail(missionId, resume = false)
     }
@@ -2172,67 +2315,81 @@ class ConcursoRepository(
     ): File? = withContext(Dispatchers.IO) {
         val cleanAssetId = assetId.replace(Regex("[^a-zA-Z0-9_-]"), "")
         if (cleanAssetId.isEmpty()) return@withContext null
-        val missionsDir = File(cacheRootDir, "missions").apply { mkdirs() }
-        val target = File(missionsDir, "$cleanAssetId.mp4")
-        if (target.isFile && target.length() > 1024L) {
-            return@withContext target
-        }
+        videoCacheMutex.withLock {
+            val missionsDir = File(cacheRootDir, "missions").apply { mkdirs() }
+            val target = File(missionsDir, "$cleanAssetId.mp4")
+            val shaSidecar = File(missionsDir, "$cleanAssetId.sha256")
+            if (target.isFile && target.length() > 1024L) {
+                val expectedNorm = expectedSha256?.trim()?.lowercase()
+                if (expectedNorm.isNullOrBlank()) {
+                    return@withLock target
+                }
+                val cachedSha = runCatching { shaSidecar.takeIf { it.isFile }?.readText(Charsets.UTF_8)?.trim()?.lowercase() }.getOrNull()
+                if (cachedSha == expectedNorm) {
+                    return@withLock target
+                }
+                runCatching { target.delete() }
+                runCatching { shaSidecar.delete() }
+            }
 
-        val token = auth?.let { store ->
-            store.token(ownerUserId) ?: runCatching {
-                store.ensureSession(api, ownerUserId)
-                store.token(ownerUserId)
-            }.getOrNull()
-        } ?: return@withContext null
+            val token = auth?.let { store ->
+                store.token(ownerUserId) ?: runCatching {
+                    store.ensureSession(api, ownerUserId)
+                    store.token(ownerUserId)
+                }.getOrNull()
+            } ?: return@withLock null
 
-        val baseUrl = BuildConfig.API_BASE_URL.trimEnd('/')
-        val url = "$baseUrl/missions/media/$cleanAssetId"
-        val tmpFile = File(missionsDir, "$cleanAssetId.part")
-        val client = OkHttpClient.Builder()
-            .connectTimeout(12, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .build()
-        try {
-            val req = Request.Builder()
-                .url(url)
-                .header("Authorization", "Bearer $token")
-                .header("Accept-Encoding", "identity")
+            val baseUrl = BuildConfig.API_BASE_URL.trimEnd('/')
+            val url = "$baseUrl/missions/media/$cleanAssetId"
+            val tmpFile = File(missionsDir, "$cleanAssetId-${UUID.randomUUID()}.part")
+            val client = OkHttpClient.Builder()
+                .connectTimeout(12, TimeUnit.SECONDS)
+                .readTimeout(60, TimeUnit.SECONDS)
                 .build()
-            client.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) return@withContext null
-                val body = resp.body ?: return@withContext null
-                val digest = java.security.MessageDigest.getInstance("SHA-256")
-                body.byteStream().use { input ->
-                    FileOutputStream(tmpFile).use { out ->
-                        val buf = ByteArray(64 * 1024)
-                        while (true) {
-                            val read = input.read(buf)
-                            if (read <= 0) break
-                            digest.update(buf, 0, read)
-                            out.write(buf, 0, read)
+            try {
+                val req = Request.Builder()
+                    .url(url)
+                    .header("Authorization", "Bearer $token")
+                    .header("Accept-Encoding", "identity")
+                    .build()
+                client.newCall(req).execute().use { resp ->
+                    if (!resp.isSuccessful) return@withLock null
+                    val body = resp.body ?: return@withLock null
+                    val digest = java.security.MessageDigest.getInstance("SHA-256")
+                    body.byteStream().use { input ->
+                        FileOutputStream(tmpFile).use { out ->
+                            val buf = ByteArray(64 * 1024)
+                            while (true) {
+                                val read = input.read(buf)
+                                if (read <= 0) break
+                                digest.update(buf, 0, read)
+                                out.write(buf, 0, read)
+                            }
                         }
                     }
-                }
-                if (!expectedSha256.isNullOrBlank()) {
                     val actualHex = digest.digest().joinToString("") { "%02x".format(it) }
-                    if (!actualHex.equals(expectedSha256, ignoreCase = true)) {
+                    if (!expectedSha256.isNullOrBlank() && !actualHex.equals(expectedSha256.trim(), ignoreCase = true)) {
                         tmpFile.delete()
-                        return@withContext null
+                        return@withLock null
                     }
+                    if (target.exists()) target.delete()
+                    if (!tmpFile.renameTo(target)) {
+                        tmpFile.copyTo(target, overwrite = true)
+                        tmpFile.delete()
+                    }
+                    runCatching { shaSidecar.writeText(actualHex, Charsets.UTF_8) }
+                    target
                 }
-                if (target.exists()) target.delete()
-                if (!tmpFile.renameTo(target)) {
-                    tmpFile.copyTo(target, overwrite = true)
-                    tmpFile.delete()
-                }
-                target
+            } catch (e: CancellationException) {
+                runCatching { tmpFile.delete() }
+                throw e
+            } catch (_: Exception) {
+                runCatching { tmpFile.delete() }
+                null
+            } finally {
+                client.dispatcher.executorService.shutdown()
+                client.connectionPool.evictAll()
             }
-        } catch (_: Exception) {
-            runCatching { tmpFile.delete() }
-            null
-        } finally {
-            client.dispatcher.executorService.shutdown()
-            client.connectionPool.evictAll()
         }
     }
 }

@@ -29,6 +29,8 @@ interface DurableStateDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putMetadata(value: LocalMetadataEntity)
     @Query("SELECT value FROM local_metadata WHERE `key`=:key") suspend fun metadata(key: String): String?
     @Query("DELETE FROM local_metadata WHERE `key`=:key") suspend fun deleteMetadata(key: String)
+    @Query("DELETE FROM local_metadata") suspend fun clearAllMetadata()
+    @Query("DELETE FROM learning_records") suspend fun clearAllLearning()
     @Query("SELECT * FROM local_metadata WHERE `key` LIKE 'exam_backup:%'") suspend fun preservedExamEdits(): List<LocalMetadataEntity>
     @Query("SELECT value FROM local_metadata WHERE `key`=:key") fun observeMetadata(key: String): kotlinx.coroutines.flow.Flow<String?>
 }

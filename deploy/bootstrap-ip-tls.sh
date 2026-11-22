@@ -78,8 +78,8 @@ if [ "\$before" != "\$after" ]; then
     nginx -t
     systemctl reload nginx
 fi
-# Fail loudly if remaining certificate validity drops below 36 hours (six-day cert profile).
-openssl x509 -in /etc/letsencrypt/live/cogniva-ip/fullchain.pem -checkend 129600 -noout
+# Fail loudly if remaining certificate validity drops below 60 hours (six-day cert profile).
+openssl x509 -in /etc/letsencrypt/live/cogniva-ip/fullchain.pem -checkend 216000 -noout
 EOF
 chmod 700 /usr/local/sbin/cogniva-renew-tls
 

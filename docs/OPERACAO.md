@@ -1,6 +1,6 @@
 # Manual de Operação e Produção — Cogniva 2.0
 
-Este guia documenta a operação segura do **Cogniva `2.4.0`** (`build 30`) na VPS DigitalOcean, incluindo credenciais, migração do acervo `CNU → cogniva`, administração de contas, conformidade LGPD, TLS IPv4/IPv6, promoção atômica e rollback verificado.
+Este guia documenta a operação segura do **Cogniva `2.4.1`** (`build 31`) na VPS DigitalOcean, incluindo credenciais, migração do acervo `CNU → cogniva`, administração de contas, conformidade LGPD, TLS IPv4/IPv6, promoção atômica e rollback verificado.
 
 ---
 
@@ -56,11 +56,11 @@ Esse comando instala e verifica os validadores BSON, índices operacionais e TTL
 
 - **Configuração Nginx ([`deploy/nginx-cogniva.conf`](../deploy/nginx-cogniva.conf) e [`deploy/nginx-rate-limits.conf`](../deploy/nginx-rate-limits.conf)):**
   - Vincula `:443` apenas ao IPv4 público (habilitando IPv6 `:443` via [`deploy/bootstrap-ip-tls.sh`](../deploy/bootstrap-ip-tls.sh) exclusivamente quando o certificado possui SAN IPv6 válido), com `Strict-Transport-Security`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy` restritiva e `ssl_session_tickets off`.
-  - Aplica rate-limiting com normalização de sub-rede IPv6 `/64` (`$cogniva_limit_key`, zonas de `4m`) às rotas de autenticação (`/api/v1/auth/(login|register|guest|logout|web-session|web-logout|account)`), IA (`cogniva_ai`), download OTA (`cogniva_apk`) e API geral (`cogniva_api`).
-  - Durante manutenção (`$cogniva_maintenance = 1` em `/etc/nginx/cogniva-gate.conf`), retorna JSON estruturado HTTP `503` com `Retry-After: 15` e `Cache-Control: no-store`.
-  - Mantém `/api/v1/apk/download` com `gzip off` e `proxy_buffering off` (conforme [`LICAO-APRENDIDA-OTA-APK.md`](LICAO-APRENDIDA-OTA-APK.md)).
+  - Aplica rate-limiting com normalização de sub-rede IPv6 `/64` (`$cogniva_limit_key`, zonas de `4m`) às rotas de autenticação (`/api/v1/auth/(login|register|guest|logout|native-session|web-session|web-logout|missions-session|missions-register|missions-logout|account)`), mutações de IA (`$cogniva_ai_limit_key` / `cogniva_ai`), mídia `HTTP Range` de Missões (`cogniva_media`), download OTA (`cogniva_apk`) e API geral (`cogniva_api`), sincronizando atomicamente site e zonas via [`deploy/sync_nginx_site.py`](../deploy/sync_nginx_site.py).
+  - Durante manutenção (`$cogniva_maintenance = 1` em `/etc/nginx/cogniva-gate.conf`), retorna JSON estruturado HTTP `503` (`charset utf-8`) com `Retry-After: 15` e `Cache-Control: no-store`.
+  - Mantém `/api/v1/apk/download` e `/api/v1/missions/media/` com `gzip off` e `proxy_buffering off` (conforme [`LICAO-APRENDIDA-OTA-APK.md`](LICAO-APRENDIDA-OTA-APK.md)).
 - **Bootstrap e Renovação TLS ([`deploy/bootstrap-ip-tls.sh`](../deploy/bootstrap-ip-tls.sh)):**
-  - Provisiona `cogniva-renew-tls.timer` (execução horária com verificação `openssl x509 -checkend 129600`), recarregando o Nginx apenas quando o certificado renovado difere em SHA-256.
+  - Provisiona `cogniva-renew-tls.timer` (execução horária com verificação `openssl x509 -checkend 216000` / `60h`), recarregando o Nginx apenas quando o certificado renovado difere em SHA-256.
 
 ---
 
@@ -77,6 +77,6 @@ O fluxo de promoção em [`.github/workflows/deploy.yml`](../.github/workflows/d
 ```bash
 python3 scripts/verify-production-release.py <GIT_SHA> \
   --origin https://198.199.65.103 \
-  --version-name 2.3.0 \
-  --version-code 29
+  --version-name 2.4.1 \
+  --version-code 31
 ```

@@ -5,12 +5,8 @@
 
 # Kotlinx Serialization
 -keepattributes RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations
--keepclassmembers class kotlinx.serialization.json.** {
-    *** Companion;
-}
--keepclasseswithmembers class kotlinx.serialization.json.** {
-    kotlinx.serialization.KSerializer serializer(...);
-}
+-keep class kotlinx.serialization.json.** { *; }
+-keep class kotlinx.serialization.internal.** { *; }
 -keep,includedescriptorclasses class br.com.concursoprep.app.**$$serializer { *; }
 -keep @kotlinx.serialization.Serializable class br.com.concursoprep.app.** { *; }
 -keepclassmembers class br.com.concursoprep.app.** {
@@ -20,6 +16,7 @@
     kotlinx.serialization.KSerializer serializer(...);
 }
 -keepclassmembers enum br.com.concursoprep.app.** {
+    <fields>;
     public static **[] values();
     public static ** valueOf(java.lang.String);
 }

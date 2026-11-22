@@ -152,7 +152,11 @@ export async function api(path, options = {}) {
   }
   if (!resp.ok) {
     if (resp.status === 401 && !path.startsWith('/api/v1/auth/')) {
+      stopActiveVideo();
       state.profile = null;
+      state.activeDetail = null;
+      state.activeSceneId = null;
+      clearNode((boundDoc || document).getElementById('missions-main'));
       syncShellVisibility();
     }
     const msg = payload?.message || payload?.detail || `Erro HTTP ${resp.status}`;
@@ -183,6 +187,18 @@ function syncShellVisibility() {
   if (adminLink) {
     adminLink.hidden = !state.profile?.is_admin;
   }
+}
+
+function stopActiveVideo() {
+  const doc = boundDoc || document;
+  const videoEl = doc.getElementById('active-scene-video');
+  if (videoEl) {
+    try { videoEl.pause?.(); } catch {}
+    try { videoEl.removeAttribute?.('src'); } catch {}
+    videoEl.src = '';
+    try { videoEl.load?.(); } catch {}
+  }
+  preloadedMediaUrls.clear();
 }
 
 function triggerModerateNextPreload(url) {
@@ -260,6 +276,7 @@ export async function exitMissionToCatalog() {
   const currentPosMs = videoEl && Number.isFinite(videoEl.currentTime)
     ? Math.round(videoEl.currentTime * 1000)
     : null;
+  stopActiveVideo();
 
   if (state.activeDetail && state.activeSceneId) {
     try {
@@ -397,6 +414,7 @@ async function openRelatedHumanQuestions() {
 }
 
 async function submitRealPracticeAnswer() {
+  if (state.busy) return;
   const ps = state.practiceState;
   if (!ps || ps.selectedIndex == null || !ps.questions[ps.index]) return;
   const q = ps.questions[ps.index];
@@ -405,6 +423,9 @@ async function submitRealPracticeAnswer() {
   const isCorrect = correctIndices.includes(chosenIdx);
   const spentSec = Math.max(1, Math.round((Date.now() - ps.questionStartedAtMs) / 1000));
 
+  state.busy = true;
+  const confirmBtn = (boundDoc || document).getElementById('confirm-practice-btn');
+  if (confirmBtn) confirmBtn.disabled = true;
   try {
     const batchResp = await api('/api/v1/quiz/submit-batch', {
       method: 'POST',
@@ -443,7 +464,10 @@ async function submitRealPracticeAnswer() {
     }
     renderMissionsView();
   } catch (err) {
+    if (confirmBtn) confirmBtn.disabled = false;
     setNotice(err.message || 'Falha ao registrar tentativa no acervo.');
+  } finally {
+    state.busy = false;
   }
 }
 
@@ -454,7 +478,8 @@ function renderPresentValueVisual(visual) {
   const initialRate = Number(params.initial_rate_pct ?? 10);
   const minRate = Number(params.min_rate_pct ?? 4);
   const maxRate = Number(params.max_rate_pct ?? 20);
-  const simRate = Math.min(maxRate, Math.max(minRate, Number(state.simulatedRatePct || params.shocked_rate_pct || 14)));
+  const clampSimRate = val => Math.min(maxRate, Math.max(minRate, Number(val)));
+  const simRate = clampSimRate(state.simulatedRatePct || params.shocked_rate_pct || 14);
 
   const points = buildPresentValueCurvePoints(params);
   const width = 620;
@@ -481,6 +506,25 @@ function renderPresentValueVisual(visual) {
   const simPrice = presentValueZeroCoupon(faceValue, simRate, years);
   const deltaPct = priceChangePct(faceValue, initialRate, simRate, years);
 
+  const simCircle = svg('circle', {
+    id: 'sim-rate-point',
+    cx: xOf(simRate).toFixed(1),
+    cy: yOf(simPrice).toFixed(1),
+    r: 6.5,
+    fill: '#fbbf24',
+  });
+  const simText = svg(
+    'text',
+    {
+      id: 'sim-rate-callout',
+      x: Math.min(width - 175, Math.max(padL + 6, xOf(simRate) - 20)).toFixed(1),
+      y: Math.min(height - padB - 8, yOf(simPrice) + 18).toFixed(1),
+      fill: '#fef3c7',
+      'font-size': 12,
+    },
+    `Taxa ${simRate.toFixed(1)}%: ${formatBrl(simPrice)}`
+  );
+
   const chart = svg(
     'svg',
     {
@@ -498,19 +542,21 @@ function renderPresentValueVisual(visual) {
       {x: (xOf(initialRate) + 8).toFixed(1), y: (yOf(initialPrice) - 8).toFixed(1), fill: '#dcfce7', 'font-size': 12},
       `Base ${initialRate}%: ${formatBrl(initialPrice)}`
     ),
-    svg('circle', {cx: xOf(simRate).toFixed(1), cy: yOf(simPrice).toFixed(1), r: 6.5, fill: '#fbbf24'}),
-    svg(
-      'text',
-      {
-        x: Math.min(width - 175, Math.max(padL + 6, xOf(simRate) - 20)).toFixed(1),
-        y: Math.min(height - padB - 8, yOf(simPrice) + 18).toFixed(1),
-        fill: '#fef3c7',
-        'font-size': 12,
-      },
-      `Taxa ${simRate.toFixed(1)}%: ${formatBrl(simPrice)}`
-    ),
+    simCircle,
+    simText,
     svg('text', {x: padL, y: height - 10, fill: '#cbd5e1', 'font-size': 11}, `${minRate}% a.a.`),
     svg('text', {x: width - padR - 58, y: height - 10, fill: '#cbd5e1', 'font-size': 11}, `${maxRate}% a.a.`)
+  );
+
+  const rateLabel = h(
+    'label',
+    {for: 'sim-rate-range'},
+    `Simular taxa exigida pelo mercado: ${simRate.toFixed(1).replace('.', ',')}% a.a.`
+  );
+  const priceStrong = h(
+    'strong',
+    {},
+    `Preço hoje: ${formatBrl(simPrice)} (${formatSignedPct(deltaPct)} vs. ${initialRate}% a.a.)`
   );
 
   return h(
@@ -522,11 +568,7 @@ function renderPresentValueVisual(visual) {
     h(
       'div',
       {class: 'rate-simulator-row'},
-      h(
-        'label',
-        {for: 'sim-rate-range'},
-        `Simular taxa exigida pelo mercado: ${simRate.toFixed(1).replace('.', ',')}% a.a.`
-      ),
+      rateLabel,
       h('input', {
         id: 'sim-rate-range',
         type: 'range',
@@ -535,15 +577,20 @@ function renderPresentValueVisual(visual) {
         step: '0.5',
         value: simRate,
         oninput: e => {
-          state.simulatedRatePct = Number(e.target.value);
-          renderMissionsView();
+          const nextRate = clampSimRate(e.target.value);
+          state.simulatedRatePct = nextRate;
+          const nextPrice = presentValueZeroCoupon(faceValue, nextRate, years);
+          const nextDelta = priceChangePct(faceValue, initialRate, nextRate, years);
+          rateLabel.textContent = `Simular taxa exigida pelo mercado: ${nextRate.toFixed(1).replace('.', ',')}% a.a.`;
+          priceStrong.textContent = `Preço hoje: ${formatBrl(nextPrice)} (${formatSignedPct(nextDelta)} vs. ${initialRate}% a.a.)`;
+          simCircle.setAttribute('cx', xOf(nextRate).toFixed(1));
+          simCircle.setAttribute('cy', yOf(nextPrice).toFixed(1));
+          simText.setAttribute('x', Math.min(width - 175, Math.max(padL + 6, xOf(nextRate) - 20)).toFixed(1));
+          simText.setAttribute('y', Math.min(height - padB - 8, yOf(nextPrice) + 18).toFixed(1));
+          simText.textContent = `Taxa ${nextRate.toFixed(1)}%: ${formatBrl(nextPrice)}`;
         },
       }),
-      h(
-        'strong',
-        {},
-        `Preço hoje: ${formatBrl(simPrice)} (${formatSignedPct(deltaPct)} vs. ${initialRate}% a.a.)`
-      )
+      priceStrong
     ),
     chart,
     h(
@@ -814,9 +861,10 @@ function renderPracticePanel() {
       h(
         'button',
         {
+          id: 'confirm-practice-btn',
           type: 'button',
           class: 'btn-primary',
-          disabled: ps.selectedIndex == null,
+          disabled: ps.selectedIndex == null || state.busy,
           onclick: submitRealPracticeAnswer,
         },
         'Confirmar resposta formal'
@@ -1135,6 +1183,73 @@ function renderPlayerView(detail) {
   const interaction = scene.interaction;
   const answered = interaction?.answered || null;
 
+  const transcriptDrawer = h(
+    'section',
+    {
+      class: 'transcript-drawer',
+      'aria-label': 'Transcrição em português brasileiro',
+      hidden: !state.transcriptOpen,
+    },
+    h('h3', {}, `Transcrição · ${scene.title}`),
+    h('p', {}, scene.transcript_pt_br)
+  );
+  const captionsBtn = !videoUnavailable
+    ? h(
+        'button',
+        {
+          type: 'button',
+          class: 'btn-ghost',
+          onclick: () => {
+            state.captionsEnabled = !state.captionsEnabled;
+            if (videoEl?.textTracks?.[0]) {
+              videoEl.textTracks[0].mode = state.captionsEnabled ? 'showing' : 'hidden';
+            }
+            captionsBtn.textContent = state.captionsEnabled ? 'CC Legendas: Ativas' : 'CC Legendas: Ocultas';
+            sendTelemetrySilently(mission.mission_id, 'CAPTIONS_TOGGLED', scene.scene_id);
+          },
+        },
+        state.captionsEnabled ? 'CC Legendas: Ativas' : 'CC Legendas: Ocultas'
+      )
+    : null;
+  const transcriptBtn = h(
+    'button',
+    {
+      type: 'button',
+      class: 'btn-ghost',
+      'aria-expanded': String(state.transcriptOpen),
+      onclick: () => {
+        state.transcriptOpen = !state.transcriptOpen;
+        state.userIntervenedInScene = true;
+        transcriptDrawer.hidden = !state.transcriptOpen;
+        if (state.transcriptOpen) {
+          transcriptDrawer.removeAttribute?.('hidden');
+          sendTelemetrySilently(mission.mission_id, 'TRANSCRIPT_OPENED', scene.scene_id);
+        } else {
+          transcriptDrawer.setAttribute('hidden', '');
+        }
+        transcriptBtn.setAttribute('aria-expanded', String(state.transcriptOpen));
+        transcriptBtn.textContent = state.transcriptOpen ? 'Ocultar transcrição' : 'Transcrição PT-BR';
+      },
+    },
+    state.transcriptOpen ? 'Ocultar transcrição' : 'Transcrição PT-BR'
+  );
+  const autoAdvBtn = scene.auto_advance_on_video_end
+    ? h(
+        'button',
+        {
+          type: 'button',
+          class: 'btn-ghost',
+          onclick: () => {
+            state.autoAdvanceEnabled = !state.autoAdvanceEnabled;
+            autoAdvBtn.textContent = state.autoAdvanceEnabled
+              ? 'Avanço automático: Ligado'
+              : 'Avanço automático: Pausado';
+          },
+        },
+        state.autoAdvanceEnabled ? 'Avanço automático: Ligado' : 'Avanço automático: Pausado'
+      )
+    : null;
+
   return h(
     'div',
     {class: 'theater-wrap'},
@@ -1234,63 +1349,13 @@ function renderPlayerView(detail) {
         !videoUnavailable && timeReadout,
         !videoUnavailable && muteBtn,
         !videoUnavailable && volumeSlider,
-        !videoUnavailable &&
-          h(
-            'button',
-            {
-              type: 'button',
-              class: 'btn-ghost',
-              onclick: () => {
-                state.captionsEnabled = !state.captionsEnabled;
-                if (videoEl?.textTracks?.[0]) {
-                  videoEl.textTracks[0].mode = state.captionsEnabled ? 'showing' : 'hidden';
-                }
-                sendTelemetrySilently(mission.mission_id, 'CAPTIONS_TOGGLED', scene.scene_id);
-                renderMissionsView();
-              },
-            },
-            state.captionsEnabled ? 'CC Legendas: Ativas' : 'CC Legendas: Ocultas'
-          ),
-        h(
-          'button',
-          {
-            type: 'button',
-            class: 'btn-ghost',
-            'aria-expanded': String(state.transcriptOpen),
-            onclick: () => {
-              state.transcriptOpen = !state.transcriptOpen;
-              state.userIntervenedInScene = true;
-              if (state.transcriptOpen) {
-                sendTelemetrySilently(mission.mission_id, 'TRANSCRIPT_OPENED', scene.scene_id);
-              }
-              renderMissionsView();
-            },
-          },
-          state.transcriptOpen ? 'Ocultar transcrição' : 'Transcrição PT-BR'
-        ),
-        scene.auto_advance_on_video_end &&
-          h(
-            'button',
-            {
-              type: 'button',
-              class: 'btn-ghost',
-              onclick: () => {
-                state.autoAdvanceEnabled = !state.autoAdvanceEnabled;
-                renderMissionsView();
-              },
-            },
-            state.autoAdvanceEnabled ? 'Avanço automático: Ligado' : 'Avanço automático: Pausado'
-          )
+        captionsBtn,
+        transcriptBtn,
+        autoAdvBtn
       )
     ),
 
-    state.transcriptOpen &&
-      h(
-        'section',
-        {class: 'transcript-drawer', 'aria-label': 'Transcrição em português brasileiro'},
-        h('h3', {}, `Transcrição · ${scene.title}`),
-        h('p', {}, scene.transcript_pt_br)
-      ),
+    transcriptDrawer,
 
     scene.native_visual?.visual_type === 'BOND_PRESENT_VALUE_CURVE' &&
       renderPresentValueVisual(scene.native_visual),
@@ -1437,6 +1502,7 @@ function bindAuthControls(doc) {
       tabRegister.setAttribute('aria-selected', String(isReg));
     }
     if (nameWrap) nameWrap.hidden = !isReg;
+    if (passInput) passInput.setAttribute('autocomplete', isReg ? 'new-password' : 'current-password');
     if (submitBtn) submitBtn.textContent = isReg ? 'Criar conta e abrir Missões' : 'Entrar nas Missões';
     if (statusEl) statusEl.textContent = '';
   };
@@ -1488,6 +1554,7 @@ function bindAuthControls(doc) {
   });
 
   logoutBtn?.addEventListener('click', async () => {
+    stopActiveVideo();
     try {
       await api('/api/v1/auth/logout', {method: 'POST'});
     } catch {
@@ -1497,6 +1564,7 @@ function bindAuthControls(doc) {
     state.catalog = null;
     state.activeDetail = null;
     state.activeSceneId = null;
+    clearNode(doc.getElementById('missions-main'));
     syncShellVisibility();
   });
 

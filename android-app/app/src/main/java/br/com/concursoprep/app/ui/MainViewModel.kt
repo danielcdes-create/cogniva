@@ -169,11 +169,23 @@ class MainViewModel(
                 "register"->repository.registerAccount(email.orEmpty(),password.orEmpty(),displayName)
                 else->repository.startGuestOrOfflineSession(displayName)
             }
-            val savedOnboarding=repository.saveOnboarding(session.profile.userId,selectedContests,dailyQuestionsTarget,dailyHoursTarget,displayName)
+            val targetRepo = if (session.profile.userId != repository.ownerUserId && appContext != null) {
+                runCatching {
+                    ConcursoApp.instance.selectAccount(session.profile.userId)
+                    ConcursoApp.instance.repository
+                }.getOrDefault(repository)
+            } else {
+                repository
+            }
+            val savedOnboarding=targetRepo.saveOnboarding(session.profile.userId,selectedContests,dailyQuestionsTarget,dailyHoursTarget,displayName)
             val profile=savedOnboarding.copy(email=session.profile.email?:savedOnboarding.email,role=session.profile.role,isGuest=session.profile.isGuest,isAdmin=session.profile.isAdmin)
             saveProfile(profile);_isOnboardingCompleted.value=true
             _accountAuthState.value=AccountAuthUiState(isAuthenticated=!profile.isGuest)
-            if(profile.userId!=repository.ownerUserId){_accountChanged.emit(profile.userId);return@operation}
+            if(profile.userId!=repository.ownerUserId){
+                appContext?.let{OfflineSyncWorker.enqueueNow(it)}
+                _accountChanged.emit(profile.userId)
+                return@operation
+            }
             _userProfile.value=profile;refreshAllData();appContext?.let{OfflineSyncWorker.enqueueNow(it)}
             _userFeedbackMessage.emit(if(session.token.isBlank())"Perfil salvo neste aparelho. A sincronização aguardará conexão." else "Perfil salvo. Sincronização agendada.")
         }
@@ -322,7 +334,7 @@ class MainViewModel(
                 _accountAuthState.value=_accountAuthState.value.copy(isAuthenticated=!isGuest)
             }
             val allStored=repository.loadStoredExams(includeDeleted=true);_pendingExamDeletions.value=allStored.filter { it.lifecycleStatus=="EXCLUIDO" && it.syncStatus!="SYNCED" };val stored=allStored.filter { it.lifecycleStatus!="EXCLUIDO" };_storedExams.value=stored
-            runCatching { _missionsCatalog.value = repository.loadMissionsCatalog() }
+            runCatching { _missionsCatalog.value = repository.loadMissionsCatalog() }.onFailure { if (it is CancellationException) throw it }
             val selected=PracticeScope.selected(stored,_selectedContestId.value)
             if(selected!=_selectedContestId.value){_selectedContestId.value=selected;prefs?.edit()?.putString("selected_contest_id",selected)?.apply()}
             _focusedTrunks.value=repository.focusedTrunkSlugs()
@@ -444,7 +456,7 @@ class MainViewModel(
                             cid,
                             syllabusTopicId=nextAct?.priorityTopicId
                         )
-                    }.getOrDefault(emptyList()).filter { it.id !in excludeQuestionIds }
+                    }.onFailure { if (it is CancellationException) throw it }.getOrDefault(emptyList()).filter { it.id !in excludeQuestionIds }
                     fetched.ifEmpty {
                         repository.fetchOrGetOfflineQuiz(repository.ownerUserId,QuizMode.ENTRY_60S,4,null)
                             .filter { it.id !in excludeQuestionIds }
@@ -727,6 +739,8 @@ class MainViewModel(
                         appContext?.let { OfflineSyncWorker.enqueueNow(it) }
                     }
                     saved
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     _userFeedbackMessage.emit(
                         e.message ?: "Não foi possível salvar todas as respostas do simulado. Tente novamente."
@@ -785,10 +799,11 @@ class MainViewModel(
     }
 
     fun requestContextualLookupAi(questionId: String, selectedText: String, isAnswerSubmitted: Boolean) {
-        val cleaned = selectedText.trim().take(240)
+        val cleaned = selectedText.trim().replace(Regex("\\s+"), " ").take(240)
         if (cleaned.isEmpty()) return
         lookupAiJob?.cancel()
         _contextualLookupState.value = _contextualLookupState.value?.copy(
+            selectedText = cleaned,
             isAiLoading = true,
             aiExplanationMarkdown = null
         )
@@ -871,6 +886,17 @@ class MainViewModel(
                 )
                 _missionsCatalog.value = repository.loadMissionsCatalog()
             }
+        }
+    }
+
+    fun saveMissionPlaybackPosition(missionId: String, currentSceneId: String, playbackPositionMs: Long) {
+        if (currentSceneId.isBlank()) return
+        operation {
+            repository.updateMissionProgressOfflineFirst(
+                missionId = missionId,
+                currentSceneId = currentSceneId,
+                playbackPositionMs = playbackPositionMs,
+            )
         }
     }
 
@@ -958,6 +984,7 @@ class MainViewModel(
         if (assetId.isNullOrBlank()) return
         vmScope.launch(Dispatchers.IO) {
             runCatching { repository.ensureMissionVideoCached(cacheDir, assetId, expectedSha256) }
+                .onFailure { if (it is CancellationException) throw it }
         }
     }
 

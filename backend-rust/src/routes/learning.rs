@@ -20,8 +20,14 @@ pub struct LearningEvent {
     pub attempt_id: String,
     pub occurred_at: String,
     pub is_correct: bool,
+    pub is_blank: bool,
     pub confidence_level: i32,
     pub time_spent_seconds: i32,
+    pub selected_evidence_id: Option<String>,
+    pub quiz_mode: String,
+    pub session_uuid: String,
+    pub elapsed_session_seconds: Option<i32>,
+    pub session_interrupted: bool,
 }
 #[derive(Serialize)]
 pub struct LearningRecord {
@@ -98,10 +104,22 @@ pub async fn get_state(
                     .unwrap_or_else(|| format!("legacy:{id}:{index}")),
                 occurred_at: e.data.to_rfc3339(),
                 is_correct: e.status,
+                is_blank: e.is_blank,
                 confidence_level: e.nivel_confianca,
                 time_spent_seconds: e.tempo_gasto_segundos,
+                selected_evidence_id: e.selected_evidence_id.clone(),
+                quiz_mode: e.modo_sessao.clone(),
+                session_uuid: e.session_uuid.clone(),
+                elapsed_session_seconds: e.elapsed_session_seconds,
+                session_interrupted: e.session_interrupted,
             })
             .collect();
+        let non_blank_count = activity
+            .past_sessions
+            .iter()
+            .filter(|s| !s.is_blank)
+            .count() as i32;
+        let clamped_interval = activity.spaced_repetition_interval.clamp(1, 3650) as i64;
         records.push(LearningRecord {
             knowledge_projection_version: 1,
             knowledge_evidence: None,
@@ -109,9 +127,7 @@ pub async fn get_state(
             disciplina: activity.disciplina,
             canonical_subject_id: activity.canonical_subject_id,
             canonical_topic_id: activity.canonical_topic_id,
-            attempts: activity
-                .quantidade_praticas
-                .max(activity.past_sessions.len() as i32),
+            attempts: activity.quantidade_praticas.max(non_blank_count),
             correct: activity.quantidade_acertos,
             accuracy_pct: activity.percentual_acertos,
             is_mastered: activity.dominada,
@@ -122,7 +138,7 @@ pub async fn get_state(
             practice_available: false,
             points: activity.points,
             next_review_at: (activity.datas.ultima_sessao
-                + chrono::Duration::days(activity.spaced_repetition_interval.max(1) as i64))
+                + chrono::Duration::days(clamped_interval))
             .to_rfc3339(),
             revision: raw.get_i64("state_revision").unwrap_or(0),
             events,

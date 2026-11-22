@@ -149,12 +149,17 @@ pub fn has_legacy_admin_cookie(headers: &HeaderMap) -> bool {
 }
 
 pub fn extract_bearer_token(headers: &HeaderMap) -> Option<String> {
-    headers
+    let raw = headers
         .get(header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "))
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty())
+        .and_then(|v| v.to_str().ok())?
+        .trim_start();
+    if raw.len() > 7 && raw[..7].eq_ignore_ascii_case("bearer ") {
+        let tok = raw[7..].trim();
+        if !tok.is_empty() {
+            return Some(tok.to_string());
+        }
+    }
+    None
 }
 
 pub fn check_sec_fetch_site(headers: &HeaderMap) -> Result<(), AppError> {
@@ -235,9 +240,14 @@ pub fn same_origin(headers: &HeaderMap, public_origin: &str) -> Result<(), AppEr
         }
     }
 
+    let public_is_loopback = parse_http_origin(public_origin)
+        .is_none_or(|(_, h, _)| matches!(h.as_str(), "127.0.0.1" | "localhost" | "[::1]"));
+
     if let Some(host_raw) = headers.get(header::HOST).and_then(|v| v.to_str().ok()) {
         let host = host_raw.trim();
-        if !host.is_empty()
+        let allow_host_fallback = is_loopback_authority(host) || public_is_loopback;
+        if allow_host_fallback
+            && !host.is_empty()
             && !host.contains('/')
             && !host.contains('\\')
             && !host.contains('@')
@@ -357,6 +367,10 @@ pub async fn authenticate(
     let user = if let Some(bearer) = extract_bearer_token(request.headers()) {
         let claims = verify_session_token(&state.config.jwt_secret, &bearer, "mobile")?;
         resolve_db_session(&state, &claims).await?
+    } else if request.headers().contains_key(header::AUTHORIZATION) {
+        return Err(AppError::Unauthorized(
+            "Cabeçalho Authorization inválido".into(),
+        ));
     } else {
         let cookies = extract_web_cookies(request.headers());
         if cookies.is_empty() {
@@ -384,14 +398,37 @@ pub async fn authenticate(
     request.extensions_mut().insert(user);
     let mut response = crate::services::catalog_runtime::scope(catalog, next.run(request)).await;
     if used_cookie_auth {
-        response.headers_mut().insert(
-            header::CACHE_CONTROL,
-            axum::http::HeaderValue::from_static("no-store"),
-        );
-        response.headers_mut().insert(
-            header::VARY,
-            axum::http::HeaderValue::from_static("Cookie"),
-        );
+        let keep_private_cache = response
+            .headers()
+            .get(header::CACHE_CONTROL)
+            .and_then(|v| v.to_str().ok())
+            .is_some_and(|cc| cc.to_ascii_lowercase().contains("private"));
+        if !keep_private_cache {
+            response.headers_mut().insert(
+                header::CACHE_CONTROL,
+                axum::http::HeaderValue::from_static("no-store"),
+            );
+        }
+        let merged_vary = match response
+            .headers()
+            .get(header::VARY)
+            .and_then(|v| v.to_str().ok())
+        {
+            Some(existing)
+                if existing
+                    .split(',')
+                    .any(|part| part.trim().eq_ignore_ascii_case("cookie") || part.trim() == "*") =>
+            {
+                None
+            }
+            Some(existing) if !existing.trim().is_empty() => {
+                axum::http::HeaderValue::from_str(&format!("{existing}, Cookie")).ok()
+            }
+            _ => Some(axum::http::HeaderValue::from_static("Cookie")),
+        };
+        if let Some(vary_val) = merged_vary {
+            response.headers_mut().insert(header::VARY, vary_val);
+        }
     }
     Ok(response)
 }
@@ -479,5 +516,15 @@ mod tests {
         h.insert("sec-fetch-site", "same-origin".parse().unwrap());
         assert!(verify_csrf_same_origin(&h, &Method::GET, "https://cogniva.example.org").is_ok());
         assert!(verify_csrf_same_origin(&h, &Method::POST, "https://cogniva.example.org").is_ok());
+
+        // Host-header spoofing against a configured non-loopback public_origin MUST fail
+        h.insert(header::HOST, "evil.example.com".parse().unwrap());
+        h.insert(header::ORIGIN, "https://evil.example.com".parse().unwrap());
+        assert!(verify_csrf_same_origin(&h, &Method::POST, "https://cogniva.example.org").is_err());
+
+        // Case-insensitive Bearer extraction
+        let mut bh = HeaderMap::new();
+        bh.insert(header::AUTHORIZATION, "bearer tok-abc".parse().unwrap());
+        assert_eq!(extract_bearer_token(&bh).as_deref(), Some("tok-abc"));
     }
 }

@@ -79,6 +79,12 @@ try:
 except urllib.error.HTTPError as error:
     assert error.code == 401, error.code
 
+for portal_path in ('/admin/', '/missoes/'):
+    with urllib.request.urlopen(base + portal_path, timeout=30) as portal_resp:
+        assert portal_resp.status == 200, f'{portal_path} returned {portal_resp.status}'
+        assert "frame-ancestors 'none'" in portal_resp.headers.get('Content-Security-Policy', '')
+        assert 'no-store' in portal_resp.headers.get('Cache-Control', '')
+
 with tempfile.TemporaryDirectory(prefix='cogniva-release-verify-') as tmp:
     apk = pathlib.Path(tmp) / 'cogniva.apk'
     with urllib.request.urlopen(base + info['download_path'], timeout=120) as response, apk.open('wb') as out:

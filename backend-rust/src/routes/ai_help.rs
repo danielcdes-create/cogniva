@@ -89,8 +89,15 @@ fn percent_encode_query(raw: &str) -> String {
 }
 
 fn percent_encode_path_segment(raw: &str) -> String {
-    let mut out = String::with_capacity(raw.len() * 2);
-    for b in raw.as_bytes() {
+    let trimmed = raw.trim();
+    if trimmed == "." {
+        return "%2E".to_string();
+    }
+    if trimmed == ".." {
+        return "%2E%2E".to_string();
+    }
+    let mut out = String::with_capacity(trimmed.len() * 2);
+    for b in trimmed.as_bytes() {
         match *b {
             b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' => out.push(*b as char),
             b' ' => out.push('_'),
@@ -141,7 +148,7 @@ pub async fn handle_question_ai_assist(
 /// síntese enciclopédica aberta (quando disponível) e URLs seguras de busca em camada (Google/Planalto/Jurisprudência).
 pub async fn handle_question_contextual_lookup(
     State(state): State<Arc<AppState>>,
-    Extension(_user): Extension<crate::security::SessionUser>,
+    Extension(user): Extension<crate::security::SessionUser>,
     Path(question_id): Path<String>,
     Json(req): Json<ContextualLookupRequest>,
 ) -> Result<Json<ContextualLookupResponse>, AppError> {
@@ -151,6 +158,14 @@ pub async fn handle_question_contextual_lookup(
             "Selecione um trecho entre 1 e 240 caracteres para consultar.".into(),
         ));
     }
+    crate::services::rate_limit::check_auth_rate_limit(
+        &state.db,
+        "ctx_lookup",
+        &user.user_id.to_string(),
+        45,
+        60,
+    )
+    .await?;
     let oid = ObjectId::parse_str(&question_id)?;
     let raw_q = state
         .db
@@ -223,42 +238,52 @@ pub async fn handle_question_contextual_lookup(
         }
     }
 
-    // Síntese enciclopédica rápida via Wikimedia PT REST API (timeout curto de 2.2s, nunca bloqueia se indisponível)
+    // Síntese enciclopédica rápida via Wikimedia PT REST API (timeout total de 2.2s e teto de 64 KB no corpo)
     let wiki_seg = percent_encode_path_segment(trimmed);
     let wiki_url = format!("https://pt.wikipedia.org/api/rest_v1/page/summary/{wiki_seg}");
-    let encyclopedic_summary = match tokio::time::timeout(
+    let encyclopedic_summary = tokio::time::timeout(
         std::time::Duration::from_millis(2200),
-        shared_http_client()
-            .get(&wiki_url)
-            .header("User-Agent", "Cogniva/2.3 (Educacao Concursos)")
-            .send(),
-    )
-    .await
-    {
-        Ok(Ok(resp)) if resp.status().is_success() => {
-            if let Ok(val) = resp.json::<serde_json::Value>().await {
-                let title = val["title"].as_str().unwrap_or("").trim().to_string();
-                let extract = val["extract"].as_str().unwrap_or("").trim().to_string();
-                let page_url = val["content_urls"]["desktop"]["page"]
-                    .as_str()
-                    .filter(|u| u.starts_with("https://"))
-                    .unwrap_or("https://pt.wikipedia.org")
-                    .to_string();
-                if !title.is_empty() && !extract.is_empty() && val["type"].as_str() != Some("disambiguation") {
-                    Some(EncyclopedicSummaryDto {
-                        title,
-                        extract,
-                        source_url: page_url,
-                    })
-                } else {
-                    None
+        async {
+            let mut resp = shared_http_client()
+                .get(&wiki_url)
+                .header("User-Agent", "Cogniva/2.4 (Educacao Concursos)")
+                .send()
+                .await
+                .ok()?;
+            if !resp.status().is_success() {
+                return None;
+            }
+            let mut body_buf = Vec::with_capacity(4096);
+            while let Ok(Some(chunk)) = resp.chunk().await {
+                if body_buf.len() + chunk.len() > 64 * 1024 {
+                    return None;
                 }
+                body_buf.extend_from_slice(&chunk);
+            }
+            let val: serde_json::Value = serde_json::from_slice(&body_buf).ok()?;
+            let title = val["title"].as_str().unwrap_or("").trim().to_string();
+            let extract = val["extract"].as_str().unwrap_or("").trim().to_string();
+            let page_url = val["content_urls"]["desktop"]["page"]
+                .as_str()
+                .filter(|u| u.starts_with("https://"))
+                .unwrap_or("https://pt.wikipedia.org")
+                .to_string();
+            if !title.is_empty()
+                && !extract.is_empty()
+                && val["type"].as_str() != Some("disambiguation")
+            {
+                Some(EncyclopedicSummaryDto {
+                    title,
+                    extract,
+                    source_url: page_url,
+                })
             } else {
                 None
             }
-        }
-        _ => None,
-    };
+        },
+    )
+    .await
+    .unwrap_or(None);
 
     let contextual_q = format!("{trimmed} {disciplina}");
     let google_search_url = format!(

@@ -682,7 +682,7 @@ pub async fn commit_with_reviewer(
 
     let now_bson = bson::DateTime::now();
     if retrying_failed {
-        commits_coll
+        let retry_res = commits_coll
             .update_one(
                 doc! { "_id": &commit_record_id, "status": "failed" },
                 doc! {
@@ -694,6 +694,13 @@ pub async fn commit_with_reviewer(
                 },
             )
             .await?;
+        if retry_res.matched_count != 1 {
+            return Err(AppError::conflict_code(
+                "IDEMPOTENCY_KEY_CONFLICT",
+                Some("idempotency_key"),
+                "Commit de lote já retomado concorrentemente",
+            ));
+        }
     } else if let Err(e) = commits_coll
         .insert_one(doc! {
             "_id": &commit_record_id,
@@ -901,31 +908,47 @@ pub async fn assist(state: &AppState, user: i64, r: AssistRequest) -> Result<Val
             return Err(AppError::Conflict("Solicitação de IA já reservada; confira o resultado. Para nova chamada, inicie outra operação explicitamente".into()));
         }
     }
-    let reservation = crate::services::rate_limit::reserve_xai_quota(
-        &state.db,
-        Some(user),
-        state.config.xai_daily_user_limit,
-        state.config.xai_daily_global_limit,
-    )
-    .await?;
+    let quota_guard = crate::services::rate_limit::QuotaGuard::new(
+        state.db.clone(),
+        crate::services::rate_limit::reserve_xai_quota(
+            &state.db,
+            Some(user),
+            state.config.xai_daily_user_limit,
+            state.config.xai_daily_global_limit,
+        )
+        .await?,
+    );
     let now_bson = bson::DateTime::now();
     let now_iso = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-    let reserve_res = if had_failed {
-        coll.update_one(
-            doc! { "_id": &key, "status": "failed" },
-            doc! {
-                "$set": {
-                    "status": "reserved",
-                    "model": &model,
-                    "recorded_at": &now_iso,
-                    "updated_at": now_bson,
-                }
-            },
-        )
-        .await
-        .map(|_| ())
-    } else {
-        coll.insert_one(doc! {
+    if had_failed {
+        match coll
+            .update_one(
+                doc! { "_id": &key, "status": "failed" },
+                doc! {
+                    "$set": {
+                        "status": "reserved",
+                        "model": &model,
+                        "recorded_at": &now_iso,
+                        "updated_at": now_bson,
+                    }
+                },
+            )
+            .await
+        {
+            Ok(res) if res.matched_count == 1 => {}
+            Ok(_) => {
+                quota_guard.release_now().await;
+                return Err(AppError::Conflict(
+                    "Solicitação de IA já retomada em outra requisição".into(),
+                ));
+            }
+            Err(err) => {
+                quota_guard.release_now().await;
+                return Err(err.into());
+            }
+        }
+    } else if let Err(err) = coll
+        .insert_one(doc! {
             "_id": &key,
             "actor_user_id": user,
             "payload_sha256": hash,
@@ -936,10 +959,13 @@ pub async fn assist(state: &AppState, user: i64, r: AssistRequest) -> Result<Val
             "created_at": now_bson,
         })
         .await
-        .map(|_| ())
-    };
-    if let Err(err) = reserve_res {
-        crate::services::rate_limit::release_xai_quota(&state.db, &reservation).await;
+    {
+        quota_guard.release_now().await;
+        if question_storage::is_duplicate_key_error(&err) {
+            return Err(AppError::Conflict(
+                "Solicitação de IA já reservada concorrentemente".into(),
+            ));
+        }
         return Err(err.into());
     }
     let fenced_material =
@@ -964,13 +990,19 @@ pub async fn assist(state: &AppState, user: i64, r: AssistRequest) -> Result<Val
         Ok(response)
     }
     .await;
-    if result.is_err() {
-        crate::services::rate_limit::release_xai_quota(&state.db, &reservation).await;
-        let _ = coll
-            .update_one(doc! {"_id":&key}, doc! {"$set":{"status":"failed"}})
-            .await;
+    match result {
+        Ok(resp) => {
+            quota_guard.commit();
+            Ok(resp)
+        }
+        Err(err) => {
+            quota_guard.release_now().await;
+            let _ = coll
+                .update_one(doc! {"_id":&key}, doc! {"$set":{"status":"failed"}})
+                .await;
+            Err(err)
+        }
     }
-    result
 }
 
 #[cfg(test)]

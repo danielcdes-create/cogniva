@@ -29,8 +29,17 @@ use sha2::{Digest, Sha256};
 use std::{net::SocketAddr, sync::Arc, sync::OnceLock};
 
 const MAX_SAFE_JS_INT: u64 = 9_007_199_254_740_991;
+const MAX_PASSWORD_BYTES: usize = 1024;
+const MAX_CONCURRENT_ARGON2: usize = 3;
 
 static DUMMY_PASSWORD_HASH: OnceLock<String> = OnceLock::new();
+static ARGON2_SEMAPHORE: OnceLock<Arc<tokio::sync::Semaphore>> = OnceLock::new();
+
+fn argon2_semaphore() -> Arc<tokio::sync::Semaphore> {
+    ARGON2_SEMAPHORE
+        .get_or_init(|| Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_ARGON2)))
+        .clone()
+}
 
 fn dummy_password_hash() -> &'static str {
     DUMMY_PASSWORD_HASH.get_or_init(|| {
@@ -133,6 +142,11 @@ pub fn normalize_and_validate_email(raw: &str) -> Result<(String, String), AppEr
 }
 
 pub fn validate_password_strength(password: &str) -> Result<(), AppError> {
+    if password.len() > MAX_PASSWORD_BYTES {
+        return Err(AppError::BadRequest(
+            "A senha deve ter entre 8 e 128 caracteres".into(),
+        ));
+    }
     let chars = password.chars().count();
     if !(8..=128).contains(&chars) {
         return Err(AppError::BadRequest(
@@ -142,7 +156,27 @@ pub fn validate_password_strength(password: &str) -> Result<(), AppError> {
     Ok(())
 }
 
+async fn acquire_argon2_permit() -> Result<tokio::sync::OwnedSemaphorePermit, AppError> {
+    tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        argon2_semaphore().acquire_owned(),
+    )
+    .await
+    .map_err(|_| {
+        AppError::TemporarilyUnavailable(
+            "Servidor ocupado processando autenticações. Tente novamente em instantes.".into(),
+        )
+    })?
+    .map_err(|_| AppError::Internal("Semáforo de criptografia indisponível".into()))
+}
+
 pub async fn hash_password(password: String) -> Result<String, AppError> {
+    if password.len() > MAX_PASSWORD_BYTES {
+        return Err(AppError::BadRequest(
+            "A senha deve ter entre 8 e 128 caracteres".into(),
+        ));
+    }
+    let _permit = acquire_argon2_permit().await?;
     tokio::task::spawn_blocking(move || {
         let salt = SaltString::generate(&mut OsRng);
         Argon2::default()
@@ -155,6 +189,10 @@ pub async fn hash_password(password: String) -> Result<String, AppError> {
 }
 
 pub async fn verify_password(password: String, password_hash: String) -> Result<bool, AppError> {
+    if password.len() > MAX_PASSWORD_BYTES {
+        return Ok(false);
+    }
+    let _permit = acquire_argon2_permit().await?;
     tokio::task::spawn_blocking(move || {
         let Ok(parsed) = PasswordHash::new(&password_hash) else {
             return Ok(false);
@@ -184,6 +222,7 @@ pub fn build_named_web_cookie(
     let proto_https = headers
         .get("x-forwarded-proto")
         .and_then(|v| v.to_str().ok())
+        .and_then(|p| p.split(',').next())
         .is_some_and(|p| p.trim().eq_ignore_ascii_case("https"));
     let origin_https = public_origin.trim().starts_with("https://");
     let secure = proto_https || origin_https || !local_host;
@@ -252,12 +291,32 @@ pub async fn profile(state: &AppState, user_id: i64) -> Result<UserProfileDto, A
     Ok(user.to_profile_dto())
 }
 
+async fn revoke_incoming_web_cookies(state: &AppState, headers: &HeaderMap) {
+    for prev_token in security::extract_web_cookies(headers) {
+        if let Ok(claims) =
+            security::verify_session_token(&state.config.jwt_secret, &prev_token, "web")
+        {
+            let _ = state
+                .db
+                .collection::<Document>("sessions")
+                .update_one(
+                    doc! { "_id": claims.sid, "user_id": claims.uid },
+                    doc! { "$set": { "revoked": true } },
+                )
+                .await;
+        }
+    }
+}
+
 async fn build_auth_response(
     state: &AppState,
     user: &UserDocument,
     purpose: &str,
     headers: &HeaderMap,
 ) -> Result<Response, AppError> {
+    if purpose == "web" {
+        revoke_incoming_web_cookies(state, headers).await;
+    }
     let (token, ttl) = issue_db_session(state, user.user_id, purpose).await?;
     let historical_questions_count = state
         .db
@@ -385,7 +444,7 @@ pub async fn handle_guest_session(
                     role: "student".to_string(),
                     is_guest: true,
                     installation_id: Some(inst.to_string()),
-                    installation_secret_sha256: Some(secret_hash),
+                    installation_secret_sha256: Some(secret_hash.clone()),
                     active_contest_ids: vec!["CPNU".to_string()],
                     daily_questions_target: 30,
                     daily_study_hours_target: 3.0,
@@ -393,8 +452,25 @@ pub async fn handle_guest_session(
                     created_at: Some(now),
                     updated_at: Some(now),
                 };
-                users.insert_one(&doc).await?;
-                doc
+                match users.insert_one(&doc).await {
+                    Ok(_) => doc,
+                    Err(e) if e.to_string().contains("E11000") => {
+                        let raced = users
+                            .find_one(doc! { "installation_id": inst.to_string() })
+                            .await?
+                            .ok_or_else(|| {
+                                AppError::Conflict("Conflito ao iniciar sessão convidada".into())
+                            })?;
+                        let stored = raced.installation_secret_sha256.as_deref().unwrap_or("");
+                        if !equal_hash(stored, &secret_hash) || !raced.is_guest {
+                            return Err(AppError::Unauthorized(
+                                "Esta instalação já possui outra credencial".into(),
+                            ));
+                        }
+                        raced
+                    }
+                    Err(e) => return Err(e.into()),
+                }
             }
         }
         (None, None) => {
@@ -575,6 +651,10 @@ pub async fn handle_register(
                                 name.chars().take(120).collect::<String>(),
                             );
                         }
+                        let unset_guest_inst = doc! {
+                            "installation_id": "",
+                            "installation_secret_sha256": "",
+                        };
                         let res = users_raw
                             .update_one(
                                 doc! {
@@ -582,11 +662,19 @@ pub async fn handle_register(
                                     "is_guest": true,
                                     "email_normalized": { "$exists": false }
                                 },
-                                doc! { "$set": set_doc },
+                                doc! { "$set": set_doc, "$unset": unset_guest_inst.clone() },
                             )
                             .await;
                         match res {
                             Ok(r) if r.matched_count == 1 => {
+                                let _ = state
+                                    .db
+                                    .collection::<Document>("sessions")
+                                    .update_many(
+                                        doc! { "user_id": existing.user_id },
+                                        doc! { "$set": { "revoked": true } },
+                                    )
+                                    .await;
                                 upgraded_user = Some(load_user(&state.db, existing.user_id).await?);
                             }
                             Ok(_) => {
@@ -617,7 +705,7 @@ pub async fn handle_register(
                                             "is_guest": true,
                                             "email_normalized": bson::Bson::Null
                                         },
-                                        doc! { "$set": retry_set },
+                                        doc! { "$set": retry_set, "$unset": unset_guest_inst },
                                     )
                                     .await
                                     .map_err(|e| {
@@ -630,6 +718,14 @@ pub async fn handle_register(
                                         }
                                     })?;
                                 if r2.matched_count == 1 {
+                                    let _ = state
+                                        .db
+                                        .collection::<Document>("sessions")
+                                        .update_many(
+                                            doc! { "user_id": existing.user_id },
+                                            doc! { "$set": { "revoked": true } },
+                                        )
+                                        .await;
                                     upgraded_user =
                                         Some(load_user(&state.db, existing.user_id).await?);
                                 }
@@ -741,6 +837,9 @@ async fn login_inner(
     }
 
     let (_, email_norm) = normalize_and_validate_email(&req.email)?;
+    if req.password.len() > MAX_PASSWORD_BYTES {
+        return Err(AppError::Unauthorized("E-mail ou senha incorretos".into()));
+    }
     rate_limit::check_auth_rate_limit(&state.db, "login", &email_norm, 10, 300).await?;
 
     let found = state
@@ -796,7 +895,8 @@ pub async fn handle_logout(
     headers: HeaderMap,
 ) -> Result<Response, AppError> {
     let cookies = security::extract_web_cookies(&headers);
-    if !cookies.is_empty() {
+    let had_web_cookies = !cookies.is_empty();
+    if had_web_cookies {
         security::verify_csrf_same_origin(&headers, &Method::POST, &state.config.public_origin)?;
         for token in cookies {
             if let Ok(claims) = security::verify_session_token(&state.config.jwt_secret, &token, "web") {
@@ -828,21 +928,23 @@ pub async fn handle_logout(
     }
 
     let mut resp = Json(json!({ "authenticated": false, "revoked": true })).into_response();
-    resp.headers_mut().append(
-        header::SET_COOKIE,
-        build_web_cookie(&headers, &state.config.public_origin, "", 0)?,
-    );
-    if security::has_legacy_admin_cookie(&headers) {
+    if had_web_cookies {
         resp.headers_mut().append(
             header::SET_COOKIE,
-            build_named_web_cookie(
-                &headers,
-                &state.config.public_origin,
-                security::LEGACY_ADMIN_COOKIE_NAME,
-                "",
-                0,
-            )?,
+            build_web_cookie(&headers, &state.config.public_origin, "", 0)?,
         );
+        if security::has_legacy_admin_cookie(&headers) {
+            resp.headers_mut().append(
+                header::SET_COOKIE,
+                build_named_web_cookie(
+                    &headers,
+                    &state.config.public_origin,
+                    security::LEGACY_ADMIN_COOKIE_NAME,
+                    "",
+                    0,
+                )?,
+            );
+        }
     }
     resp.headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
@@ -852,6 +954,7 @@ pub async fn handle_logout(
 #[derive(Debug, Clone)]
 pub struct LgpdDeletionPlan {
     pub delete_filters: Vec<(&'static str, Document)>,
+    pub scoped_cleanup_filters: Vec<(&'static str, Document)>,
     pub report_anonymize_filter: Document,
     pub report_anonymize_update: Document,
 }
@@ -872,7 +975,9 @@ pub fn validate_delete_confirmation(body: &[u8]) -> Result<(), AppError> {
 
 pub fn lgpd_deletion_plan(uid: i64) -> LgpdDeletionPlan {
     let uid_str = uid.to_string();
-    let uid_prefix = format!("^{}:", regex::escape(&uid_str));
+    let uid_escaped = regex::escape(&uid_str);
+    let uid_prefix = format!("^{uid_escaped}:");
+    let compat_cmd_prefix = format!("^(?:compatibility|compat-sequence):{uid_escaped}:");
 
     let delete_filters = vec![
         ("usuarios", doc! { "user_id": uid }),
@@ -922,12 +1027,37 @@ pub fn lgpd_deletion_plan(uid: i64) -> LgpdDeletionPlan {
             "question_import_ai_requests",
             doc! { "$or": [{ "actor_user_id": uid }, { "user_id": uid }, { "_id": { "$regex": &uid_prefix } }] },
         ),
+        (
+            "question_import_commits",
+            doc! { "$or": [{ "actor_user_id": uid }, { "_id": { "$regex": &uid_prefix } }] },
+        ),
         ("mission_progress", doc! { "user_id": uid }),
+    ];
+
+    let scoped_cleanup_filters = vec![
+        (
+            "question_commands",
+            doc! { "_id": { "$regex": &compat_cmd_prefix } },
+        ),
+        (
+            "question_review_events",
+            doc! {
+                "actor.id": &uid_str,
+                "event_type": {
+                    "$in": [
+                        "COMPATIBILITY_CONFIRM",
+                        "COMPATIBILITY_EXCLUDE",
+                        "EVALUATION_CONFIRM"
+                    ]
+                }
+            },
+        ),
     ];
 
     let report_anonymize_filter = doc! {
         "$or": [
             { "user_id": uid },
+            { "user_id": &uid_str },
             { "userId": uid },
             { "userId": &uid_str }
         ]
@@ -946,6 +1076,7 @@ pub fn lgpd_deletion_plan(uid: i64) -> LgpdDeletionPlan {
 
     LgpdDeletionPlan {
         delete_filters,
+        scoped_cleanup_filters,
         report_anonymize_filter,
         report_anonymize_update,
     }
@@ -1004,9 +1135,15 @@ pub async fn handle_delete_account(
     let plan = lgpd_deletion_plan(user.user_id);
 
     let mut deleted_documents = 0u64;
-    // Remove dados pessoais e histórico primeiro, revogando sessões e a conta por último
-    // para que uma falha de rede permita repetição idempotente pelo titular.
-    for (coll_name, filter) in plan.delete_filters.iter().rev() {
+    // 1. Anonimiza reportes de qualidade antes de remover a sessão/conta para permitir repetição idempotente em falhas de rede.
+    let report_res = state
+        .db
+        .collection::<Document>("reportedQuestoes")
+        .update_many(plan.report_anonymize_filter, plan.report_anonymize_update)
+        .await?;
+
+    // 2. Remove comandos/eventos pessoais do titular sem tocar em registros editoriais compartilhados.
+    for (coll_name, filter) in &plan.scoped_cleanup_filters {
         let res = state
             .db
             .collection::<Document>(coll_name)
@@ -1015,11 +1152,15 @@ pub async fn handle_delete_account(
         deleted_documents += res.deleted_count;
     }
 
-    let report_res = state
-        .db
-        .collection::<Document>("reportedQuestoes")
-        .update_many(plan.report_anonymize_filter, plan.report_anonymize_update)
-        .await?;
+    // 3. Remove dados pessoais e histórico primeiro, revogando sessões e a conta (`usuarios`) estritamente por último.
+    for (coll_name, filter) in plan.delete_filters.iter().rev() {
+        let res = state
+            .db
+            .collection::<Document>(coll_name)
+            .delete_many(filter.clone())
+            .await?;
+        deleted_documents += res.deleted_count;
+    }
 
     build_account_deleted_response(
         &headers,
@@ -1133,6 +1274,50 @@ pub async fn grant_admin_by_email(db: &Database, email: &str) -> Result<UserProf
     Ok(updated.to_profile_dto())
 }
 
+pub async fn mint_ephemeral_admin_token(
+    db: &Database,
+    jwt_secret: &str,
+    email_filter: Option<&str>,
+) -> Result<serde_json::Value, AppError> {
+    let filter = if let Some(email_raw) = email_filter.filter(|s| !s.trim().is_empty()) {
+        let (_, email_norm) = normalize_and_validate_email(email_raw)?;
+        doc! { "email_normalized": email_norm, "role": "admin" }
+    } else {
+        doc! { "role": "admin", "is_guest": { "$ne": true } }
+    };
+    let admin = db
+        .collection::<UserDocument>("usuarios")
+        .find_one(filter)
+        .await?
+        .ok_or_else(|| {
+            AppError::NotFound(
+                "Nenhuma conta administrativa ativa encontrada em usuarios".into(),
+            )
+        })?;
+    let ttl = 900_i64;
+    let sid = uuid::Uuid::new_v4().to_string();
+    let now = chrono::Utc::now();
+    let expires_at = bson::DateTime::from_chrono(now + chrono::Duration::seconds(ttl));
+    db.collection::<Document>("sessions")
+        .insert_one(doc! {
+            "_id": &sid,
+            "user_id": admin.user_id,
+            "purpose": "mobile",
+            "revoked": false,
+            "ephemeral_cli": true,
+            "created_at": bson::DateTime::from_chrono(now),
+            "expires_at": expires_at,
+        })
+        .await?;
+    let token = security::sign_session_token(jwt_secret, admin.user_id, &sid, "mobile", ttl)?;
+    Ok(json!({
+        "user_id": admin.user_id,
+        "sid": sid,
+        "token": token,
+        "expires_in_seconds": ttl,
+    }))
+}
+
 pub async fn handle_trigger_daily_maintenance(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<DailyMaintenanceReport>, AppError> {
@@ -1152,6 +1337,7 @@ mod tests {
         assert_eq!(norm, "admin@cogniva.app");
         assert!(normalize_and_validate_email("invalido").is_err());
         assert!(validate_password_strength("curta").is_err());
+        assert!(validate_password_strength(&"A".repeat(1025)).is_err());
         validate_password_strength("SenhaForte123!").unwrap();
 
         let hashed = hash_password("SenhaForte123!".into()).await.unwrap();

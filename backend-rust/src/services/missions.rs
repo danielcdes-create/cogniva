@@ -299,6 +299,8 @@ pub struct MissionProgressDoc {
     #[serde(default)]
     pub completed_runs_count: i32,
     #[serde(default)]
+    pub revision: i64,
+    #[serde(default)]
     pub telemetry_events: Vec<MissionTelemetryEventDoc>,
 }
 
@@ -478,7 +480,12 @@ pub fn resolve_media_path(media_dir: &Path, asset: &MediaAssetSpec) -> Option<Pa
     if asset.relative_file_name.contains('/')
         || asset.relative_file_name.contains('\\')
         || asset.relative_file_name.contains("..")
+        || asset.relative_file_name.contains(':')
     {
+        return None;
+    }
+    let mut comps = Path::new(&asset.relative_file_name).components();
+    if !matches!(comps.next(), Some(std::path::Component::Normal(_))) || comps.next().is_some() {
         return None;
     }
     let candidate = media_dir.join(&asset.relative_file_name);
@@ -487,6 +494,10 @@ pub fn resolve_media_path(media_dir: &Path, asset: &MediaAssetSpec) -> Option<Pa
     } else {
         None
     }
+}
+
+fn sanitize_vtt_single_line(raw: &str) -> String {
+    raw.replace(['\r', '\n'], " ").replace("-->", "->").trim().to_string()
 }
 
 pub fn format_webvtt_timestamp(ms: u64) -> String {
@@ -502,16 +513,18 @@ pub fn format_webvtt_timestamp(ms: u64) -> String {
 pub fn render_webvtt(asset: &MediaAssetSpec) -> String {
     let mut out = String::from("WEBVTT\nKind: captions\nLanguage: pt-BR\n\n");
     for cue in &asset.captions {
-        out.push_str(&cue.cue_id);
+        out.push_str(&sanitize_vtt_single_line(&cue.cue_id));
         out.push('\n');
         out.push_str(&format_webvtt_timestamp(cue.start_ms));
         out.push_str(" --> ");
-        out.push_str(&format_webvtt_timestamp(cue.end_ms));
+        out.push_str(&format_webvtt_timestamp(cue.end_ms.max(cue.start_ms)));
         out.push('\n');
+        let clean_text = sanitize_vtt_single_line(&cue.text);
         if let Some(speaker) = cue.speaker.as_deref().filter(|s| !s.trim().is_empty()) {
-            out.push_str(&format!("<v {speaker}>{}\n\n", cue.text.trim()));
+            let clean_speaker = sanitize_vtt_single_line(speaker).replace(['<', '>'], "");
+            out.push_str(&format!("<v {clean_speaker}>{clean_text}\n\n"));
         } else {
-            out.push_str(cue.text.trim());
+            out.push_str(&clean_text);
             out.push_str("\n\n");
         }
     }
@@ -1015,6 +1028,9 @@ pub struct ResolvedCatalog {
 impl ResolvedCatalog {
     pub fn find_mission(&self, mission_id: &str) -> Option<(&CareerSpec, &DisciplineSpec, &SeasonSpec, &MissionSpec)> {
         for career in &self.careers {
+            if career.status == "ARCHIVED" {
+                continue;
+            }
             for disc in &career.disciplines {
                 for season in &disc.seasons {
                     for mission in &season.missions {
@@ -1144,20 +1160,63 @@ pub async fn load_single_progress(
         .map_err(Into::into)
 }
 
-pub async fn save_progress_doc(state: &AppState, progress: &MissionProgressDoc) -> Result<(), AppError> {
-    let encoded = bson::to_document(progress)
-        .map_err(|e| AppError::Internal(format!("Falha ao serializar progresso da missão: {e}")))?;
-    question_storage::collection(&state.db, "mission_progress")
-        .update_one(
-            doc! {
-                "user_id": progress.user_id,
-                "mission_id": &progress.mission_id,
-            },
-            doc! { "$set": encoded },
-        )
-        .upsert(true)
-        .await?;
-    Ok(())
+pub async fn mutate_progress_cas<F>(
+    state: &AppState,
+    user_id: i64,
+    mission: &MissionSpec,
+    mutator: F,
+) -> Result<MissionProgressDoc, AppError>
+where
+    F: Fn(&mut MissionProgressDoc) -> Result<(), AppError>,
+{
+    let coll = question_storage::collection(&state.db, "mission_progress");
+    for _ in 0..10 {
+        let existing = load_single_progress(state, user_id, &mission.mission_id).await?;
+        let (mut draft, is_insert) = match existing {
+            Some(d) => (d, false),
+            None => (new_initial_progress(user_id, mission), true),
+        };
+        let expected_rev = draft.revision;
+        mutator(&mut draft)?;
+        draft.revision = expected_rev.saturating_add(1);
+        let encoded = bson::to_document(&draft).map_err(|e| {
+            AppError::Internal(format!("Falha ao serializar progresso da missão: {e}"))
+        })?;
+
+        if is_insert {
+            match coll.insert_one(encoded).await {
+                Ok(_) => return Ok(draft),
+                Err(e) if e.to_string().contains("E11000") || e.to_string().contains("11000") => {
+                    continue;
+                }
+                Err(e) => return Err(e.into()),
+            }
+        } else {
+            let filter = if expected_rev == 0 {
+                doc! {
+                    "user_id": user_id,
+                    "mission_id": &mission.mission_id,
+                    "$or": [
+                        { "revision": 0_i64 },
+                        { "revision": { "$exists": false } }
+                    ]
+                }
+            } else {
+                doc! {
+                    "user_id": user_id,
+                    "mission_id": &mission.mission_id,
+                    "revision": expected_rev,
+                }
+            };
+            let res = coll.update_one(filter, doc! { "$set": encoded }).await?;
+            if res.matched_count == 1 {
+                return Ok(draft);
+            }
+        }
+    }
+    Err(AppError::Conflict(
+        "Conflito concorrente ao atualizar progresso da missão; tente novamente.".into(),
+    ))
 }
 
 pub fn build_student_scenes(
@@ -1348,6 +1407,7 @@ pub fn new_initial_progress(user_id: i64, mission: &MissionSpec) -> MissionProgr
         resume_count: 0,
         run_count: 1,
         completed_runs_count: 0,
+        revision: 0,
         telemetry_events: vec![MissionTelemetryEventDoc {
             event_type: "MISSION_STARTED".to_string(),
             scene_id: Some(first_scene),

@@ -175,6 +175,12 @@ class FakeElement extends FakeNode {
     return this._attrs.has(key) ? this._attrs.get(key) : null;
   }
   hasAttribute(name) { return this._attrs.has(String(name).toLowerCase()); }
+  removeAttribute(name) {
+    const key = String(name).toLowerCase();
+    this._attrs.delete(key);
+    if (key === 'hidden') this.hidden = false;
+    if (key === 'disabled') this.disabled = false;
+  }
   append(...nodes) {
     for (const raw of nodes.flat(Infinity)) {
       if (raw == null || raw === false) continue;
@@ -964,4 +970,43 @@ test('video playback failure activates Transcript Fallback Mode without blocking
   assert.ok(submitCall, 'Real human question practice must submit through official /api/v1/quiz/submit-batch');
   assert.match(main.textContent, /Resposta correta no acervo oficial!/);
   assert.match(main.textContent, /1\/15/);
+});
+
+test('in-place controls and PV rate slider never destroy the active <video> element or leak background playback on exit', async () => {
+  const {doc} = setupMissionsTestEnv({
+    authenticatedProfile: {user_id: 88, display_name: 'Bruno', is_guest: false, is_admin: false},
+    initialStatus: 'IN_PROGRESS',
+    initialCompletedScenes: ['cena-01-o-alerta', 'cena-02-o-problema', 'cena-03-primeira-decisao'],
+    initialSceneId: 'cena-04-explicacao',
+  });
+  await initMissionsApp(doc);
+  await openMission('bcb-ef-t1-m01-choque-dos-juros', {resume: true});
+
+  const main = doc.getElementById('missions-main');
+  const videoBefore = doc.getElementById('active-scene-video');
+  assert.ok(videoBefore);
+  await videoBefore.play();
+  videoBefore.currentTime = 4.2;
+
+  const slider = doc.getElementById('sim-rate-range');
+  assert.ok(slider);
+  slider.value = '16.5';
+  slider.dispatchEvent({type: 'input', target: slider});
+
+  // Video element and slider must remain the exact same live DOM instances
+  assert.strictEqual(doc.getElementById('active-scene-video'), videoBefore);
+  assert.strictEqual(doc.getElementById('sim-rate-range'), slider);
+  assert.equal(videoBefore.paused, false);
+  assert.match(main.textContent, /16,5% a\.a\./);
+
+  // Captions, transcript, and auto-advance toggles update in-place without replacing <video>
+  findButton(main, 'CC Legendas').click();
+  assert.strictEqual(doc.getElementById('active-scene-video'), videoBefore);
+  findButton(main, 'Transcrição PT-BR').click();
+  assert.strictEqual(doc.getElementById('active-scene-video'), videoBefore);
+
+  // Exiting pauses and clears active video immediately
+  await exitMissionToCatalog();
+  assert.equal(videoBefore.paused, true);
+  assert.equal(videoBefore.src, '');
 });

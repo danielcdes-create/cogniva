@@ -121,6 +121,8 @@ class RepositoryContractTest {
             "putLearning"->{(args[0] as List<*>).filterIsInstance<LearningRecordEntity>().forEach{learning[it.questionId]=it};Unit}
             "metadata"->metadata[args[0]]
             "deleteMetadata"->{metadata.remove(args[0] as String);Unit}
+            "clearAllMetadata"->{metadata.clear();Unit}
+            "clearAllLearning"->{learning.clear();Unit}
             "preservedExamEdits"->metadata.filterKeys { it.startsWith("exam_backup:") }.map { LocalMetadataEntity(it.key,it.value) }
             "putMetadata"->{val m=args[0] as LocalMetadataEntity;metadata[m.key]=m.value;Unit}
             "reports"->reports.values.filter{it.ownerUserId==args[0]}

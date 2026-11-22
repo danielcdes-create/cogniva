@@ -133,5 +133,19 @@ class MissionsModuleTest {
         )
         assertEquals("UNMEASURED", detailWithHumanBank!!.demonstratedMastery.masteryState)
         assertTrue(detailWithHumanBank.demonstratedMastery.practiceAvailable)
+        assertTrue(detailWithHumanBank.duration.displayLabel.contains("2 decisões"))
+
+        val detailVerified = MissionsCatalogLoader.buildDetailView(
+            spec = spec,
+            missionId = mission.missionId,
+            record = completedRecord,
+            availableHumanQuestions = 20,
+            practicedDistinctHumanQuestions = 16,
+            masteredHumanQuestions = 15,
+        )
+        assertEquals("VERIFIED_INDEPENDENT", detailVerified!!.demonstratedMastery.masteryState)
+
+        val archivedSpec = spec.copy(careers = spec.careers.map { it.copy(status = "ARCHIVED") })
+        assertEquals(null, MissionsCatalogLoader.buildDetailView(archivedSpec, mission.missionId, completedRecord, 20, 5))
     }
 }

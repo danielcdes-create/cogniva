@@ -41,7 +41,26 @@ pub fn format_entry_60s_header(at: chrono::DateTime<Utc>) -> String {
 /// descontando incerteza de amostra pequena (`< 15` questões humanas distintas) e
 /// aplicando impulso suave (não-punitivo) de pré-requisitos pendentes.
 pub fn priority_utility(input: &PrioritizationInputs) -> f64 {
-    let r = input.retrievability.clamp(0.0, 1.0);
+    let r = if input.retrievability.is_finite() {
+        input.retrievability.clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let ed_w = if input.edital_weight.is_finite() {
+        input.edital_weight.max(0.0)
+    } else {
+        0.0
+    };
+    let inc_w = if input.incidence_weight.is_finite() {
+        input.incidence_weight.max(0.0)
+    } else {
+        0.0
+    };
+    let avg_s = if input.avg_seconds.is_finite() {
+        input.avg_seconds
+    } else {
+        60.0
+    };
     let ev_factor = (input.distinct_questions.min(15) as f64) / 15.0;
     let m_eff = if input.verified_competence {
         0.85 * r + 0.15
@@ -49,16 +68,14 @@ pub fn priority_utility(input: &PrioritizationInputs) -> f64 {
         0.65 * r * ev_factor
     };
     let gap = (1.0 - m_eff).clamp(0.05, 1.0);
-    let tau_min = input.avg_seconds.clamp(20.0, 300.0) / 60.0;
+    let tau_min = avg_s.clamp(20.0, 300.0) / 60.0;
     let prereq_mult = if input.unmet_prerequisites_count == 0 {
         1.0
     } else {
         0.55_f64.powi(input.unmet_prerequisites_count.min(3) as i32)
     };
     let downstream_boost = 1.0 + 0.15 * (input.dependent_count.min(4) as f64);
-    let raw = (input.edital_weight * input.incidence_weight * gap / tau_min)
-        * prereq_mult
-        * downstream_boost;
+    let raw = (ed_w * inc_w * gap / tau_min) * prereq_mult * downstream_boost;
     if raw >= 0.0 {
         (raw * 1_000_000_000.0 + 0.5).floor() / 1_000_000_000.0
     } else {

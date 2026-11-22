@@ -1918,9 +1918,6 @@ def main():
     args = parser.parse_args()
 
     effective_dry_run = bool(args.dry_run) or not bool(args.apply)
-    # Preserve historic behavior if neither --dry-run nor --apply was explicitly given unless --dry-run is set:
-    if not args.dry_run and not args.apply:
-        effective_dry_run = False
 
     if args.input_json:
         catalog = kc.read(ROOT / "shared/knowledge-catalog.json")

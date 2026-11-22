@@ -216,16 +216,33 @@ fn project(
             100.0 * activity.quantidade_acertos as f64 / activity.quantidade_praticas.max(1) as f64;
     }
     activity.tempos.tempo_total_estudo += item.time_spent_seconds as f64;
-    let total_events_for_time = activity.quantidade_praticas.max(activity.past_sessions.len() as i32).max(1);
-    activity.tempos.tempo_medio_resposta =
-        activity.tempos.tempo_total_estudo / total_events_for_time as f64;
+    let answered_time_sum: f64 = activity
+        .past_sessions
+        .iter()
+        .filter(|s| !s.is_blank)
+        .map(|s| s.tempo_gasto_segundos as f64)
+        .sum();
+    let answered_count = activity
+        .past_sessions
+        .iter()
+        .filter(|s| !s.is_blank)
+        .count();
+    if answered_count > 0 {
+        let denom = activity.quantidade_praticas.max(answered_count as i32) as f64;
+        let num = if activity.quantidade_praticas as usize > answered_count {
+            activity.tempos.tempo_total_estudo
+        } else {
+            answered_time_sum
+        };
+        activity.tempos.tempo_medio_resposta = num / denom;
+    }
 
     // Replay chronologically across past_sessions so an out-of-order offline attempt
     // never overwrites newer SRS state or corrupts ultima_sessao / ultima_resposta_em backwards.
     let mut running_statuses = Vec::with_capacity(activity.past_sessions.len());
     let mut running_correct = 0i32;
     let mut running_non_blank = 0i32;
-    let mut running_time = 0.0f64;
+    let mut running_answered_time = 0.0f64;
     let mut prev_session_date: Option<DateTime<Utc>> = None;
     let mut prev_interval: i32 = 0;
     let mut latest_revision: Option<DateTime<Utc>> = activity.datas.ultima_revisao;
@@ -250,7 +267,6 @@ fn project(
             .collect();
         let conf_avg_step = calculate_recent_confidence_avg(&non_blank_prefix, 3);
         let s = &mut activity.past_sessions[idx];
-        running_time += s.tempo_gasto_segundos as f64;
         let step_dias_ultima = prev_session_date
             .map(|p| (s.data - p).num_days().max(0))
             .unwrap_or(0);
@@ -261,7 +277,11 @@ fn project(
             } else {
                 0.0
             };
-            s.tempo_medio_acumulado = running_time / ((idx + 1) as f64);
+            s.tempo_medio_acumulado = if running_non_blank > 0 {
+                running_answered_time / (running_non_blank as f64)
+            } else {
+                0.0
+            };
             s.spaced_repetition_interval = final_interval;
             s.spaced_repetition_score = final_score;
             s.streak_atual = final_streak.streak_atual;
@@ -272,6 +292,7 @@ fn project(
             continue;
         }
         running_non_blank += 1;
+        running_answered_time += s.tempo_gasto_segundos as f64;
         running_statuses.push(s.status);
         if s.status {
             running_correct += 1;
@@ -279,7 +300,7 @@ fn project(
         }
         let step_streak = calculate_streak_and_points(&running_statuses);
         let step_count = running_non_blank as f64;
-        let step_avg_time = running_time / ((idx + 1) as f64);
+        let step_avg_time = running_answered_time / step_count;
         let step_acc = 100.0 * (running_correct as f64) / step_count;
         let avg_for_srs = if idx + 1 == total_sessions_len {
             activity.tempos.tempo_medio_resposta
@@ -358,22 +379,36 @@ fn project(
     activity.datas.data_primeiro_acerto = first_correct;
     activity.datas.ultima_revisao = latest_revision;
 
+    let answered_sessions: Vec<_> = activity
+        .past_sessions
+        .iter()
+        .filter(|s| !s.is_blank)
+        .cloned()
+        .collect();
+    let last_answered = answered_sessions.last();
+
     activity.streak_atual = final_streak.streak_atual;
     activity.streak_max = final_streak.streak_max;
     activity.points = final_streak.points_total;
     activity.points_with_decay = calculate_decay(activity.points, monotonic_ultima, Utc::now());
-    activity.nivel_confianca_med_rec = calculate_recent_confidence_avg(&activity.past_sessions, 3);
+    activity.nivel_confianca_med_rec = calculate_recent_confidence_avg(&answered_sessions, 3);
     activity.dominada =
         is_mastered(activity.points) && activity.nivel_confianca_med_rec.unwrap_or(0) >= 2;
     activity.spaced_repetition_score = final_score;
-    activity.spaced_repetition_interval = final_interval;
+    activity.spaced_repetition_interval = if running_non_blank > 0 {
+        final_interval.clamp(1, 3650)
+    } else {
+        0
+    };
     activity.memory_stability_days = running_stability;
     activity.memory_difficulty = running_difficulty;
-    activity.revisao_necessaria =
-        Utc::now() >= monotonic_ultima + Duration::days(final_interval as i64);
-    activity.high_confidence_error_flag = !last.is_blank && !last.status && last.nivel_confianca >= 2;
+    activity.revisao_necessaria = running_non_blank > 0
+        && Utc::now()
+            >= monotonic_ultima + Duration::days(activity.spaced_repetition_interval.max(1) as i64);
+    activity.high_confidence_error_flag =
+        last_answered.is_some_and(|la| !la.status && la.nivel_confianca >= 2);
     activity.in_error_notebook = replay_notebook;
-    activity.var_alternativa_escolhida = calculate_alternative_variation(&activity.past_sessions);
+    activity.var_alternativa_escolhida = calculate_alternative_variation(&answered_sessions);
     activity.frequencia_estudo_mes =
         calculate_monthly_study_frequency(&activity.past_sessions, Utc::now());
     activity.canonical_subject_id = question
@@ -398,7 +433,7 @@ fn project(
         question_id: item.question_id.clone(),
         is_correct: correct,
         confidence_quadrant: classify_confidence_quadrant(correct, item.confidence_level),
-        high_confidence_error_alert: !correct && item.confidence_level >= 2,
+        high_confidence_error_alert: !item.is_blank && !correct && item.confidence_level >= 2,
         streak_atual: activity.streak_atual,
         streak_max: activity.streak_max,
         points_total: activity.points,
@@ -614,6 +649,26 @@ pub async fn attach_evidence(
         return Err(AppError::BadRequest(
             "Identificador de evidência fora dos limites".into(),
         ));
+    }
+    if let Some(raw_q) = state
+        .db
+        .collection::<Document>("todasQuestoes")
+        .find_one(doc! { "_id": qid })
+        .await?
+    {
+        if let Ok(q_doc) = bson::from_document::<QuestionDocument>(raw_q) {
+            if let Some(challenge) = q_doc.effective_evidence_challenge() {
+                if !challenge
+                    .options
+                    .iter()
+                    .any(|opt| opt.evidence_id == trimmed)
+                {
+                    return Err(AppError::BadRequest(
+                        "Identificador de evidência não pertence às opções desta questão".into(),
+                    ));
+                }
+            }
+        }
     }
     let activities = state.db.collection_with_options::<Document>(
         "userActivityLog",
@@ -902,5 +957,85 @@ mod tests {
         assert!(!parsed_out.high_confidence_error_flag);
         // Newer user_note at t2 is NOT overwritten by older offline note at t1
         assert_eq!(parsed_out.user_note.as_deref(), Some("Nota recente online"));
+    }
+
+    #[test]
+    fn blank_omissions_do_not_pollute_confidence_avg_response_time_or_trigger_review_due() {
+        let q: QuestionDocument = bson::from_document(doc! {
+            "_id": ObjectId::new(),
+            "question": "Julgue o item sobre política monetária.",
+            "answers": ["Certo", "Errado"],
+            "correct_answers": ["Certo"],
+            "disciplina": "Economia"
+        })
+        .unwrap();
+        let now = Utc::now();
+        let blank_only = AnswerAttemptItem {
+            exam_component_id: None,
+            attempt_id: uuid::Uuid::new_v4().to_string(),
+            occurred_at: (now - Duration::days(10)).to_rfc3339(),
+            client_answered_at: None,
+            question_revision: q.revision().unwrap(),
+            question_id: q.id.to_hex(),
+            chosen_index: 0,
+            chosen_text: String::new(),
+            is_correct: false,
+            time_spent_seconds: 8,
+            confidence_level: 0,
+            session_uuid: "sim-1".into(),
+            quiz_mode: "SIMULADO".into(),
+            exam_block: None,
+            contest_id: None,
+            user_note: None,
+            canonical_subject_id: None,
+            canonical_topic_id: None,
+            is_blank: true,
+            confidence_explicit: false,
+            selected_evidence_id: None,
+            position_in_session: None,
+            elapsed_session_seconds: Some(120),
+            session_interrupted: false,
+        };
+        let (fields_b, event_b, ack_b) =
+            project(empty(99, &q, now - Duration::days(10)), &q, &blank_only, now - Duration::days(10))
+                .unwrap();
+        assert!(!ack_b.high_confidence_error_alert);
+        assert_eq!(ack_b.attempts_total, 0);
+        assert_eq!(ack_b.confidence_avg, None);
+        assert!(!fields_b.get_bool("revisao_necessaria").unwrap());
+
+        let mut raw_doc = doc! {
+            "_id": ObjectId::new(),
+            "user_id": 99_i64,
+            "question_id": q.id,
+            "datas": {
+                "ultima_sessao": bson::DateTime::from_chrono(now - Duration::days(10)),
+                "data_primeira_sessao": bson::DateTime::from_chrono(now - Duration::days(10)),
+            },
+            "tempos": { "tempo_total_estudo": 8.0, "tempo_medio_resposta": 0.0 },
+            "disciplina": "Economia",
+            "pastSessions": [event_b],
+            "quantidade_praticas": 0,
+        };
+        let act_b: UserActivityDocument = bson::from_document(raw_doc.clone()).unwrap();
+        assert!(!act_b.review_due(now));
+
+        // Now answer with confidence 3 and 30s -> average confidence is 3 (not diluted by blank's 0)
+        // and average response time is 30.0s (not diluted by blank's 8s)
+        let answered = AnswerAttemptItem {
+            attempt_id: uuid::Uuid::new_v4().to_string(),
+            occurred_at: now.to_rfc3339(),
+            chosen_text: "Certo".into(),
+            is_correct: true,
+            time_spent_seconds: 30,
+            confidence_level: 3,
+            is_blank: false,
+            confidence_explicit: true,
+            ..blank_only
+        };
+        let (fields_a, _, ack_a) = project(act_b, &q, &answered, now).unwrap();
+        assert_eq!(ack_a.confidence_avg, Some(3));
+        assert!((fields_a.get_f64("tempos.tempo_medio_resposta").unwrap() - 30.0).abs() < 1e-6);
+        raw_doc.insert("dominada", false);
     }
 }

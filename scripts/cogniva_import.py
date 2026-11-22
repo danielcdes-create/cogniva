@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import datetime as dt
 import hashlib
 import json
 import os
@@ -198,6 +199,25 @@ def chunk_items(items: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
     return chunks
 
 
+def normalize_validity_basis(raw_basis: str) -> str:
+    basis = (raw_basis or "FACTUAL").strip().upper()
+    if basis in ("NORMATIVE", "JURISPRUDENTIAL"):
+        return "LEGAL"
+    if basis in ("FACTUAL", "LEGAL", "TECHNICAL", "TIMELESS"):
+        return basis
+    raise ValueError(f"validity_basis inválida: {raw_basis!r}")
+
+
+def resolve_review_due_on(effective_basis: str, explicit_due: str | None, today: dt.date | None = None) -> str | None:
+    if explicit_due:
+        parsed = dt.date.fromisoformat(explicit_due.strip())
+        return parsed.isoformat()
+    if effective_basis == "LEGAL":
+        base_day = today or dt.datetime.now(dt.timezone.utc).date()
+        return (base_day + dt.timedelta(days=365)).isoformat()
+    return None
+
+
 REMOTE_RUNNER = r"""
 import base64
 import copy
@@ -220,24 +240,41 @@ t0 = time.time()
 core = json.loads(subprocess.check_output(["docker", "inspect", "api-rust-core"]))[0]
 env = dict(row.split("=", 1) for row in core["Config"]["Env"] if "=" in row)
 jwt_secret = env["JWT_SECRET"]
-user_id = int(req_bundle.get("admin_user_id", 3762914356612732))
-sid = str(req_bundle.get("admin_sid", "03422120-65eb-4819-9ea7-3f88fb95c37a"))
 
 def b64u(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
 
-now = int(time.time())
-header = b64u(json.dumps({"alg": "HS256", "typ": "JWT"}, separators=(",", ":")).encode())
-payload = b64u(json.dumps({
-    "v": 2,
-    "uid": user_id,
-    "sid": sid,
-    "purpose": "mobile",
-    "iat": now,
-    "exp": now + 3600,
-}, separators=(",", ":")).encode())
-sig = b64u(hmac.new(jwt_secret.encode(), f"{header}.{payload}".encode(), hashlib.sha256).digest())
-token = f"{header}.{payload}.{sig}"
+def mint_ephemeral_admin_session(admin_email: str | None) -> tuple[int, str]:
+    cmd = ["docker", "exec", "-e", "RUST_LOG=error", "api-rust-core", "/usr/local/bin/cogniva-api", "--mint-admin-token"]
+    if admin_email:
+        cmd.append(admin_email)
+    out = subprocess.check_output(cmd, text=True).strip()
+    jpos = out.find("{")
+    minted = json.loads(out[jpos:] if jpos >= 0 else out)
+    return int(minted["user_id"]), str(minted["token"])
+
+ephemeral_session = False
+explicit_uid = req_bundle.get("admin_user_id")
+explicit_sid = req_bundle.get("admin_sid")
+admin_email = req_bundle.get("admin_email")
+if explicit_uid and explicit_sid:
+    user_id = int(explicit_uid)
+    sid = str(explicit_sid)
+    now = int(time.time())
+    header = b64u(json.dumps({"alg": "HS256", "typ": "JWT"}, separators=(",", ":")).encode())
+    payload = b64u(json.dumps({
+        "v": 2,
+        "uid": user_id,
+        "sid": sid,
+        "purpose": "mobile",
+        "iat": now,
+        "exp": now + 900,
+    }, separators=(",", ":")).encode())
+    sig = b64u(hmac.new(jwt_secret.encode(), f"{header}.{payload}".encode(), hashlib.sha256).digest())
+    token = f"{header}.{payload}.{sig}"
+else:
+    user_id, token = mint_ephemeral_admin_session(admin_email)
+    ephemeral_session = True
 
 conn = http.client.HTTPConnection("127.0.0.1", 8001, timeout=120)
 
@@ -273,6 +310,7 @@ dry_run = bool(req_bundle.get("dry_run", False))
 acknowledge_duplicates = bool(req_bundle.get("acknowledge_duplicates", False))
 verify_quiz = bool(req_bundle.get("verify_quiz", True))
 validity_basis = req_bundle.get("validity_basis", "FACTUAL")
+review_due_on = req_bundle.get("review_due_on")
 exam_id = req_bundle["exam_id"]
 replace_custom = bool(req_bundle.get("replace_custom_placeholders", False))
 taxonomy = req_bundle.get("taxonomy") or {}
@@ -504,7 +542,7 @@ for pkg in packages:
                 "status": "CURRENT",
                 "basis": validity_basis,
                 "reference_date": today_iso,
-                "review_due_on": None,
+                "review_due_on": review_due_on,
                 "reason_codes": [],
                 "evaluated_content_revision": crev,
                 "decision": {
@@ -613,6 +651,12 @@ if not dry_run and verify_quiz:
         quiz_verified_topics[t_id] = len(drawn)
 
 summary_after = api("/api/v1/admin/summary")
+if ephemeral_session:
+    try:
+        api("/api/v1/auth/logout", {}, method="POST")
+    except Exception:
+        pass
+conn.close()
 
 print(json.dumps({
     "complete": True,
@@ -745,10 +789,18 @@ def main() -> int:
     )
     parser.add_argument(
         "--validity-basis",
-        choices=["FACTUAL", "NORMATIVE", "JURISPRUDENTIAL"],
+        choices=["FACTUAL", "LEGAL", "TECHNICAL", "TIMELESS", "NORMATIVE", "JURISPRUDENTIAL"],
         default="FACTUAL",
-        help="Base de validade aplicada aos itens confirmados (padrão: FACTUAL; use NORMATIVE para Direito/legislação)",
+        help="Base de validade canônica (FACTUAL, LEGAL, TECHNICAL, TIMELESS; NORMATIVE/JURISPRUDENTIAL mapeiam para LEGAL)",
     )
+    parser.add_argument(
+        "--review-due-on",
+        default=None,
+        help="Data ISO YYYY-MM-DD de revisão obrigatória para base LEGAL (padrão automático: hoje + 365 dias quando LEGAL)",
+    )
+    parser.add_argument("--admin-email", default=None, help="E-mail da conta admin para emissão de sessão efêmera na VPS")
+    parser.add_argument("--admin-user-id", type=int, default=None, help="ID opcional de usuário admin com sessão ativa")
+    parser.add_argument("--admin-sid", default=None, help="SID opcional de sessão admin ativa")
     parser.add_argument("--acknowledge-duplicates", action="store_true", help="Autoriza gravação caso haja POTENTIAL_DUPLICATE")
     parser.add_argument("--allow-letter-prefixes", action="store_true", help="Não falha caso alternativas comecem com 'A) '")
     parser.add_argument("--no-verify-quiz", action="store_true", help="Pula sorteio de conferência /api/v1/quiz/generate pós-commit")
@@ -806,6 +858,11 @@ def main() -> int:
         inferred_exam_id = inferred_exam_id or target.get("exam_id")
         inferred_replace_custom = inferred_replace_custom or bool(target.get("replace_custom_placeholders"))
 
+    effective_basis = normalize_validity_basis(args.validity_basis)
+    effective_review_due_on = resolve_review_due_on(effective_basis, args.review_due_on)
+    if (args.admin_user_id is None) ^ (args.admin_sid is None):
+        parser.error("Informe ambos --admin-user-id e --admin-sid, ou omita ambos para sessão efêmera automática")
+
     total_items = sum(p["count"] for p in packages)
     if args.check_local:
         print(
@@ -829,7 +886,11 @@ def main() -> int:
         "dry_run": args.dry_run,
         "acknowledge_duplicates": args.acknowledge_duplicates,
         "verify_quiz": not args.no_verify_quiz,
-        "validity_basis": args.validity_basis,
+        "validity_basis": effective_basis,
+        "review_due_on": effective_review_due_on,
+        "admin_email": args.admin_email,
+        "admin_user_id": args.admin_user_id,
+        "admin_sid": args.admin_sid,
         "exam_id": exam_id,
         "replace_custom_placeholders": args.replace_custom_placeholders or inferred_replace_custom,
         "taxonomy": merged_taxonomy,

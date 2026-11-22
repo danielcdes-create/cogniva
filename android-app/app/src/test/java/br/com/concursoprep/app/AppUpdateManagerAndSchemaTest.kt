@@ -176,6 +176,10 @@ class AppUpdateManagerAndSchemaTest {
             "https://api.cogniva.com.br/api/v1/apk/download",
             AppUpdateManager.resolveDownloadUrl("https://api.cogniva.com.br/api/v1", "/api/v1/apk/download")
         )
+        assertEquals(
+            "https://198.199.65.103/api/v1/apk/download",
+            AppUpdateManager.resolveDownloadUrl("https://198.199.65.103:443/api/v1/", "https://198.199.65.103/api/v1/apk/download")
+        )
         assertTrue(
             runCatching {
                 AppUpdateManager.resolveDownloadUrl("http://insecure.example.com/api/v1", "/api/v1/apk/download")
@@ -186,6 +190,101 @@ class AppUpdateManagerAndSchemaTest {
                 AppUpdateManager.resolveDownloadUrl("https://api.cogniva.com.br/api/v1", "https://evil.example.com/app.apk")
             }.isFailure
         )
+        // Blocks host-prefix spoofing, userinfo confusion, protocol-relative, port mismatch, and path traversal
+        assertTrue(
+            runCatching {
+                AppUpdateManager.resolveDownloadUrl("https://198.199.65.103/api/v1", "https://198.199.65.103.evil.com/api/v1/apk/download")
+            }.isFailure
+        )
+        assertTrue(
+            runCatching {
+                AppUpdateManager.resolveDownloadUrl("https://198.199.65.103/api/v1", "https://attacker@198.199.65.103/api/v1/apk/download")
+            }.isFailure
+        )
+        assertTrue(
+            runCatching {
+                AppUpdateManager.resolveDownloadUrl("https://198.199.65.103/api/v1", "//evil.com/apk/download")
+            }.isFailure
+        )
+        assertTrue(
+            runCatching {
+                AppUpdateManager.resolveDownloadUrl("https://198.199.65.103/api/v1", "https://198.199.65.103:8443/api/v1/apk/download")
+            }.isFailure
+        )
+        assertTrue(
+            runCatching {
+                AppUpdateManager.resolveDownloadUrl("https://198.199.65.103/api/v1", "/api/v1/../../etc/passwd")
+            }.isFailure
+        )
+    }
+
+    @Test
+    fun performanceEnginesHandleExtremeEarlyMinutesAndNonFiniteInputsSafely() {
+        val fatigue = br.com.concursoprep.app.domain.exam.FatigueEngine.evaluateFatigueWithDifficulty(
+            qualifyingSessions = 4,
+            earlyCorrect = 50,
+            earlyTotal = 65,
+            lateCorrect = 40,
+            lateTotal = 65,
+            earlyAvgDifficulty = Double.NaN,
+            lateAvgDifficulty = Double.POSITIVE_INFINITY,
+            earlyMeanMinutes = 290.0,
+            lateMeanMinutes = 295.0
+        )
+        assertTrue(fatigue.estimatedLambda != null && fatigue.estimatedLambda!!.isFinite())
+        assertTrue(fatigue.shrunkAccuracyDelta != null && fatigue.shrunkAccuracyDelta!!.isFinite())
+
+        val ret = br.com.concursoprep.app.domain.exam.RetentionEngine.updateRetention(
+            priorStability = Double.NaN,
+            priorDifficulty = Double.NaN,
+            isCorrect = true,
+            confidence = 3,
+            elapsedDays = Double.NaN,
+            responseSeconds = 30,
+            expectedSeconds = Double.NaN
+        )
+        assertTrue(ret.nextStability.isFinite() && ret.nextDifficulty.isFinite())
+
+        val strat = br.com.concursoprep.app.domain.exam.StrategyEngine.evaluateStrategy(
+            pCalibrated = Double.NaN,
+            penalty = Double.NaN,
+            cutoffPct = Double.NaN,
+            currentProjectedPct = Double.NaN,
+            remainingFraction = Double.NaN
+        )
+        assertTrue(strat.expectedValue.isFinite())
+    }
+
+    @Test
+    fun examBlueprintPayloadAcceptsBackendMongoAndDtoFieldAliases() {
+        val parser = Json { ignoreUnknownKeys = true; coerceInputValues = true }
+        val wire = """
+            {
+              "_id": "exam-1",
+              "revision": 3,
+              "wrong_answer_penalty": 0.5,
+              "title": "BCB 2027",
+              "short_name": "BCB",
+              "institution": "Banco Central",
+              "role": "Analista",
+              "trunk_slug": "fiscal",
+              "status": "PROVA_REALIZADA",
+              "exam_boards": ["Cebraspe"],
+              "target_date": {"type": "UNDEFINED"},
+              "historical_cutoff_score": 72.0,
+              "is_active_in_ladder": true,
+              "ladder_priority": 1,
+              "subjects": [],
+              "sync_status": "SYNCED",
+              "template_source_id": "tpl-1",
+              "base_template_revision": 9,
+              "is_custom_copy": true,
+              "upstream_update_available": false
+            }
+        """.trimIndent()
+        val parsed = parser.decodeFromString<br.com.concursoprep.app.data.remote.ExamBlueprintPayload>(wire)
+        assertEquals(9L, parsed.templateRevisionSynced)
+        assertTrue(parsed.isCustomized)
     }
 
     @Test

@@ -114,6 +114,7 @@ impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let code = self.error_code();
         let field = self.error_field().map(str::to_string);
+        let correlation_id = uuid::Uuid::new_v4().to_string();
         let (status, message) = match &self {
             AppError::TemporarilyUnavailable(_) => {
                 (StatusCode::SERVICE_UNAVAILABLE, self.to_string())
@@ -123,17 +124,26 @@ impl IntoResponse for AppError {
             AppError::Forbidden(_) => (StatusCode::FORBIDDEN, self.to_string()),
             AppError::Conflict(_) => (StatusCode::CONFLICT, self.to_string()),
             AppError::Database(e) => {
-                tracing::error!("MongoDB error: {:?}", e);
+                tracing::error!(correlation_id = %correlation_id, "MongoDB error: {:?}", e);
                 (
                     StatusCode::SERVICE_UNAVAILABLE,
                     "Persistência temporariamente indisponível".to_string(),
                 )
             }
-            AppError::InvalidObjectId(_) => (StatusCode::BAD_REQUEST, self.to_string()),
+            AppError::InvalidObjectId(_) => (
+                StatusCode::BAD_REQUEST,
+                "Identificador de objeto inválido.".to_string(),
+            ),
             AppError::NotFound(_) => (StatusCode::NOT_FOUND, self.to_string()),
             AppError::BadRequest(_) => (StatusCode::BAD_REQUEST, self.to_string()),
             AppError::ExternalAiError(_) => (StatusCode::BAD_GATEWAY, self.to_string()),
-            AppError::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()),
+            AppError::Internal(detail) => {
+                tracing::error!(correlation_id = %correlation_id, "Internal error: {}", detail);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Erro interno no servidor.".to_string(),
+                )
+            }
             AppError::Structured {
                 status, message, ..
             } => (*status, message.clone()),
@@ -144,9 +154,25 @@ impl IntoResponse for AppError {
             "code": code,
             "field": field,
             "message": message,
-            "correlation_id": uuid::Uuid::new_v4().to_string(),
+            "correlation_id": correlation_id,
         }));
 
         (status, body).into_response()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn internal_errors_never_leak_detail_to_http_clients() {
+        let resp = AppError::Internal("segredo /opt/internal/stacktrace".into()).into_response();
+        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let bytes = axum::body::to_bytes(resp.into_body(), 8192).await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(body["code"], "INTERNAL_ERROR");
+        assert_eq!(body["message"], "Erro interno no servidor.");
+        assert!(!body.to_string().contains("segredo"));
     }
 }

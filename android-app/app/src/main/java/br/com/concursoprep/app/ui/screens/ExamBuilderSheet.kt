@@ -395,7 +395,7 @@ internal fun ExamFormContent(
                                 if (step < 3) {
                                     step += 1
                                 } else {
-                                    val name = organ.ifBlank { trunks.first { it.slug == trunkSlug }.name }
+                                    val name = organ.ifBlank { trunks.firstOrNull { it.slug == trunkSlug }?.name ?: "Concurso" }
                                     val presetSortDates = mapOf("1º sem/2027" to "2027-06-30", "2º sem/2027" to "2027-12-31", "1º sem/2028" to "2028-06-30")
                                     onSave(
                                         ExamDraft(

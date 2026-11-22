@@ -65,13 +65,40 @@ class DeployScriptsTest(unittest.TestCase):
     def test_nginx_conf_protects_auth_ai_apk_and_sets_security_headers(self):
         nginx = (ROOT / "deploy/nginx-cogniva.conf").read_text(encoding="utf-8")
         rates = (ROOT / "deploy/nginx-rate-limits.conf").read_text(encoding="utf-8")
+        sync = (ROOT / "deploy/sync_nginx_site.py").read_text(encoding="utf-8")
+        bootstrap = (ROOT / "deploy/bootstrap-ip-tls.sh").read_text(encoding="utf-8")
         self.assertIn("admin/questions/import/assist", nginx)
-        self.assertIn("login|register|guest|logout|web-session|web-logout|account", nginx)
+        self.assertIn("login|register|guest|logout|web-session|web-logout|account|native-session", nginx)
         self.assertIn('Retry-After "15"', nginx)
         self.assertIn('Strict-Transport-Security "max-age=604800"', nginx)
+        self.assertIn("proxy_hide_header X-Content-Type-Options;", nginx)
+        self.assertIn("proxy_hide_header Referrer-Policy;", nginx)
+        self.assertIn("charset utf-8;", nginx)
         self.assertIn("cogniva_apk", nginx)
+        self.assertIn("cogniva_media", nginx)
         self.assertIn("$cogniva_limit_key", rates)
+        self.assertIn("$cogniva_ai_limit_key", rates)
+        self.assertIn("zone=cogniva_media:4m", rates)
         self.assertIn("ipv6_subnet", rates)
+        self.assertNotIn("if 'location /missoes/' in cur", sync)
+        self.assertIn("-checkend 216000", bootstrap)
+
+    def test_cogniva_import_normalizes_validity_basis_and_avoids_hardcoded_session(self):
+        import datetime as dt
+        import sys
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import cogniva_import as ci
+
+        self.assertEqual(ci.normalize_validity_basis("NORMATIVE"), "LEGAL")
+        self.assertEqual(ci.normalize_validity_basis("JURISPRUDENTIAL"), "LEGAL")
+        self.assertEqual(ci.normalize_validity_basis("FACTUAL"), "FACTUAL")
+        self.assertEqual(ci.normalize_validity_basis("TECHNICAL"), "TECHNICAL")
+        self.assertEqual(
+            ci.resolve_review_due_on("LEGAL", None, today=dt.date(2026, 11, 21)),
+            "2027-11-21",
+        )
+        self.assertIsNone(ci.resolve_review_due_on("FACTUAL", None, today=dt.date(2026, 11, 21)))
+        self.assertNotIn("03422120-65eb-4819-9ea7-3f88fb95c37a", ci.REMOTE_RUNNER)
 
     def test_prune_old_releases_preserves_active_previous_and_three_latest(self):
         ns = load_promote_helpers()

@@ -4,6 +4,7 @@ import {helpTopics,searchHelp} from '../help.js';
 
 test('help search handles accents, case and multiple terms used in real tasks',()=>{
   assert.deepEqual(searchHelp('BANCO CENTRAL pré-edital').map(topic=>topic.id),['pre-edital-banco-central']);
+  assert.ok(searchHelp('sessao 12 horas grant-admin').some(topic=>topic.id==='acesso-sessao'));
   assert.ok(searchHelp('sessao 30 dias grant-admin').some(topic=>topic.id==='acesso-sessao'));
   assert.ok(searchHelp('classificacao IA propostas').some(topic=>topic.id==='classificacao-ia'));
   assert.ok(searchHelp('moderacao reportes').some(topic=>topic.id==='reportes-moderacao'));

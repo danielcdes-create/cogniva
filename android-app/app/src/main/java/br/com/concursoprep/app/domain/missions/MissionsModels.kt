@@ -57,9 +57,9 @@ data class WorkedConceptSpec(
 @Serializable
 data class CurriculumBindingSpec(
     @SerialName("contest_name") val contestName: String,
-    @SerialName("contest_template_id") val contestTemplateId: String,
+    @SerialName("contest_template_id") val contestTemplateId: String = "",
     @SerialName("role_name") val roleName: String,
-    @SerialName("exam_component_id") val examComponentId: String,
+    @SerialName("exam_component_id") val examComponentId: String = "",
     @SerialName("discipline_label") val disciplineLabel: String,
     @SerialName("theme_label") val themeLabel: String,
     @SerialName("canonical_subject_id") val canonicalSubjectId: String,
@@ -170,7 +170,7 @@ data class SeasonSpec(
 data class DisciplineSpec(
     @SerialName("discipline_id") val disciplineId: String,
     @SerialName("canonical_subject_id") val canonicalSubjectId: String,
-    @SerialName("exam_component_id") val examComponentId: String,
+    @SerialName("exam_component_id") val examComponentId: String = "",
     @SerialName("display_name") val displayName: String,
     val seasons: List<SeasonSpec>,
 )
@@ -179,7 +179,7 @@ data class DisciplineSpec(
 data class CareerSpec(
     @SerialName("career_id") val careerId: String,
     @SerialName("trunk_id") val trunkId: String,
-    @SerialName("contest_template_id") val contestTemplateId: String,
+    @SerialName("contest_template_id") val contestTemplateId: String = "",
     @SerialName("display_header") val displayHeader: String,
     val institution: String,
     val role: String,
@@ -220,6 +220,7 @@ data class LocalMissionProgressRecord(
     val decisions: Map<String, LocalRecordedDecision> = emptyMap(),
     val runCount: Int = 0,
     val completedRunsCount: Int = 0,
+    val dirty: Boolean = false,
 )
 
 @Serializable
@@ -390,13 +391,15 @@ object MissionsCatalogLoader {
     fun calculateDuration(mission: MissionSpec, assets: Map<String, MediaAssetSpec>): MissionDurationView {
         val videoSec = mission.scenes.sumOf { assets[it.assetId]?.durationSeconds ?: 0.0 }
         val interSec = mission.scenes.sumOf { it.estimatedInteractionSeconds }
+        val decCount = mission.scenes.count { it.interaction != null }
         val estMin = ceil((videoSec + interSec) / 60.0).toInt().coerceAtLeast(1)
         val roundedVideo = videoSec.roundToInt()
+        val decWord = if (decCount == 1) "decisão" else "decisões"
         return MissionDurationView(
             videoSeconds = videoSec,
             interactionSeconds = interSec,
             estimatedMinutes = estMin,
-            displayLabel = "~$estMin min (${roundedVideo}s de vídeo + decisões)",
+            displayLabel = "~$estMin min (${roundedVideo}s de vídeo + $decCount $decWord)",
         )
     }
 
@@ -453,14 +456,16 @@ object MissionsCatalogLoader {
         record: LocalMissionProgressRecord?,
         availableHumanQuestions: Int,
         practicedDistinctHumanQuestions: Int,
+        masteredHumanQuestions: Int = 0,
     ): MissionDetailView? {
         val assets = spec.mediaAssets.associateBy { it.assetId }
         val chars = spec.characters.associateBy { it.characterId }
 
         for (career in spec.careers) {
+            if (career.status == "ARCHIVED") continue
             for (disc in career.disciplines) {
                 for (season in disc.seasons) {
-                    val mission = season.missions.find { it.missionId == missionId } ?: continue
+                    val mission = season.missions.find { it.missionId == missionId && it.publicationState == "PUBLISHED" } ?: continue
                     val prog = summarizeProgress(mission, record)
                     val perf = summarizePerformance(mission, record)
                     val reviewSet = perf.conceptsForReview.toSet()
@@ -529,12 +534,15 @@ object MissionsCatalogLoader {
                     }
                     val masteryState = when {
                         availableHumanQuestions == 0 -> "NO_QUESTIONS_AVAILABLE"
+                        masteredHumanQuestions >= 15 -> "VERIFIED_INDEPENDENT"
                         practicedDistinctHumanQuestions == 0 -> "UNMEASURED"
                         else -> "EVIDENCE_IN_PROGRESS"
                     }
                     val masteryLabel = when (masteryState) {
                         "NO_QUESTIONS_AVAILABLE" ->
                             "Nenhuma questão humana validada está em cache/acervo neste ambiente para os subtópicos vinculados."
+                        "VERIFIED_INDEPENDENT" ->
+                            "Domínio independente demonstrado em questões humanas reais ($masteredHumanQuestions questões dominadas)."
                         "UNMEASURED" ->
                             "Ainda não aferido em questões humanas reais ($availableHumanQuestions disponíveis). Concluir a missão não concede domínio automático."
                         else ->

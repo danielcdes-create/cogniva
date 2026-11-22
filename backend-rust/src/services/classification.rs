@@ -514,6 +514,15 @@ pub async fn generate(
     config: &AppConfig,
     request: &Value,
 ) -> Result<Value, AppError> {
+    generate_for_actor(db, config, None, request).await
+}
+
+pub async fn generate_for_actor(
+    db: &Database,
+    config: &AppConfig,
+    actor_user_id: Option<i64>,
+    request: &Value,
+) -> Result<Value, AppError> {
     let model = config.require_xai_model()?;
     let operation = request["operation_id"]
         .as_str()
@@ -607,15 +616,20 @@ pub async fn generate(
     }
     let mut results = Vec::new();
     for id in ids {
-        let id = id.as_str().unwrap();
-        let batch = commands.find_one(doc! {"_id":&batch_id}).await?.unwrap();
+        let id = id
+            .as_str()
+            .ok_or_else(|| bad("Identificador de questão inválido"))?;
+        let batch = commands
+            .find_one(doc! {"_id":&batch_id})
+            .await?
+            .ok_or_else(|| conflict("Lote ausente durante execução"))?;
         let saved = batch
             .get_document("results")
             .ok()
             .and_then(|r| r.get_document(id).ok());
         let result = match saved {
             Some(saved) => json_of(saved),
-            None => generate_one(db, config, id, reason, operation).await?,
+            None => generate_one_for_actor(db, config, actor_user_id, id, reason, operation).await?,
         };
         if result["suggestion"].is_null() {
             return Err(conflict(
@@ -640,9 +654,10 @@ pub async fn generate(
     Ok(receipt)
 }
 
-pub(crate) async fn generate_one(
+pub(crate) async fn generate_one_for_actor(
     db: &Database,
     config: &AppConfig,
+    actor_user_id: Option<i64>,
     question_id: &str,
     reprocess: Option<&str>,
     batch_operation: &str,
@@ -781,15 +796,15 @@ pub(crate) async fn generate_one(
             return Err(error);
         }
     };
-    let quota = match super::rate_limit::reserve_xai_quota(
+    let quota_guard = match super::rate_limit::reserve_xai_quota(
         db,
-        None,
+        actor_user_id,
         config.xai_daily_user_limit,
         config.xai_daily_global_limit,
     )
     .await
     {
-        Ok(q) => q,
+        Ok(q) => super::rate_limit::QuotaGuard::new(db.clone(), q),
         Err(error) => {
             commands
                 .update_one(
@@ -809,7 +824,7 @@ pub(crate) async fn generate_one(
     {
         Ok(text) => text,
         Err(error) => {
-            super::rate_limit::release_xai_quota(db, &quota).await;
+            quota_guard.release_now().await;
             commands
                 .update_one(
                     doc! {"_id": &reservation,"generation":generation},
@@ -822,7 +837,7 @@ pub(crate) async fn generate_one(
     let parsed = match parse_model_output(&model_text) {
         Ok(value) => value,
         Err(error) => {
-            super::rate_limit::release_xai_quota(db, &quota).await;
+            quota_guard.release_now().await;
             commands
                 .update_one(
                     doc! {"_id": &reservation,"generation":generation},
@@ -832,8 +847,20 @@ pub(crate) async fn generate_one(
             return Err(error);
         }
     };
-    let semantic = semantic_revision_of(&raw)?;
-    let mut suggestion = build_suggestion(
+    let semantic = match semantic_revision_of(&raw) {
+        Ok(sem) => sem,
+        Err(error) => {
+            quota_guard.release_now().await;
+            let _ = commands
+                .update_one(
+                    doc! {"_id": &reservation,"generation":generation},
+                    doc! {"$set": {"status": "failed", "failure": error.to_string()}},
+                )
+                .await;
+            return Err(error);
+        }
+    };
+    let mut suggestion = match build_suggestion(
         &suggestion_key,
         question_id,
         &content,
@@ -841,7 +868,20 @@ pub(crate) async fn generate_one(
         class_rev,
         &parsed,
         &model,
-    )?;
+    ) {
+        Ok(sug) => sug,
+        Err(error) => {
+            quota_guard.release_now().await;
+            let _ = commands
+                .update_one(
+                    doc! {"_id": &reservation,"generation":generation},
+                    doc! {"$set": {"status": "failed", "failure": error.to_string()}},
+                )
+                .await;
+            return Err(error);
+        }
+    };
+    quota_guard.commit();
     let superseded = json!({"decided_at":now_z(),"actor":{"type":"SYSTEM","id":"classification-lease"},"reason":"Resposta de geração substituída por reprocessamento explícito.","resulting_classification_revision":null});
     if commands
         .find_one(doc! {"_id":&reservation,"generation":generation,"status":"reserved"})
@@ -1715,7 +1755,7 @@ pub async fn decide_compatibility(
         .find_one_and_update(doc! {"_id":&counter}, doc! {"$inc":{"sequence":1_i64}})
         .return_document(mongodb::options::ReturnDocument::After)
         .await?
-        .unwrap();
+        .ok_or_else(|| conflict("Sequência de compatibilidade indisponível"))?;
     let revision = i64_of(&sequence, "sequence").ok_or_else(|| conflict("Sequência inválida"))?;
     let review_action = if relation == "EXCLUDED" {
         "COMPATIBILITY_EXCLUDE"
@@ -1756,7 +1796,10 @@ pub async fn decide_compatibility(
             doc! {"$set":{"document":as_doc(document)?,"review_event":compat_ev_doc.clone()}},
         )
         .await?;
-    let command = commands.find_one(doc! {"_id":&command_id}).await?.unwrap();
+    let command = commands
+        .find_one(doc! {"_id":&command_id})
+        .await?
+        .ok_or_else(|| conflict("Comando de compatibilidade ausente"))?;
     let planned = command
         .get_document("document")
         .map_err(|_| conflict("Plano ausente"))?

@@ -44,8 +44,10 @@ def main() -> None:
         ADMIN_EMAILS=admin_email,
         BIND_ADDRESS=f'127.0.0.1:{args.port}',
         XAI_API_KEY='',
+        MISSIONS_MEDIA_DIR=str(ROOT / 'missoes/videos'),
     )
     process = None
+    log = None
     try:
         subprocess.run(
             [str(binary), '--prepare-storage'],
@@ -92,6 +94,8 @@ def main() -> None:
         if process and process.poll() is None:
             process.terminate()
             process.wait(timeout=15)
+        if log is not None:
+            log.close()
         assert name.startswith('cogniva_test_web_preview_')
         client.drop_database(name)
         client.close()

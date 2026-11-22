@@ -472,13 +472,21 @@ impl QuestionDocument {
     /// Retorna o seletor opcional pós-resposta apontando exclusivamente para fragmentos do
     /// enunciado e da fonte oficial (sem formular outra questão jurídica).
     pub fn effective_evidence_challenge(&self) -> Option<EvidenceChallengeDto> {
+        let card = self.effective_editorial_card();
+        self.build_evidence_challenge_from_card(card.as_ref())
+    }
+
+    fn build_evidence_challenge_from_card(
+        &self,
+        card_opt: Option<&EditorialCardDto>,
+    ) -> Option<EvidenceChallengeDto> {
         if let Some(curated) = &self.evidence_challenge {
             return Some(curated.clone());
         }
         if self.is_open_ended() {
             return None;
         }
-        let card = self.effective_editorial_card()?;
+        let card = card_opt?;
         let sources = self.linked_catalog_sources();
         let primary_source_id = sources.first().map(|(sid, _, _, _)| sid.clone());
 
@@ -543,6 +551,8 @@ impl QuestionDocument {
             .iter()
             .filter(|s| !s.trim().is_empty())
             .count();
+        let editorial_card = self.effective_editorial_card();
+        let evidence_challenge = self.build_evidence_challenge_from_card(editorial_card.as_ref());
 
         QuestionDto {
             id: self.id.to_hex(),
@@ -618,8 +628,8 @@ impl QuestionDocument {
             user_stats,
             exam_component_id: None,
             concept_ids: self.confirmed_concept_ids(),
-            evidence_challenge: self.effective_evidence_challenge(),
-            editorial_card: self.effective_editorial_card(),
+            evidence_challenge,
+            editorial_card,
         }
     }
 

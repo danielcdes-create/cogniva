@@ -105,7 +105,15 @@ pub async fn get_next_action(
     let active_exam = query
         .contest_id
         .as_deref()
-        .and_then(|cid| exams.iter().find(|e| e.id == cid))
+        .and_then(|cid| {
+            exams.iter().find(|e| {
+                e.id == cid
+                    && !matches!(
+                        e.status,
+                        ExamLifecycleStatus::Arquivado | ExamLifecycleStatus::Excluido
+                    )
+            })
+        })
         .or_else(|| {
             exams
                 .iter()
@@ -123,15 +131,8 @@ pub async fn get_next_action(
         .map(|e| {
             e.exam_boards
                 .iter()
-                .filter(|b| b.as_str() != "A definir" && !b.trim().is_empty())
-                .map(|b| {
-                    let low = b.trim().to_lowercase();
-                    if low == "cespe" {
-                        "cebraspe".to_string()
-                    } else {
-                        low
-                    }
-                })
+                .map(|b| knowledge::normalize_board_key(b))
+                .filter(|b| !b.is_empty())
                 .collect()
         })
         .unwrap_or_default();
@@ -140,6 +141,7 @@ pub async fn get_next_action(
         .db
         .collection::<Document>("userActivityLog")
         .find(doc! { "user_id": user.user_id })
+        .projection(doc! { "pastSessions.ack": 0, "pastSessions.payload_sha256": 0 })
         .await?
         .try_collect()
         .await?;
@@ -186,17 +188,8 @@ pub async fn get_next_action(
                 let Ok(tid) = doc_row.get_str("canonical_topic_id") else {
                     continue;
                 };
-                let src = doc_row
-                    .get_str("source")
-                    .unwrap_or("")
-                    .trim()
-                    .to_lowercase();
-                let norm_src = if src == "cespe" {
-                    "cebraspe".to_string()
-                } else {
-                    src
-                };
-                if norm_src.is_empty() || norm_src == "origem não informada" {
+                let norm_src = knowledge::normalize_board_key(doc_row.get_str("source").unwrap_or(""));
+                if norm_src.is_empty() {
                     continue;
                 }
                 if !target_boards.is_empty() {
@@ -594,10 +587,10 @@ pub async fn get_next_action(
             } else if s.nivel_confianca >= 3 || (s.nivel_confianca >= 2 && ev_passed == Some(false))
             {
                 three_signal.overconfidence_errors += 1;
-            } else if had_prior_good {
-                three_signal.retrieval_failures += 1;
-            } else {
+            } else if ev_passed == Some(false) || !had_prior_good {
                 three_signal.conceptual_errors += 1;
+            } else {
+                three_signal.retrieval_failures += 1;
             }
         }
     }

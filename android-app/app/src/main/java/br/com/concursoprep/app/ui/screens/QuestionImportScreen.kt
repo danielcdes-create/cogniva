@@ -47,7 +47,10 @@ fun QuestionImportScreen(viewModel: QuestionImportViewModel, onBack: () -> Unit)
         if (uri != null) scope.launch {
             try {
                 val text = withContext(Dispatchers.IO) {
-                    context.contentResolver.openInputStream(uri)!!.use { stream ->
+                    val input = requireNotNull(context.contentResolver.openInputStream(uri)) {
+                        "Não foi possível abrir o arquivo selecionado."
+                    }
+                    input.use { stream ->
                         val bytes = java.io.ByteArrayOutputStream()
                         val buffer = ByteArray(8192)
                         while (true) {
@@ -61,6 +64,8 @@ fun QuestionImportScreen(viewModel: QuestionImportViewModel, onBack: () -> Unit)
                 }
                 viewModel.importText(text)
                 fileError = null
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) { fileError = e.message ?: "Não foi possível ler o arquivo." }
         }
     }
@@ -68,7 +73,14 @@ fun QuestionImportScreen(viewModel: QuestionImportViewModel, onBack: () -> Unit)
         if (uri != null) scope.launch {
             try {
                 val text = viewModel.exportDraft()
-                withContext(Dispatchers.IO) { context.contentResolver.openOutputStream(uri)!!.bufferedWriter(Charsets.UTF_8).use { it.write(text) } }
+                withContext(Dispatchers.IO) {
+                    val output = requireNotNull(context.contentResolver.openOutputStream(uri)) {
+                        "Não foi possível criar o arquivo de exportação."
+                    }
+                    output.bufferedWriter(Charsets.UTF_8).use { it.write(text) }
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) { fileError = e.message ?: "Falha ao exportar." }
         }
     }
@@ -199,28 +211,35 @@ fun QuestionImportScreen(viewModel: QuestionImportViewModel, onBack: () -> Unit)
                 Button(onClick = viewModel::preview, enabled = editable && state.allowed, modifier = Modifier.fillMaxWidth()) { Text("Validar e revisar questões") }
             }
             draft.preview?.let { preview ->
+                val previewItems = preview["items"]?.jsonArray ?: JsonArray(emptyList())
                 item { Text("Revisão do lote", style = MaterialTheme.typography.titleLarge) }
-                itemsIndexed(preview["items"]!!.jsonArray) { index, entry ->
-                    val item = entry.jsonObject
+                itemsIndexed(previewItems) { index, entry ->
+                    val item = entry as? JsonObject ?: buildJsonObject {}
                     Card(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text("Questão ${index + 1}", style = MaterialTheme.typography.titleMedium)
-                            if (item["valid"]?.jsonPrimitive?.booleanOrNull != true) Text(item["message"]?.jsonPrimitive?.content.orEmpty(), color = MaterialTheme.colorScheme.error)
-                            else {
-                                val q = item["command"]!!.jsonObject["document"]!!.jsonObject
-                                Text(q["question"]!!.jsonPrimitive.content)
-                                q["answers"]!!.jsonArray.forEachIndexed { option, answer -> Text("${'A' + option}) ${answer.jsonPrimitive.content}") }
-                                Text("Gabarito: ${q["correct_answers"]!!.jsonArray.joinToString { it.jsonPrimitive.content }.ifBlank { "Discursiva — rubrica" }}")
-                                if (q["question_type"]?.jsonPrimitive?.content == "OPEN_ENDED") Text("Correção: ${q["grading"]}")
-                                Text("Classificação: ${q["classification"]!!.jsonObject["state"]!!.jsonPrimitive.content} · Validade: ${q["validity"]!!.jsonObject["status"]!!.jsonPrimitive.content}", style = MaterialTheme.typography.bodySmall)
-                                q["classification"]!!.jsonObject["links"]!!.jsonArray.forEach { link ->
-                                    val l = link.jsonObject
-                                    Text("${l["subject_id"]!!.jsonPrimitive.content} / ${l["topic_id"]!!.jsonPrimitive.content} · ${l["role"]!!.jsonPrimitive.content} · ${l["coverage"]!!.jsonPrimitive.content}", style = MaterialTheme.typography.bodySmall)
+                            val q = item["command"]?.jsonObject?.get("document")?.jsonObject
+                            if (item["valid"]?.jsonPrimitive?.booleanOrNull != true || q == null) {
+                                Text(item["message"]?.jsonPrimitive?.contentOrNull.orEmpty(), color = MaterialTheme.colorScheme.error)
+                            } else {
+                                Text(q["question"]?.jsonPrimitive?.contentOrNull.orEmpty())
+                                q["answers"]?.jsonArray.orEmpty().forEachIndexed { option, answer ->
+                                    Text("${'A' + option}) ${answer.jsonPrimitive.contentOrNull.orEmpty()}")
                                 }
-                                val validity = q["validity"]!!.jsonObject
-                                Text("Contexto: ${validity["scope"]} · data histórica: ${validity["context_date"]} · próxima revisão: ${validity["review_due_on"]}", style = MaterialTheme.typography.bodySmall)
-                                q["origins"]!!.jsonArray.forEach { origin ->
-                                    val o = origin.jsonObject
+                                Text("Gabarito: ${q["correct_answers"]?.jsonArray.orEmpty().joinToString { it.jsonPrimitive.contentOrNull.orEmpty() }.ifBlank { "Discursiva — rubrica" }}")
+                                if (q["question_type"]?.jsonPrimitive?.contentOrNull == "OPEN_ENDED") Text("Correção: ${q["grading"]}")
+                                val classif = q["classification"]?.jsonObject
+                                val validity = q["validity"]?.jsonObject
+                                Text("Classificação: ${classif?.get("state")?.jsonPrimitive?.contentOrNull.orEmpty()} · Validade: ${validity?.get("status")?.jsonPrimitive?.contentOrNull.orEmpty()}", style = MaterialTheme.typography.bodySmall)
+                                classif?.get("links")?.jsonArray.orEmpty().forEach { link ->
+                                    val l = link as? JsonObject ?: return@forEach
+                                    Text("${l["subject_id"]?.jsonPrimitive?.contentOrNull.orEmpty()} / ${l["topic_id"]?.jsonPrimitive?.contentOrNull.orEmpty()} · ${l["role"]?.jsonPrimitive?.contentOrNull.orEmpty()} · ${l["coverage"]?.jsonPrimitive?.contentOrNull.orEmpty()}", style = MaterialTheme.typography.bodySmall)
+                                }
+                                if (validity != null) {
+                                    Text("Contexto: ${validity["scope"]} · data histórica: ${validity["context_date"]} · próxima revisão: ${validity["review_due_on"]}", style = MaterialTheme.typography.bodySmall)
+                                }
+                                q["origins"]?.jsonArray.orEmpty().forEach { origin ->
+                                    val o = origin as? JsonObject ?: return@forEach
                                     Text("Origem: ${o["kind"]} · ${o["verification"]} · prova: ${o["source_exam_code"]} · instituição: ${o["institution"]} · banca: ${o["organizer"]} · ano: ${o["exam_year"]} · questão: ${o["question_number"]}", style = MaterialTheme.typography.bodySmall)
                                     if (o["source_reference"] is JsonObject) Text("Fonte: ${o["source_reference"]}", style = MaterialTheme.typography.bodySmall)
                                 }
@@ -237,18 +256,18 @@ fun QuestionImportScreen(viewModel: QuestionImportViewModel, onBack: () -> Unit)
                     }
                     val complete = draft.result?.get("complete")?.jsonPrimitive?.booleanOrNull == true
                     Button(onClick = viewModel::commit, enabled = !state.busy && state.allowed && reviewed && preview["ready"]?.jsonPrimitive?.booleanOrNull == true && !complete, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (draft.submitted) "Conferir / reenviar os mesmos comandos" else "Confirmar inserção de ${preview["items"]!!.jsonArray.size} questão(ões)")
+                        Text(if (draft.submitted) "Conferir / reenviar os mesmos comandos" else "Confirmar inserção de ${previewItems.size} questão(ões)")
                     }
                     if (draft.submitted && !complete) Text("Envio iniciado. O conteúdo permanece bloqueado até a confirmação. A retentativa usa os mesmos identificadores e não duplica itens já confirmados.")
                 }
             }
             draft.result?.let { result -> item {
-                val results = result["items"]!!.jsonArray
-                val count = results.count { it.jsonObject["saved"]?.jsonPrimitive?.booleanOrNull == true }
+                val results = result["items"]?.jsonArray ?: JsonArray(emptyList())
+                val count = results.count { (it as? JsonObject)?.get("saved")?.jsonPrimitive?.booleanOrNull == true }
                 Text("$count de ${results.size} questão(ões) confirmadas no servidor.", style = MaterialTheme.typography.titleMedium)
                 results.forEachIndexed { index, entry ->
-                    val item = entry.jsonObject
-                    Text("${index + 1}: " + if (item["saved"]?.jsonPrimitive?.booleanOrNull == true) "Confirmada · ${item["id"]}" else item["message"]?.jsonPrimitive?.content.orEmpty())
+                    val item = entry as? JsonObject ?: buildJsonObject {}
+                    Text("${index + 1}: " + if (item["saved"]?.jsonPrimitive?.booleanOrNull == true) "Confirmada · ${item["id"]}" else item["message"]?.jsonPrimitive?.contentOrNull.orEmpty())
                 }
             } }
             item {

@@ -1,10 +1,10 @@
 # Cogniva
 
-Plataforma inteligente de preparação de alta performance para concursos públicos, composta por aplicativo nativo Android (**Kotlin / Jetpack Compose / Room v7**), painel administrativo web incorporado (**`/admin/`**) e API **Rust / Axum** (`cogniva-api`). O ecossistema transforma evidências auditáveis de aprendizagem em decisões de estudo e estratégia de prova em arquitetura *offline-first* sobre **MongoDB (`cogniva`)**, com conformidade integral **LGPD (Lei 13.709/2018)** e promoção atômica conteinerizada.
+Plataforma inteligente de preparação de alta performance para concursos públicos, composta por aplicativo nativo Android (**Kotlin / Jetpack Compose / Room v7**), portal web interativo de **Missões** (**`/missoes/`**), painel administrativo web incorporado (**`/admin/`**) e API **Rust / Axum** (`cogniva-api`). O ecossistema transforma evidências auditáveis de aprendizagem em decisões de estudo e estratégia de prova em arquitetura *offline-first* sobre **MongoDB (`cogniva`)**, com conformidade integral **LGPD (Lei 13.709/2018)** e promoção atômica conteinerizada.
 
 ---
 
-## 🚀 Versão Atual: `2.4.0` (`build 30`)
+## 🚀 Versão Atual: `2.4.1` (`build 31`)
 
 - **Arquitetura Disruptiva em 3 Camadas (`contract_version: 5`):**
   1. **Escassez — Diagnóstico por Evidências, Não por Geração:** Ficha Editorial Rastreável (`editorial_card` com dispositivos legais, regra cobrada, exceção, trecho decisivo e erros conceituais plausíveis), diagnóstico cruzando **3 sinais** (*resposta × confiança × evidência selecionada*, detectando inclusive `ILLUSORY_COMPETENCE`), restrição explícita **`< 15` questões humanas** (`MIN_QUESTIONS_FOR_MASTERY = 15`) e conjunto separado de **Transferência Cross-Banca (`TRANSFER_PROBE`)** com registro explícito de `TRANSFER_UNMEASURED` quando não há item válido de outra banca.
@@ -12,7 +12,7 @@ Plataforma inteligente de preparação de alta performance para concursos públi
   3. **Protocolo de Entrada de 60 Segundos ("Terça · 22h") & Consulta em Camada:** Tela inicial livre de metas atrasadas, gráficos punitivos ou cobrança de sequência — compromisso reversível (**`Resolver 1 questão`** / **`Sem estudar hoje`**) e seleção contextual de qualquer trecho na questão com **Camada de Consulta Normativa + IA + Pesquisa Google sobreposta** (Partial Custom Tab). Consulte [`docs/MOTORES-DECISAO-CORE-LOOP.md`](docs/MOTORES-DECISAO-CORE-LOOP.md).
 - **Autenticação Nativa e LGPD (Art. 18):** Modo convidado imediato + contas nativas Cogniva com e-mail, senha `Argon2id`, sessões revogáveis e exclusão física imediata de dados pessoais (`DELETE /api/v1/auth/account` / app Android) preservando 100% do acervo compartilhado ([`PRIVACY.md`](PRIVACY.md)).
 - **Saúde e Prontidão:** `GET /api/v1/health` (processo) e `GET /api/v1/ready` (validação MongoDB com retorno `503` em falha, catálogo ativo e revisão).
-- **Distribuição OTA Android:** `GET /api/v1/apk/info`, `GET /api/app/latest-apk` e streaming binário direto em `GET /api/v1/apk/download` (`ETag` / `304`, `Cache-Control: no-store, no-transform`, `proxy_buffering off`), preservando `applicationId = "br.com.concursoprep.app"` para atualização contínua.
+- **Distribuição OTA Android:** `GET /api/v1/apk/info` e streaming binário direto em `GET /api/v1/apk/download` (`ETag` / `304`, `Cache-Control: no-store, no-transform`, `proxy_buffering off`), preservando `applicationId = "br.com.concursoprep.app"` para atualização contínua.
 - **Políticas e Histórico:** Consulte [`CHANGELOG.md`](CHANGELOG.md), [`PRIVACY.md`](PRIVACY.md) e [`SECURITY.md`](SECURITY.md).
 
 ---

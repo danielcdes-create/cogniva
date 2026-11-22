@@ -72,11 +72,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import br.com.concursoprep.app.domain.missions.MissionCardView
 import br.com.concursoprep.app.domain.missions.MissionDetailView
 import br.com.concursoprep.app.domain.missions.MissionSceneView
@@ -85,6 +87,7 @@ import br.com.concursoprep.app.domain.missions.MissionsCatalogView
 import br.com.concursoprep.app.domain.missions.MissionsFinanceMath
 import br.com.concursoprep.app.domain.missions.NativeVisualSpec
 import br.com.concursoprep.app.ui.theme.CognivaBrandHeader
+import br.com.concursoprep.app.ui.theme.LocalExtendedColors
 import kotlinx.coroutines.delay
 import java.io.File
 import java.util.Locale
@@ -299,6 +302,7 @@ fun MissionPlayerScreen(
     detail: MissionDetailView,
     isBusy: Boolean,
     onExitMission: (sceneId: String?, positionMs: Long?) -> Unit,
+    onSavePlaybackPosition: (sceneId: String, positionMs: Long) -> Unit = { _, _ -> },
     onAdvanceScene: (completedSceneId: String, nextSceneId: String?, viaTranscript: Boolean) -> Unit,
     onJumpToScene: (targetSceneId: String) -> Unit,
     onSubmitDecision: (sceneId: String, interactionId: String, optionId: String, timeSpentMs: Long, viaTranscript: Boolean) -> Unit,
@@ -307,7 +311,7 @@ fun MissionPlayerScreen(
     onResolveVideoFile: suspend (assetId: String, sha256: String?) -> File?,
     onPreloadNextVideo: (assetId: String?, sha256: String?) -> Unit,
 ) {
-    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     var showConclusion by rememberSaveable(detail.missionId) {
         mutableStateOf(false)
     }
@@ -319,7 +323,7 @@ fun MissionPlayerScreen(
         )
     }
     val scene = detail.scenes.find { it.sceneId == activeSceneId } ?: detail.scenes.firstOrNull()
-    var currentPosMs by remember(activeSceneId) {
+    var currentPosMs by rememberSaveable(activeSceneId) {
         mutableLongStateOf(detail.narrativeProgress.scenePositionsMs[activeSceneId] ?: 0L)
     }
 
@@ -398,8 +402,27 @@ fun MissionPlayerScreen(
             }
         }
 
-        DisposableEffect(scene.sceneId) {
+        DisposableEffect(scene.sceneId, lifecycleOwner) {
+            val observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_PAUSE) {
+                    runCatching {
+                        val vv = videoViewRef
+                        if (vv != null) {
+                            if (vv.isPlaying) {
+                                currentPosMs = vv.currentPosition.toLong().coerceAtLeast(0L)
+                                vv.pause()
+                            }
+                            isPlaying = false
+                        }
+                    }
+                    if (currentPosMs > 0L) {
+                        onSavePlaybackPosition(scene.sceneId, currentPosMs)
+                    }
+                }
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
             onDispose {
+                lifecycleOwner.lifecycle.removeObserver(observer)
                 runCatching { videoViewRef?.stopPlayback() }
                 videoViewRef = null
                 mediaPlayerRef = null
@@ -1008,10 +1031,12 @@ fun BondPresentValueChartCard(visual: NativeVisualSpec) {
                 fontWeight = FontWeight.SemiBold,
             )
 
+            val minRange = p.minRatePct.toFloat()
+            val maxRange = p.maxRatePct.toFloat().coerceAtLeast(minRange + 0.1f)
             Slider(
-                value = simRatePct,
+                value = simRatePct.coerceIn(minRange, maxRange),
                 onValueChange = { simRatePct = it },
-                valueRange = p.minRatePct.toFloat()..p.maxRatePct.toFloat(),
+                valueRange = minRange..maxRange,
                 modifier = Modifier.fillMaxWidth(),
             )
 
@@ -1207,13 +1232,14 @@ private fun MissionConclusionSection(
             fontWeight = FontWeight.Bold,
         )
 
+        val warningAccent = LocalExtendedColors.current.warning
         detail.workedConcepts.forEach { concept ->
             Card(
                 shape = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 border = BorderStroke(
                     1.dp,
-                    if (concept.recommendedRevisit) Color(0xFFF59E0B) else MaterialTheme.colorScheme.outlineVariant,
+                    if (concept.recommendedRevisit) warningAccent else MaterialTheme.colorScheme.outlineVariant,
                 ),
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -1235,7 +1261,7 @@ private fun MissionConclusionSection(
                             Text(
                                 text = "Revisitação sugerida",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFFF59E0B),
+                                color = warningAccent,
                                 fontWeight = FontWeight.Bold,
                             )
                         }

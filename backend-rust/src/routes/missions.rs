@@ -5,8 +5,8 @@ use crate::{
     services::missions::{
         self, append_bounded_telemetry, build_student_scenes, build_worked_concepts_view,
         calculate_mission_duration, compute_demonstrated_mastery, fetch_related_human_questions,
-        load_effective_catalog, load_single_progress, load_user_progress_map, new_initial_progress,
-        parse_http_byte_range, render_webvtt, resolve_media_path, save_progress_doc,
+        load_effective_catalog, load_single_progress, load_user_progress_map,
+        parse_http_byte_range, render_webvtt, resolve_media_path,
         summarize_interaction_performance, summarize_narrative_progress, RecordedDecisionDoc,
         StudentDecisionFeedbackDto,
     },
@@ -203,23 +203,28 @@ pub async fn get_mission_detail(
     };
 
     let mut progress_doc = load_single_progress(&state, user.user_id, &mission.mission_id).await?;
-    if query.resume {
-        if let Some(ref mut doc) = progress_doc {
-            if doc.status == "IN_PROGRESS" {
-                let now_iso = Utc::now().to_rfc3339();
-                doc.resume_count = doc.resume_count.saturating_add(1);
-                doc.last_resumed_at = Some(now_iso.clone());
-                doc.updated_at = now_iso.clone();
-                let current_sid = doc.current_scene_id.clone();
-                append_bounded_telemetry(
-                    &mut doc.telemetry_events,
-                    "MISSION_RESUMED",
-                    Some(&current_sid),
-                    None,
-                    &now_iso,
-                );
-                save_progress_doc(&state, doc).await?;
-            }
+    if query.resume && progress_doc.as_ref().is_some_and(|d| d.status == "IN_PROGRESS") {
+        let now_iso = Utc::now().to_rfc3339();
+        if let Ok(updated) =
+            missions::mutate_progress_cas(&state, user.user_id, mission, |doc| {
+                if doc.status == "IN_PROGRESS" {
+                    doc.resume_count = doc.resume_count.saturating_add(1);
+                    doc.last_resumed_at = Some(now_iso.clone());
+                    doc.updated_at = now_iso.clone();
+                    let current_sid = doc.current_scene_id.clone();
+                    append_bounded_telemetry(
+                        &mut doc.telemetry_events,
+                        "MISSION_RESUMED",
+                        Some(&current_sid),
+                        None,
+                        &now_iso,
+                    );
+                }
+                Ok(())
+            })
+            .await
+        {
+            progress_doc = Some(updated);
         }
     }
 
@@ -308,128 +313,132 @@ pub async fn update_mission_progress(
     };
 
     let now_iso = Utc::now().to_rfc3339();
-    let mut doc = match load_single_progress(&state, user.user_id, &mission.mission_id).await? {
-        Some(existing) => existing,
-        None => new_initial_progress(user.user_id, mission),
-    };
-    doc.updated_at = now_iso.clone();
+    let doc = missions::mutate_progress_cas(&state, user.user_id, mission, |doc| {
+        doc.updated_at = now_iso.clone();
 
-    if let Some(ref completed_sid) = req.completed_scene_id {
-        let Some(scene_spec) = mission.scenes.iter().find(|s| &s.scene_id == completed_sid) else {
-            return Err(AppError::BadRequest("Cena informada não pertence à missão".into()));
-        };
-        if scene_spec.requires_decision_to_advance {
-            let answered = scene_spec
-                .interaction
-                .as_ref()
-                .is_some_and(|inter| doc.decisions.contains_key(&inter.interaction_id));
-            if !answered {
-                return Err(AppError::conflict_code(
-                    "DECISION_REQUIRED_BEFORE_ADVANCE",
-                    Some("completed_scene_id"),
-                    "Responda à decisão desta cena antes de concluí-la.",
+        if let Some(ref completed_sid) = req.completed_scene_id {
+            let Some(scene_spec) = mission.scenes.iter().find(|s| &s.scene_id == completed_sid)
+            else {
+                return Err(AppError::BadRequest(
+                    "Cena informada não pertence à missão".into(),
                 ));
+            };
+            if scene_spec.requires_decision_to_advance {
+                let answered = scene_spec
+                    .interaction
+                    .as_ref()
+                    .is_some_and(|inter| doc.decisions.contains_key(&inter.interaction_id));
+                if !answered {
+                    return Err(AppError::conflict_code(
+                        "DECISION_REQUIRED_BEFORE_ADVANCE",
+                        Some("completed_scene_id"),
+                        "Responda à decisão desta cena antes de concluí-la.",
+                    ));
+                }
+            }
+            if !doc.completed_scene_ids.contains(completed_sid) {
+                doc.completed_scene_ids.push(completed_sid.clone());
+            }
+            let evt = if req.used_transcript_fallback == Some(true) {
+                "SCENE_COMPLETED_VIA_TRANSCRIPT"
+            } else {
+                "SCENE_COMPLETED"
+            };
+            append_bounded_telemetry(
+                &mut doc.telemetry_events,
+                evt,
+                Some(completed_sid),
+                None,
+                &now_iso,
+            );
+            if req.current_scene_id.is_none() {
+                if let Some(ref next_sid) = scene_spec.next_scene_id {
+                    doc.current_scene_id = next_sid.clone();
+                }
             }
         }
-        if !doc.completed_scene_ids.contains(completed_sid) {
-            doc.completed_scene_ids.push(completed_sid.clone());
-        }
-        let evt = if req.used_transcript_fallback == Some(true) {
-            "SCENE_COMPLETED_VIA_TRANSCRIPT"
-        } else {
-            "SCENE_COMPLETED"
-        };
-        append_bounded_telemetry(
-            &mut doc.telemetry_events,
-            evt,
-            Some(completed_sid),
-            None,
-            &now_iso,
-        );
-        if req.current_scene_id.is_none() {
-            if let Some(ref next_sid) = scene_spec.next_scene_id {
-                doc.current_scene_id = next_sid.clone();
-            }
-        }
-    }
 
-    if let Some(ref target_sid) = req.current_scene_id {
-        let Some(target_spec) = mission.scenes.iter().find(|s| &s.scene_id == target_sid) else {
-            return Err(AppError::BadRequest("Cena atual inválida para esta missão".into()));
-        };
-        if doc.status != "COMPLETED" {
-            for prior in mission.scenes.iter().filter(|s| s.order < target_spec.order) {
-                if prior.requires_decision_to_advance {
-                    let answered = prior
+        if let Some(ref target_sid) = req.current_scene_id {
+            let Some(target_spec) = mission.scenes.iter().find(|s| &s.scene_id == target_sid)
+            else {
+                return Err(AppError::BadRequest(
+                    "Cena atual inválida para esta missão".into(),
+                ));
+            };
+            if doc.status != "COMPLETED" {
+                for prior in mission.scenes.iter().filter(|s| s.order < target_spec.order) {
+                    if prior.requires_decision_to_advance {
+                        let answered = prior
+                            .interaction
+                            .as_ref()
+                            .is_some_and(|inter| doc.decisions.contains_key(&inter.interaction_id));
+                        if !answered {
+                            return Err(AppError::conflict_code(
+                                "DECISION_REQUIRED_BEFORE_ADVANCE",
+                                Some("current_scene_id"),
+                                "Responda às decisões obrigatórias anteriores antes de avançar.",
+                            ));
+                        }
+                    }
+                }
+            }
+            doc.current_scene_id = target_sid.clone();
+            if let Some(pos) = req.playback_position_ms {
+                doc.scene_positions_ms
+                    .insert(target_sid.clone(), pos.clamp(0, 3_600_000));
+            }
+            append_bounded_telemetry(
+                &mut doc.telemetry_events,
+                "SCENE_VIEWED",
+                Some(target_sid),
+                None,
+                &now_iso,
+            );
+        } else if let Some(pos) = req.playback_position_ms {
+            let cur = doc.current_scene_id.clone();
+            doc.scene_positions_ms
+                .insert(cur, pos.clamp(0, 3_600_000));
+        }
+
+        if req.mark_mission_completed == Some(true) {
+            for scene in &mission.scenes {
+                if scene.requires_decision_to_advance {
+                    let answered = scene
                         .interaction
                         .as_ref()
-                        .is_some_and(|inter| doc.decisions.contains_key(&inter.interaction_id));
+                        .is_some_and(|i| doc.decisions.contains_key(&i.interaction_id));
                     if !answered {
                         return Err(AppError::conflict_code(
-                            "DECISION_REQUIRED_BEFORE_ADVANCE",
-                            Some("current_scene_id"),
-                            "Responda às decisões obrigatórias anteriores antes de avançar.",
+                            "DECISION_REQUIRED_BEFORE_COMPLETION",
+                            Some("mark_mission_completed"),
+                            "Responda às decisões obrigatórias da missão antes de concluí-la.",
                         ));
                     }
                 }
             }
-        }
-        doc.current_scene_id = target_sid.clone();
-        if let Some(pos) = req.playback_position_ms {
-            doc.scene_positions_ms
-                .insert(target_sid.clone(), pos.clamp(0, 3_600_000));
-        }
-        append_bounded_telemetry(
-            &mut doc.telemetry_events,
-            "SCENE_VIEWED",
-            Some(target_sid),
-            None,
-            &now_iso,
-        );
-    } else if let Some(pos) = req.playback_position_ms {
-        let cur = doc.current_scene_id.clone();
-        doc.scene_positions_ms
-            .insert(cur, pos.clamp(0, 3_600_000));
-    }
-
-    if req.mark_mission_completed == Some(true) {
-        for scene in &mission.scenes {
-            if scene.requires_decision_to_advance {
-                let answered = scene
-                    .interaction
-                    .as_ref()
-                    .is_some_and(|i| doc.decisions.contains_key(&i.interaction_id));
-                if !answered {
-                    return Err(AppError::conflict_code(
-                        "DECISION_REQUIRED_BEFORE_COMPLETION",
-                        Some("mark_mission_completed"),
-                        "Responda às decisões obrigatórias da missão antes de concluí-la.",
-                    ));
+            for scene in &mission.scenes {
+                if !doc.completed_scene_ids.contains(&scene.scene_id) {
+                    doc.completed_scene_ids.push(scene.scene_id.clone());
                 }
             }
-        }
-        for scene in &mission.scenes {
-            if !doc.completed_scene_ids.contains(&scene.scene_id) {
-                doc.completed_scene_ids.push(scene.scene_id.clone());
+            if doc.status != "COMPLETED" {
+                doc.status = "COMPLETED".to_string();
+                doc.completed_at = Some(now_iso.clone());
+                doc.completed_runs_count = doc.completed_runs_count.saturating_add(1);
+                append_bounded_telemetry(
+                    &mut doc.telemetry_events,
+                    "MISSION_COMPLETED",
+                    Some(&doc.current_scene_id.clone()),
+                    None,
+                    &now_iso,
+                );
             }
+        } else if doc.status == "NOT_STARTED" {
+            doc.status = "IN_PROGRESS".to_string();
         }
-        if doc.status != "COMPLETED" {
-            doc.status = "COMPLETED".to_string();
-            doc.completed_at = Some(now_iso.clone());
-            doc.completed_runs_count = doc.completed_runs_count.saturating_add(1);
-            append_bounded_telemetry(
-                &mut doc.telemetry_events,
-                "MISSION_COMPLETED",
-                Some(&doc.current_scene_id.clone()),
-                None,
-                &now_iso,
-            );
-        }
-    } else if doc.status == "NOT_STARTED" {
-        doc.status = "IN_PROGRESS".to_string();
-    }
-
-    save_progress_doc(&state, &doc).await?;
+        Ok(())
+    })
+    .await?;
 
     let narrative_progress = summarize_narrative_progress(mission, Some(&doc));
     let interaction_performance = summarize_interaction_performance(mission, Some(&doc));
@@ -482,92 +491,111 @@ pub async fn submit_mission_decision(
     let is_correct = chosen_option.option_id == interaction.expected_option_id;
     let now_iso = Utc::now().to_rfc3339();
 
-    let mut doc = match load_single_progress(&state, user.user_id, &mission.mission_id).await? {
-        Some(existing) => existing,
-        None => new_initial_progress(user.user_id, mission),
-    };
-    doc.updated_at = now_iso.clone();
-    doc.current_scene_id = scene.scene_id.clone();
-
-    let recorded = match doc.decisions.get(&interaction.interaction_id).cloned() {
-        Some(prev) => RecordedDecisionDoc {
-            interaction_id: interaction.interaction_id.clone(),
-            scene_id: scene.scene_id.clone(),
-            first_selected_option_id: prev.first_selected_option_id,
-            latest_selected_option_id: chosen_option.option_id.clone(),
-            first_attempt_correct: prev.first_attempt_correct,
-            latest_correct: is_correct,
-            attempt_count: prev.attempt_count.saturating_add(1),
-            answered_at: now_iso.clone(),
-            time_spent_ms: req.time_spent_ms.clamp(0, 3_600_000),
-            used_transcript_fallback: req.used_transcript_fallback,
-        },
-        None => RecordedDecisionDoc {
-            interaction_id: interaction.interaction_id.clone(),
-            scene_id: scene.scene_id.clone(),
-            first_selected_option_id: chosen_option.option_id.clone(),
-            latest_selected_option_id: chosen_option.option_id.clone(),
-            first_attempt_correct: is_correct,
-            latest_correct: is_correct,
-            attempt_count: 1,
-            answered_at: now_iso.clone(),
-            time_spent_ms: req.time_spent_ms.clamp(0, 3_600_000),
-            used_transcript_fallback: req.used_transcript_fallback,
-        },
-    };
-    doc.decisions
-        .insert(interaction.interaction_id.clone(), recorded.clone());
-
-    if !doc.completed_scene_ids.contains(&scene.scene_id) {
-        doc.completed_scene_ids.push(scene.scene_id.clone());
-    }
-
-    append_bounded_telemetry(
-        &mut doc.telemetry_events,
-        "DECISION_SUBMITTED",
-        Some(&scene.scene_id),
-        Some(&format!(
-            "{}:{} ({})",
-            interaction.interaction_id,
-            chosen_option.option_id,
-            if is_correct { "correta" } else { "revisar" }
-        )),
-        &now_iso,
-    );
-
-    // If this is the terminal scene and all required decisions are answered, mark mission completed!
-    if scene.next_scene_id.is_none() {
-        let all_required_answered = mission
-            .scenes
-            .iter()
-            .filter(|s| s.requires_decision_to_advance)
-            .all(|s| {
-                s.interaction
-                    .as_ref()
-                    .is_some_and(|i| doc.decisions.contains_key(&i.interaction_id))
-            });
-        if all_required_answered {
-            for s in &mission.scenes {
-                if !doc.completed_scene_ids.contains(&s.scene_id) {
-                    doc.completed_scene_ids.push(s.scene_id.clone());
+    let doc = missions::mutate_progress_cas(&state, user.user_id, mission, |doc| {
+        if doc.status != "COMPLETED" {
+            for prior in mission.scenes.iter().filter(|s| s.order < scene.order) {
+                if prior.requires_decision_to_advance {
+                    let answered = prior
+                        .interaction
+                        .as_ref()
+                        .is_some_and(|inter| doc.decisions.contains_key(&inter.interaction_id));
+                    if !answered {
+                        return Err(AppError::conflict_code(
+                            "DECISION_REQUIRED_BEFORE_ADVANCE",
+                            Some("scene_id"),
+                            "Responda às decisões obrigatórias anteriores antes de enviar esta decisão.",
+                        ));
+                    }
                 }
             }
-            if doc.status != "COMPLETED" {
-                doc.status = "COMPLETED".to_string();
-                doc.completed_at = Some(now_iso.clone());
-                doc.completed_runs_count = doc.completed_runs_count.saturating_add(1);
-                append_bounded_telemetry(
-                    &mut doc.telemetry_events,
-                    "MISSION_COMPLETED",
-                    Some(&scene.scene_id),
-                    None,
-                    &now_iso,
-                );
+        }
+        doc.updated_at = now_iso.clone();
+        doc.current_scene_id = scene.scene_id.clone();
+
+        let rec = match doc.decisions.get(&interaction.interaction_id).cloned() {
+            Some(prev) => RecordedDecisionDoc {
+                interaction_id: interaction.interaction_id.clone(),
+                scene_id: scene.scene_id.clone(),
+                first_selected_option_id: prev.first_selected_option_id,
+                latest_selected_option_id: chosen_option.option_id.clone(),
+                first_attempt_correct: prev.first_attempt_correct,
+                latest_correct: is_correct,
+                attempt_count: prev.attempt_count.saturating_add(1),
+                answered_at: now_iso.clone(),
+                time_spent_ms: req.time_spent_ms.clamp(0, 3_600_000),
+                used_transcript_fallback: req.used_transcript_fallback,
+            },
+            None => RecordedDecisionDoc {
+                interaction_id: interaction.interaction_id.clone(),
+                scene_id: scene.scene_id.clone(),
+                first_selected_option_id: chosen_option.option_id.clone(),
+                latest_selected_option_id: chosen_option.option_id.clone(),
+                first_attempt_correct: is_correct,
+                latest_correct: is_correct,
+                attempt_count: 1,
+                answered_at: now_iso.clone(),
+                time_spent_ms: req.time_spent_ms.clamp(0, 3_600_000),
+                used_transcript_fallback: req.used_transcript_fallback,
+            },
+        };
+        doc.decisions.insert(interaction.interaction_id.clone(), rec);
+
+        if !doc.completed_scene_ids.contains(&scene.scene_id) {
+            doc.completed_scene_ids.push(scene.scene_id.clone());
+        }
+
+        append_bounded_telemetry(
+            &mut doc.telemetry_events,
+            "DECISION_SUBMITTED",
+            Some(&scene.scene_id),
+            Some(&format!(
+                "{}:{} ({})",
+                interaction.interaction_id,
+                chosen_option.option_id,
+                if is_correct { "correta" } else { "revisar" }
+            )),
+            &now_iso,
+        );
+
+        // If this is the terminal scene and all required decisions are answered, mark mission completed!
+        if scene.next_scene_id.is_none() {
+            let all_required_answered = mission
+                .scenes
+                .iter()
+                .filter(|s| s.requires_decision_to_advance)
+                .all(|s| {
+                    s.interaction
+                        .as_ref()
+                        .is_some_and(|i| doc.decisions.contains_key(&i.interaction_id))
+                });
+            if all_required_answered {
+                for s in &mission.scenes {
+                    if !doc.completed_scene_ids.contains(&s.scene_id) {
+                        doc.completed_scene_ids.push(s.scene_id.clone());
+                    }
+                }
+                if doc.status != "COMPLETED" {
+                    doc.status = "COMPLETED".to_string();
+                    doc.completed_at = Some(now_iso.clone());
+                    doc.completed_runs_count = doc.completed_runs_count.saturating_add(1);
+                    append_bounded_telemetry(
+                        &mut doc.telemetry_events,
+                        "MISSION_COMPLETED",
+                        Some(&scene.scene_id),
+                        None,
+                        &now_iso,
+                    );
+                }
             }
         }
-    }
-
-    save_progress_doc(&state, &doc).await?;
+        Ok(())
+    })
+    .await?;
+    let recorded = doc
+        .decisions
+        .get(&interaction.interaction_id)
+        .cloned()
+        .ok_or_else(|| AppError::Internal("Decisão registrada ausente".into()))?;
 
     let narrative_progress = summarize_narrative_progress(mission, Some(&doc));
     let interaction_performance = summarize_interaction_performance(mission, Some(&doc));
@@ -617,31 +645,29 @@ pub async fn repeat_mission(
         .map(|s| s.scene_id.clone())
         .unwrap_or_default();
 
-    let mut doc = match load_single_progress(&state, user.user_id, &mission.mission_id).await? {
-        Some(mut existing) => {
-            existing.status = "IN_PROGRESS".to_string();
-            existing.current_scene_id = first_scene.clone();
-            existing.completed_scene_ids.clear();
-            existing.scene_positions_ms.clear();
-            existing.decisions.clear();
-            existing.updated_at = now_iso.clone();
-            existing.run_count = existing.run_count.saturating_add(1);
+    let doc = missions::mutate_progress_cas(&state, user.user_id, mission, |doc| {
+        if doc.revision > 0 || !doc.completed_scene_ids.is_empty() || !doc.decisions.is_empty() {
+            doc.status = "IN_PROGRESS".to_string();
+            doc.current_scene_id = first_scene.clone();
+            doc.completed_scene_ids.clear();
+            doc.scene_positions_ms.clear();
+            doc.decisions.clear();
+            doc.updated_at = now_iso.clone();
+            doc.run_count = doc.run_count.saturating_add(1);
             append_bounded_telemetry(
-                &mut existing.telemetry_events,
+                &mut doc.telemetry_events,
                 "MISSION_REPEATED",
                 Some(&first_scene),
                 None,
                 &now_iso,
             );
-            existing
         }
-        None => new_initial_progress(user.user_id, mission),
-    };
-
-    if doc.run_count < 1 {
-        doc.run_count = 1;
-    }
-    save_progress_doc(&state, &doc).await?;
+        if doc.run_count < 1 {
+            doc.run_count = 1;
+        }
+        Ok(())
+    })
+    .await?;
 
     let narrative_progress = summarize_narrative_progress(mission, Some(&doc));
     let interaction_performance = summarize_interaction_performance(mission, Some(&doc));
@@ -677,19 +703,18 @@ pub async fn record_mission_telemetry(
     }
 
     let now_iso = Utc::now().to_rfc3339();
-    let mut doc = match load_single_progress(&state, user.user_id, &mission.mission_id).await? {
-        Some(existing) => existing,
-        None => new_initial_progress(user.user_id, mission),
-    };
-    doc.updated_at = now_iso.clone();
-    append_bounded_telemetry(
-        &mut doc.telemetry_events,
-        &event_clean,
-        req.scene_id.as_deref(),
-        req.detail.as_deref(),
-        &now_iso,
-    );
-    save_progress_doc(&state, &doc).await?;
+    missions::mutate_progress_cas(&state, user.user_id, mission, |doc| {
+        doc.updated_at = now_iso.clone();
+        append_bounded_telemetry(
+            &mut doc.telemetry_events,
+            &event_clean,
+            req.scene_id.as_deref(),
+            req.detail.as_deref(),
+            &now_iso,
+        );
+        Ok(())
+    })
+    .await?;
 
     Ok(Json(json!({ "recorded": true })))
 }
@@ -711,17 +736,23 @@ pub async fn get_mission_practice_questions(
     let (resolved_topic_ids, available_count, questions) =
         fetch_related_human_questions(&state, user.user_id, &mission.curriculum, quantity).await?;
 
-    if let Some(mut doc) = load_single_progress(&state, user.user_id, &mission.mission_id).await? {
+    if load_single_progress(&state, user.user_id, &mission.mission_id)
+        .await?
+        .is_some()
+    {
         let now_iso = Utc::now().to_rfc3339();
-        append_bounded_telemetry(
-            &mut doc.telemetry_events,
-            "PRACTICE_QUESTIONS_OPENED",
-            None,
-            Some(&format!("available={available_count}")),
-            &now_iso,
-        );
-        doc.updated_at = now_iso;
-        let _ = save_progress_doc(&state, &doc).await;
+        let _ = missions::mutate_progress_cas(&state, user.user_id, mission, |doc| {
+            append_bounded_telemetry(
+                &mut doc.telemetry_events,
+                "PRACTICE_QUESTIONS_OPENED",
+                None,
+                Some(&format!("available={available_count}")),
+                &now_iso,
+            );
+            doc.updated_at = now_iso.clone();
+            Ok(())
+        })
+        .await;
     }
 
     let empty_state_message = if questions.is_empty() {
@@ -813,7 +844,15 @@ pub async fn stream_mission_media(
         ));
     };
 
-    let meta = tokio::fs::metadata(&file_path).await.map_err(|_| {
+    let mut file = tokio::fs::File::open(&file_path).await.map_err(|_| {
+        AppError::structured(
+            StatusCode::NOT_FOUND,
+            "MEDIA_ASSET_UNAVAILABLE",
+            Some("asset_id"),
+            "Vídeo indisponível neste servidor no momento. Você pode continuar normalmente utilizando a transcrição da cena.",
+        )
+    })?;
+    let meta = file.metadata().await.map_err(|_| {
         AppError::structured(
             StatusCode::NOT_FOUND,
             "MEDIA_ASSET_UNAVAILABLE",
@@ -832,17 +871,36 @@ pub async fn stream_mission_media(
     }
 
     let etag = format!("\"{}-{total_len}\"", asset.sha256);
-    let range_raw = headers.get(header::RANGE).and_then(|v| v.to_str().ok());
-
-    if range_raw.is_none() && if_none_match_hit(&headers, &etag) {
+    if if_none_match_hit(&headers, &etag) {
         return Response::builder()
             .status(StatusCode::NOT_MODIFIED)
             .header(header::ETAG, &etag)
             .header(header::ACCEPT_RANGES, "bytes")
             .header(header::CACHE_CONTROL, "private, max-age=3600, no-transform")
+            .header(header::X_CONTENT_TYPE_OPTIONS, "nosniff")
             .body(Body::empty())
             .map_err(|e| AppError::Internal(e.to_string()));
     }
+
+    let if_range_mismatch = headers
+        .get(header::IF_RANGE)
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .is_some_and(|raw_ir| {
+            let norm = raw_ir
+                .strip_prefix("W/")
+                .or_else(|| raw_ir.strip_prefix("w/"))
+                .unwrap_or(raw_ir)
+                .trim()
+                .trim_matches('"');
+            !norm.eq_ignore_ascii_case(etag.trim_matches('"'))
+        });
+    let range_raw = if if_range_mismatch {
+        None
+    } else {
+        headers.get(header::RANGE).and_then(|v| v.to_str().ok())
+    };
 
     let parsed_range = match parse_http_byte_range(range_raw, total_len) {
         Ok(r) => r,
@@ -855,15 +913,6 @@ pub async fn stream_mission_media(
                 .map_err(|e| AppError::Internal(e.to_string()));
         }
     };
-
-    let mut file = tokio::fs::File::open(&file_path).await.map_err(|_| {
-        AppError::structured(
-            StatusCode::NOT_FOUND,
-            "MEDIA_ASSET_UNAVAILABLE",
-            Some("asset_id"),
-            "Não foi possível abrir o arquivo de vídeo.",
-        )
-    })?;
 
     let (status, start, end) = match parsed_range {
         Some((s, e)) => {
@@ -889,9 +938,15 @@ pub async fn stream_mission_media(
         }
     });
 
+    let safe_mime = match asset.mime_type.trim() {
+        "video/mp4" => "video/mp4",
+        "video/webm" => "video/webm",
+        _ => "application/octet-stream",
+    };
+
     let mut builder = Response::builder()
         .status(status)
-        .header(header::CONTENT_TYPE, asset.mime_type.as_str())
+        .header(header::CONTENT_TYPE, safe_mime)
         .header(header::CONTENT_LENGTH, chunk_total)
         .header(header::ACCEPT_RANGES, "bytes")
         .header(header::ETAG, &etag)

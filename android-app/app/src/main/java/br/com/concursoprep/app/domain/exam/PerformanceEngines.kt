@@ -16,8 +16,13 @@ import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.sqrt
 
-private fun rustRound(value: Double): Double =
-    if (value >= 0.0) floor(value + 0.5) else ceil(value - 0.5)
+private fun finiteOr(value: Double, fallback: Double): Double =
+    if (value.isFinite()) value else fallback
+
+private fun rustRound(value: Double): Double {
+    if (!value.isFinite()) return 0.0
+    return if (value >= 0.0) floor(value + 0.5) else ceil(value - 0.5)
+}
 
 private fun round6(value: Double): Double =
     rustRound(value * 1_000_000.0) / 1_000_000.0
@@ -155,7 +160,7 @@ data class RetentionUpdate(
 
 object RetentionEngine {
     fun retrievability(elapsedDays: Double, stabilityDays: Double): Double {
-        if (stabilityDays <= 0.0 || !stabilityDays.isFinite()) return 0.0
+        if (stabilityDays <= 0.0 || !stabilityDays.isFinite() || !elapsedDays.isFinite()) return 0.0
         val t = max(0.0, elapsedDays)
         return (1.0 + (19.0 / 81.0) * (t / stabilityDays)).pow(-0.5).coerceIn(0.0, 1.0)
     }
@@ -169,8 +174,12 @@ object RetentionEngine {
         responseSeconds: Int,
         expectedSeconds: Double
     ): RetentionUpdate {
-        val d = if (priorStability <= 0.0) 5.0 else priorDifficulty.coerceIn(1.0, 10.0)
-        val s = max(0.0, priorStability)
+        val safePriorS = finiteOr(priorStability, 0.0)
+        val safePriorD = finiteOr(priorDifficulty, 5.0)
+        val safeElapsed = max(0.0, finiteOr(elapsedDays, 0.0))
+        val safeExpected = max(0.0, finiteOr(expectedSeconds, 0.0))
+        val d = if (safePriorS <= 0.0) 5.0 else safePriorD.coerceIn(1.0, 10.0)
+        val s = max(0.0, safePriorS)
 
         val (sNext, dNext) = if (!isCorrect) {
             val deltaD = if (confidence >= 3) 1.5 else 1.0
@@ -182,13 +191,13 @@ object RetentionEngine {
             val sn = s.coerceIn(1.0, 1.5)
             sn to dn
         } else {
-            val slow = expectedSeconds > 0.0 && responseSeconds.toDouble() > 1.5 * expectedSeconds
+            val slow = safeExpected > 0.0 && responseSeconds.toDouble() > 1.5 * safeExpected
             val g = if (confidence >= 3 && !slow) 1.0 else 0.6
             val dn = (d - 0.3 * g + 0.15 * (1.0 - g)).coerceIn(1.0, 10.0)
             val sn = if (s <= 0.0) {
                 if (g >= 1.0) 4.0 else 2.0
             } else {
-                val r = retrievability(elapsedDays, s)
+                val r = retrievability(safeElapsed, s)
                 val mult = 1.0 + g * ((11.0 - dn) / 9.0) * (1.2 + 1.8 * (1.0 - r))
                 (s * mult).coerceIn(1.0, 180.0)
             }
@@ -272,7 +281,7 @@ object PrioritizationEngine {
     }
 
     fun priorityUtility(input: PrioritizationInputs): Double {
-        val r = input.retrievability.coerceIn(0.0, 1.0)
+        val r = finiteOr(input.retrievability, 0.0).coerceIn(0.0, 1.0)
         val evFactor = min(15, max(0, input.distinctQuestions)).toDouble() / 15.0
         val mEff = if (input.verifiedCompetence) {
             0.85 * r + 0.15
@@ -280,14 +289,16 @@ object PrioritizationEngine {
             0.65 * r * evFactor
         }
         val gap = (1.0 - mEff).coerceIn(0.05, 1.0)
-        val tauMin = input.avgSeconds.coerceIn(20.0, 300.0) / 60.0
+        val tauMin = finiteOr(input.avgSeconds, 60.0).coerceIn(20.0, 300.0) / 60.0
         val prereqMult = if (input.unmetPrerequisitesCount <= 0) {
             1.0
         } else {
             0.55.pow(min(3, input.unmetPrerequisitesCount))
         }
         val downstreamBoost = 1.0 + 0.15 * min(4, max(0, input.dependentCount)).toDouble()
-        val raw = (input.editalWeight * input.incidenceWeight * gap / tauMin) * prereqMult * downstreamBoost
+        val ew = max(0.0, finiteOr(input.editalWeight, 0.05))
+        val iw = max(0.0, finiteOr(input.incidenceWeight, 1.0))
+        val raw = (ew * iw * gap / tauMin) * prereqMult * downstreamBoost
         return round9(raw)
     }
 
@@ -461,7 +472,7 @@ object StrategyEngine {
      * se uma alternativa tem probabilidade estimada de 48%, a outra possui 52%.
      */
     fun normalizeBinaryChoiceProbability(pAlternative: Double): Double {
-        val p = pAlternative.coerceIn(0.0, 1.0)
+        val p = finiteOr(pAlternative, 0.5).coerceIn(0.0, 1.0)
         return round9(max(p, 1.0 - p))
     }
 
@@ -470,6 +481,7 @@ object StrategyEngine {
      * idêntica bit a bit entre Python, Rust e Kotlin.
      */
     fun normalCdf(z: Double): Double {
+        if (!z.isFinite()) return 0.5
         if (z <= -8.0) return 0.0
         if (z >= 8.0) return 1.0
         val sign = if (z < 0.0) -1.0 else 1.0
@@ -507,10 +519,11 @@ object StrategyEngine {
         val ev = round9((1.0 + pen) * pt - pen)
         val pStar = if (pen > 0.0) round9(pen / (1.0 + pen)) else 0.0
         val rem = max(1, input.remainingItems)
-        val goal = max(input.targetScore, input.minimumScore)
-        val sdU = input.uncertaintySd.coerceIn(0.0, 0.35)
+        val curNet = finiteOr(input.currentNetScore, 0.0)
+        val goal = max(finiteOr(input.targetScore, 0.0), finiteOr(input.minimumScore, 0.0))
+        val sdU = finiteOr(input.uncertaintySd, 0.0).coerceIn(0.0, 0.35)
 
-        val pf = input.baselineFutureP.coerceIn(0.10, 0.95)
+        val pf = finiteOr(input.baselineFutureP, 0.72).coerceIn(0.10, 0.95)
         val qf = if (pen > 0.0) 0.85 else 1.0
         val muItem = qf * ((1.0 + pen) * pf - pen)
         val eX2 = qf * (pf * 1.0 + (1.0 - pf) * pen * pen)
@@ -528,11 +541,11 @@ object StrategyEngine {
             return normalCdf((meanFinal - goal) / sdFinal)
         }
 
-        val probOmit = continuationProb(input.currentNetScore, rem - 1)
+        val probOmit = continuationProb(curNet, rem - 1)
         val pMinus = (pt - sdU).coerceIn(0.01, 0.99)
         val pPlus = (pt + sdU).coerceIn(0.01, 0.99)
-        val probHit = continuationProb(input.currentNetScore + 1.0, rem - 1)
-        val probMiss = continuationProb(input.currentNetScore - pen, rem - 1)
+        val probHit = continuationProb(curNet + 1.0, rem - 1)
+        val probMiss = continuationProb(curNet - pen, rem - 1)
         val probAns = 0.5 * (pMinus * probHit + (1.0 - pMinus) * probMiss) +
             0.5 * (pPlus * probHit + (1.0 - pPlus) * probMiss)
 
@@ -622,8 +635,11 @@ object StrategyEngine {
         currentProjectedPct: Double,
         remainingFraction: Double
     ): StrategyDecision {
-        val p = pCalibrated.coerceIn(0.0, 1.0)
+        val p = finiteOr(pCalibrated, 0.5).coerceIn(0.0, 1.0)
         val lam = if (penalty.isFinite()) max(0.0, penalty) else 0.0
+        val safeCutoff = finiteOr(cutoffPct, 0.0)
+        val safeProj = finiteOr(currentProjectedPct, 0.0)
+        val safeRem = finiteOr(remainingFraction, 1.0)
         val ev = round9((1.0 + lam) * p - lam)
 
         if (lam <= 0.0) {
@@ -637,8 +653,8 @@ object StrategyEngine {
         }
 
         val pStar = round9(lam / (1.0 + lam))
-        val (eff, posture) = if (cutoffPct > 0.0 && remainingFraction > 0.0 && remainingFraction <= 0.35) {
-            val margin = currentProjectedPct - cutoffPct
+        val (eff, posture) = if (safeCutoff > 0.0 && safeRem > 0.0 && safeRem <= 0.35) {
+            val margin = safeProj - safeCutoff
             when {
                 margin >= 6.0 -> round9(min(0.95, pStar + 0.05)) to StrategyPosture.PROTECT_MARGIN
                 margin <= -6.0 -> round9(max(0.25, pStar - 0.04)) to StrategyPosture.CALCULATED_RISK
@@ -687,17 +703,19 @@ data class FatigueReportDto(
 )
 
 object FatigueEngine {
-    fun sigmoid(z: Double): Double =
-        if (z >= 0.0) {
+    fun sigmoid(z: Double): Double {
+        if (!z.isFinite()) return 0.5
+        return if (z >= 0.0) {
             val ez = exp(-z)
             1.0 / (1.0 + ez)
         } else {
             val ez = exp(z)
             ez / (1.0 + ez)
         }
+    }
 
     fun logit(p: Double): Double {
-        val c = p.coerceIn(0.02, 0.98)
+        val c = finiteOr(p, 0.5).coerceIn(0.02, 0.98)
         return ln(c / (1.0 - c))
     }
 
@@ -711,8 +729,8 @@ object FatigueEngine {
         lambdaI: Double,
         elapsedMinutes: Double
     ): Pair<Double, Double> {
-        val d = itemDifficulty.coerceIn(0.0, 1.0)
-        val t = elapsedMinutes.coerceIn(0.0, 300.0)
+        val d = finiteOr(itemDifficulty, 0.50).coerceIn(0.0, 1.0)
+        val t = finiteOr(elapsedMinutes, 0.0).coerceIn(0.0, 300.0)
         val lam = if (lambdaI.isFinite()) lambdaI.coerceIn(-2.5, 2.5) else 0.0
         val z0 = logit(pBase) - 0.80 * (d - 0.50)
         val p0 = sigmoid(z0)
@@ -754,10 +772,10 @@ object FatigueEngine {
             )
         }
 
-        val dEarly = earlyAvgDifficulty.coerceIn(0.0, 1.0)
-        val dLate = lateAvgDifficulty.coerceIn(0.0, 1.0)
-        val uEarly = (earlyMeanMinutes / 300.0).coerceIn(0.0, 1.0)
-        val uLate = (lateMeanMinutes / 300.0).coerceIn(uEarly + 0.15, 1.0)
+        val dEarly = finiteOr(earlyAvgDifficulty, 0.50).coerceIn(0.0, 1.0)
+        val dLate = finiteOr(lateAvgDifficulty, 0.50).coerceIn(0.0, 1.0)
+        val uEarly = (finiteOr(earlyMeanMinutes, 30.0) / 300.0).coerceIn(0.0, 0.85)
+        val uLate = (finiteOr(lateMeanMinutes, 210.0) / 300.0).coerceIn(uEarly + 0.15, 1.0)
 
         val pEarly = (earlyCorrect.coerceIn(0, sEarlyTotal).toDouble() + 0.5) / (sEarlyTotal.toDouble() + 1.0)
         val pLate = (lateCorrect.coerceIn(0, sLateTotal).toDouble() + 0.5) / (sLateTotal.toDouble() + 1.0)

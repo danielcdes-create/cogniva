@@ -1,6 +1,6 @@
-# 🦀 Cogniva Backend (`cogniva-api` `2.4.0`)
+# 🦀 Cogniva Backend (`cogniva-api` `2.4.1`)
 
-Serviço HTTP assíncrono em **Rust (`Axum 0.7` + `Tokio` + `MongoDB 3.1`)** responsável pela API REST `/api/v1/*`, pelos motores simétricos da arquitetura em 3 camadas (`contract_version: 5`), pela consulta contextual normativa/enciclopédica (`POST /api/v1/questions/:id/lookup`), pelo servidor estático incorporado do painel administrativo `/admin/`, pela distribuição OTA do APK Android e pelas rotinas agendadas de manutenção pedagógica sobre o banco **`cogniva`**.
+Serviço HTTP assíncrono em **Rust (`Axum 0.7` + `Tokio` + `MongoDB 3.1`)** responsável pela API REST `/api/v1/*`, pelos motores simétricos da arquitetura em 3 camadas (`contract_version: 5`), pelo módulo **Missões** (`/missoes/` + streaming `HTTP Range`), pela consulta contextual normativa/enciclopédica (`POST /api/v1/questions/:id/lookup`), pelo servidor estático incorporado do painel administrativo `/admin/`, pela distribuição OTA do APK Android e pelas rotinas agendadas de manutenção pedagógica sobre o banco **`cogniva`**.
 
 Para a visão integrada do sistema, consulte [`docs/ARQUITETURA.md`](../docs/ARQUITETURA.md), [`docs/MOTORES-DECISAO-CORE-LOOP.md`](../docs/MOTORES-DECISAO-CORE-LOOP.md), [`docs/OPERACAO.md`](../docs/OPERACAO.md), [`PRIVACY.md`](../PRIVACY.md) e [`SECURITY.md`](../SECURITY.md).
 
@@ -50,6 +50,9 @@ cogniva-api --prepare-storage
 
 # Conceder papel administrativo a uma conta já registrada por e-mail
 cogniva-api --grant-admin admin@exemplo.com
+
+# Emitir sessão administrativa efêmera (15 min) para automação local segura
+cogniva-api --mint-admin-token admin@exemplo.com
 ```
 
 ---

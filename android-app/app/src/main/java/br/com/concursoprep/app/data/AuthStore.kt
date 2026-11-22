@@ -152,13 +152,18 @@ class AuthStore(context: Context) {
     }
 
     fun invalidate(userId: Long) {
-        prefs.edit().remove("auth_token_$userId").apply()
+        val editor = prefs.edit().remove("auth_token_$userId")
+        if (userId != localUserId) {
+            editor.remove("auth_token_$localUserId")
+        }
+        editor.apply()
     }
 
     fun clearSessionForLogout(userId: Long): Long {
         check(
             prefs.edit()
                 .remove("auth_token_$userId")
+                .remove("auth_token_$localUserId")
                 .putLong("user_id", localUserId)
                 .remove("email")
                 .putString("role", "student")
@@ -174,6 +179,7 @@ class AuthStore(context: Context) {
      * rotacionando a identidade local de instalação e retornando ao modo convidado desautenticado.
      */
     fun wipeAccountAndResetToGuest(deletedUserId: Long, postSwitchMessage: String? = null): Long {
+        val previousLocalId = localUserId
         val freshInstallationId = UUID.randomUUID().toString()
         val freshSecretBytes = ByteArray(32).also { SecureRandom().nextBytes(it) }
         val freshSecret = freshSecretBytes.joinToString("") { "%02x".format(it) }
@@ -185,8 +191,10 @@ class AuthStore(context: Context) {
 
         val editor = prefs.edit()
             .remove("auth_token_$deletedUserId")
+            .remove("auth_token_$previousLocalId")
             .remove("account_registered_$deletedUserId")
             .remove("pending_profile_$deletedUserId")
+            .remove("pending_profile_$previousLocalId")
             .putString("installation_id", freshInstallationId)
             .putString("installation_secret", encryptSecret(freshSecret))
             .putLong("user_id", freshLocalId)
@@ -252,6 +260,11 @@ class AuthStore(context: Context) {
             error("Esta conta exige autenticação por e-mail e senha. As pendências do proprietário original foram preservadas.")
         }
         accept(response)
+        if (owner < 0L && response.token.isNotBlank()) {
+            // Mirror guest token under negative offline owner so the active OkHttp interceptor
+            // (`authStore.token(ownerUserId)`) attaches Bearer immediately without account loss.
+            writeSecret("auth_token_$owner", response.token)
+        }
     }
 
     companion object {

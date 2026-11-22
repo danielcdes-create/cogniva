@@ -266,6 +266,14 @@ def _promote_locked(release: pathlib.Path) -> None:
     }
     if missions_videos.is_dir():
         service_override['volumes'] = [f'{missions_videos}:/app/missoes/videos:ro']
+    if old_override is not None:
+        try:
+            prev_doc = json.loads(old_override.decode('utf-8'))
+            prev_env_file = prev_doc.get('services', {}).get(SERVICE, {}).get('env_file')
+            if prev_env_file:
+                service_override['env_file'] = prev_env_file
+        except Exception:
+            pass
 
     override = {'services': {SERVICE: service_override}}
 
@@ -328,7 +336,9 @@ def _promote_locked(release: pathlib.Path) -> None:
             else:
                 current.unlink(missing_ok=True)
             if old_override is not None:
-                OVERRIDE.write_bytes(old_override)
+                tmp_override = OVERRIDE.with_name(OVERRIDE.name + '.tmp')
+                tmp_override.write_bytes(old_override)
+                os.replace(tmp_override, OVERRIDE)
             else:
                 atomic_json(OVERRIDE, {'services': {SERVICE: {'image': old_runtime_ref}}})
             compose_up()

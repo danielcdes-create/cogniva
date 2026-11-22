@@ -6,18 +6,18 @@ Apenas a versão mais recente promovida em produção recebe correções de segu
 
 | Versão | Build Android (`versionCode`) | Contrato API (`contract_version`) | Status |
 | :--- | :---: | :---: | :--- |
-| `2.3.0` | `29` | `5` | Suportada (Produção ativa) |
-| `2.0.0` – `2.2.0` | `25` – `28` | `3` – `4` | Suportada para atualização OTA imediata |
-| `< 2.0.0` | `< 25` | `< 3` | Descontinuada (Atualizar para `2.3.0`) |
+| `2.4.1` | `31` | `5` | Suportada (Produção ativa) |
+| `2.0.0` – `2.4.0` | `25` – `30` | `3` – `5` | Suportada para atualização OTA imediata |
+| `< 2.0.0` | `< 25` | `< 3` | Descontinuada (Atualizar para `2.4.1`) |
 
 ## Invariantes de Segurança da Arquitetura
 
 1. **Autenticação Nativa e Isolamento por Proprietário:**
-   - Senhas de contas registradas são derivadas exclusivamente com **Argon2id** e sal criptográfico individual; tokens de sessão são gerados com entropia criptográfica e armazenados no cliente Android sob criptografia AES-GCM apoiada pelo Android Keystore (`allowBackup="false"`).
-   - Sessões do Portal Administrativo (`/admin/`) utilizam cookies `HttpOnly`, `SameSite=Strict` e `Secure` sob HTTPS, validação combinada de esquema/origem (`X-Forwarded-Proto` + `Origin`/`Referer` + `Sec-Fetch-Site`) e cabeçalho anti-CSRF (`X-Cogniva-CSRF: 1`).
-   - Endpoints de autenticação e criação de contas contam com limitação de taxa em dupla camada: Nginx com normalização de prefixo IPv6 `/64` e limitador em memória por IP no runtime Rust.
+   - Senhas de contas registradas são derivadas exclusivamente com **Argon2id** (sob semáforo de concorrência limitada para proteção de memória) e sal criptográfico individual; tokens de sessão são gerados com entropia criptográfica e armazenados no cliente Android sob criptografia AES-GCM apoiada pelo Android Keystore (`allowBackup="false"`).
+   - Sessões do Portal Administrativo (`/admin/`) e do Portal de Missões (`/missoes/`) utilizam cookies separados (`cogniva_web_session` e `cogniva_missions_session`) com `HttpOnly`, `SameSite=Strict` e `Secure` sob HTTPS, validação combinada de esquema/origem (`X-Forwarded-Proto` + `Origin`/`Referer` + `Sec-Fetch-Site`), proteção contra spoofing de `Host` e cabeçalho anti-CSRF (`X-Cogniva-CSRF: 1`).
+   - Endpoints de autenticação e criação de contas contam com limitação de taxa em dupla camada: Nginx com normalização de prefixo IPv6 `/64` e limitador persistente/em memória com chaves de sujeito derivadas em SHA-256 no runtime Rust.
 2. **Integridade de Build, Promoção Atômica e OTA:**
-   - O runtime `cogniva-api` e o pacote `.apk` são compilados exclusivamente fora da VPS no pipeline imutável [deploy.yml](.github/workflows/deploy.yml), com verificação `SHA256SUMS`, assinatura privada APK Signature Scheme v2/v3 (sem chaves de depuração), ensaio automático de *rollback* isolado (`rollback-drill`) e validação de tamanho + hash SHA-256 antes da abertura de sessão no `PackageInstaller`.
+   - O runtime `cogniva-api` e o pacote `.apk` são compilados exclusivamente fora da VPS no pipeline imutável [deploy.yml](.github/workflows/deploy.yml), com verificação `SHA256SUMS`, assinatura privada APK Signature Scheme v2/v3 (sem chaves de depuração), ensaio automático de *rollback* isolado (`rollback-drill`) e validação estrita de URI de origem (esquema, host e porta exatos), tamanho e hash SHA-256 antes da abertura de sessão no `PackageInstaller`.
 3. **Endurecimento de Runtime, Rede e Contratos:**
    - O serviço `api-rust-core` executa como usuário não-root, filesystem somente leitura (`read_only: true`), `cap_drop: ["ALL"]`, `no-new-privileges: true` e limites estritos de memória, CPU e PIDs.
    - A borda TLS aplica HSTS, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Permissions-Policy` restritiva e renovação automática horária monitorada.

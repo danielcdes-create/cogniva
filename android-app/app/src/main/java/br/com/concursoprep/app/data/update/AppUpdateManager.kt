@@ -55,6 +55,7 @@ object AppUpdateManager {
     }
 
     internal fun emitStatusEvent(event: InstallSessionEvent): Boolean = _statusEvents.tryEmit(event)
+    internal fun hasActiveSubscribers(): Boolean = _statusEvents.subscriptionCount.value > 0
 
     fun validateMetadata(
         info: ApkInfoDto,
@@ -88,24 +89,48 @@ object AppUpdateManager {
     )
 
     fun resolveDownloadUrl(apiBaseUrl: String, downloadPath: String): String {
-        require(apiBaseUrl.startsWith("https://", ignoreCase = true)) {
+        val baseUri = runCatching { java.net.URI(apiBaseUrl.trim()) }.getOrNull()
+        require(
+            baseUri != null &&
+                baseUri.scheme.equals("https", ignoreCase = true) &&
+                !baseUri.host.isNullOrBlank() &&
+                baseUri.userInfo == null
+        ) {
             "Atualização exige conexão HTTPS."
         }
-        val cleanBase = apiBaseUrl.trimEnd('/')
+        val basePort = if (baseUri.port == 443) -1 else baseUri.port
+        val cleanBase = apiBaseUrl.trim().trimEnd('/')
         val cleanPath = downloadPath.trim()
-        if (cleanPath.startsWith("https://", ignoreCase = true)) {
-            val baseOrigin = cleanBase.substringBefore("/api/")
-            require(cleanPath.startsWith(baseOrigin, ignoreCase = true)) {
-                "Origem de download da atualização não autorizada."
+        require(!cleanPath.startsWith("//") && !cleanPath.contains('\\') && !cleanPath.contains("..")) {
+            "Origem de download da atualização não autorizada."
+        }
+        val resolved = when {
+            cleanPath.contains("://") -> cleanPath
+            cleanPath.startsWith("/api/v1/") -> {
+                val origin = cleanBase.removeSuffix("/api/v1")
+                origin + cleanPath
             }
-            return cleanPath
+            else -> {
+                val relative = cleanPath.trimStart('/')
+                "$cleanBase/${relative.ifBlank { "apk/download" }}"
+            }
         }
-        if (cleanPath.startsWith("/api/v1/")) {
-            val origin = cleanBase.removeSuffix("/api/v1")
-            return origin + cleanPath
+        val parsedUri = runCatching { java.net.URI(resolved) }.getOrNull()
+        require(parsedUri != null && !(parsedUri.rawPath ?: "").contains("..")) {
+            "Origem de download da atualização não autorizada."
         }
-        val relative = cleanPath.trimStart('/')
-        return "$cleanBase/${relative.ifBlank { "apk/download" }}"
+        val targetUri = parsedUri.normalize()
+        val targetPort = if (targetUri.port == 443) -1 else targetUri.port
+        require(
+            targetUri.scheme.equals("https", ignoreCase = true) &&
+                targetUri.userInfo == null &&
+                targetUri.host.equals(baseUri.host, ignoreCase = true) &&
+                targetPort == basePort &&
+                (targetUri.rawPath ?: "").startsWith("/api/")
+        ) {
+            "Origem de download da atualização não autorizada."
+        }
+        return resolved
     }
 
     /**
@@ -357,10 +382,13 @@ class ApkInstallStatusReceiver : BroadcastReceiver() {
                     Intent::class.java
                 ) ?: return
                 confirmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                AppUpdateManager.emitStatusEvent(
-                    AppUpdateManager.InstallSessionEvent.PendingUserConfirmation(confirmIntent)
-                )
-                runCatching { context.startActivity(confirmIntent) }
+                val deliveredToUi = AppUpdateManager.hasActiveSubscribers() &&
+                    AppUpdateManager.emitStatusEvent(
+                        AppUpdateManager.InstallSessionEvent.PendingUserConfirmation(confirmIntent)
+                    )
+                if (!deliveredToUi) {
+                    runCatching { context.startActivity(confirmIntent) }
+                }
             }
             PackageInstaller.STATUS_SUCCESS -> {
                 AppUpdateManager.emitStatusEvent(AppUpdateManager.InstallSessionEvent.Succeeded)

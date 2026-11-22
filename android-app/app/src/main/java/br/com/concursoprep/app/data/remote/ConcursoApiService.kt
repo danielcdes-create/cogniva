@@ -47,7 +47,8 @@ data class AuthRegisterPayload(
 data class PublishedTopicPayload(
     @SerialName("canonical_topic_id") val canonicalTopicId: String,
     @SerialName("canonical_subject_id") val canonicalSubjectId: String,
-    @SerialName("display_title") val displayTitle: String
+    @SerialName("display_title") val displayTitle: String,
+    @SerialName("local_subject_id") val localSubjectId: String? = null
 )
 @Serializable
 data class PublishEditalPayload(
@@ -107,6 +108,7 @@ data class ExamSubjectPayload(
     val stage: String = ""
 )
 
+@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
 @Serializable
 data class ExamBlueprintPayload(
     @SerialName("_id") val id: String,
@@ -126,8 +128,12 @@ data class ExamBlueprintPayload(
     val subjects: List<ExamSubjectPayload>,
     @SerialName("sync_status") val syncStatus: String,
     @SerialName("template_source_id") val templateSourceId: String? = null,
-    @SerialName("template_revision_synced") val templateRevisionSynced: Long? = null,
-    @SerialName("is_customized") val isCustomized: Boolean = false,
+    @SerialName("template_revision_synced")
+    @kotlinx.serialization.json.JsonNames("template_revision_synced", "base_template_revision")
+    val templateRevisionSynced: Long? = null,
+    @SerialName("is_customized")
+    @kotlinx.serialization.json.JsonNames("is_customized", "is_custom_copy")
+    val isCustomized: Boolean = false,
     @SerialName("upstream_update_available") val upstreamUpdateAvailable: Boolean = false
 )
 

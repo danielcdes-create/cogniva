@@ -197,11 +197,11 @@ Erros de validação (HTTP 4xx) desbloqueiam imediatamente o rascunho para corre
 
 No portal: **Abrir rascunhos e pendências**.
 
-## Acesso com e-mail e senha, sessão de 30 dias e promoção de admin
+## Acesso com e-mail e senha, sessão web de 12 horas e promoção de admin
 
-No Cogniva 2.0, a autenticação administrativa é 100% nativa por e-mail e senha (Argon2id), sem códigos temporários nem vínculo com Telegram.
+No Cogniva, a autenticação administrativa é 100% nativa por e-mail e senha (Argon2id), sem códigos temporários nem vínculo com Telegram.
 
-1. Entre com seu e-mail administrativo e senha na aba Entrar. A sessão web dura até 30 dias em cookie HttpOnly.
+1. Entre com seu e-mail administrativo e senha na aba Entrar. A sessão web dura até 12 horas em cookie HttpOnly (enquanto no aplicativo Android a sessão Bearer dura até 30 dias).
 2. Para criar a primeira conta administrativa pela web, configure o e-mail em ADMIN_EMAILS no servidor e utilize a aba Primeiro acesso.
 3. Para promover uma conta já existente ao papel administrativo, execute cogniva-api --grant-admin email@dominio.com no servidor.
 4. Ao clicar em Sair, a sessão é revogada imediatamente na coleção sessions do banco de dados.
@@ -212,10 +212,10 @@ No portal: **Ver rascunhos preservados**.
 
 ## Arquitetura em 3 Camadas: Protocolo 60s, Ficha Editorial (<15 itens) e Decisão 300m
 
-O Cogniva 2.3 organiza a preparação em três camadas orientadas por evidência: Entrada de 60 Segundos sem cobrança punitiva, Diagnóstico Rastreável com Ficha Editorial e Simulador de Decisão sob Incerteza.
+O Cogniva organiza a preparação em três camadas orientadas por evidência: Entrada de 60 Segundos sem cobrança punitiva, Diagnóstico Rastreável com Ficha Editorial e Simulador de Decisão sob Incerteza.
 
-1. Subordine novos conceitos a um Subassunto folha ativo (SUBTOPIC) e declare pré-requisitos sem ciclos (DAG verificado na validação do catálogo).
-2. Cadastre fontes normativas com hash SHA-256 vigente e preencha opcionalmente a Ficha Editorial das questões humanas (dispositivos legais, regra cobrada, exceção, trecho decisivo do enunciado, fonte oficial e erros conceituais plausíveis).
+1. Mantenha conceitos subordinados a um Subassunto folha ativo (SUBTOPIC) com pré-requisitos sem ciclos (DAG verificado por scripts/knowledge_catalog.py --check no catálogo versionado).
+2. Mantenha fontes normativas com hash SHA-256 vigente no catálogo declarativo e preencha opcionalmente a Ficha Editorial das questões humanas no editor web (dispositivos legais, regra cobrada, exceção, trecho decisivo do enunciado, fonte oficial e erros conceituais plausíveis).
 3. Respeite a regra epistemológica de escassez: com menos de 15 questões humanas distintas, o sistema aponta indícios de erro (cruzando resposta, confiança e evidência selecionada), mas jamais afirma domínio nem inventa questões sintéticas; sem questão válida de outra banca, registra transferência não mensurada.
 4. O Simulador de Decisão sob Incerteza opera com o modelo logístico individual de 300 minutos p(t) = sigma(logit(p0) - lambda_i * t/300), exigindo provas prolongadas periódicas com controle de dificuldade para calibrar fadiga real.
 
