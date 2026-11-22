@@ -46,7 +46,9 @@ def main() -> None:
         site_changed = rendered != cur
         rates_cur = rates_dest.read_text(encoding='utf-8') if rates_dest.is_file() else None
         rates_changed = rates_rendered is not None and rates_rendered != rates_cur
-        if not site_changed and not rates_changed:
+        gate_path = pathlib.Path('/etc/nginx/cogniva-gate.conf')
+        gate_stale = gate_path.is_file() and 'set $cogniva_maintenance 1;' in gate_path.read_text(encoding='utf-8')
+        if not site_changed and not rates_changed and not gate_stale:
             return
 
         bak = pathlib.Path('/opt/apps/cogniva-nginx.bak')
@@ -60,6 +62,8 @@ def main() -> None:
             atomic_write(site, rendered)
         if rates_changed and rates_rendered is not None:
             atomic_write(rates_dest, rates_rendered)
+        if gate_stale:
+            atomic_write(gate_path, 'set $cogniva_maintenance 0;\n')
 
         if subprocess.call(['nginx', '-t']) == 0:
             subprocess.check_call(['systemctl', 'reload', 'nginx'])

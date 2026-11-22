@@ -278,8 +278,10 @@ def _promote_locked(release: pathlib.Path) -> None:
     override = {'services': {SERVICE: service_override}}
 
     controlled_failure = False
+    runtime_mutated = False
     try:
         gate(True)
+        runtime_mutated = True
         atomic_json(OVERRIDE, override)
         apk_release = ROOT / 'apk' / 'releases' / release.name
         apk_release.mkdir(parents=True, exist_ok=True)
@@ -328,9 +330,19 @@ def _promote_locked(release: pathlib.Path) -> None:
             )
         )
     except BaseException as primary_error:
+        if not runtime_mutated:
+            if not SKIP_NGINX_GATE:
+                gate_path = pathlib.Path('/etc/nginx/cogniva-gate.conf')
+                gate_tmp = gate_path.with_name(gate_path.name + '.tmp')
+                gate_tmp.write_text('set $cogniva_maintenance 0;\n', encoding='utf-8')
+                os.replace(gate_tmp, gate_path)
+            raise
         restored_previous = False
         try:
-            gate(True)
+            try:
+                gate(True)
+            except BaseException:
+                pass
             if old_target is not None:
                 symlink(old_target, current)
             else:
