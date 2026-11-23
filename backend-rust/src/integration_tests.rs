@@ -773,7 +773,7 @@ async fn cogniva_2_0_guest_upgrade_templates_and_report_isolation() {
 
     let promoted_user_doc = db
         .collection::<Document>("usuarios")
-        .find_one(doc! { "_id": guest_uid })
+        .find_one(doc! { "user_id": guest_uid })
         .await
         .unwrap()
         .unwrap();
@@ -787,7 +787,7 @@ async fn cogniva_2_0_guest_upgrade_templates_and_report_isolation() {
     );
     assert_eq!(
         db.collection::<Document>("sessions")
-            .count_documents(doc! { "user_id": guest_uid, "revoked_at": { "$ne": null } })
+            .count_documents(doc! { "user_id": guest_uid, "revoked": true })
             .await
             .unwrap(),
         1,
@@ -3396,7 +3396,7 @@ async fn missions_end_to_end_flow_range_streaming_isolation_and_epistemology() {
     );
     assert_eq!(
         db.collection::<Document>("usuarios")
-            .count_documents(doc! { "_id": 456_i64 })
+            .count_documents(doc! { "user_id": 456_i64 })
             .await
             .unwrap(),
         0

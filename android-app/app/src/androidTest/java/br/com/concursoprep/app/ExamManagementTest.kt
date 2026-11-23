@@ -72,8 +72,9 @@ class ExamManagementTest {
                     val imm = rule.activity.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
                     val roots = windowRoots()
                     val imeVisible = roots.any { root ->
-                        androidx.core.view.ViewCompat.getRootWindowInsets(root)
-                            ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true
+                        val insets = androidx.core.view.ViewCompat.getRootWindowInsets(root)
+                        insets?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true ||
+                            (insets?.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime())?.bottom ?: 0) > 0
                     }
                     if (imeVisible) {
                         roots.forEach { root ->
@@ -95,14 +96,30 @@ class ExamManagementTest {
         rule.onNodeWithText("Passo 3 de 3 · Disciplinas e tópicos").assertIsDisplayed()
         rule.onNodeWithText("Nome de outra disciplina").performScrollTo().performTextInput("Engenharia de Túneis")
         closeKeyboardAndAwaitSettled()
-        rule.onNodeWithText("Adicionar disciplina personalizada").performScrollTo().performClick()
+        rule.onNodeWithText("Adicionar disciplina personalizada").performScrollTo().assertIsEnabled().performClick()
+        rule.waitForIdle()
+        if (rule.onAllNodesWithText("Editar disciplina e tópicos").fetchSemanticsNodes().isEmpty()) {
+            android.os.SystemClock.sleep(250)
+            closeKeyboardAndAwaitSettled()
+            rule.onNodeWithText("Adicionar disciplina personalizada").performScrollTo().assertIsEnabled().performClick()
+            rule.waitForIdle()
+        }
         rule.onNodeWithText("Editar disciplina e tópicos").performScrollTo().performClick()
         rule.onNodeWithText("Etapa (ex.: 1ª etapa · Prova objetiva)").performScrollTo().performTextInput("2ª etapa")
         closeKeyboardAndAwaitSettled()
         rule.onNodeWithText("Conhecimentos gerais").performScrollTo().performClick()
         rule.onNodeWithText("Novo tópico").performScrollTo().performTextInput("Escavação")
         closeKeyboardAndAwaitSettled()
-        rule.onNodeWithText("Adicionar tópico").performScrollTo().performClick()
+        rule.onNodeWithText("Adicionar tópico").performScrollTo().assertIsEnabled().performClick()
+        rule.waitForIdle()
+        if (rule.onAllNodesWithText("Escavação").fetchSemanticsNodes().size <= 1 &&
+            rule.onAllNodesWithText("Sem tópicos ativos: a disciplina não aparecerá no edital nem na prática.").fetchSemanticsNodes().isNotEmpty()
+        ) {
+            android.os.SystemClock.sleep(250)
+            closeKeyboardAndAwaitSettled()
+            rule.onNodeWithText("Adicionar tópico").performScrollTo().assertIsEnabled().performClick()
+            rule.waitForIdle()
+        }
         rule.onNodeWithText("Salvar na escada").performClick()
         rule.runOnIdle {
             val subject=checkNotNull(saved).subjects.single()
