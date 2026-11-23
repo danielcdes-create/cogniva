@@ -3,6 +3,7 @@ package br.com.concursoprep.app.domain.model
 import br.com.concursoprep.app.domain.exam.ExamCatalog
 import br.com.concursoprep.app.domain.exam.ExamMomentScenarioDto
 import br.com.concursoprep.app.domain.exam.PrioritizationEngine
+import java.text.Normalizer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -335,14 +336,132 @@ data class ContextualLookupUiState(
 private val LEGAL_PROVISION_REGEX = Regex(
     "(?i)\\b(?:art(?:igo)?\\.?\\s*\\d+[º°]?(?:\\s*,\\s*(?:§\\s*\\d+[º°]?|parágrafo\\s+único|inciso\\s+[IVXLCDM]+|[a-z]\\)))?|lei(?:\\s+complementar|\\s+n[º°]?)?\\s*[\\d\\.]+(?:/\\d{2,4})?|cf(?:/88)?|súmula(?:\\s+vinculante)?\\s*(?:n[º°]?\\s*)?\\d+|decreto(?:\\s+n[º°]?)?\\s*[\\d\\.]+(?:/\\d{2,4})?|resolu[çc][ãa]o\\s+(?:cmn|bcb|cvm)?\\s*n?[º°]?\\s*[\\d\\.]+)"
 )
-private val EXCEPTION_MARKER_REGEX = Regex(
-    "(?i)\\b(salvo|exceto|ressalvad[oa]s?|vedad[oa]s?|independentemente|apenas|exclusivamente|somente|sem\\s+preju[íi]zo)\\b"
+private val GENUINE_EXCEPTION_REGEX = Regex(
+    "(?i)\\b(salvo|exceto|excetuad[oa]s?|ressalvad[oa]s?|à\\s+exce[çc][ãa]o|sem\\s+preju[íi]zo)\\b"
 )
+private val STEM_DELIMITER_REGEX = Regex(
+    "(?i)\\b(salvo|exceto|ressalvad[oa]s?|vedad[oa]s?|independentemente|apenas|exclusivamente|somente|necessariamente|isoladamente|sempre|nunca|jamais|sem\\s+preju[íi]zo|não\\s+[ée]|implica|exige|prescinde)\\b"
+)
+private val LEADING_VERDICT_REGEX = Regex(
+    "(?i)^\\s*(?:[✅❌✔]\\s*:?\\s*)?(?:(?:gabarito(?:\\s+oficial)?|item|assertiva|afirmativa|resposta)\\s*:\\s*)?(?:(?:certo|errado|corret[oa]|incorret[oa]|verdadeir[oa]|fals[oa])\\s*[.!—–:-]+\\s*|(?:a\\s+)?(?:alternativa|op[çc][ãa]o)\\s+correta\\s+[ée]\\s+(?:a\\s+)?(?:primeira|segunda|terceira|quarta|quinta|letra\\s+[a-e]|[a-e]|[1-5][ªº]?)\\s*[.!—–:-]+\\s*)"
+)
+private val LEADING_TF_VERDICT_ONLY_REGEX = Regex(
+    "(?i)^\\s*(?:gabarito(?:\\s+oficial)?\\s*:\\s*)?(?:certo|errado)\\s*[.!—–:-]+\\s+"
+)
+private val TRAILING_REFERENCES_REGEX = Regex(
+    "(?is)\\s*(Refer[êe]ncias?\\s*:\\s*.+)$"
+)
+private val COMPARISON_NON_ALNUM_REGEX = Regex("[^\\p{L}\\p{N}]+")
 
 private fun truncateChars(raw: String, maxChars: Int): String {
     val t = raw.trim()
-    return if (t.length <= maxChars) t else t.take(maxChars - 1).trimEnd() + "…"
+    if (t.length <= maxChars) return t
+    val limit = (maxChars - 1).coerceAtLeast(1)
+    val prefix = t.take(limit)
+    val minWordCut = (limit * 60) / 100
+    val lastWs = prefix.indexOfLast { it.isWhitespace() }
+    val cleanPrefix = if (lastWs >= minWordCut) prefix.substring(0, lastWs) else prefix
+    val trimmedEnd = cleanPrefix.trimEnd().trimEnd(',', ';', ':', '-', '–', '—').trimEnd()
+    return "$trimmedEnd…"
 }
+
+internal fun stripVerdictAndReferences(raw: String): String {
+    val withoutIcons = raw.replace("✅:", "").replace("❌:", "").trim()
+    val strippedVerdict = LEADING_VERDICT_REGEX.replace(withoutIcons, "").trim()
+    val withoutRefs = TRAILING_REFERENCES_REGEX.replace(strippedVerdict, "").trim()
+    return when {
+        withoutRefs.length >= 16 -> withoutRefs
+        strippedVerdict.length >= 16 -> strippedVerdict
+        else -> withoutIcons
+    }
+}
+
+private fun extractGenuineExceptionSentence(raw: String): String? {
+    val cleaned = stripVerdictAndReferences(raw)
+    return cleaned.split('.', ';', '\n')
+        .map { it.trim() }
+        .firstOrNull { it.length >= 18 && GENUINE_EXCEPTION_REGEX.containsMatchIn(it) }
+        ?.let { truncateChars(it, 240) }
+}
+
+private fun pickDecisiveStemFragment(stem: String): String {
+    val sentences = stem.split('.', ';', '?', '\n')
+        .map { it.trim() }
+        .filter { it.length >= 16 }
+    val chosen = sentences.firstOrNull { STEM_DELIMITER_REGEX.containsMatchIn(it) }
+        ?: sentences.lastOrNull()
+        ?: stem.trim()
+    if (chosen.length <= 135) return chosen
+
+    val match = STEM_DELIMITER_REGEX.find(chosen)
+    if (match != null && match.range.first > 32) {
+        val targetStart = (match.range.first - 20).coerceAtLeast(0)
+        val wsIdx = chosen.indexOf(' ', targetStart)
+        val startIdx = if (wsIdx in targetStart until match.range.first) wsIdx + 1 else targetStart
+        val windowed = chosen.substring(startIdx)
+            .trimStart { it.isWhitespace() || it in charArrayOf(',', ';', ':', '-', '–', '—') }
+        if (windowed.length >= 24) {
+            return "…" + truncateChars(windowed, 130)
+        }
+    }
+    return truncateChars(chosen, 135)
+}
+
+private fun deterministicSwapEvidenceOrder(questionId: String): Boolean {
+    var sum = 0
+    for (b in questionId.encodeToByteArray()) {
+        sum = (sum + (b.toInt() and 0xFF)) and 0xFF
+    }
+    return (sum and 1) == 1
+}
+
+fun normalizeEvidenceOptionId(rawId: String?, hasCuratedChallenge: Boolean = false): String? {
+    val trimmed = rawId?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    if (hasCuratedChallenge) return trimmed
+    return when {
+        trimmed.equals("ev_decisive", ignoreCase = true) -> "EV_DECISIVE"
+        trimmed.equals("ev_premissa_divergente", ignoreCase = true) ||
+            trimmed.equals("ev_err_1", ignoreCase = true) ||
+            trimmed.equals("ev_err_2", ignoreCase = true) -> "EV_PREMISSA_DIVERGENTE"
+        else -> trimmed
+    }
+}
+
+private fun foldPostAnswerTextForComparison(raw: String?): String {
+    if (raw.isNullOrBlank()) return ""
+    val nfc = Normalizer.normalize(raw, Normalizer.Form.NFC)
+    val stripped = stripVerdictAndReferences(nfc)
+        .removePrefix("…")
+        .removeSuffix("…")
+        .removeSuffix("...")
+        .lowercase()
+    return COMPARISON_NON_ALNUM_REGEX.replace(stripped, " ").trim()
+}
+
+/**
+ * Verifica deterministicamente se um campo resumido (`testedRule` ou `exceptionClause`) apenas repete
+ * conteúdo já presente na explicação principal ou no próprio enunciado, evitando blocos duplicados.
+ */
+fun isPostAnswerTextRedundant(candidate: String?, vararg primaryTexts: String?): Boolean {
+    val candNorm = foldPostAnswerTextForComparison(candidate)
+    if (candNorm.isEmpty()) return true
+    for (primary in primaryTexts) {
+        val primNorm = foldPostAnswerTextForComparison(primary)
+        if (primNorm.isEmpty()) continue
+        if (primNorm.contains(candNorm)) return true
+        if (primNorm.length >= 24 && candNorm.contains(primNorm)) return true
+        if (candNorm.length >= 24) {
+            val prefixLen = minOf(candNorm.length, 56)
+            if (primNorm.startsWith(candNorm.take(prefixLen))) return true
+        }
+    }
+    return false
+}
+
+data class FormattedExplanationParts(
+    val body: String,
+    val referenceFooter: String? = null
+)
 
 @Serializable
 data class QuestionDto(
@@ -375,13 +494,97 @@ data class QuestionDto(
     @SerialName("evidence_challenge") val evidenceChallenge: EvidenceChallengeDto? = null,
     @SerialName("editorial_card") val editorialCard: EditorialCardDto? = null
 ) {
+    fun hasCustomEvidenceChallenge(): Boolean {
+        val ch = evidenceChallenge ?: return false
+        if (ch.options.size < 2) return false
+        val isSynthesizedIds = ch.correctEvidenceId.equals("EV_DECISIVE", ignoreCase = true) &&
+            ch.options.all {
+                it.evidenceId.equals("EV_DECISIVE", ignoreCase = true) ||
+                    it.evidenceId.equals("EV_PREMISSA_DIVERGENTE", ignoreCase = true) ||
+                    it.evidenceId.startsWith("ev_err_", ignoreCase = true)
+            }
+        return !isSynthesizedIds
+    }
+
+    fun formatPostAnswerCorrectLabel(correctIndex: Int): String {
+        val rawAnswer = answers.getOrNull(correctIndex)?.trim().orEmpty()
+        if (questionType == QuestionType.TRUE_FALSE) {
+            return rawAnswer.ifEmpty { "Gabarito oficial" }
+        }
+        if (correctIndex in answers.indices) {
+            val letter = ('A' + correctIndex)
+            return if (rawAnswer.isNotEmpty() && rawAnswer.length <= 36) {
+                "Alternativa $letter ($rawAnswer)"
+            } else {
+                "Alternativa $letter"
+            }
+        }
+        return rawAnswer.ifEmpty { "Gabarito oficial" }
+    }
+
+    fun formatPostAnswerExplanation(): FormattedExplanationParts? {
+        val raw = explanation?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val cleanedVerdict = if (questionType == QuestionType.TRUE_FALSE) {
+            val stripped = LEADING_TF_VERDICT_ONLY_REGEX.replace(raw, "").trim()
+            if (stripped.length >= 16) stripped else raw
+        } else {
+            raw
+        }
+        val refMatch = TRAILING_REFERENCES_REGEX.find(cleanedVerdict)
+        if (refMatch != null) {
+            val mainBody = cleanedVerdict.substring(0, refMatch.range.first).trim()
+            val refText = refMatch.groupValues[1].trim()
+            if (mainBody.length >= 20 && refText.isNotEmpty()) {
+                return FormattedExplanationParts(body = mainBody, referenceFooter = refText)
+            }
+        }
+        return FormattedExplanationParts(body = cleanedVerdict, referenceFooter = null)
+    }
+
+    fun resolveActionableConceptualError(
+        card: EditorialCardDto,
+        chosenIndex: Int?
+    ): ConceptualErrorItemDto? {
+        if (card.plausibleConceptualErrors.isEmpty()) return null
+        if (questionType == QuestionType.MULTIPLE_CHOICE) {
+            val nonTrivial = card.plausibleConceptualErrors.filterNot { it.errorId.startsWith("ERR_ALT_") }
+            if (nonTrivial.isEmpty()) return null
+            val chosenText = chosenIndex?.let { answers.getOrNull(it)?.trim() }.orEmpty()
+            if (chosenText.isNotEmpty()) {
+                nonTrivial.firstOrNull {
+                    chosenText.contains(it.label, ignoreCase = true) ||
+                        it.label.contains(chosenText.take(32), ignoreCase = true)
+                }?.let { return it }
+            }
+            return nonTrivial.first()
+        }
+        // Em Certo/Errado: exibe erro conceitual estruturado se for curado especificamente
+        // ou se a questão não possuir comentário textual principal.
+        val genericTfIds = setOf("ERR_REGRA_EXCECAO", "ERR_ESCOPO_ASSERTIVA")
+        val curatedSpecific = card.plausibleConceptualErrors.firstOrNull { it.errorId !in genericTfIds }
+        if (curatedSpecific != null) return curatedSpecific
+        return if (explanation.isNullOrBlank()) card.plausibleConceptualErrors.firstOrNull() else null
+    }
+
     /**
      * Retorna a Ficha Editorial Rastreável curada ou sintetizada deterministicamente
      * a partir das fontes oficiais do catálogo e do gabarito/enunciado (zero alucinação).
      */
     fun effectiveEditorialCard(): EditorialCardDto {
         if (editorialCard != null && editorialCard.testedRule.isNotBlank()) {
-            return editorialCard
+            val isLegacyVerdictPrefixed = !explanation.isNullOrBlank() &&
+                LEADING_TF_VERDICT_ONLY_REGEX.containsMatchIn(editorialCard.testedRule)
+            val isLegacyFalseStemException = editorialCard.exceptionClause != null &&
+                !GENUINE_EXCEPTION_REGEX.containsMatchIn(editorialCard.exceptionClause) &&
+                isPostAnswerTextRedundant(editorialCard.exceptionClause, question)
+            return if (isLegacyVerdictPrefixed || isLegacyFalseStemException) {
+                editorialCard.copy(
+                    testedRule = if (isLegacyVerdictPrefixed) stripVerdictAndReferences(editorialCard.testedRule) else editorialCard.testedRule,
+                    exceptionClause = if (isLegacyFalseStemException) null else editorialCard.exceptionClause
+                )
+            } else {
+                editorialCard
+            }
         }
         val linkedSources = runCatching {
             ExamCatalog.normativeSourcesForQuestion(canonicalTopicId, conceptIds)
@@ -396,39 +599,47 @@ data class QuestionDto(
                 provisions += truncateChars(found, 120)
             }
         }
-        val firstExp = explanation?.lineSequence()
+        val cleanedExp = explanation?.takeIf { it.isNotBlank() }?.let { stripVerdictAndReferences(it) }
+        val firstExp = cleanedExp?.lineSequence()
             ?.map { it.trim() }
-            ?.firstOrNull { it.length >= 12 }
+            ?.firstOrNull { it.length >= 20 }
+            ?: cleanedExp?.takeIf { it.isNotBlank() }
         val testedRule = when {
-            linkedSources.isNotEmpty() -> truncateChars(linkedSources.first().excerpt, 320)
+            linkedSources.any { it.excerpt.isNotBlank() } ->
+                truncateChars(linkedSources.first { it.excerpt.isNotBlank() }.excerpt, 320)
             !firstExp.isNullOrBlank() -> truncateChars(firstExp, 320)
             else -> {
                 val cIdx = correctAnswerIndices.firstOrNull() ?: 0
                 val cText = answers.getOrNull(cIdx) ?: "Gabarito oficial"
-                truncateChars("Critério determinante de $disciplina: gabarito oficial \"$cText\".", 320)
+                val disc = disciplina.trim().ifEmpty { "disciplina do edital" }
+                truncateChars("Aplicação direta do critério cobrado em $disc (gabarito oficial: $cText).", 320)
             }
         }
-        val exceptionClause = combined.split('.', ';', '\n')
-            .map { it.trim() }
-            .firstOrNull { it.length >= 18 && EXCEPTION_MARKER_REGEX.containsMatchIn(it) }
-            ?.let { truncateChars(it, 260) }
-        val decisiveStem = question.split('.', ';', '?', '\n')
-            .map { it.trim() }
-            .filter { it.length >= 16 }
-            .let { clauses ->
-                clauses.firstOrNull { EXCEPTION_MARKER_REGEX.containsMatchIn(it) } ?: clauses.lastOrNull()
-            }
-            ?.let { truncateChars(it, 240) }
-            ?: truncateChars(question, 240)
+        val isTrueStatement = questionType == QuestionType.TRUE_FALSE &&
+            correctAnswerIndices.firstOrNull()?.let { answers.getOrNull(it) }?.trim().equals("Certo", ignoreCase = true)
+        val exceptionClause = linkedSources.firstNotNullOfOrNull { extractGenuineExceptionSentence(it.excerpt) }
+            ?: explanation?.takeIf { it.isNotBlank() }?.let { extractGenuineExceptionSentence(it) }
+            ?: if (explanation.isNullOrBlank() && isTrueStatement) extractGenuineExceptionSentence(question) else null
+        val decisiveStem = pickDecisiveStemFragment(question)
 
         val conceptualErrors = if (questionType == QuestionType.TRUE_FALSE) {
-            listOf(
-                ConceptualErrorItemDto(
-                    errorId = "ERR_REGRA_EXCECAO",
-                    label = "Inversão entre regra geral e exceção/ressalva",
-                    description = "Leitura literal da regra geral desconsiderando condicionante, prazo ou vedação expressa no enunciado."
+            if (exceptionClause != null) {
+                listOf(
+                    ConceptualErrorItemDto(
+                        errorId = "ERR_REGRA_EXCECAO",
+                        label = "Inversão entre regra geral e cláusula restritiva/exceção",
+                        description = "Desconsiderar a ressalva ou exceção expressa aplicável ao caso concreto."
+                    )
                 )
-            )
+            } else {
+                listOf(
+                    ConceptualErrorItemDto(
+                        errorId = "ERR_ESCOPO_ASSERTIVA",
+                        label = "Generalização ou restrição indevida da assertiva",
+                        description = "Aceitar extrapolação além do alcance do dispositivo ou conceito cobrado pela banca."
+                    )
+                )
+            }
         } else {
             val cIdx = correctAnswerIndices.firstOrNull() ?: 0
             answers.mapIndexedNotNull { idx, ans ->
@@ -452,35 +663,78 @@ data class QuestionDto(
     }
 
     /**
-     * Retorna o desafio opcional pós-resposta apontando exclusivamente para fragmentos do enunciado
-     * e da fonte oficial (sem formular outra questão jurídica).
+     * Retorna o seletor opcional pós-resposta apontando exclusivamente para fragmentos concisos
+     * do enunciado e da fonte oficial (sem repetir a explicação e sem formular nova questão).
      */
     fun effectiveEvidenceChallenge(): EvidenceChallengeDto? {
+        if (questionType == QuestionType.OPEN_ENDED) return null
         if (evidenceChallenge != null && evidenceChallenge.options.size >= 2) {
-            return evidenceChallenge
+            val isLegacyRepetitive = !hasCustomEvidenceChallenge() && evidenceChallenge.options.any {
+                it.text.startsWith("Trecho decisivo do enunciado e fundamento:") ||
+                    it.text.startsWith("Trecho decisivo:") ||
+                    it.text.startsWith("Premissa divergente:")
+            }
+            if (!isLegacyRepetitive) {
+                return evidenceChallenge
+            }
         }
         val card = effectiveEditorialCard()
-        val correctText = card.officialSourceExcerpt?.let { src ->
-            truncateChars("Trecho decisivo: \"${card.decisiveStemExcerpt}\" · Fonte: $src", 240)
-        } ?: truncateChars("Trecho decisivo: \"${card.decisiveStemExcerpt}\" · ${card.testedRule}", 240)
+        val linkedSources = runCatching {
+            ExamCatalog.normativeSourcesForQuestion(canonicalTopicId, conceptIds)
+        }.getOrDefault(emptyList())
+        val primarySourceId = linkedSources.firstOrNull()?.sourceId
 
-        val distractors = mutableListOf<EvidenceOptionDto>()
-        card.plausibleConceptualErrors.take(2).forEachIndexed { i, err ->
-            distractors += EvidenceOptionDto(
-                evidenceId = "ev_err_${i + 1}",
-                text = truncateChars("${err.label}: ${err.description}", 220)
+        val decisiveText = when {
+            card.legalProvisions.isNotEmpty() -> truncateChars(
+                "Critério no trecho \"${card.decisiveStemExcerpt}\" confrontado com ${card.legalProvisions.first()}",
+                195
+            )
+            linkedSources.any { it.title.isNotBlank() } -> truncateChars(
+                "Critério no trecho \"${card.decisiveStemExcerpt}\" à luz de ${linkedSources.first { it.title.isNotBlank() }.title}",
+                195
+            )
+            else -> truncateChars(
+                "Alcance exato do trecho \"${card.decisiveStemExcerpt}\" diante do conceito central cobrado",
+                195
             )
         }
-        if (distractors.isEmpty()) {
-            distractors += EvidenceOptionDto(
-                evidenceId = "ev_err_1",
-                text = "Interpretação isolada de termo acessório do enunciado, ignorando a regra/exceção principal."
-            )
+
+        val divergentText = when {
+            questionType == QuestionType.MULTIPLE_CHOICE -> {
+                val specificAlt = card.plausibleConceptualErrors
+                    .firstOrNull { !it.errorId.startsWith("ERR_ALT_") && it.label.isNotBlank() }
+                if (specificAlt != null) {
+                    truncateChars("Associação com a hipótese alternativa \"${specificAlt.label}\"", 195)
+                } else {
+                    "Associação geral com termos familiares das alternativas, sem isolar o requisito específico do comando."
+                }
+            }
+            card.exceptionClause != null ->
+                "Aplicação direta da regra geral do tema, sem ponderar a ressalva ou condição específica do item."
+            else ->
+                "Impressão geral pelos termos técnicos do tema, sem isolar a condição específica afirmada na assertiva."
         }
+
+        val decisiveOpt = EvidenceOptionDto(
+            evidenceId = "EV_DECISIVE",
+            text = decisiveText,
+            sourceId = primarySourceId
+        )
+        val divergentOpt = EvidenceOptionDto(
+            evidenceId = "EV_PREMISSA_DIVERGENTE",
+            text = divergentText,
+            sourceId = null
+        )
+        val orderedOptions = if (deterministicSwapEvidenceOrder(id)) {
+            listOf(divergentOpt, decisiveOpt)
+        } else {
+            listOf(decisiveOpt, divergentOpt)
+        }
+
         return EvidenceChallengeDto(
-            prompt = "Opcional: qual fragmento do enunciado ou da fonte oficial determinou sua resposta?",
-            options = listOf(EvidenceOptionDto(evidenceId = "ev_decisive", text = correctText)) + distractors,
-            correctEvidenceId = "ev_decisive"
+            prompt = "Opcional — qual ponto guiou sua decisão nesta questão?",
+            options = orderedOptions,
+            correctEvidenceId = "EV_DECISIVE"
         )
     }
 }

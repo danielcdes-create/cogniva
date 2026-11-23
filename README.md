@@ -4,7 +4,7 @@ Plataforma inteligente de preparação de alta performance para concursos públi
 
 ---
 
-## 🚀 Versão Atual: `2.4.2` (`build 32`)
+## 🚀 Versão Atual: `2.4.3` (`build 33`)
 
 - **Arquitetura Disruptiva em 3 Camadas (`contract_version: 5`):**
   1. **Escassez — Diagnóstico por Evidências, Não por Geração:** Ficha Editorial Rastreável (`editorial_card` com dispositivos legais, regra cobrada, exceção, trecho decisivo e erros conceituais plausíveis), diagnóstico cruzando **3 sinais** (*resposta × confiança × evidência selecionada*, detectando inclusive `ILLUSORY_COMPETENCE`), restrição explícita **`< 15` questões humanas** (`MIN_QUESTIONS_FOR_MASTERY = 15`) e conjunto separado de **Transferência Cross-Banca (`TRANSFER_PROBE`)** com registro explícito de `TRANSFER_UNMEASURED` quando não há item válido de outra banca.

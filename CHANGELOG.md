@@ -4,6 +4,32 @@ Todas as mudanças arquiteturais, de segurança, acessibilidade e operacionais r
 
 ---
 
+## [2.4.3] - 2026-11-23 (build 33)
+
+Revisão integral do **processo pós-resposta** nas sessões de questões e simulados (`backend-rust/` + `android-app/`), eliminando duplicações textuais, falsos positivos de cláusulas de exceção, truncamentos no meio de palavras, chips redundantes/incompatíveis com o formato do item e divergências de IDs no Diagnóstico dos 3 Sinais.
+
+### 1. Síntese Editorial Determinística e Diagnóstico de 3 Sinais (`backend-rust/`)
+- **Eliminação de Falsos Positivos em `"Ressalva / Exceção"` (`models/question.rs`):**
+  - Restrição de `extract_genuine_exception_sentence` exclusivamente a conectivos reais de ressalva (`salvo`, `exceto`, `excetuado`, `ressalvado`, `à exceção`, `sem prejuízo`), removendo advérbios de escopo/finalidade como `apenas` ou `independentemente` que faziam o próprio enunciado ser repetido como `"Ressalva / Exceção"`.
+  - Extração restrita a fontes fidedignas (excertos normativos ativos do catálogo ou fundamentação oficial `explanation`, admitindo o enunciado apenas em itens `Certo` sem comentário cadastrado) — impedindo que assertivas falsas (`Errado`) fossem exibidas como exceções verdadeiras.
+- **Higiene de `tested_rule`, Recorte Decisivo e Rastreabilidade sem Eco (`models/question.rs`, `services/ai_tutor.rs`):**
+  - Priorização do excerto normativo oficial do catálogo antes do fallback em `explanation`, remoção determinística de prefixos redundantes de veredito (`Certo.`, `Errado.`, `A alternativa correta é...`, `✅:`/`❌:`) e separação de rodapés `Referência(s): ...`.
+  - Truncamento respeitando fronteira de palavra (eliminando cortes abruptos como `Co…`), janela focada em torno do delimitador lógico para enunciados extensos (`<= 135` caracteres) e reformulação neutra e concisa das opções de `evidence_challenge` (`EV_DECISIVE` vs. `EV_PREMISSA_DIVERGENTE`) com ordem determinística por `question_id` e zero repetição da explicação principal.
+  - Adaptação do prompt pós-resposta de `AiAssistKind::Plausibility` quando invocado sobre itens binários `TRUE_FALSE`.
+- **Retrocompatibilidade de IDs de Evidência (`services/attempts.rs`, `routes/study_loop.rs`, `services/knowledge.rs`):**
+  - Normalização transparente de IDs sintetizados legados (`ev_decisive`, `ev_err_1`, `ev_err_2` → `EV_DECISIVE`, `EV_PREMISSA_DIVERGENTE`) preservando validação estrita para desafios curados customizados.
+
+### 2. Superfície Única Pós-Resposta, Chips Contextuais e Estado de Sessão (`android-app/`)
+- **Consolidação Visual sem Duplicidade (`PracticeAndQuestionScreen.kt`, `Models.kt`):**
+  - Unificação da Ficha Editorial e do comentário principal em uma única superfície de alto contraste, suprimindo `Regra cobrada` e `Ressalva / Exceção` sempre que forem textualmente redundantes com `explanation` (`isPostAnswerTextRedundant`), limpando o prefixo repetido `Certo.`/`Errado.` abaixo do cabeçalho de gabarito e destacando `Referência(s):` em rodapé tipográfico próprio.
+  - Saneamento automático em memória de payloads legados cacheados na versão `2.4.2` (`cached_questions` / `quiz_sessions`), corrigindo sessões offline mesmo antes da primeira ressincronização.
+  - Rótulos concisos de gabarito em Múltipla Escolha (`Alternativa B` em vez de repetir parágrafos extensos no título do cartão), resumo compacto da tentativa registrada (`Sua marcação · Confiança · Tempo`) e supressão de erros genéricos `ERR_ALT_*` que apenas copiavam o texto literal da opção.
+- **Chips de Aprofundamento Aderentes ao Formato e Navegação Pós-Resposta (`PracticeAndQuestionScreen.kt`, `MainViewModel.kt`, `ConcursoRepository.kt`):**
+  - Exibição de **`Gerar Comentário IA`** (`explanation`) apenas quando a questão ainda não possui comentário exibido em tela (evitando reabrir em modal o mesmo texto já visível) com hidratação imediata em memória após geração, e restrição de **`Análise dos Distratores`** (`plausibility`) a questões `MULTIPLE_CHOICE`.
+  - Preservação de `selectedEvidenceId` no mapa local `userAnswers` ao navegar entre questões (`Anterior` / `Próxima`), reconciliação em `syncPendingAttempts` para toques ocorridos durante envio HTTP em voo e reset automático de rolagem (`LazyListState.scrollToItem(0)`) ao avançar/voltar de questão.
+
+---
+
 ## [2.4.2] - 2026-11-23 (build 32)
 
 Auditoria profunda de arquitetura de testes, eliminação de *Mock Drift* e código morto, correção de defeitos críticos e altos revelados pela suíte remediada e expansão de cobertura comportamental nas quatro camadas do ecossistema (`backend-rust/`, `android-app/`, `web-admin/` + `web-missions/` e `scripts/` + `deploy/`), documentada integralmente em [`TEST_AUDIT_REPORT.md`](TEST_AUDIT_REPORT.md).

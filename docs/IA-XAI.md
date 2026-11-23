@@ -1,6 +1,6 @@
 # Integração com IA (xAI) — Tutores, Consulta Contextual em Camada, Blindagem e Governança de Cotas
 
-O **Cogniva `2.4.2`** integra a API da **xAI** de forma estritamente governada no backend Rust (`cogniva-api`), atendendo aos **tutores pedagógicos por questão** (incluindo `term-lookup` e `term-lookup-post` para consulta contextual em camada), à **assistência de importação de questões** e à **geração de propostas de classificação V2**, além da rota gratuita de consulta normativa/enciclopédica `POST /api/v1/questions/:id/lookup`.
+O **Cogniva `2.4.3`** integra a API da **xAI** de forma estritamente governada no backend Rust (`cogniva-api`), atendendo aos **tutores pedagógicos por questão** (incluindo `term-lookup` e `term-lookup-post` para consulta contextual em camada), à **assistência de importação de questões** e à **geração de propostas de classificação V2**, além da rota gratuita de consulta normativa/enciclopédica `POST /api/v1/questions/:id/lookup`.
 
 ---
 

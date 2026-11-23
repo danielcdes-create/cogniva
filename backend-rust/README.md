@@ -1,4 +1,4 @@
-# 🦀 Cogniva Backend (`cogniva-api` `2.4.2`)
+# 🦀 Cogniva Backend (`cogniva-api` `2.4.3`)
 
 Serviço HTTP assíncrono em **Rust (`Axum 0.7` + `Tokio` + `MongoDB 3.1`)** responsável pela API REST `/api/v1/*`, pelos motores simétricos da arquitetura em 3 camadas (`contract_version: 5`), pelo módulo **Missões** (`/missoes/` + streaming `HTTP Range`), pela consulta contextual normativa/enciclopédica (`POST /api/v1/questions/:id/lookup`), pelo servidor estático incorporado do painel administrativo `/admin/`, pela distribuição OTA do APK Android e pelas rotinas agendadas de manutenção pedagógica sobre o banco **`cogniva`**.
 

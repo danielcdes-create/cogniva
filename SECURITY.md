@@ -6,9 +6,9 @@ Apenas a versão mais recente promovida em produção recebe correções de segu
 
 | Versão | Build Android (`versionCode`) | Contrato API (`contract_version`) | Status |
 | :--- | :---: | :---: | :--- |
-| `2.4.2` | `32` | `5` | Suportada (Produção ativa) |
-| `2.0.0` – `2.4.1` | `25` – `31` | `3` – `5` | Suportada para atualização OTA imediata |
-| `< 2.0.0` | `< 25` | `< 3` | Descontinuada (Atualizar para `2.4.2`) |
+| `2.4.3` | `33` | `5` | Suportada (Produção ativa) |
+| `2.0.0` – `2.4.2` | `25` – `32` | `3` – `5` | Suportada para atualização OTA imediata |
+| `< 2.0.0` | `< 25` | `< 3` | Descontinuada (Atualizar para `2.4.3`) |
 
 ## Invariantes de Segurança da Arquitetura
 

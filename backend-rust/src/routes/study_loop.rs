@@ -621,8 +621,13 @@ pub async fn get_next_action(
         } else {
             "MULTIPLE_CHOICE"
         };
-        let decoded_ch = qdoc_opt
-            .and_then(|d| crate::services::question_compatibility::decode(d.clone()).ok())
+        let decoded_q = qdoc_opt
+            .and_then(|d| crate::services::question_compatibility::decode(d.clone()).ok());
+        let has_curated_ch = decoded_q
+            .as_ref()
+            .is_some_and(|q| q.evidence_challenge.is_some());
+        let decoded_ch = decoded_q
+            .as_ref()
             .and_then(|q| q.effective_evidence_challenge());
 
         let mut had_prior_good = false;
@@ -644,7 +649,11 @@ pub async fn get_next_action(
 
             let ev_passed = match (s.selected_evidence_id.as_deref(), decoded_ch.as_ref()) {
                 (Some(sel), Some(ch)) if !sel.trim().is_empty() => {
-                    Some(sel.trim() == ch.correct_evidence_id)
+                    let norm_sel = crate::models::question::normalize_synthesized_evidence_id(
+                        sel,
+                        has_curated_ch,
+                    );
+                    Some(norm_sel == ch.correct_evidence_id)
                 }
                 _ => None,
             };

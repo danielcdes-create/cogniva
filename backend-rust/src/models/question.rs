@@ -210,15 +210,51 @@ pub struct UserQuestionBriefStats {
 }
 
 static LEGAL_PROVISION_RE: OnceLock<Regex> = OnceLock::new();
-static EXCEPTION_MARKER_RE: OnceLock<Regex> = OnceLock::new();
+static GENUINE_EXCEPTION_RE: OnceLock<Regex> = OnceLock::new();
+static STEM_DELIMITER_RE: OnceLock<Regex> = OnceLock::new();
+static LEADING_VERDICT_RE: OnceLock<Regex> = OnceLock::new();
+static TRAILING_REFERENCES_RE: OnceLock<Regex> = OnceLock::new();
 
 fn truncate_chars(text: &str, max_chars: usize) -> String {
     let trimmed = text.trim();
     if trimmed.chars().count() <= max_chars {
-        trimmed.to_string()
+        return trimmed.to_string();
+    }
+    let limit = max_chars.saturating_sub(1);
+    let prefix: String = trimmed.chars().take(limit).collect();
+    let min_word_cut = (limit * 60) / 100;
+    let clean_prefix = match prefix.char_indices().rev().find(|(_, ch)| ch.is_whitespace()) {
+        Some((byte_idx, _)) if prefix[..byte_idx].chars().count() >= min_word_cut => {
+            &prefix[..byte_idx]
+        }
+        _ => prefix.as_str(),
+    };
+    let trimmed_end = clean_prefix
+        .trim_end()
+        .trim_end_matches([',', ';', ':', '-', '–', '—']);
+    format!("{}…", trimmed_end.trim_end())
+}
+
+pub(crate) fn strip_verdict_and_references(raw: &str) -> String {
+    let verdict_re = LEADING_VERDICT_RE.get_or_init(|| {
+        Regex::new(
+            r"(?i)^\s*(?:[✅❌✔]\s*:?\s*)?(?:(?:gabarito(?:\s+oficial)?|item|assertiva|afirmativa|resposta)\s*:\s*)?(?:(?:certo|errado|corret[oa]|incorret[oa]|verdadeir[oa]|fals[oa])\s*[.!—–:-]+\s*|(?:a\s+)?(?:alternativa|op[çc][ãa]o)\s+correta\s+[ée]\s+(?:a\s+)?(?:primeira|segunda|terceira|quarta|quinta|letra\s+[a-e]|[a-e]|[1-5][ªº]?)\s*[.!—–:-]+\s*)",
+        )
+        .unwrap()
+    });
+    let refs_re = TRAILING_REFERENCES_RE
+        .get_or_init(|| Regex::new(r"(?is)\s*\bRefer[êe]ncias?\s*:.*$").unwrap());
+
+    let without_icons = raw.replace("✅:", "").replace("❌:", "");
+    let stripped_verdict = verdict_re.replace(without_icons.trim(), "");
+    let without_refs = refs_re.replace(stripped_verdict.trim(), "");
+    let candidate = without_refs.trim();
+    if candidate.chars().count() >= 16 {
+        candidate.to_string()
+    } else if stripped_verdict.trim().chars().count() >= 16 {
+        stripped_verdict.trim().to_string()
     } else {
-        let prefix: String = trimmed.chars().take(max_chars.saturating_sub(1)).collect();
-        format!("{}…", prefix.trim_end())
+        without_icons.trim().to_string()
     }
 }
 
@@ -246,33 +282,103 @@ fn extract_legal_provisions(text: &str) -> Vec<String> {
     found
 }
 
-fn extract_exception_sentence(text: &str) -> Option<String> {
-    let re = EXCEPTION_MARKER_RE.get_or_init(|| {
-        Regex::new(r"(?i)\b(salvo|exceto|ressalvad[oa]s?|vedad[oa]s?|independentemente|apenas|exclusivamente|somente|sem\s+preju[íi]zo)\b")
-            .unwrap()
+/// Extrai apenas cláusulas genuínas de exceção/ressalva (`salvo`, `exceto`, `ressalvado`, `sem prejuízo`),
+/// ignorando advérbios de escopo/finalidade como `apenas` ou `independentemente` para jamais rotular
+/// o próprio enunciado ou uma assertiva falsa como "Ressalva / Exceção".
+fn extract_genuine_exception_sentence(text: &str) -> Option<String> {
+    let re = GENUINE_EXCEPTION_RE.get_or_init(|| {
+        Regex::new(
+            r"(?i)\b(salvo|exceto|excetuad[oa]s?|ressalvad[oa]s?|à\s+exce[çc][ãa]o|sem\s+preju[íi]zo)\b",
+        )
+        .unwrap()
     });
-    for sentence in text.split(['.', ';', '\n']) {
+    let cleaned = strip_verdict_and_references(text);
+    for sentence in cleaned.split(['.', ';', '\n']) {
         let s = sentence.trim();
-        if s.len() >= 18 && re.is_match(s) {
-            return Some(truncate_chars(s, 260));
+        if s.chars().count() >= 18 && re.is_match(s) {
+            return Some(truncate_chars(s, 240));
         }
     }
     None
 }
 
 fn pick_decisive_stem_fragment(stem: &str) -> String {
-    let clauses: Vec<&str> = stem
+    let delim_re = STEM_DELIMITER_RE.get_or_init(|| {
+        Regex::new(
+            r"(?i)\b(salvo|exceto|ressalvad[oa]s?|vedad[oa]s?|independentemente|apenas|exclusivamente|somente|necessariamente|isoladamente|sempre|nunca|jamais|sem\s+preju[íi]zo|não\s+[ée]|implica|exige|prescinde)\b",
+        )
+        .unwrap()
+    });
+    let sentences: Vec<&str> = stem
         .split(['.', ';', '?', '\n'])
         .map(str::trim)
         .filter(|s| s.chars().count() >= 16)
         .collect();
-    if let Some(exc) = extract_exception_sentence(stem) {
-        return exc;
+
+    let chosen = sentences
+        .iter()
+        .copied()
+        .find(|s| delim_re.is_match(s))
+        .or_else(|| sentences.last().copied())
+        .unwrap_or_else(|| stem.trim());
+
+    if chosen.chars().count() <= 135 {
+        return chosen.to_string();
     }
-    if let Some(last) = clauses.last() {
-        return truncate_chars(last, 240);
+
+    if let Some(m) = delim_re.find(chosen) {
+        let char_before = chosen[..m.start()].chars().count();
+        if char_before > 32 {
+            let target_skip = char_before.saturating_sub(20);
+            let byte_start = chosen
+                .char_indices()
+                .nth(target_skip)
+                .map(|(idx, _)| {
+                    chosen[idx..]
+                        .find(char::is_whitespace)
+                        .map(|ws| idx + ws + 1)
+                        .unwrap_or(idx)
+                })
+                .unwrap_or(0);
+            let windowed = chosen[byte_start..]
+                .trim_start_matches(|c: char| c.is_whitespace() || matches!(c, ',' | ';' | ':' | '-' | '–' | '—'));
+            if windowed.chars().count() >= 24 {
+                return format!("…{}", truncate_chars(windowed, 130));
+            }
+        }
     }
-    truncate_chars(stem, 240)
+
+    truncate_chars(chosen, 135)
+}
+
+pub(crate) fn deterministic_swap_evidence_order(question_id: &str) -> bool {
+    question_id
+        .bytes()
+        .fold(0u8, |acc, b| acc.wrapping_add(b))
+        & 1
+        == 1
+}
+
+/// Normaliza IDs legados (`ev_decisive`, `ev_err_1`, `ev_err_2`) emitidos por caches offline anteriores
+/// quando a questão utiliza o desafio de evidência sintetizado padrão.
+pub(crate) fn normalize_synthesized_evidence_id(
+    raw_id: &str,
+    has_curated_challenge: bool,
+) -> &str {
+    let trimmed = raw_id.trim();
+    if has_curated_challenge {
+        return trimmed;
+    }
+    if trimmed.eq_ignore_ascii_case("ev_decisive") {
+        "EV_DECISIVE"
+    } else if trimmed.eq_ignore_ascii_case("ev_premissa_divergente")
+        || trimmed.eq_ignore_ascii_case("ev_err_1")
+        || trimmed.eq_ignore_ascii_case("ev_err_2")
+    {
+        "EV_PREMISSA_DIVERGENTE"
+    } else {
+        trimmed
+    }
 }
 
 impl QuestionDocument {
@@ -392,40 +498,71 @@ impl QuestionDocument {
             }
         });
 
-        let tested_rule =
-            if let Some(exp) = self.explanation.as_deref().filter(|s| !s.trim().is_empty()) {
-                let clean = exp.replace("✅:", "").replace("❌:", "");
-                let first_para = clean
-                    .split('\n')
-                    .map(str::trim)
-                    .find(|line| line.chars().count() >= 20)
-                    .unwrap_or(clean.trim());
-                truncate_chars(first_para, 360)
-            } else if let Some((_, _, _, excerpt)) = sources.first() {
-                truncate_chars(excerpt, 360)
-            } else if let Ok(indices) = self.answer_indices() {
-                let gabarito = self
-                    .answers
-                    .get(indices[0])
-                    .map(String::as_str)
-                    .unwrap_or("Gabarito oficial");
-                truncate_chars(
-                    &format!(
-                        "Aplicação direta do critério cobrado em {} (gabarito oficial: {}).",
-                        if self.disciplina.trim().is_empty() {
-                            "disciplina do edital"
-                        } else {
-                            self.disciplina.trim()
-                        },
-                        gabarito
-                    ),
-                    320,
-                )
-            } else {
-                return None;
-            };
+        let tested_rule = if let Some((_, _, _, excerpt)) =
+            sources.first().filter(|(_, _, _, ex)| !ex.trim().is_empty())
+        {
+            truncate_chars(excerpt, 320)
+        } else if let Some(exp) = self.explanation.as_deref().filter(|s| !s.trim().is_empty()) {
+            let clean = strip_verdict_and_references(exp);
+            let first_para = clean
+                .split('\n')
+                .map(str::trim)
+                .find(|line| line.chars().count() >= 20)
+                .unwrap_or(clean.trim());
+            truncate_chars(first_para, 320)
+        } else if let Ok(indices) = self.answer_indices() {
+            let gabarito = self
+                .answers
+                .get(indices[0])
+                .map(String::as_str)
+                .unwrap_or("Gabarito oficial");
+            truncate_chars(
+                &format!(
+                    "Aplicação direta do critério cobrado em {} (gabarito oficial: {}).",
+                    if self.disciplina.trim().is_empty() {
+                        "disciplina do edital"
+                    } else {
+                        self.disciplina.trim()
+                    },
+                    gabarito
+                ),
+                320,
+            )
+        } else {
+            return None;
+        };
 
-        let exception_clause = extract_exception_sentence(&combined_text);
+        let is_true_statement = self.effective_question_type() == "TRUE_FALSE"
+            && self
+                .answer_indices()
+                .ok()
+                .and_then(|idx| self.answers.get(*idx.first()?))
+                .is_some_and(|ans| ans.trim().eq_ignore_ascii_case("Certo"));
+
+        // Extrai exceção/ressalva APENAS de fontes fidedignas (catálogo normativo ou fundamentação oficial;
+        // ou do enunciado exclusivamente se for item Certo sem fundamentação cadastrada).
+        let exception_clause = sources
+            .iter()
+            .find_map(|(_, _, _, excerpt)| extract_genuine_exception_sentence(excerpt))
+            .or_else(|| {
+                self.explanation
+                    .as_deref()
+                    .filter(|s| !s.trim().is_empty())
+                    .and_then(extract_genuine_exception_sentence)
+            })
+            .or_else(|| {
+                if self
+                    .explanation
+                    .as_deref()
+                    .is_none_or(|s| s.trim().is_empty())
+                    && is_true_statement
+                {
+                    extract_genuine_exception_sentence(&self.question)
+                } else {
+                    None
+                }
+            });
+
         let decisive_stem_excerpt = pick_decisive_stem_fragment(&self.question);
 
         let mut plausible_errors = Vec::new();
@@ -449,13 +586,13 @@ impl QuestionDocument {
                 plausible_errors.push(ConceptualErrorItemDto {
                     error_id: "ERR_REGRA_EXCECAO".to_string(),
                     label: "Inversão entre regra geral e cláusula restritiva/exceção".to_string(),
-                    description: "Desconsiderar o delimitador restritivo (salvo/exceto/apenas/vedado) presente no enunciado ou na norma.".to_string(),
+                    description: "Desconsiderar a ressalva ou exceção expressa aplicável ao caso concreto.".to_string(),
                 });
             } else if self.effective_question_type() == "TRUE_FALSE" {
                 plausible_errors.push(ConceptualErrorItemDto {
                     error_id: "ERR_ESCOPO_ASSERTIVA".to_string(),
                     label: "Generalização ou restrição indevida da assertiva".to_string(),
-                    description: "Aceitar extrapolação além do alcance literal do dispositivo ou conceito cobrado pela banca.".to_string(),
+                    description: "Aceitar extrapolação além do alcance do dispositivo ou conceito cobrado pela banca.".to_string(),
                 });
             }
         }
@@ -470,8 +607,8 @@ impl QuestionDocument {
         })
     }
 
-    /// Retorna o seletor opcional pós-resposta apontando exclusivamente para fragmentos do
-    /// enunciado e da fonte oficial (sem formular outra questão jurídica).
+    /// Retorna o seletor opcional pós-resposta apontando exclusivamente para fragmentos concisos do
+    /// enunciado e da fonte oficial (sem repetir a fundamentação textual e sem formular nova questão).
     pub fn effective_evidence_challenge(&self) -> Option<EvidenceChallengeDto> {
         let card = self.effective_editorial_card();
         self.build_evidence_challenge_from_card(card.as_ref())
@@ -491,51 +628,78 @@ impl QuestionDocument {
         let sources = self.linked_catalog_sources();
         let primary_source_id = sources.first().map(|(sid, _, _, _)| sid.clone());
 
-        let decisive_text = if let Some(src_exc) = &card.official_source_excerpt {
+        let decisive_text = if let Some(first_prov) = card.legal_provisions.first() {
             truncate_chars(
                 &format!(
-                    "Trecho decisivo: \"{}\" · Fonte: {}",
-                    card.decisive_stem_excerpt, src_exc
+                    "Critério no trecho \"{}\" confrontado com {}",
+                    card.decisive_stem_excerpt, first_prov
                 ),
-                320,
+                195,
+            )
+        } else if let Some((_, title, _, _)) = sources.first().filter(|(_, t, _, _)| !t.is_empty())
+        {
+            truncate_chars(
+                &format!(
+                    "Critério no trecho \"{}\" à luz de {}",
+                    card.decisive_stem_excerpt, title
+                ),
+                195,
             )
         } else {
             truncate_chars(
                 &format!(
-                    "Trecho decisivo do enunciado e fundamento: \"{}\" — {}",
-                    card.decisive_stem_excerpt, card.tested_rule
+                    "Alcance exato do trecho \"{}\" diante do conceito central cobrado",
+                    card.decisive_stem_excerpt
                 ),
-                320,
+                195,
             )
         };
 
-        let alt_misconception = if let Some(first_err) = card.plausible_conceptual_errors.first() {
-            truncate_chars(
-                &format!(
-                    "Premissa divergente: {} — {}",
-                    first_err.label, first_err.description
-                ),
-                280,
-            )
+        let alt_misconception = if self.effective_question_type() == "MULTIPLE_CHOICE" {
+            if let Some(inc) = self
+                .plausibility_analysis
+                .as_ref()
+                .and_then(|pa| pa.incorrect_answers_analysis.first())
+                .filter(|inc| !inc.alternative.trim().is_empty())
+            {
+                truncate_chars(
+                    &format!(
+                        "Associação com a hipótese alternativa \"{}\"",
+                        inc.alternative.trim()
+                    ),
+                    195,
+                )
+            } else {
+                "Associação geral com termos familiares das alternativas, sem isolar o requisito específico do comando."
+                    .to_string()
+            }
+        } else if card.exception_clause.is_some() {
+            "Aplicação direta da regra geral do tema, sem ponderar a ressalva ou condição específica do item."
+                .to_string()
         } else {
-            "Leitura superficial de termos acessórios do enunciado, sem conferir o núcleo normativo/conceitual.".to_string()
+            "Impressão geral pelos termos técnicos do tema, sem isolar a condição específica afirmada na assertiva."
+                .to_string()
+        };
+
+        let decisive_opt = EvidenceOptionDto {
+            evidence_id: "EV_DECISIVE".to_string(),
+            text: decisive_text,
+            source_id: primary_source_id,
+        };
+        let divergent_opt = EvidenceOptionDto {
+            evidence_id: "EV_PREMISSA_DIVERGENTE".to_string(),
+            text: alt_misconception,
+            source_id: None,
+        };
+        let options = if deterministic_swap_evidence_order(&self.id.to_hex()) {
+            vec![divergent_opt, decisive_opt]
+        } else {
+            vec![decisive_opt, divergent_opt]
         };
 
         Some(EvidenceChallengeDto {
-            prompt: "Opcional — aponte qual fragmento determinou sua resposta (sem nova questão):"
-                .to_string(),
-            options: vec![
-                EvidenceOptionDto {
-                    evidence_id: "EV_DECISIVE".to_string(),
-                    text: decisive_text,
-                    source_id: primary_source_id,
-                },
-                EvidenceOptionDto {
-                    evidence_id: "EV_PREMISSA_DIVERGENTE".to_string(),
-                    text: alt_misconception,
-                    source_id: None,
-                },
-            ],
+            prompt: "Opcional — qual ponto guiou sua decisão nesta questão?".to_string(),
+            options,
             correct_evidence_id: "EV_DECISIVE".to_string(),
         })
     }
@@ -772,5 +936,84 @@ mod revision_tests {
         let dto = open_doc.to_dto(None);
         assert_eq!(dto.question_revision, rev);
         assert_eq!(dto.question_type, "OPEN_ENDED");
+    }
+
+    #[test]
+    fn synthesized_post_answer_avoids_false_stem_exceptions_verdict_prefixes_and_explanation_echo() {
+        // Caso real reportado: "apenas para evitar reconhecer o prejuízo" no enunciado NÃO é exceção legal,
+        // "Certo." e "Referência: ..." não devem poluir `tested_rule`, e `evidence_challenge` não deve repetir `tested_rule`.
+        let q_disp: QuestionDocument = bson::from_document(doc! {
+            "_id": ObjectId::new(),
+            "question_type": "TRUE_FALSE",
+            "question": "Vender rapidamente investimentos que se valorizaram e manter investimentos desvalorizados apenas para evitar reconhecer o prejuízo é um padrão compatível com o efeito disposição.",
+            "answers": ["Certo", "Errado"],
+            "correct_answer_indices": [0],
+            "disciplina": "Finanças",
+            "explanation": "Certo. O efeito disposição envolve maior propensão a realizar ganhos que perdas. Sua identificação empírica exige considerar as oportunidades de venda e explicações alternativas, como tributos, custos e rebalanceamento. Referência: Odean, Are Investors Reluctant to Realize Their Losses?, 1998."
+        })
+        .unwrap();
+
+        let card = q_disp.effective_editorial_card().unwrap();
+        assert!(
+            card.exception_clause.is_none(),
+            "Advérbio de finalidade 'apenas para evitar' no enunciado não pode virar Ressalva / Exceção"
+        );
+        assert!(
+            !card.tested_rule.starts_with("Certo"),
+            "tested_rule não deve iniciar com prefixo redundante de veredito: {}",
+            card.tested_rule
+        );
+        assert!(
+            !card.tested_rule.contains("Referência:"),
+            "tested_rule não deve incluir rodapé bibliográfico: {}",
+            card.tested_rule
+        );
+
+        let challenge = q_disp.effective_evidence_challenge().unwrap();
+        assert_eq!(challenge.correct_evidence_id, "EV_DECISIVE");
+        assert_eq!(challenge.options.len(), 2);
+        for opt in &challenge.options {
+            assert!(
+                !opt.text.contains("O efeito disposição envolve maior propensão"),
+                "Desafio de 3 Sinais não deve repetir a explicação exibida acima: {}",
+                opt.text
+            );
+            assert!(
+                !opt.text.contains("Premissa divergente:"),
+                "Opção alternativa não deve exibir rótulo meta-autoincriminador: {}",
+                opt.text
+            );
+        }
+
+        // Assertiva ERRADA contendo "salvo" no enunciado falso jamais deve extrair o enunciado falso como exceção verdadeira.
+        let q_false_salvo: QuestionDocument = bson::from_document(doc! {
+            "_id": ObjectId::new(),
+            "question_type": "TRUE_FALSE",
+            "question": "As dimensões ambiental, social e de governança são independentes, salvo no setor bancário estatal.",
+            "answers": ["Certo", "Errado"],
+            "correct_answer_indices": [1],
+            "disciplina": "Finanças",
+            "explanation": "Errado. Um mesmo evento pode atravessar múltiplas dimensões de risco e categorias financeiras."
+        })
+        .unwrap();
+        let false_card = q_false_salvo.effective_editorial_card().unwrap();
+        assert!(
+            false_card.exception_clause.is_none(),
+            "Enunciado de item Errado jamais pode ser extraído como Ressalva / Exceção"
+        );
+
+        // Normalização retrocompatível de IDs legados de evidência
+        assert_eq!(
+            normalize_synthesized_evidence_id("ev_decisive", false),
+            "EV_DECISIVE"
+        );
+        assert_eq!(
+            normalize_synthesized_evidence_id("ev_err_1", false),
+            "EV_PREMISSA_DIVERGENTE"
+        );
+        assert_eq!(
+            normalize_synthesized_evidence_id("ev_decisive", true),
+            "ev_decisive"
+        );
     }
 }

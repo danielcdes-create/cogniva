@@ -1,13 +1,13 @@
 # Documentação do Ecossistema Cogniva
 
-Este diretório reúne as especificações arquiteturais, contratos normativos, políticas de segurança/privacidade, manuais operacionais e guias de administração da plataforma **Cogniva `2.4.2`** (`build 32`).
+Este diretório reúne as especificações arquiteturais, contratos normativos, políticas de segurança/privacidade, manuais operacionais e guias de administração da plataforma **Cogniva `2.4.3`** (`build 33`).
 
 ---
 
 ## 🗺️ Mapa de Documentação Viva
 
 ### 1. Arquitetura, Motores de Decisão, Segurança e Operação
-- **[ARQUITETURA.md](ARQUITETURA.md):** Visão sistêmica da versão `2.4.2` — autenticação nativa (`Argon2id` + sessões revogáveis), banco `cogniva` 100% V2.3, módulo **Missões** (`/missoes/` + Android), conformidade LGPD Art. 18, simetria Rust ↔ Kotlin (`contract_version: 5`), consulta contextual em camada e governança xAI.
+- **[ARQUITETURA.md](ARQUITETURA.md):** Visão sistêmica da versão `2.4.3` — autenticação nativa (`Argon2id` + sessões revogáveis), banco `cogniva` 100% V2.3, módulo **Missões** (`/missoes/` + Android), conformidade LGPD Art. 18, simetria Rust ↔ Kotlin (`contract_version: 5`), consulta contextual em camada e governança xAI.
 - **[MODULO-MISSOES.md](MODULO-MISSOES.md):** Aprendizagem experiencial audiovisual declarativa (`shared/missions-catalog.json`), streaming `HTTP Range`, gráficos nativos e separação epistemológica entre percurso narrativo, decisões formativas e avaliação formal em questões humanas.
 - **[MOTORES-DECISAO-CORE-LOOP.md](MOTORES-DECISAO-CORE-LOOP.md):** Especificação matemática da arquitetura em 3 camadas (`contract_version: 5`): Escassez & Diagnóstico de 3 Sinais (`< 15` questões + Transferência Cross-Banca), Simulador de Decisão sob Incerteza ($VE = 2p-1$ + curva de 300 min $p(t)$ com controle de dificuldade) e Protocolo de Entrada de 60 Segundos ("Terça · 22h").
 - **[PRIVACY.md](../PRIVACY.md):** Política de Privacidade e Proteção de Dados Pessoais (LGPD — Lei 13.709/2018), detalhando minimização, transferência internacional controlada e exclusão física imediata de dados pessoais com preservação do acervo compartilhado.

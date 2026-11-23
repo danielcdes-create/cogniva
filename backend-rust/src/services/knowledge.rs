@@ -190,6 +190,7 @@ pub fn project_units(activity: &Document, question: &Document) -> Vec<UnitQuesti
         return Vec::new();
     }
 
+    let has_curated_ch = q.evidence_challenge.is_some();
     let effective_ch = q.effective_evidence_challenge();
     let is_verified_correct_event = |e: &&Document| -> bool {
         if e.get_bool("status").ok() != Some(true) || e.get_i32("nivel_confianca").unwrap_or(0) < 2
@@ -203,7 +204,10 @@ pub fn project_units(activity: &Document, question: &Document) -> Vec<UnitQuesti
                 .filter(|s| !s.is_empty()),
             effective_ch.as_ref(),
         ) {
-            (Some(sel), Some(ch)) => sel == ch.correct_evidence_id,
+            (Some(sel), Some(ch)) => {
+                crate::models::question::normalize_synthesized_evidence_id(sel, has_curated_ch)
+                    == ch.correct_evidence_id
+            }
             _ => true,
         }
     };
@@ -251,7 +255,9 @@ pub fn project_units(activity: &Document, question: &Document) -> Vec<UnitQuesti
         effective_ch.as_ref(),
     ) {
         (Some(sel), Some(ch)) if !sel.trim().is_empty() => {
-            Some(sel.trim() == ch.correct_evidence_id)
+            let norm_sel =
+                crate::models::question::normalize_synthesized_evidence_id(sel, has_curated_ch);
+            Some(norm_sel == ch.correct_evidence_id)
         }
         _ => None,
     };

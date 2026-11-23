@@ -82,18 +82,22 @@ pub(crate) fn validate_selected_evidence_id(
             "Identificador de evidência fora dos limites".into(),
         ));
     }
+    let normalized = crate::models::question::normalize_synthesized_evidence_id(
+        trimmed,
+        question.evidence_challenge.is_some(),
+    );
     if let Some(challenge) = question.effective_evidence_challenge() {
         if !challenge
             .options
             .iter()
-            .any(|opt| opt.evidence_id == trimmed)
+            .any(|opt| opt.evidence_id == normalized)
         {
             return Err(AppError::BadRequest(
                 "Identificador de evidência não pertence às opções desta questão".into(),
             ));
         }
     }
-    Ok(trimmed.to_string())
+    Ok(normalized.to_string())
 }
 
 fn validate(
@@ -696,15 +700,17 @@ pub async fn attach_evidence(
             "Identificador de evidência fora dos limites".into(),
         ));
     }
-    if let Some(raw_q) = state
+    let stored_evidence_id = if let Some(raw_q) = state
         .db
         .collection::<Document>("todasQuestoes")
         .find_one(doc! { "_id": qid })
         .await?
     {
         let q_doc = crate::services::question_compatibility::decode(raw_q)?;
-        validate_selected_evidence_id(trimmed, &q_doc)?;
-    }
+        validate_selected_evidence_id(trimmed, &q_doc)?
+    } else {
+        trimmed.to_string()
+    };
     let activities = state.db.collection_with_options::<Document>(
         "userActivityLog",
         CollectionOptions::builder()
@@ -725,7 +731,7 @@ pub async fn attach_evidence(
                 "pastSessions.attempt_id": attempt_id
             },
             doc! {
-                "$set": { "pastSessions.$.selected_evidence_id": trimmed },
+                "$set": { "pastSessions.$.selected_evidence_id": &stored_evidence_id },
                 "$inc": { "state_revision": 1_i64 }
             },
         )

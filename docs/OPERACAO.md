@@ -1,6 +1,6 @@
 # Manual de Operação e Produção — Cogniva 2.0
 
-Este guia documenta a operação segura do **Cogniva `2.4.2`** (`build 32`) na VPS DigitalOcean, incluindo credenciais, migração do acervo `CNU → cogniva`, administração de contas, conformidade LGPD, TLS IPv4/IPv6, promoção atômica e rollback verificado.
+Este guia documenta a operação segura do **Cogniva `2.4.3`** (`build 33`) na VPS DigitalOcean, incluindo credenciais, migração do acervo `CNU → cogniva`, administração de contas, conformidade LGPD, TLS IPv4/IPv6, promoção atômica e rollback verificado.
 
 ---
 
@@ -77,6 +77,6 @@ O fluxo de promoção em [`.github/workflows/deploy.yml`](../.github/workflows/d
 ```bash
 python3 scripts/verify-production-release.py <GIT_SHA> \
   --origin https://198.199.65.103 \
-  --version-name 2.4.2 \
-  --version-code 32
+  --version-name 2.4.3 \
+  --version-code 33
 ```

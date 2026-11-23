@@ -6,11 +6,13 @@ import br.com.concursoprep.app.domain.exam.StrategyAction
 import br.com.concursoprep.app.domain.exam.StrategyEngine
 import br.com.concursoprep.app.domain.exam.StrategyPosture
 import br.com.concursoprep.app.domain.model.EditorialCardDto
+import br.com.concursoprep.app.domain.model.EvidenceChallengeDto
 import br.com.concursoprep.app.domain.model.QuestionDto
 import br.com.concursoprep.app.domain.model.QuestionType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -153,7 +155,7 @@ class PerformanceEnginesAndModelsTest {
 
         val tfChallenge = qSynthesizedTf.effectiveEvidenceChallenge()
         assertNotNull(tfChallenge)
-        assertEquals("ev_decisive", tfChallenge!!.correctEvidenceId)
+        assertEquals("EV_DECISIVE", tfChallenge!!.correctEvidenceId)
         assertTrue(tfChallenge.options.size >= 2)
 
         // Synthesized MULTIPLE_CHOICE card builds distractor error items excluding the correct index
@@ -167,6 +169,90 @@ class PerformanceEnginesAndModelsTest {
         )
         val mcCard = qSynthesizedMc.effectiveEditorialCard()
         assertTrue(mcCard.legalProvisions.any { it.contains("CF/88", ignoreCase = true) })
+        assertNull("Scope word 'apenas' in MC question stem must not become exceptionClause", mcCard.exceptionClause)
         assertEquals(listOf("ERR_ALT_1", "ERR_ALT_3"), mcCard.plausibleConceptualErrors.map { it.errorId })
+    }
+
+    @Test
+    fun postAnswerDeduplicationSanitizesFalseExceptionsVerdictPrefixesAndLegacyCachedPayloads() {
+        val stemDisp = "Vender rapidamente investimentos que se valorizaram e manter investimentos desvalorizados apenas para evitar reconhecer o prejuízo é um padrão compatível com o efeito disposição."
+        val expDisp = "Certo. O efeito disposição envolve maior propensão a realizar ganhos que perdas. Sua identificação empírica exige considerar as oportunidades de venda e explicações alternativas, como tributos, custos e rebalanceamento. Referência: Odean, Are Investors Reluctant to Realize Their Losses?, 1998."
+
+        // Simula questão cacheada do 2.4.2 com duplicação legada em editorialCard e evidenceChallenge
+        val legacyCached = QuestionDto(
+            id = "673f00000000000000000001",
+            question = stemDisp,
+            questionType = QuestionType.TRUE_FALSE,
+            answers = listOf("Certo", "Errado"),
+            correctAnswerIndices = listOf(0),
+            disciplina = "Finanças",
+            explanation = expDisp,
+            editorialCard = EditorialCardDto(
+                legalProvisions = emptyList(),
+                testedRule = expDisp,
+                exceptionClause = stemDisp.removeSuffix("."),
+                decisiveStemExcerpt = stemDisp.removeSuffix(".")
+            ),
+            evidenceChallenge = EvidenceChallengeDto(
+                prompt = "Opcional — aponte qual fragmento determinou sua resposta (sem nova questão):",
+                options = listOf(
+                    br.com.concursoprep.app.domain.model.EvidenceOptionDto(
+                        evidenceId = "EV_DECISIVE",
+                        text = "Trecho decisivo do enunciado e fundamento: \"$stemDisp\" — $expDisp"
+                    ),
+                    br.com.concursoprep.app.domain.model.EvidenceOptionDto(
+                        evidenceId = "EV_PREMISSA_DIVERGENTE",
+                        text = "Premissa divergente: Generalização ou restrição indevida da assertiva"
+                    )
+                ),
+                correctEvidenceId = "EV_DECISIVE"
+            )
+        )
+
+        val cleanedCard = legacyCached.effectiveEditorialCard()
+        assertNull("False stem exception with 'apenas' must be stripped", cleanedCard.exceptionClause)
+        assertFalse("testedRule must strip leading 'Certo.'", cleanedCard.testedRule.startsWith("Certo"))
+
+        val formattedExp = legacyCached.formatPostAnswerExplanation()
+        assertNotNull(formattedExp)
+        assertFalse("Formatted explanation body strips redundant 'Certo.'", formattedExp!!.body.startsWith("Certo."))
+        assertEquals(
+            "Referência: Odean, Are Investors Reluctant to Realize Their Losses?, 1998.",
+            formattedExp.referenceFooter
+        )
+        assertTrue(
+            "Synthesized testedRule must be detected as redundant with explanation so UI renders it once",
+            br.com.concursoprep.app.domain.model.isPostAnswerTextRedundant(
+                cleanedCard.testedRule,
+                legacyCached.explanation,
+                formattedExp.body
+            )
+        )
+
+        val upgradedChallenge = legacyCached.effectiveEvidenceChallenge()
+        assertNotNull(upgradedChallenge)
+        assertEquals("EV_DECISIVE", upgradedChallenge!!.correctEvidenceId)
+        assertTrue(
+            "Upgraded challenge must not echo the explanation text",
+            upgradedChallenge.options.none { it.text.contains("maior propensão a realizar ganhos") }
+        )
+
+        // Rótulo conciso em múltipla escolha com alternativa extensa
+        val longMc = QuestionDto(
+            id = "673f00000000000000000002",
+            question = "A explicação microcomportamental central do efeito disposição articula:",
+            questionType = QuestionType.MULTIPLE_CHOICE,
+            answers = listOf(
+                "hipótese neoclássica de expectativas racionais com tarifas decrescentes.",
+                "a contabilidade mental por ativo ancorada no preço de compra, somada à concavidade nos ganhos e convexidade nos prejuízos."
+            ),
+            correctAnswerIndices = listOf(1),
+            disciplina = "Finanças"
+        )
+        assertEquals("Alternativa B", longMc.formatPostAnswerCorrectLabel(1))
+        assertNull(
+            "Raw option copy ERR_ALT_* must not be surfaced as fake conceptual error",
+            longMc.resolveActionableConceptualError(longMc.effectiveEditorialCard(), 0)
+        )
     }
 }

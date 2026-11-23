@@ -774,7 +774,15 @@ class MainViewModel(
     fun reportProblem(id:String,category:String){operation {check(repository.reportQuestionProblem(repository.ownerUserId,id,category)){"O reporte não pôde ser salvo; tente novamente."};appContext?.let{OfflineSyncWorker.enqueueNow(it)};localStats();_userFeedbackMessage.emit("Reporte salvo neste aparelho e aguardando confirmação de envio.")}}
     fun requestAiTutor(id:String,kind:String,title:String,hintIndex:Int?=null){
         aiJob?.cancel();val generation=++aiGeneration;_activeAiSheetTitle.value=title;_activeAiSheetMarkdown.value="Consultando tutor…"
-        aiJob=operation {val text=repository.requestAiTutor(id,kind,hintIndex);if(aiGeneration==generation&&_activeQuizQuestions.value?.any{it.id==id}==true)_activeAiSheetMarkdown.value=text}
+        aiJob=operation {
+            val text=repository.requestAiTutor(id,kind,hintIndex)
+            if(kind=="explanation" && text.isNotBlank() && !text.startsWith("Tutor indisponível")){
+                _activeQuizQuestions.value=_activeQuizQuestions.value?.map { q ->
+                    if(q.id==id && q.explanation.isNullOrBlank()) q.copy(explanation=text) else q
+                }
+            }
+            if(aiGeneration==generation&&_activeQuizQuestions.value?.any{it.id==id}==true)_activeAiSheetMarkdown.value=text
+        }
     }
     fun dismissAiSheet(){aiGeneration++;aiJob?.cancel();_activeAiSheetMarkdown.value=null;_activeAiSheetTitle.value=null}
 

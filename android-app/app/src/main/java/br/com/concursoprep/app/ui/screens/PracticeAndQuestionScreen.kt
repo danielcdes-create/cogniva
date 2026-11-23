@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -45,6 +46,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -99,6 +101,8 @@ import br.com.concursoprep.app.domain.model.QuestionDto
 import br.com.concursoprep.app.domain.model.QuestionType
 import br.com.concursoprep.app.domain.model.QuizMode
 import br.com.concursoprep.app.domain.model.VALID_PROBLEM_CATEGORIES
+import br.com.concursoprep.app.domain.model.isPostAnswerTextRedundant
+import br.com.concursoprep.app.domain.model.normalizeEvidenceOptionId
 import br.com.concursoprep.app.ui.components.ConfidenceSelectorGrid
 import br.com.concursoprep.app.ui.components.ContextualLookupBottomSheet
 import br.com.concursoprep.app.ui.components.LayerSelectionTextToolbar
@@ -331,9 +335,15 @@ fun QuestionSessionScreen(
         handleBackNavigation()
     }
 
+    val listState = rememberLazyListState()
+    var lastScrolledIndex by remember { mutableIntStateOf(currentIndex) }
     LaunchedEffect(currentIndex) {
         onDismissAiSheet()
         onDismissContextualLookup()
+        if (currentIndex != lastScrolledIndex) {
+            lastScrolledIndex = currentIndex
+            listState.scrollToItem(0)
+        }
     }
 
     val deadline by rememberSaveable(snapshot?.sessionId) { mutableStateOf(snapshot?.deadlineEpochMs ?: (System.currentTimeMillis()+questions.size*180000L)) }
@@ -802,6 +812,7 @@ fun QuestionSessionScreen(
             contentAlignment = Alignment.TopCenter
         ) {
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxSize()
                     .widthIn(max = 680.dp),
@@ -1210,9 +1221,43 @@ fun QuestionSessionScreen(
                 }
 
                 if (isAnswerSubmitted && !hideFeedback) {
-                    val correctOptionLabel = question.answers.getOrNull(correctIndex) ?: "Gabarito oficial"
-
                     item(key = "post_feedback") {
+                        val correctOptionLabel = question.formatPostAnswerCorrectLabel(correctIndex)
+                        val formattedExplanation = remember(question.id, question.explanation) {
+                            question.formatPostAnswerExplanation()
+                        }
+                        val showTestedRule = formattedExplanation == null || !isPostAnswerTextRedundant(
+                            editorial.testedRule,
+                            question.explanation,
+                            formattedExplanation.body
+                        )
+                        val distinctException = editorial.exceptionClause?.takeIf { exc ->
+                            exc.isNotBlank() && !isPostAnswerTextRedundant(
+                                exc,
+                                question.explanation,
+                                formattedExplanation?.body,
+                                if (question.editorialCard == null) question.question else null
+                            )
+                        }
+                        val actionableError = if (!isUserCorrect && !isBlankAnswer) {
+                            question.resolveActionableConceptualError(editorial, selectedOptionIndex)
+                        } else {
+                            null
+                        }
+                        val confidenceBadgeText = when (selectedConfidence.coerceIn(0, 3)) {
+                            0 -> "Nenhuma Ideia"
+                            1 -> "Chutei"
+                            2 -> "Mais ou Menos"
+                            else -> "Certeza Absoluta"
+                        }
+                        val userChosenSummary = when {
+                            isBlankAnswer -> null
+                            question.questionType == QuestionType.TRUE_FALSE ->
+                                selectedOptionIndex?.let { question.answers.getOrNull(it) }
+                            else -> selectedOptionIndex?.let { "Alternativa ${'A' + it}" }
+                        }
+                        val recordedSeconds = currentAttempt?.timeSpentSeconds
+
                         Card(
                             shape = RoundedCornerShape(14.dp),
                             colors = CardDefaults.cardColors(
@@ -1243,6 +1288,14 @@ fun QuestionSessionScreen(
                                     fontWeight = FontWeight.Bold
                                 )
 
+                                if (userChosenSummary != null) {
+                                    val timeSuffix = recordedSeconds?.takeIf { it > 0 }?.let { " · ${it}s" }.orEmpty()
+                                    Text(
+                                        text = "Sua marcação: $userChosenSummary · Confiança: $confidenceBadgeText$timeSuffix",
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                }
+
                                 if (isHighConfidenceError) {
                                     Surface(
                                         shape = RoundedCornerShape(8.dp),
@@ -1258,7 +1311,7 @@ fun QuestionSessionScreen(
                                     }
                                 }
 
-                                // Ficha Editorial Rastreável (Fundamento Legal, Regra, Exceção e Erro Objetivo)
+                                // Fundamentação consolidada em superfície única (sem repetir explicação como "Regra cobrada" ou enunciado como "Ressalva")
                                 Surface(
                                     shape = RoundedCornerShape(10.dp),
                                     color = MaterialTheme.colorScheme.surface,
@@ -1267,7 +1320,7 @@ fun QuestionSessionScreen(
                                 ) {
                                     Column(
                                         modifier = Modifier.padding(12.dp),
-                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
                                         if (editorial.legalProvisions.isNotEmpty()) {
                                             Text(
@@ -1277,11 +1330,33 @@ fun QuestionSessionScreen(
                                                 color = MaterialTheme.colorScheme.primary
                                             )
                                         }
-                                        Text(
-                                            text = "Regra cobrada: ${editorial.testedRule}",
-                                            style = MaterialTheme.typography.bodyMedium
-                                        )
-                                        editorial.exceptionClause?.takeIf { it.isNotBlank() }?.let { exc ->
+                                        if (showTestedRule) {
+                                            Text(
+                                                text = if (formattedExplanation != null) {
+                                                    "Regra cobrada: ${editorial.testedRule}"
+                                                } else {
+                                                    editorial.testedRule
+                                                },
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                        }
+                                        if (showTestedRule && formattedExplanation != null) {
+                                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                                        }
+                                        formattedExplanation?.let { expParts ->
+                                            Text(
+                                                text = remember(expParts.body) { MarkdownParser.parse(expParts.body) },
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                            expParts.referenceFooter?.let { refLine ->
+                                                Text(
+                                                    text = refLine,
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                        distinctException?.let { exc ->
                                             Text(
                                                 text = "Ressalva / Exceção: $exc",
                                                 style = MaterialTheme.typography.bodySmall,
@@ -1289,8 +1364,7 @@ fun QuestionSessionScreen(
                                                 color = ext.warning
                                             )
                                         }
-                                        if (!isUserCorrect && !isBlankAnswer && editorial.plausibleConceptualErrors.isNotEmpty()) {
-                                            val err = editorial.plausibleConceptualErrors.first()
+                                        actionableError?.let { err ->
                                             Text(
                                                 text = "Indicação objetiva do erro: ${err.label} — ${err.description}",
                                                 style = MaterialTheme.typography.bodySmall,
@@ -1299,13 +1373,6 @@ fun QuestionSessionScreen(
                                             )
                                         }
                                     }
-                                }
-
-                                question.explanation?.takeIf { it.isNotBlank() }?.let { expText ->
-                                    Text(
-                                        text = remember(expText) { MarkdownParser.parse(expText) },
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
                                 }
 
                                 Spacer(modifier = Modifier.height(2.dp))
@@ -1328,25 +1395,29 @@ fun QuestionSessionScreen(
                                             label = { Text("Consultar / Google em Camada") }
                                         )
                                     }
-                                    AssistChip(
-                                        onClick = { onRequestAiTutor(question.id, "explanation", "Gabarito Comentado Completo", null) },
-                                        label = { Text("Análise das Alternativas") }
-                                    )
-                                    AssistChip(
-                                        onClick = { onRequestAiTutor(question.id, "mnemonic", "Mnemônico de Fixação", null) },
-                                        label = { Text("Criar Mnemônico") }
-                                    )
+                                    if (formattedExplanation == null) {
+                                        AssistChip(
+                                            onClick = { onRequestAiTutor(question.id, "explanation", "Gabarito Comentado Completo", null) },
+                                            label = { Text("Gerar Comentário IA") }
+                                        )
+                                    }
+                                    if (question.questionType == QuestionType.MULTIPLE_CHOICE) {
+                                        AssistChip(
+                                            onClick = { onRequestAiTutor(question.id, "plausibility", "Análise dos Distratores", null) },
+                                            label = { Text("Análise dos Distratores") }
+                                        )
+                                    }
                                     AssistChip(
                                         onClick = { onRequestAiTutor(question.id, "extra-concepts", "Conceitos-Chave & Exemplos", null) },
                                         label = { Text("Conceitos-Chave") }
                                     )
                                     AssistChip(
-                                        onClick = { onRequestAiTutor(question.id, "plausibility", "Plausibilidade dos Distratores", null) },
-                                        label = { Text("Plausibilidade") }
+                                        onClick = { onRequestAiTutor(question.id, "child-friendly-post", "Explicação Simples", null) },
+                                        label = { Text("Explicação Simples") }
                                     )
                                     AssistChip(
-                                        onClick = { onRequestAiTutor(question.id, "child-friendly-post", "Explicação Infantil (ELI10)", null) },
-                                        label = { Text("Explicação Simples") }
+                                        onClick = { onRequestAiTutor(question.id, "mnemonic", "Mnemônico de Fixação", null) },
+                                        label = { Text("Criar Mnemônico") }
                                     )
                                 }
                             }
@@ -1444,7 +1515,11 @@ fun QuestionSessionScreen(
                     // Diagnóstico dos 3 Sinais: Resposta × Confiança × Evidência Selecionada (em acertos e erros, sem nova pergunta jurídica)
                     if (!isBlankAnswer && challenge != null && challenge.options.isNotEmpty()) {
                         item(key = "evidence_challenge") {
-                            val pickedWrongEvidenceOnHit = isUserCorrect && selectedEvidenceId != null && selectedEvidenceId != challenge.correctEvidenceId
+                            val hasCustomCh = question.hasCustomEvidenceChallenge()
+                            val normalizedSelectedEv = normalizeEvidenceOptionId(selectedEvidenceId, hasCustomCh)
+                            val pickedWrongEvidenceOnHit = isUserCorrect &&
+                                normalizedSelectedEv != null &&
+                                normalizedSelectedEv != challenge.correctEvidenceId
                             Card(
                                 shape = RoundedCornerShape(14.dp),
                                 colors = CardDefaults.cardColors(
@@ -1468,17 +1543,17 @@ fun QuestionSessionScreen(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     challenge.options.forEach { opt ->
-                                        val isPicked = selectedEvidenceId == opt.evidenceId
+                                        val isPicked = normalizedSelectedEv == opt.evidenceId
                                         val isRightEv = opt.evidenceId == challenge.correctEvidenceId
                                         Surface(
                                             shape = RoundedCornerShape(10.dp),
                                             color = when {
-                                                selectedEvidenceId != null && isRightEv -> ext.correctContainer
+                                                normalizedSelectedEv != null && isRightEv -> ext.correctContainer
                                                 isPicked && !isRightEv -> ext.errorContainer
                                                 else -> MaterialTheme.colorScheme.surfaceContainerLow
                                             },
                                             contentColor = when {
-                                                selectedEvidenceId != null && isRightEv -> ext.onCorrectContainer
+                                                normalizedSelectedEv != null && isRightEv -> ext.onCorrectContainer
                                                 isPicked && !isRightEv -> ext.onErrorContainer
                                                 else -> MaterialTheme.colorScheme.onSurface
                                             },
@@ -1488,8 +1563,11 @@ fun QuestionSessionScreen(
                                             ),
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .clickable(enabled = selectedEvidenceId == null) {
+                                                .clickable(enabled = normalizedSelectedEv == null) {
                                                     selectedEvidenceId = opt.evidenceId
+                                                    userAnswers[question.id]?.let { prev ->
+                                                        userAnswers[question.id] = prev.copy(selectedEvidenceId = opt.evidenceId)
+                                                    }
                                                     onSelectEvidence(question.id, opt.evidenceId)
                                                 }
                                         ) {
@@ -1514,6 +1592,16 @@ fun QuestionSessionScreen(
                                                 modifier = Modifier.padding(10.dp)
                                             )
                                         }
+                                    } else if (normalizedSelectedEv != null) {
+                                        Text(
+                                            text = if (isUserCorrect) {
+                                                "Raciocínio alinhado ao fundamento central registrado nos 3 Sinais."
+                                            } else {
+                                                "Leitura registrada para calibrar a próxima revisão deste tópico."
+                                            },
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
                                     }
                                 }
                             }

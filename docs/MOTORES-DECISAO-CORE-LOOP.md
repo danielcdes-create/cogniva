@@ -1,6 +1,6 @@
-# Arquitetura em 3 Camadas: Diagnóstico por Evidências, Decisão sob Incerteza e Protocolo de 60s (`2.4.2`)
+# Arquitetura em 3 Camadas: Diagnóstico por Evidências, Decisão sob Incerteza e Protocolo de 60s (`2.4.3`)
 
-Este documento especifica a arquitetura pedagógica, estatística e comportamental do **Cogniva `2.4.2`** (`build 32`, `contract_version: 5`), implementada com simetria matemática bit a bit entre Python, o backend Rust ([`backend-rust/src/services/`](../backend-rust/src/services/)) e o cliente Android *offline-first* ([`PerformanceEngines.kt`](../android-app/app/src/main/java/br/com/concursoprep/app/domain/exam/PerformanceEngines.kt)).
+Este documento especifica a arquitetura pedagógica, estatística e comportamental do **Cogniva `2.4.3`** (`build 33`, `contract_version: 5`), implementada com simetria matemática bit a bit entre Python, o backend Rust ([`backend-rust/src/services/`](../backend-rust/src/services/)) e o cliente Android *offline-first* ([`PerformanceEngines.kt`](../android-app/app/src/main/java/br/com/concursoprep/app/domain/exam/PerformanceEngines.kt)).
 
 A solução abandona três ilusões clássicas de plataformas para concursos:
 1. Que são necessárias milhares de questões sintéticas para diagnosticar um conceito;
@@ -11,16 +11,16 @@ A solução abandona três ilusões clássicas de plataformas para concursos:
 
 ## 1. Camada 1 — Escassez: Diagnóstico por Evidências, Não por Geração
 
-### 1.1. Ficha Editorial Rastreável (`editorial_card`)
+### 1.1. Ficha Editorial Rastreável (`editorial_card`) e Higiene Pós-Resposta
 Cada questão humana objetiva possui (por curadoria no `/admin/` ou sintetização determinística ancorada nas fontes oficiais do catálogo em [`models/question.rs`](../backend-rust/src/models/question.rs) e [`Models.kt`](../android-app/app/src/main/java/br/com/concursoprep/app/domain/model/Models.kt)) uma ficha editorial com:
 - `legal_provisions[]`: dispositivos legais, normativos ou súmulas envolvidos;
-- `tested_rule`: regra cobrada de forma objetiva;
-- `exception_clause`: ressalva ou exceção examinada (quando presente);
-- `decisive_stem_excerpt`: fragmento decisivo do enunciado humano;
+- `tested_rule`: regra cobrada de forma objetiva (priorizando excertos normativos verificados do catálogo e removendo prefixos redundantes de veredito e rodapés bibliográficos);
+- `exception_clause`: ressalva ou exceção examinada (extraída exclusivamente de conectivos reais de ressalva como `salvo`, `exceto`, `ressalvado` e `sem prejuízo` em fontes fidedignas — jamais de advérbios de escopo como `apenas` no enunciado ou de assertivas falsas);
+- `decisive_stem_excerpt`: fragmento decisivo do enunciado humano (`<= 135` caracteres com truncamento em fronteira de palavra);
 - `official_source_excerpt`: excerto literal da fonte normativa;
 - `plausible_conceptual_errors[]`: erros conceituais plausíveis associados aos distratores.
 
-Após confirmar a resposta, o estudante recebe imediatamente o gabarito + fundamento legal destacado e pode, opcionalmente, apontar o trecho do enunciado/fonte oficial que determinou sua resposta (`POST /api/v1/quiz/attempt-evidence`), **sem jamais formular outra questão jurídica gerada por IA**.
+Após confirmar a resposta, o cliente consolida a fundamentação em **superfície única sem duplicidade** (`isPostAnswerTextRedundant` suprime `Regra cobrada` ou `Ressalva / Exceção` quando já contidas no comentário principal, destaca `Referência(s):` em rodapé próprio e exibe apenas chips compatíveis com o formato da questão) e apresenta o seletor opcional dos **3 Sinais** (`EV_DECISIVE` vs. `EV_PREMISSA_DIVERGENTE` via `POST /api/v1/quiz/attempt-evidence`), com opções neutras, ordem determinística por `question_id` e zero eco da explicação textual — **sem jamais formular outra questão jurídica gerada por IA**.
 
 ### 1.2. Cruzamento dos 3 Sinais e Restrição `< 15` Questões (`diagnostic_engine.rs` / `DiagnosticEngine`)
 O diagnóstico cruza **resposta × confiança declarada × evidência selecionada** sob `MIN_QUESTIONS_FOR_MASTERY = 15`:

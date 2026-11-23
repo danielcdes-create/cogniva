@@ -393,9 +393,15 @@ pub(crate) fn build_tutor_prompts(
                 (MNEMONIC_SYSTEM_INSTRUCTION.to_string(), prompt)
             }
             AiAssistKind::Plausibility => {
-                let prompt = format!(
-                    "{post_source}{student_context}\n\nTomando a resposta correta (`correct_answer`) como referência explícita, analise a plausibilidade de cada alternativa incorreta classificando-a em `Improvável`, `Parcialmente plausível` ou `Plausível`, explicando o raciocínio do distrator e prestando atenção especial a comandos como NÃO, EXCETO, INCORRETA e MENOS."
-                );
+                let prompt = if question_type == "TRUE_FALSE" {
+                    format!(
+                        "{post_source}{student_context}\n\nTomando o gabarito oficial (`correct_answer`) como referência explícita, analise em Markdown conciso por que a marcação oposta costuma parecer plausível em prova (armadilha semântica, extrapolação de escopo, confusão de conceitos vizinhos ou omissão de condicionante) e indique o critério objetivo para desarmá-la."
+                    )
+                } else {
+                    format!(
+                        "{post_source}{student_context}\n\nTomando a resposta correta (`correct_answer`) como referência explícita, analise a plausibilidade de cada alternativa incorreta classificando-a em `Improvável`, `Parcialmente plausível` ou `Plausível`, explicando o raciocínio do distrator e prestando atenção especial a comandos como NÃO, EXCETO, INCORRETA e MENOS."
+                    )
+                };
                 (PLAUSIBILITY_SYSTEM_INSTRUCTION.to_string(), prompt)
             }
             AiAssistKind::TermLookupPost => {

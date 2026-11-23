@@ -552,7 +552,8 @@ class ConcursoRepository(
                     val lastQuestion = lastRowAndEv?.first?.let { cachedById[it] }
                     val evChallengePassed = if (lastEv?.selectedEvidenceId != null && lastQuestion != null) {
                         val ch = lastQuestion.effectiveEvidenceChallenge()
-                        if (ch != null) lastEv.selectedEvidenceId == ch.correctEvidenceId else null
+                        val normSel = normalizeEvidenceOptionId(lastEv.selectedEvidenceId, lastQuestion.hasCustomEvidenceChallenge())
+                        if (ch != null && normSel != null) normSel == ch.correctEvidenceId else null
                     } else {
                         null
                     }
@@ -581,11 +582,13 @@ class ConcursoRepository(
                             (targetBoardKeys.isEmpty() || bk !in targetBoardKeys)
                         if (!isCross) continue
                         val ch = q.effectiveEvidenceChallenge()
+                        val customCh = q.hasCustomEvidenceChallenge()
                         for (ev in r.events) {
                             if (ev.isBlank) continue
                             if (ev.quizMode.equals("TRANSFER_PROBE", ignoreCase = true) || targetBoardKeys.isNotEmpty()) {
                                 transferAttempts++
-                                val badEvidence = ch != null && ev.selectedEvidenceId != null && ev.selectedEvidenceId != ch.correctEvidenceId
+                                val normSel = normalizeEvidenceOptionId(ev.selectedEvidenceId, customCh)
+                                val badEvidence = ch != null && normSel != null && normSel != ch.correctEvidenceId
                                 if (ev.isCorrect && ev.confidenceLevel >= 2 && !badEvidence) {
                                     transferGrounded++
                                 }
@@ -694,6 +697,7 @@ class ConcursoRepository(
         for (row in rows) {
             val q = cachedById[row.questionId]
             val qt = if (q?.questionType == QuestionType.TRUE_FALSE) "TRUE_FALSE" else "MULTIPLE_CHOICE"
+            val customCh = q?.hasCustomEvidenceChallenge() == true
             val correctEvId = q?.effectiveEvidenceChallenge()?.correctEvidenceId
             var seenCorrectBefore = false
             for (ev in row.events.sortedBy { safeInstant(it.occurredAt) }) {
@@ -707,7 +711,8 @@ class ConcursoRepository(
                 val cur = cellCounts[key] ?: (0 to 0)
                 cellCounts[key] = (cur.first + if (ev.isCorrect) 1 else 0) to (cur.second + 1)
 
-                val evWrong = correctEvId != null && ev.selectedEvidenceId != null && ev.selectedEvidenceId != correctEvId
+                val normSel = normalizeEvidenceOptionId(ev.selectedEvidenceId, customCh)
+                val evWrong = correctEvId != null && normSel != null && normSel != correctEvId
                 if (ev.isCorrect) {
                     if (evWrong) {
                         illusoryHits++
@@ -1314,7 +1319,14 @@ class ConcursoRepository(
                         val learningById = learningMapForQuestions(ackedQuestionIds).toMutableMap()
                         val updatedLearning = mutableListOf<LearningRecordEntity>()
                         for (ack in response.results) {
-                            val local = byId.getValue(ack.attemptId)
+                            val snapshotAttempt = byId.getValue(ack.attemptId)
+                            val latestEvidenceId = dao.findPendingAttemptInSession(snapshotAttempt.sessionUuid, snapshotAttempt.questionId)
+                                ?.selectedEvidenceId ?: snapshotAttempt.selectedEvidenceId
+                            val local = if (latestEvidenceId != snapshotAttempt.selectedEvidenceId) {
+                                snapshotAttempt.copy(selectedEvidenceId = latestEvidenceId)
+                            } else {
+                                snapshotAttempt
+                            }
                             val question = questionsById[local.questionId]
                             if (question != null && durable != null && (!local.isBlank || learningById[local.questionId] != null || ack.attemptsTotal > 0)) {
                                 val base = learningById[local.questionId]

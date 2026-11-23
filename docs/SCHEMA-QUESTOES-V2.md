@@ -1,6 +1,6 @@
 # Contratos e Schema de Questões V2 (Cogniva 2.3 — Compatível `schema_version = 2`)
 
-No **Cogniva `2.4.2`** (`NT-COGNIVA-QUESTIONS-002` + Ficha Editorial Rastreável & Grafo de Conceitos), 100% do acervo em `cogniva.todasQuestoes` preserva `schema_version = 2` com endurecimento completo de proveniência autenticada, separação entre identidade semântica e política de correção, vínculo opcional a conceitos (`concept_id`), desafio de evidência pós-resposta (`evidence_challenge`), **Ficha Editorial Rastreável (`editorial_card`)**, idempotência transacional, elegibilidade centralizada e validação estrita de `ObjectId` e inteiros.
+No **Cogniva `2.4.3`** (`NT-COGNIVA-QUESTIONS-002` + Ficha Editorial Rastreável & Grafo de Conceitos), 100% do acervo em `cogniva.todasQuestoes` preserva `schema_version = 2` com endurecimento completo de proveniência autenticada, separação entre identidade semântica e política de correção, vínculo opcional a conceitos (`concept_id`), desafio de evidência pós-resposta (`evidence_challenge`), **Ficha Editorial Rastreável (`editorial_card`)**, idempotência transacional, elegibilidade centralizada e validação estrita de `ObjectId` e inteiros.
 
 Os contratos formais residem em:
 - Schema JSON canônico: [`shared/schemas/question-contracts.schema.json`](../shared/schemas/question-contracts.schema.json)
