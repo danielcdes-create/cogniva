@@ -24,6 +24,7 @@ interface DurableStateDao {
     @Query("UPDATE quiz_sessions SET payloadJson=:payload, revision=:revision, updatedAt=:at WHERE sessionId=:id AND ownerUserId=:owner AND active=1 AND revision<:revision")
     suspend fun saveSession(id: String, owner: Long, payload: String, revision: Long, at: Long)
     @Query("UPDATE quiz_sessions SET active=0 WHERE sessionId=:id AND ownerUserId=:owner") suspend fun completeSession(id: String, owner: Long)
+    @Query("DELETE FROM quiz_sessions WHERE ownerUserId=:owner") suspend fun deleteSessionsForOwner(owner: Long)
     @Query("SELECT * FROM quiz_sessions WHERE active=1 AND ownerUserId=:owner ORDER BY updatedAt DESC LIMIT 1") suspend fun pausedSession(owner: Long): QuizSessionEntity?
     @Query("DELETE FROM quiz_sessions WHERE updatedAt < :cutoffEpochMs") suspend fun pruneSessionsOlderThan(cutoffEpochMs: Long)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putMetadata(value: LocalMetadataEntity)

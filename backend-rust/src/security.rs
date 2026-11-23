@@ -272,7 +272,11 @@ pub fn same_origin(headers: &HeaderMap, public_origin: &str) -> Result<(), AppEr
                 }
             } else if is_loopback_authority(host) {
                 "http"
-            } else if public_origin.trim().to_ascii_lowercase().starts_with("https://") {
+            } else if public_origin
+                .trim()
+                .to_ascii_lowercase()
+                .starts_with("https://")
+            {
                 "https"
             } else {
                 "http"
@@ -288,9 +292,7 @@ pub fn same_origin(headers: &HeaderMap, public_origin: &str) -> Result<(), AppEr
         }
     }
 
-    Err(AppError::Forbidden(
-        "Origem inválida na sessão web".into(),
-    ))
+    Err(AppError::Forbidden("Origem inválida na sessão web".into()))
 }
 
 pub fn verify_csrf_same_origin(
@@ -358,6 +360,53 @@ async fn resolve_db_session(
     })
 }
 
+pub fn apply_cookie_auth_response_headers(headers: &mut HeaderMap) {
+    let keep_private_cache = headers
+        .get(header::CACHE_CONTROL)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|cc| cc.to_ascii_lowercase().contains("private"));
+    if !keep_private_cache {
+        headers.insert(
+            header::CACHE_CONTROL,
+            axum::http::HeaderValue::from_static("private, no-store"),
+        );
+    }
+
+    let mut parts: Vec<String> = Vec::new();
+    let mut has_wildcard = false;
+    let mut has_cookie = false;
+    for val in headers.get_all(header::VARY) {
+        if let Ok(raw) = val.to_str() {
+            for item in raw.split(',') {
+                let trimmed = item.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                if trimmed == "*" {
+                    has_wildcard = true;
+                }
+                if trimmed.eq_ignore_ascii_case("cookie") {
+                    has_cookie = true;
+                }
+                if !parts
+                    .iter()
+                    .any(|existing| existing.eq_ignore_ascii_case(trimmed))
+                {
+                    parts.push(trimmed.to_string());
+                }
+            }
+        }
+    }
+    if !has_wildcard {
+        if !has_cookie {
+            parts.push("Cookie".to_string());
+        }
+        if let Ok(joined) = axum::http::HeaderValue::from_str(&parts.join(", ")) {
+            headers.insert(header::VARY, joined);
+        }
+    }
+}
+
 pub async fn authenticate(
     State(state): State<std::sync::Arc<AppState>>,
     mut request: Request,
@@ -398,37 +447,7 @@ pub async fn authenticate(
     request.extensions_mut().insert(user);
     let mut response = crate::services::catalog_runtime::scope(catalog, next.run(request)).await;
     if used_cookie_auth {
-        let keep_private_cache = response
-            .headers()
-            .get(header::CACHE_CONTROL)
-            .and_then(|v| v.to_str().ok())
-            .is_some_and(|cc| cc.to_ascii_lowercase().contains("private"));
-        if !keep_private_cache {
-            response.headers_mut().insert(
-                header::CACHE_CONTROL,
-                axum::http::HeaderValue::from_static("no-store"),
-            );
-        }
-        let merged_vary = match response
-            .headers()
-            .get(header::VARY)
-            .and_then(|v| v.to_str().ok())
-        {
-            Some(existing)
-                if existing
-                    .split(',')
-                    .any(|part| part.trim().eq_ignore_ascii_case("cookie") || part.trim() == "*") =>
-            {
-                None
-            }
-            Some(existing) if !existing.trim().is_empty() => {
-                axum::http::HeaderValue::from_str(&format!("{existing}, Cookie")).ok()
-            }
-            _ => Some(axum::http::HeaderValue::from_static("Cookie")),
-        };
-        if let Some(vary_val) = merged_vary {
-            response.headers_mut().insert(header::VARY, vary_val);
-        }
+        apply_cookie_auth_response_headers(response.headers_mut());
     }
     Ok(response)
 }
@@ -487,7 +506,10 @@ mod tests {
         h.insert(header::HOST, "cogniva.example.org".parse().unwrap());
         h.insert("x-forwarded-proto", "https".parse().unwrap());
         h.insert("x-cogniva-csrf", "1".parse().unwrap());
-        h.insert(header::ORIGIN, "http://cogniva.example.org".parse().unwrap());
+        h.insert(
+            header::ORIGIN,
+            "http://cogniva.example.org".parse().unwrap(),
+        );
 
         // Scheme downgrade http:// against X-Forwarded-Proto: https MUST fail
         assert!(verify_csrf_same_origin(&h, &Method::POST, "https://cogniva.example.org").is_err());
@@ -505,7 +527,9 @@ mod tests {
             header::REFERER,
             "https://cogniva.example.org/admin/".parse().unwrap(),
         );
-        assert!(verify_csrf_same_origin(&h, &Method::DELETE, "https://cogniva.example.org").is_ok());
+        assert!(
+            verify_csrf_same_origin(&h, &Method::DELETE, "https://cogniva.example.org").is_ok()
+        );
 
         // Sec-Fetch-Site: cross-site rejected even on safe GET or valid CSRF POST
         h.insert("sec-fetch-site", "cross-site".parse().unwrap());
@@ -526,5 +550,58 @@ mod tests {
         let mut bh = HeaderMap::new();
         bh.insert(header::AUTHORIZATION, "bearer tok-abc".parse().unwrap());
         assert_eq!(extract_bearer_token(&bh).as_deref(), Some("tok-abc"));
+        bh.insert(header::AUTHORIZATION, "BeArEr   tok-xyz  ".parse().unwrap());
+        assert_eq!(extract_bearer_token(&bh).as_deref(), Some("tok-xyz"));
+        bh.insert(header::AUTHORIZATION, "Basic dXNlcjpwYXNz".parse().unwrap());
+        assert_eq!(extract_bearer_token(&bh), None);
+    }
+
+    #[test]
+    fn cookie_auth_response_headers_consolidate_multiple_vary_headers_and_set_private_cache_control(
+    ) {
+        let mut headers = HeaderMap::new();
+        headers.append(header::VARY, "Origin".parse().unwrap());
+        headers.append(header::VARY, "Accept-Encoding".parse().unwrap());
+
+        apply_cookie_auth_response_headers(&mut headers);
+
+        let vary_vals: Vec<&str> = headers
+            .get_all(header::VARY)
+            .iter()
+            .filter_map(|v| v.to_str().ok())
+            .collect();
+        assert_eq!(vary_vals, vec!["Origin, Accept-Encoding, Cookie"]);
+        assert_eq!(
+            headers
+                .get(header::CACHE_CONTROL)
+                .and_then(|v| v.to_str().ok()),
+            Some("private, no-store")
+        );
+
+        // Idempotent when called a second time and preserves pre-existing `private` Cache-Control
+        headers.insert(
+            header::CACHE_CONTROL,
+            "private, max-age=3600, no-transform".parse().unwrap(),
+        );
+        apply_cookie_auth_response_headers(&mut headers);
+        assert_eq!(
+            headers.get(header::VARY).and_then(|v| v.to_str().ok()),
+            Some("Origin, Accept-Encoding, Cookie")
+        );
+        assert_eq!(
+            headers
+                .get(header::CACHE_CONTROL)
+                .and_then(|v| v.to_str().ok()),
+            Some("private, max-age=3600, no-transform")
+        );
+
+        // Wildcard Vary: * is preserved untouched
+        let mut wild = HeaderMap::new();
+        wild.insert(header::VARY, "*".parse().unwrap());
+        apply_cookie_auth_response_headers(&mut wild);
+        assert_eq!(
+            wild.get(header::VARY).and_then(|v| v.to_str().ok()),
+            Some("*")
+        );
     }
 }

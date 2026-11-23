@@ -16,49 +16,6 @@ enum class CanonicalTopicStatus {
     ARQUIVADO
 }
 
-data class TopicRef(
-    val canonicalTopicId: String,
-    val canonicalSubjectId: String,
-    val displayTitle: String
-)
-
-data class ClassifiedTopic(
-    val canonicalTopicId: String,
-    val canonicalSubjectId: String,
-    val displayTitle: String,
-    val diffStatus: CanonicalTopicStatus,
-    val coverageAlreadyFilled: Boolean
-)
-
-data class EditalPublishResult(
-    val topics: List<ClassifiedTopic>,
-    val confirmedCount: Int,
-    val newCount: Int,
-    val archivedCount: Int
-)
-
-data class CanonicalMasteryRecord(
-    val canonicalSubjectId: String,
-    val canonicalTopicId: String,
-    val mastery: Double
-)
-
-data class ExamTopicLink(
-    val examId: String,
-    val canonicalSubjectId: String,
-    val canonicalTopicId: String,
-    val diffStatus: CanonicalTopicStatus
-)
-
-data class ProjectedTopicCoverage(
-    val examId: String,
-    val canonicalSubjectId: String,
-    val canonicalTopicId: String,
-    val mastery: Double,
-    val practiced: Boolean,
-    val hiddenFromStudyQueue: Boolean
-)
-
 @kotlinx.serialization.Serializable
 data class StoredTopic(
     val localTopicId: String,
@@ -168,20 +125,6 @@ data class ReadinessSubject(
     val weight: Double,
     val realMastery: Double,
     val topics: List<ReadinessTopic>
-)
-
-data class SimuladoCandidate(
-    val questionId: String,
-    val canonicalSubjectId: String,
-    val canonicalTopicId: String,
-    val archived: Boolean
-)
-
-data class SubjectQuota(
-    val canonicalSubjectId: String,
-    val weight: Double,
-    val questionCount: Int,
-    val allowedTopicIds: Set<String> = emptySet()
 )
 
 data class SubjectOutcome(val weight: Double, val correct: Int, val drawn: Int, val wrong: Int=0, val penalty: Double=0.0)
@@ -369,90 +312,6 @@ object ExamEngine {
         return (100.0 * numerator / denominator).coerceIn(0.0,100.0)
     }
 
-    fun publishEditalDiff(
-        previous: List<TopicRef>,
-        published: List<TopicRef>,
-        practicedCanonicalTopicIds: Set<String>
-    ): EditalPublishResult {
-        val previousIds = previous.map { it.canonicalTopicId }.toSet()
-        val publishedIds = published.map { it.canonicalTopicId }.toSet()
-        val topics = mutableListOf<ClassifiedTopic>()
-        for (topic in published) {
-            val status = if (previousIds.contains(topic.canonicalTopicId)) {
-                CanonicalTopicStatus.OFICIAL_CONFIRMADO
-            } else {
-                CanonicalTopicStatus.OFICIAL_NOVO
-            }
-            topics += ClassifiedTopic(
-                canonicalTopicId = topic.canonicalTopicId,
-                canonicalSubjectId = topic.canonicalSubjectId,
-                displayTitle = topic.displayTitle,
-                diffStatus = status,
-                coverageAlreadyFilled = practicedCanonicalTopicIds.contains(topic.canonicalTopicId)
-            )
-        }
-        for (topic in previous) {
-            if (!publishedIds.contains(topic.canonicalTopicId)) {
-                topics += ClassifiedTopic(
-                    canonicalTopicId = topic.canonicalTopicId,
-                    canonicalSubjectId = topic.canonicalSubjectId,
-                    displayTitle = topic.displayTitle,
-                    diffStatus = CanonicalTopicStatus.ARQUIVADO,
-                    coverageAlreadyFilled = practicedCanonicalTopicIds.contains(topic.canonicalTopicId)
-                )
-            }
-        }
-        return EditalPublishResult(
-            topics = topics,
-            confirmedCount = topics.count { it.diffStatus == CanonicalTopicStatus.OFICIAL_CONFIRMADO },
-            newCount = topics.count { it.diffStatus == CanonicalTopicStatus.OFICIAL_NOVO },
-            archivedCount = topics.count { it.diffStatus == CanonicalTopicStatus.ARQUIVADO }
-        )
-    }
-
-    fun projectCrossExamCoverage(
-        history: List<CanonicalMasteryRecord>,
-        links: List<ExamTopicLink>
-    ): List<ProjectedTopicCoverage> {
-        val byTopic = history.associateBy { it.canonicalTopicId }
-        return links.map { link ->
-            val record = byTopic[link.canonicalTopicId]
-            ProjectedTopicCoverage(
-                examId = link.examId,
-                canonicalSubjectId = link.canonicalSubjectId,
-                canonicalTopicId = link.canonicalTopicId,
-                mastery = record?.mastery ?: 0.0,
-                practiced = record != null,
-                hiddenFromStudyQueue = link.diffStatus == CanonicalTopicStatus.ARQUIVADO
-            )
-        }
-    }
-
-    fun subjectMasteryPercentage(
-        projected: List<ProjectedTopicCoverage>,
-        examId: String,
-        canonicalSubjectId: String
-    ): Double {
-        val visible = projected.filter {
-            it.examId == examId && it.canonicalSubjectId == canonicalSubjectId && !it.hiddenFromStudyQueue
-        }
-        if (visible.isEmpty()) return 0.0
-        return visible.sumOf { it.mastery } / visible.size.toDouble()
-    }
-
-    fun drawWeightedSimulado(quotas: List<SubjectQuota>, questions: List<SimuladoCandidate>): List<String> {
-        val picked = mutableListOf<String>()
-        for (quota in quotas) {
-            val pool = questions
-                .filter { it.questionId !in picked && it.canonicalSubjectId == quota.canonicalSubjectId && !it.archived && it.canonicalTopicId in quota.allowedTopicIds }
-                .distinctBy { it.questionId }
-                .shuffled()
-                .take(quota.questionCount)
-            picked += pool.map { it.questionId }
-        }
-        return picked
-    }
-
     fun weightedNetScore(outcomes: List<SubjectOutcome>): Double {
         var numerator = 0.0
         var denominator = 0.0
@@ -488,47 +347,11 @@ object ExamEngine {
         )
     }
 
-    data class CanonicalActivitySlice(
-        val canonicalSubjectId: String,
-        val canonicalTopicId: String,
-        val accuracyPct: Double,
-        val mastered: Boolean,
-        val highConfidenceError: Boolean,
-        val confidenceAvg: Int? = null
-    )
-
     fun masteryFraction(accuracyPct: Double, mastered: Boolean, highConfidenceError: Boolean,confidenceAvg:Int?=null): Double {
         var value = (accuracyPct / 100.0).coerceIn(0.0, 1.0)
         if (mastered) value = 1.0 else if(confidenceAvg!=null) value*=confidenceAvg.coerceIn(0,3)/3.0
         if (highConfidenceError) value *= 0.5
         return value.coerceIn(0.0, 1.0)
-    }
-
-    fun masteryByCanonicalSubject(rows: List<CanonicalActivitySlice>): Map<String, Double> {
-        return rows
-            .filter { it.canonicalSubjectId.isNotBlank() }
-            .groupBy { it.canonicalSubjectId }
-            .mapValues { (_, items) ->
-                items.map { masteryFraction(it.accuracyPct, it.mastered, it.highConfidenceError,it.confidenceAvg) }.average()
-            }
-    }
-
-    fun cardFromCanonicalActivity(
-        exams: List<LeverageExam>,
-        rows: List<CanonicalActivitySlice>,
-        focuses: List<TrunkFocus>,
-        suggestedQuestions: Int,
-        today: LocalDate
-    ): CommonTrunkCard? {
-        val mastery = masteryByCanonicalSubject(rows)
-        return selectCommonTrunkCard(
-            exams,
-            mastery,
-            focuses.firstOrNull(),
-            suggestedQuestions,
-            today,
-            focuses.drop(1)
-        )
     }
 
     fun readinessForStoredExams(exams: List<StoredExam>, masteryByTopic: Map<String, Double>): Double {
@@ -549,26 +372,6 @@ object ExamEngine {
             ReadinessSubject(subject.weight, realMastery, topics)
         }
         return readinessIndex(subjects)
-    }
-
-    data class ProjectedSyllabusGroup(
-        val discipline: String,
-        val canonicalSubjectId: String,
-        val masteryPct: Double,
-        val topicTitles: List<String>
-    )
-
-    fun projectSyllabus(exam: StoredExam, history: List<CanonicalMasteryRecord>): List<ProjectedSyllabusGroup> {
-        return exam.subjects.mapNotNull { subject ->
-            val visible = subject.topics.filter { it.diffStatus != CanonicalTopicStatus.ARQUIVADO.name }
-            if (visible.isEmpty()) return@mapNotNull null
-            ProjectedSyllabusGroup(
-                discipline = subject.displayName,
-                canonicalSubjectId = subject.canonicalSubjectId,
-                masteryPct = history.filter { it.canonicalTopicId in visible.map { t -> t.canonicalTopicId } }.distinctBy { it.canonicalTopicId }.sumOf { it.mastery } / visible.map { it.canonicalTopicId }.distinct().size * 100.0,
-                topicTitles = visible.map { it.displayTitle }
-            )
-        }
     }
 
     fun trunkRows(trunkSlug: String, exams: List<StoredExam>): List<TrunkSubjectRow> {
@@ -631,17 +434,6 @@ object OfflineExamQueue {
             isCustomized = true,
             subjects = draft.subjects
         )
-    }
-
-    fun markUpdate(existing: StoredExam): StoredExam {
-        val status = if (existing.syncStatus == "PENDING_CREATE") "PENDING_CREATE" else "PENDING_UPDATE"
-        return existing.copy(syncStatus = status, isCustomized = true)
-    }
-
-    fun mergeByClientId(store: Map<String, StoredExam>, incoming: StoredExam): Map<String, StoredExam> {
-        val next = store.toMutableMap()
-        next[incoming.examId] = incoming
-        return next
     }
 
     fun commonTrunkFromCache(

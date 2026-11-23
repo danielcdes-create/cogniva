@@ -125,8 +125,8 @@ interface ConcursoLocalDao {
     @Query("UPDATE cached_questions SET inErrorNotebook=:error, isMastered=:mastered WHERE id=:id")
     suspend fun updateLearningFlags(id: String, error: Boolean, mastered: Boolean)
 
-    @Query("UPDATE pending_attempts SET selectedEvidenceId = :evidenceId WHERE sessionUuid = :sessionUuid AND questionId = :questionId")
-    suspend fun updateAttemptEvidence(sessionUuid: String, questionId: String, evidenceId: String)
+    @Query("UPDATE pending_attempts SET selectedEvidenceId = :evidenceId WHERE sessionUuid = :sessionUuid AND questionId = :questionId AND ownerUserId = :owner")
+    suspend fun updateAttemptEvidence(sessionUuid: String, questionId: String, evidenceId: String, owner: Long)
 }
 
 @Database(

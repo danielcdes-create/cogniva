@@ -34,6 +34,7 @@ let state = {
 let boundDoc = null;
 let sceneEnteredAtMs = Date.now();
 let preloadedMediaUrls = new Set();
+let preloadedVideoElements = [];
 
 export function getMissionsState() {
   return state;
@@ -154,8 +155,17 @@ export async function api(path, options = {}) {
     if (resp.status === 401 && !path.startsWith('/api/v1/auth/')) {
       stopActiveVideo();
       state.profile = null;
+      state.catalog = null;
       state.activeDetail = null;
       state.activeSceneId = null;
+      state.showConclusion = false;
+      state.transcriptOpen = false;
+      state.userIntervenedInScene = false;
+      state.videoErrored = false;
+      state.simulatedRatePct = 14;
+      state.practiceState = null;
+      state.busy = false;
+      setNotice('');
       clearNode((boundDoc || document).getElementById('missions-main'));
       syncShellVisibility();
     }
@@ -198,6 +208,14 @@ function stopActiveVideo() {
     videoEl.src = '';
     try { videoEl.load?.(); } catch {}
   }
+  for (const warm of preloadedVideoElements) {
+    try { warm.pause?.(); } catch {}
+    try { warm.removeAttribute?.('src'); } catch {}
+    warm.src = '';
+    try { warm.load?.(); } catch {}
+    try { warm.remove?.(); } catch {}
+  }
+  preloadedVideoElements = [];
   preloadedMediaUrls.clear();
 }
 
@@ -214,6 +232,7 @@ function triggerModerateNextPreload(url) {
   warm.setAttribute('aria-hidden', 'true');
   warm.hidden = true;
   warm.load?.();
+  preloadedVideoElements.push(warm);
 }
 
 function sendTelemetrySilently(missionId, eventType, sceneId = null, detail = null) {
@@ -230,7 +249,9 @@ export async function loadCatalog() {
   return catalog;
 }
 
-export async function openMission(missionId, {resume = true} = {}) {
+export async function openMission(missionId, {resume = true, allowWhenBusy = false} = {}) {
+  if (state.busy && !allowWhenBusy) return;
+  stopActiveVideo();
   setNotice('');
   state.busy = true;
   try {
@@ -262,11 +283,16 @@ export async function openMission(missionId, {resume = true} = {}) {
       state.activeDetail.interaction_performance = started.interaction_performance;
     }
 
+    state.busy = false;
     renderMissionsView();
   } catch (err) {
-    setNotice(err.message || 'Não foi possível carregar a missão.');
+    if (err.status !== 401) {
+      setNotice(err.message || 'Não foi possível carregar a missão.');
+    }
   } finally {
-    state.busy = false;
+    if (!allowWhenBusy) {
+      state.busy = false;
+    }
   }
 }
 
@@ -306,40 +332,47 @@ export async function exitMissionToCatalog() {
 }
 
 async function advanceFromScene(scene, {viaTranscript = false} = {}) {
-  if (!state.activeDetail || !scene) return;
+  if (!state.activeDetail || !scene || state.busy) return;
   const missionId = state.activeDetail.mission.mission_id;
+  state.busy = true;
+  stopActiveVideo();
   setNotice('');
   try {
+    const isLastScene = !scene.next_scene_id;
+    const body = {
+      completed_scene_id: scene.scene_id,
+      current_scene_id: scene.next_scene_id || scene.scene_id,
+      used_transcript_fallback: viaTranscript,
+    };
+    if (isLastScene) {
+      body.mark_mission_completed = true;
+    }
     const updated = await api(`/api/v1/missions/${encodeURIComponent(missionId)}/progress`, {
       method: 'POST',
-      body: {
-        completed_scene_id: scene.scene_id,
-        current_scene_id: scene.next_scene_id || scene.scene_id,
-        used_transcript_fallback: viaTranscript,
-      },
+      body,
     });
+    if (!state.activeDetail) return;
     state.activeDetail.narrative_progress = updated.narrative_progress;
     state.activeDetail.interaction_performance = updated.interaction_performance;
     scene.is_completed = true;
 
-    if (scene.next_scene_id) {
+    if (!isLastScene) {
       state.activeSceneId = scene.next_scene_id;
       state.transcriptOpen = false;
       state.userIntervenedInScene = false;
       state.videoErrored = false;
       sceneEnteredAtMs = Date.now();
     } else {
-      const done = await api(`/api/v1/missions/${encodeURIComponent(missionId)}/progress`, {
-        method: 'POST',
-        body: {mark_mission_completed: true},
-      });
-      state.activeDetail.narrative_progress = done.narrative_progress;
-      state.activeDetail.interaction_performance = done.interaction_performance;
       state.showConclusion = true;
     }
+    state.busy = false;
     renderMissionsView();
   } catch (err) {
-    setNotice(err.message || 'Não foi possível avançar para a próxima cena.');
+    if (err.status !== 401) {
+      setNotice(err.message || 'Não foi possível avançar para a próxima cena.');
+    }
+  } finally {
+    state.busy = false;
   }
 }
 
@@ -360,34 +393,45 @@ async function selectDecisionOption(scene, interaction, optionId) {
         used_transcript_fallback: state.videoErrored,
       },
     });
+    if (!state.activeDetail) return;
     interaction.answered = res.decision;
     scene.is_completed = true;
     state.activeDetail.narrative_progress = res.narrative_progress;
     state.activeDetail.interaction_performance = res.interaction_performance;
     state.activeDetail.mission.worked_concepts = res.worked_concepts;
+    state.busy = false;
     renderMissionsView();
   } catch (err) {
-    setNotice(err.message || 'Falha ao registrar sua decisão.');
+    if (err.status !== 401) {
+      setNotice(err.message || 'Falha ao registrar sua decisão.');
+    }
   } finally {
     state.busy = false;
   }
 }
 
 async function repeatActiveMission() {
-  if (!state.activeDetail) return;
+  if (!state.activeDetail || state.busy) return;
   const missionId = state.activeDetail.mission.mission_id;
+  state.busy = true;
+  stopActiveVideo();
   setNotice('');
   try {
     await api(`/api/v1/missions/${encodeURIComponent(missionId)}/repeat`, {method: 'POST'});
-    await openMission(missionId, {resume: false});
+    await openMission(missionId, {resume: false, allowWhenBusy: true});
   } catch (err) {
-    setNotice(err.message || 'Não foi possível reiniciar a missão.');
+    if (err.status !== 401) {
+      setNotice(err.message || 'Não foi possível reiniciar a missão.');
+    }
+  } finally {
+    state.busy = false;
   }
 }
 
 async function openRelatedHumanQuestions() {
-  if (!state.activeDetail) return;
+  if (!state.activeDetail || state.busy) return;
   const missionId = state.activeDetail.mission.mission_id;
+  state.busy = true;
   setNotice('');
   try {
     const res = await api(
@@ -397,6 +441,7 @@ async function openRelatedHumanQuestions() {
         body: {quantity: 5},
       }
     );
+    if (!state.activeDetail) return;
     state.practiceState = {
       availableCount: res.available_count || 0,
       questions: res.questions || [],
@@ -407,9 +452,14 @@ async function openRelatedHumanQuestions() {
       submittedResult: null,
       questionStartedAtMs: Date.now(),
     };
+    state.busy = false;
     renderMissionsView();
   } catch (err) {
-    setNotice(err.message || 'Não foi possível consultar as questões do acervo.');
+    if (err.status !== 401) {
+      setNotice(err.message || 'Não foi possível consultar as questões do acervo.');
+    }
+  } finally {
+    state.busy = false;
   }
 }
 
@@ -424,6 +474,7 @@ async function submitRealPracticeAnswer() {
   const spentSec = Math.max(1, Math.round((Date.now() - ps.questionStartedAtMs) / 1000));
 
   state.busy = true;
+  setNotice('');
   const confirmBtn = (boundDoc || document).getElementById('confirm-practice-btn');
   if (confirmBtn) confirmBtn.disabled = true;
   try {
@@ -435,7 +486,7 @@ async function submitRealPracticeAnswer() {
             attempt_id: crypto.randomUUID(),
             occurred_at: new Date().toISOString(),
             client_answered_at: new Date().toISOString(),
-            question_revision: q.content_revision || '',
+            question_revision: q.question_revision || q.content_revision || '',
             question_id: q.id,
             chosen_index: chosenIdx,
             chosen_text: q.answers?.[chosenIdx] || '',
@@ -451,6 +502,15 @@ async function submitRealPracticeAnswer() {
         ],
       },
     });
+    if (
+      (Array.isArray(batchResp?.rejected) && batchResp.rejected.length > 0) ||
+      (typeof batchResp?.processed_count === 'number' && batchResp.processed_count < 1)
+    ) {
+      throw new Error(
+        batchResp?.rejected?.[0]?.message ||
+          'A resposta formal foi rejeitada pelo servidor. Tente novamente.'
+      );
+    }
     ps.submittedResult = {
       isCorrect,
       ack: batchResp?.results?.[0] || null,
@@ -460,12 +520,18 @@ async function submitRealPracticeAnswer() {
       const refreshed = await api(
         `/api/v1/missions/${encodeURIComponent(state.activeDetail.mission.mission_id)}`
       );
-      state.activeDetail.demonstrated_mastery = refreshed.demonstrated_mastery;
+      if (state.activeDetail) {
+        state.activeDetail.demonstrated_mastery = refreshed.demonstrated_mastery;
+      }
     }
+    state.busy = false;
     renderMissionsView();
   } catch (err) {
-    if (confirmBtn) confirmBtn.disabled = false;
-    setNotice(err.message || 'Falha ao registrar tentativa no acervo.');
+    const btn = (boundDoc || document).getElementById('confirm-practice-btn') || confirmBtn;
+    if (btn) btn.disabled = false;
+    if (err.status !== 401) {
+      setNotice(err.message || 'Falha ao registrar tentativa no acervo.');
+    }
   } finally {
     state.busy = false;
   }
@@ -495,7 +561,8 @@ function renderPresentValueVisual(visual) {
   const minP = Math.floor(Math.min(...prices) * 0.96);
   const maxP = Math.ceil(Math.max(...prices) * 1.02);
 
-  const xOf = rate => padL + ((rate - minRate) / (maxRate - minRate)) * plotW;
+  const rateSpan = maxRate - minRate;
+  const xOf = rate => (rateSpan > 0 ? padL + ((rate - minRate) / rateSpan) * plotW : padL + plotW / 2);
   const yOf = price => padT + (1 - (price - minP) / Math.max(1, maxP - minP)) * plotH;
 
   const pathD = points
@@ -607,22 +674,25 @@ function renderDurationComparisonVisual(visual) {
   const shortBarW = Math.round((Math.abs(cmp.shortBond.changePct) / maxAbsDrop) * 320);
   const longBarW = Math.round((Math.abs(cmp.longBond.changePct) / maxAbsDrop) * 320);
 
+  const shortUnit = cmp.shortBond.years === 1 ? 'ano' : 'anos';
+  const longUnit = cmp.longBond.years === 1 ? 'ano' : 'anos';
+
   const chart = svg(
     'svg',
     {
       viewBox: '0 0 620 170',
       class: 'chart-svg',
       role: 'img',
-      'aria-label': 'Comparativo nativo da queda percentual entre título zero cupom de 1 ano e de 5 anos',
+      'aria-label': `Comparativo nativo da queda percentual entre título zero cupom de ${cmp.shortBond.years} ${shortUnit} e de ${cmp.longBond.years} ${longUnit}`,
     },
-    svg('text', {x: 20, y: 48, fill: '#f8fafc', 'font-size': 13, 'font-weight': 'bold'}, `Zero Cupom ${cmp.shortBond.years} ano (D = 1)`),
+    svg('text', {x: 20, y: 48, fill: '#f8fafc', 'font-size': 13, 'font-weight': 'bold'}, `Zero Cupom ${cmp.shortBond.years} ${shortUnit} (D = ${cmp.shortBond.macaulayDuration})`),
     svg('rect', {x: 210, y: 30, width: Math.max(12, shortBarW), height: 26, rx: 6, fill: '#38bdf8'}),
     svg(
       'text',
       {x: 220 + Math.max(12, shortBarW), y: 48, fill: '#cbd5e1', 'font-size': 13},
       `${formatSignedPct(cmp.shortBond.changePct)} (${formatBrl(cmp.shortBond.initialPrice)} → ${formatBrl(cmp.shortBond.shockedPrice)})`
     ),
-    svg('text', {x: 20, y: 112, fill: '#f8fafc', 'font-size': 13, 'font-weight': 'bold'}, `Zero Cupom ${cmp.longBond.years} anos (D = 5)`),
+    svg('text', {x: 20, y: 112, fill: '#f8fafc', 'font-size': 13, 'font-weight': 'bold'}, `Zero Cupom ${cmp.longBond.years} ${longUnit} (D = ${cmp.longBond.macaulayDuration})`),
     svg('rect', {x: 210, y: 94, width: Math.max(12, longBarW), height: 26, rx: 6, fill: '#fbbf24'}),
     svg(
       'text',
@@ -756,11 +826,7 @@ function renderCatalogView() {
                         {
                           type: 'button',
                           class: 'btn-secondary',
-                          onclick: async () => {
-                            await openMission(m.mission_id, {resume: false});
-                            state.showConclusion = true;
-                            renderMissionsView();
-                          },
+                          onclick: () => openMission(m.mission_id, {resume: false}),
                         },
                         'Ver resumo e questões reais'
                       )
@@ -1277,16 +1343,34 @@ function renderPlayerView(detail) {
               title: s.title,
               'aria-label': `Ir para Cena ${s.order}: ${s.title}`,
               onclick: async () => {
+                if (state.busy) return;
+                state.busy = true;
+                stopActiveVideo();
                 state.activeSceneId = s.scene_id;
+                state.transcriptOpen = false;
                 state.userIntervenedInScene = false;
                 state.videoErrored = false;
                 sceneEnteredAtMs = Date.now();
                 sendTelemetrySilently(mission.mission_id, 'SCENE_JUMPED', s.scene_id);
-                await api(`/api/v1/missions/${encodeURIComponent(mission.mission_id)}/progress`, {
-                  method: 'POST',
-                  body: {current_scene_id: s.scene_id},
-                }).catch(() => {});
-                renderMissionsView();
+                try {
+                  const updated = await api(`/api/v1/missions/${encodeURIComponent(mission.mission_id)}/progress`, {
+                    method: 'POST',
+                    body: {current_scene_id: s.scene_id},
+                  });
+                  if (state.activeDetail && updated?.narrative_progress) {
+                    state.activeDetail.narrative_progress = updated.narrative_progress;
+                    if (updated.interaction_performance) {
+                      state.activeDetail.interaction_performance = updated.interaction_performance;
+                    }
+                  }
+                } catch {
+                  // Preserve local scene jump even on transient network blip
+                } finally {
+                  state.busy = false;
+                }
+                if (state.profile && state.activeDetail) {
+                  renderMissionsView();
+                }
               },
             },
             String(s.order)
@@ -1424,11 +1508,7 @@ function renderPlayerView(detail) {
                       {
                         type: 'button',
                         class: 'btn-primary',
-                        onclick: async () => {
-                          await advanceFromScene(scene);
-                          state.showConclusion = true;
-                          renderMissionsView();
-                        },
+                        onclick: () => advanceFromScene(scene),
                       },
                       'Ver conclusão da missão →'
                     )
@@ -1554,16 +1634,32 @@ function bindAuthControls(doc) {
   });
 
   logoutBtn?.addEventListener('click', async () => {
+    if (state.busy) return;
+    state.busy = true;
+    logoutBtn.disabled = true;
     stopActiveVideo();
     try {
       await api('/api/v1/auth/logout', {method: 'POST'});
     } catch {
       // Clear client state even if server unreachable
+    } finally {
+      state.busy = false;
+      logoutBtn.disabled = false;
     }
     state.profile = null;
     state.catalog = null;
     state.activeDetail = null;
     state.activeSceneId = null;
+    state.showConclusion = false;
+    state.transcriptOpen = false;
+    state.userIntervenedInScene = false;
+    state.videoErrored = false;
+    state.simulatedRatePct = 14;
+    state.practiceState = null;
+    setNotice('');
+    if (typeof window !== 'undefined' && window.history?.replaceState) {
+      window.history.replaceState(null, '', '/missoes/');
+    }
     clearNode(doc.getElementById('missions-main'));
     syncShellVisibility();
   });

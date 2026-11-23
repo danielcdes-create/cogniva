@@ -12,9 +12,7 @@ use crate::{
         exam_store,
         fatigue_engine::{evaluate_from_activities, FatigueReport},
         knowledge,
-        prioritization_engine::{
-            format_entry_60s_header, priority_utility, PrioritizationInputs,
-        },
+        prioritization_engine::{format_entry_60s_header, priority_utility, PrioritizationInputs},
         quiz_selector::{QuizGenerateRequest, QuizMode},
         retention_engine::retrievability,
         selection_v2,
@@ -91,6 +89,180 @@ pub struct NextActionResponse {
     pub strategy_guidance: Vec<StrategyBandGuidanceDto>,
     pub exam_scenarios: Vec<ExamMomentScenarioDto>,
     pub fatigue_report: FatigueReport,
+}
+
+pub type UnitDiagnosticTuple = (DiagnosticStatus, TransferStatus, f64, usize, f64);
+
+#[derive(Default)]
+struct UnitDiagAccumulator {
+    topic_id: String,
+    seen_questions: HashSet<String>,
+    non_blank_attempts: usize,
+    correct_attempts: usize,
+    any_question_spaced_retention: bool,
+    any_question_prior_verified_correct: bool,
+    earliest_verified_correct_ms: Option<i64>,
+    latest_verified_correct_ms: Option<i64>,
+    latest_obs_key: Option<(i64, String)>,
+    last_is_correct: bool,
+    last_confidence: i32,
+    evidence_challenge_passed: Option<bool>,
+    retrievability_sum: f64,
+    avg_seconds_sum: f64,
+    primary_board_when_untargeted: Option<String>,
+    transfer_attempts: usize,
+    transfer_correct_grounded: usize,
+}
+
+/// Agrega observações de questões por unidade canônica (`concept_id ?? topic_id`),
+/// ordenando cronologicamente antes de avaliar retenção espaçada no nível da unidade (`>= 24h`
+/// entre o primeiro e o último acerto verificado dentre questões distintas) e transferência
+/// entre bancas (invariante à ordem física do cursor MongoDB).
+pub fn aggregate_unit_diagnostics(
+    observations: Vec<(knowledge::UnitQuestionObservation, f64)>,
+    target_boards: &HashSet<String>,
+    cross_board_supply_by_topic: &HashMap<String, usize>,
+    now_ms: i64,
+) -> HashMap<String, UnitDiagnosticTuple> {
+    let mut sorted = observations;
+    sorted.sort_by(|(a, _), (b, _)| {
+        a.first_answered_ms
+            .cmp(&b.first_answered_ms)
+            .then_with(|| a.last_answered_ms.cmp(&b.last_answered_ms))
+            .then_with(|| a.board_key.cmp(&b.board_key))
+            .then_with(|| a.question_id.cmp(&b.question_id))
+            .then_with(|| a.unit_id.cmp(&b.unit_id))
+    });
+
+    let mut by_unit: HashMap<String, UnitDiagAccumulator> = HashMap::new();
+    for (obs, stability_days) in sorted {
+        let acc = by_unit.entry(obs.unit_id.clone()).or_default();
+        if acc.topic_id.is_empty() {
+            acc.topic_id = obs.canonical_topic_id.clone();
+        }
+        if !acc.seen_questions.insert(obs.question_id.clone()) {
+            continue;
+        }
+
+        acc.non_blank_attempts += obs.non_blank_attempts;
+        acc.correct_attempts += obs.correct_attempts;
+        acc.any_question_spaced_retention |= obs.has_spaced_retention;
+        acc.any_question_prior_verified_correct |= obs.had_prior_verified_correct;
+
+        if let Some(first_vc) = obs.first_verified_correct_ms {
+            acc.earliest_verified_correct_ms = Some(
+                acc.earliest_verified_correct_ms
+                    .map_or(first_vc, |cur| cur.min(first_vc)),
+            );
+        }
+        if let Some(last_vc) = obs.last_verified_correct_ms {
+            acc.latest_verified_correct_ms = Some(
+                acc.latest_verified_correct_ms
+                    .map_or(last_vc, |cur| cur.max(last_vc)),
+            );
+        }
+
+        let obs_key = (obs.last_answered_ms, obs.question_id.clone());
+        if acc
+            .latest_obs_key
+            .as_ref()
+            .is_none_or(|prev| &obs_key >= prev)
+        {
+            acc.latest_obs_key = Some(obs_key);
+            acc.last_is_correct = obs.last_is_correct;
+            acc.last_confidence = obs.last_confidence;
+            acc.evidence_challenge_passed = obs.evidence_challenge_passed;
+        }
+
+        let elapsed_days = ((now_ms - obs.last_answered_ms).max(0) as f64) / 86_400_000.0;
+        let eff_stability = if stability_days > 0.0 {
+            stability_days
+        } else if obs.last_is_correct {
+            2.0
+        } else {
+            0.5
+        };
+        acc.retrievability_sum += retrievability(elapsed_days, eff_stability);
+        acc.avg_seconds_sum += obs.avg_seconds;
+
+        if !obs.board_key.is_empty() {
+            let is_cross_board = if !target_boards.is_empty() {
+                !target_boards.contains(&obs.board_key)
+            } else {
+                match &acc.primary_board_when_untargeted {
+                    None => {
+                        acc.primary_board_when_untargeted = Some(obs.board_key.clone());
+                        false
+                    }
+                    Some(primary) => primary != &obs.board_key,
+                }
+            };
+            if is_cross_board {
+                acc.transfer_attempts += 1;
+                if obs.last_is_correct
+                    && obs.last_confidence >= 2
+                    && obs.evidence_challenge_passed != Some(false)
+                {
+                    acc.transfer_correct_grounded += 1;
+                }
+            }
+        }
+    }
+
+    let mut out = HashMap::with_capacity(by_unit.len());
+    for (unit_id, acc) in by_unit {
+        let distinct_questions = acc.seen_questions.len();
+        if distinct_questions == 0 {
+            continue;
+        }
+        let available_cross = cross_board_supply_by_topic
+            .get(&acc.topic_id)
+            .copied()
+            .unwrap_or(0);
+        let transfer_status = evaluate_transfer_status(&TransferInputs {
+            distinct_questions,
+            available_cross_board_questions: available_cross,
+            transfer_attempts: acc.transfer_attempts,
+            transfer_correct_grounded: acc.transfer_correct_grounded,
+        });
+
+        let unit_spaced_retention = acc.any_question_spaced_retention
+            || matches!(
+                (acc.earliest_verified_correct_ms, acc.latest_verified_correct_ms),
+                (Some(first_vc), Some(last_vc)) if last_vc - first_vc >= 86_400_000
+            );
+        let latest_ts = acc.latest_obs_key.as_ref().map(|(t, _)| *t).unwrap_or(0);
+        let had_prior_verified_correct = acc.any_question_prior_verified_correct
+            || acc
+                .earliest_verified_correct_ms
+                .is_some_and(|first_vc| first_vc < latest_ts);
+
+        let diag_status = classify_diagnostic(&DiagnosticInputs {
+            distinct_questions,
+            non_blank_attempts: acc.non_blank_attempts,
+            correct_attempts: acc.correct_attempts,
+            last_is_correct: acc.last_is_correct,
+            last_confidence: acc.last_confidence,
+            had_prior_verified_correct,
+            has_spaced_retention: unit_spaced_retention,
+            evidence_challenge_passed: acc.evidence_challenge_passed,
+            has_independent_transfer: transfer_status == TransferStatus::TransferVerified,
+        });
+
+        let mean_r = acc.retrievability_sum / (distinct_questions as f64);
+        let mean_secs = acc.avg_seconds_sum / (distinct_questions as f64);
+        out.insert(
+            unit_id,
+            (
+                diag_status,
+                transfer_status,
+                mean_r,
+                distinct_questions,
+                mean_secs,
+            ),
+        );
+    }
+    out
 }
 
 pub async fn get_next_action(
@@ -188,7 +360,8 @@ pub async fn get_next_action(
                 let Ok(tid) = doc_row.get_str("canonical_topic_id") else {
                     continue;
                 };
-                let norm_src = knowledge::normalize_board_key(doc_row.get_str("source").unwrap_or(""));
+                let norm_src =
+                    knowledge::normalize_board_key(doc_row.get_str("source").unwrap_or(""));
                 if norm_src.is_empty() {
                     continue;
                 }
@@ -215,32 +388,12 @@ pub async fn get_next_action(
         }
     }
 
-    // Consolida diagnóstico de 3 sinais e transferência por unidade (`concept_id ?? topic_id`)
-    struct UnitAgg {
-        topic_id: String,
-        distinct_qids: HashSet<String>,
-        distinct_boards: HashSet<String>,
-        non_blank_attempts: usize,
-        correct_attempts: usize,
-        transfer_attempts: usize,
-        transfer_correct_grounded: usize,
-        last_is_correct: bool,
-        last_confidence: i32,
-        had_prior_verified_correct: bool,
-        has_spaced_retention: bool,
-        evidence_challenge_passed: Option<bool>,
-        last_answered_ms: i64,
-        avg_seconds_sum: f64,
-        obs_count: usize,
-        max_stability: f64,
-    }
-
     let stability_by_qid: HashMap<String, f64> = typed_activities
         .iter()
         .map(|a| (a.question_id.to_hex(), a.memory_stability_days))
         .collect();
 
-    let mut unit_map: HashMap<String, UnitAgg> = HashMap::new();
+    let mut collected_observations = Vec::new();
     for raw in &raw_rows {
         let Some(qid) = raw.get_object_id("question_id").ok() else {
             continue;
@@ -248,100 +401,19 @@ pub async fn get_next_action(
         let Some(qdoc) = q_docs.get(&qid) else {
             continue;
         };
-        let stab = stability_by_qid
-            .get(&qid.to_hex())
-            .copied()
-            .unwrap_or(0.0);
+        let stab = stability_by_qid.get(&qid.to_hex()).copied().unwrap_or(0.0);
         for obs in knowledge::project_units(raw, qdoc) {
-            let entry = unit_map.entry(obs.unit_id.clone()).or_insert_with(|| UnitAgg {
-                topic_id: obs.canonical_topic_id.clone(),
-                distinct_qids: HashSet::new(),
-                distinct_boards: HashSet::new(),
-                non_blank_attempts: 0,
-                correct_attempts: 0,
-                transfer_attempts: 0,
-                transfer_correct_grounded: 0,
-                last_is_correct: obs.last_is_correct,
-                last_confidence: obs.last_confidence,
-                had_prior_verified_correct: false,
-                has_spaced_retention: false,
-                evidence_challenge_passed: None,
-                last_answered_ms: obs.last_answered_ms,
-                avg_seconds_sum: 0.0,
-                obs_count: 0,
-                max_stability: 0.0,
-            });
-            entry.distinct_qids.insert(obs.question_id);
-            let is_cross_board_obs = if !obs.board_key.is_empty() {
-                let was_other = if !target_boards.is_empty() {
-                    !target_boards.contains(&obs.board_key)
-                } else {
-                    !entry.distinct_boards.is_empty() && !entry.distinct_boards.contains(&obs.board_key)
-                };
-                entry.distinct_boards.insert(obs.board_key);
-                was_other
-            } else {
-                false
-            };
-            if is_cross_board_obs {
-                entry.transfer_attempts += 1;
-                if obs.last_is_correct
-                    && obs.last_confidence >= 2
-                    && obs.evidence_challenge_passed != Some(false)
-                {
-                    entry.transfer_correct_grounded += 1;
-                }
-            }
-            entry.non_blank_attempts += obs.non_blank_attempts;
-            entry.correct_attempts += obs.correct_attempts;
-            entry.had_prior_verified_correct |= obs.had_prior_verified_correct;
-            entry.has_spaced_retention |= obs.has_spaced_retention;
-            entry.avg_seconds_sum += obs.avg_seconds;
-            entry.obs_count += 1;
-            entry.max_stability = entry.max_stability.max(stab);
-            if obs.last_answered_ms >= entry.last_answered_ms {
-                entry.last_answered_ms = obs.last_answered_ms;
-                entry.last_is_correct = obs.last_is_correct;
-                entry.last_confidence = obs.last_confidence;
-                entry.evidence_challenge_passed = obs.evidence_challenge_passed;
-            }
+            collected_observations.push((obs, stab));
         }
     }
 
     let now_ms = now_utc.timestamp_millis();
-    let mut diag_by_unit: HashMap<String, (DiagnosticStatus, TransferStatus, f64, usize, f64)> =
-        HashMap::new();
-    for (uid, agg) in &unit_map {
-        let avail_cross = cross_board_supply_by_topic
-            .get(&agg.topic_id)
-            .copied()
-            .unwrap_or(0);
-        let t_status = evaluate_transfer_status(&TransferInputs {
-            distinct_questions: agg.distinct_qids.len(),
-            available_cross_board_questions: avail_cross,
-            transfer_attempts: agg.transfer_attempts,
-            transfer_correct_grounded: agg.transfer_correct_grounded,
-        });
-        let d_status = classify_diagnostic(&DiagnosticInputs {
-            distinct_questions: agg.distinct_qids.len(),
-            non_blank_attempts: agg.non_blank_attempts,
-            correct_attempts: agg.correct_attempts,
-            last_is_correct: agg.last_is_correct,
-            last_confidence: agg.last_confidence,
-            had_prior_verified_correct: agg.had_prior_verified_correct,
-            has_spaced_retention: agg.has_spaced_retention,
-            evidence_challenge_passed: agg.evidence_challenge_passed,
-            has_independent_transfer: t_status == TransferStatus::TransferVerified,
-        });
-        let elapsed_days = ((now_ms - agg.last_answered_ms).max(0) as f64) / 86_400_000.0;
-        let r = retrievability(elapsed_days, agg.max_stability);
-        let avg_s = if agg.obs_count > 0 {
-            agg.avg_seconds_sum / (agg.obs_count as f64)
-        } else {
-            60.0
-        };
-        diag_by_unit.insert(uid.clone(), (d_status, t_status, r, agg.distinct_qids.len(), avg_s));
-    }
+    let diag_by_unit = aggregate_unit_diagnostics(
+        collected_observations,
+        &target_boards,
+        &cross_board_supply_by_topic,
+        now_ms,
+    );
 
     let mut verified_units = 0usize;
     let mut consolidating_units = 0usize;
@@ -381,7 +453,13 @@ pub async fn get_next_action(
                 let (st, tst, r, dq, avg_s) = diag_by_unit
                     .get(&top.canonical_topic_id)
                     .copied()
-                    .unwrap_or((DiagnosticStatus::InsufficientEvidence, default_t, 0.0, 0, 60.0));
+                    .unwrap_or((
+                        DiagnosticStatus::InsufficientEvidence,
+                        default_t,
+                        0.0,
+                        0,
+                        60.0,
+                    ));
                 match st {
                     DiagnosticStatus::VerifiedCompetence => verified_units += 1,
                     DiagnosticStatus::EvidenceInProgress
@@ -431,14 +509,12 @@ pub async fn get_next_action(
                         "Acerto com premissa divergente em {} — conferir fundamento",
                         top.display_title
                     ),
-                    DiagnosticStatus::OverconfidenceError => format!(
-                        "Indício de excesso de confiança em {}",
-                        top.display_title
-                    ),
-                    DiagnosticStatus::ConceptualError => format!(
-                        "Indício de erro conceitual em {}",
-                        top.display_title
-                    ),
+                    DiagnosticStatus::OverconfidenceError => {
+                        format!("Indício de excesso de confiança em {}", top.display_title)
+                    }
+                    DiagnosticStatus::ConceptualError => {
+                        format!("Indício de erro conceitual em {}", top.display_title)
+                    }
                     DiagnosticStatus::RetrievalFailure => format!(
                         "Assunto familiar com retenção pendente: {}",
                         top.display_title
@@ -447,14 +523,12 @@ pub async fn get_next_action(
                         "Evidência em construção ({dq}/{MIN_QUESTIONS_FOR_MASTERY} questões): {}",
                         top.display_title
                     ),
-                    DiagnosticStatus::ConsolidatedNoTransfer => format!(
-                        "Testar transferência independente em {}",
-                        top.display_title
-                    ),
-                    DiagnosticStatus::VerifiedCompetence => format!(
-                        "Manutenção leve em {}",
-                        top.display_title
-                    ),
+                    DiagnosticStatus::ConsolidatedNoTransfer => {
+                        format!("Testar transferência independente em {}", top.display_title)
+                    }
+                    DiagnosticStatus::VerifiedCompetence => {
+                        format!("Manutenção leve em {}", top.display_title)
+                    }
                     DiagnosticStatus::InsufficientEvidence if dq > 0 => format!(
                         "Assunto familiar com retenção pendente: {}",
                         top.display_title
@@ -672,4 +746,104 @@ pub async fn get_next_action(
         exam_scenarios,
         fatigue_report,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::services::knowledge::UnitQuestionObservation;
+
+    fn make_obs(
+        idx: usize,
+        board: &str,
+        ts_ms: i64,
+        is_correct: bool,
+        confidence: i32,
+    ) -> (UnitQuestionObservation, f64) {
+        (
+            UnitQuestionObservation {
+                unit_id: "DIR_ADM_01".into(),
+                canonical_subject_id: "DIR_ADM".into(),
+                canonical_topic_id: "DIR_ADM_01".into(),
+                concept_id: None,
+                question_id: format!("{idx:024x}"),
+                board_key: board.into(),
+                non_blank_attempts: 1,
+                correct_attempts: usize::from(is_correct),
+                last_is_correct: is_correct,
+                last_confidence: confidence,
+                had_prior_verified_correct: false,
+                has_spaced_retention: false,
+                evidence_challenge_passed: Some(true),
+                first_answered_ms: ts_ms,
+                last_answered_ms: ts_ms,
+                first_verified_correct_ms: is_correct.then_some(ts_ms),
+                last_verified_correct_ms: is_correct.then_some(ts_ms),
+                avg_seconds: 35.0,
+            },
+            4.0,
+        )
+    }
+
+    #[test]
+    fn fifteen_distinct_questions_across_days_reach_verified_competence_with_order_invariance() {
+        let day1_ms = 1_760_000_000_000_i64;
+        let day3_ms = day1_ms + 2 * 86_400_000;
+        let now_ms = day3_ms + 3_600_000;
+
+        // 10 distinct CEBRASPE questions on Day 1 + 5 distinct FGV questions on Day 3 (>= 24h apart, 0 repeated question_ids!)
+        let mut forward = Vec::new();
+        for i in 1..=10 {
+            forward.push(make_obs(
+                i,
+                "cebraspe",
+                day1_ms + (i as i64) * 1_000,
+                true,
+                3,
+            ));
+        }
+        for i in 11..=15 {
+            forward.push(make_obs(i, "fgv", day3_ms + (i as i64) * 1_000, true, 3));
+        }
+
+        let mut reversed = forward.clone();
+        reversed.reverse();
+
+        let empty_targets = HashSet::new();
+        let mut supply = HashMap::new();
+        supply.insert("DIR_ADM_01".to_string(), 5);
+
+        let diag_fwd = aggregate_unit_diagnostics(forward, &empty_targets, &supply, now_ms);
+        let diag_rev = aggregate_unit_diagnostics(reversed, &empty_targets, &supply, now_ms);
+
+        let (st_f, tr_f, r_f, dq_f, _) = diag_fwd["DIR_ADM_01"];
+        let (st_r, tr_r, r_r, dq_r, _) = diag_rev["DIR_ADM_01"];
+
+        assert_eq!(dq_f, 15);
+        assert_eq!(tr_f, TransferStatus::TransferVerified);
+        assert_eq!(st_f, DiagnosticStatus::VerifiedCompetence);
+        assert_eq!(st_f, st_r);
+        assert_eq!(tr_f, tr_r);
+        assert_eq!(dq_f, dq_r);
+        assert!((r_f - r_r).abs() < 1e-12);
+
+        // Same-day burst (< 24h) of 15 distinct questions must NOT prematurely claim VerifiedCompetence
+        let same_day: Vec<_> = (1..=15)
+            .map(|i| {
+                make_obs(
+                    i,
+                    if i <= 10 { "cebraspe" } else { "fgv" },
+                    day1_ms + (i as i64) * 1_000,
+                    true,
+                    3,
+                )
+            })
+            .collect();
+        let diag_same_day =
+            aggregate_unit_diagnostics(same_day, &empty_targets, &supply, day1_ms + 60_000);
+        assert_eq!(
+            diag_same_day["DIR_ADM_01"].0,
+            DiagnosticStatus::InsufficientEvidence
+        );
+    }
 }

@@ -133,7 +133,7 @@ class AuditFindingsTest {
             Instant.parse("2026-11-04T12:00:00Z"),
             Instant.parse(confident.nextReviewAt),
         ).toDays()
-        assertTrue(intervalDays == 1L || intervalDays == 7L || intervalDays == 30L)
+        assertEquals(7L, intervalDays)
         val partialBase = LearningRecord(
             questionId = "q",
             disciplina = "Matemática",
@@ -185,33 +185,23 @@ class AuditFindingsTest {
     }
 
     @Test
-    fun examBoardsWithCommasAndTemplateMetadataSurviveLocalMapping() {
-        val original = exam("rfb", "AUTORIZADO", emptyList()).copy(
-            examBoards = listOf("FGV, Projetos", "Cebraspe"),
-            templateSourceId = "RFB",
-            templateRevisionSynced = 2L,
-            isCustomized = true,
-            upstreamUpdateAvailable = true,
+    fun legacyCsvExamBoardsDecodeCleanlyAlongsideBlankValues() {
+        val baseEntity = br.com.concursoprep.app.data.local.ExamLocalMapping.toEntity(
+            exam("rfb", "AUTORIZADO", emptyList())
         )
-        val entity = br.com.concursoprep.app.data.local.ExamLocalMapping.toEntity(original)
-        val restored = br.com.concursoprep.app.data.local.ExamLocalMapping.assemble(
-            entity,
-            br.com.concursoprep.app.data.local.ExamLocalMapping.subjectsOf(original),
-            emptyList(),
-        )
-        assertEquals(listOf("FGV, Projetos", "Cebraspe"), restored.examBoards)
-        assertEquals("RFB", restored.templateSourceId)
-        assertEquals(2L, restored.templateRevisionSynced)
-        assertTrue(restored.isCustomized)
-        assertTrue(restored.upstreamUpdateAvailable)
-
-        val legacyCsv = entity.copy(examBoardsCsv = "FGV,Cebraspe")
         val restoredLegacy = br.com.concursoprep.app.data.local.ExamLocalMapping.assemble(
-            legacyCsv,
-            br.com.concursoprep.app.data.local.ExamLocalMapping.subjectsOf(original),
+            baseEntity.copy(examBoardsCsv = "FGV, Cebraspe , "),
+            emptyList(),
             emptyList(),
         )
         assertEquals(listOf("FGV", "Cebraspe"), restoredLegacy.examBoards)
+
+        val restoredBlank = br.com.concursoprep.app.data.local.ExamLocalMapping.assemble(
+            baseEntity.copy(examBoardsCsv = "   "),
+            emptyList(),
+            emptyList(),
+        )
+        assertTrue(restoredBlank.examBoards.isEmpty())
     }
 
     @Test

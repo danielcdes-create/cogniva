@@ -214,11 +214,13 @@ pub fn evaluate_from_activities(activities: &[UserActivityDocument]) -> FatigueR
             let Some(elapsed) = s.elapsed_session_seconds else {
                 continue;
             };
-            let entry = sessions.entry(s.session_uuid.clone()).or_insert(SessionObs {
-                max_elapsed: 0,
-                interrupted: false,
-                events: Vec::new(),
-            });
+            let entry = sessions
+                .entry(s.session_uuid.clone())
+                .or_insert(SessionObs {
+                    max_elapsed: 0,
+                    interrupted: false,
+                    events: Vec::new(),
+                });
             entry.max_elapsed = entry.max_elapsed.max(elapsed);
             entry.interrupted |= s.session_interrupted;
             entry.events.push((elapsed, s.status, item_diff));
@@ -315,5 +317,138 @@ mod tests {
         assert!(rep.shrunk_accuracy_delta.unwrap().is_finite());
         let (p0, pt) = performance_at_minute(f64::NAN, f64::NAN, f64::NAN, f64::NAN);
         assert!(p0.is_finite() && pt.is_finite());
+    }
+
+    #[test]
+    fn evaluate_from_activities_filters_interrupted_blank_and_non_simulado_sessions() {
+        use crate::models::activity::{ActivityDates, PastSessionEntry};
+        use bson::oid::ObjectId;
+        use chrono::Utc;
+
+        let now = Utc::now();
+        let make_entry =
+            |sess: &str, mode: &str, elapsed: i32, ok: bool, is_blank: bool, interrupted: bool| {
+                PastSessionEntry {
+                    attempt_id: uuid::Uuid::new_v4().to_string(),
+                    data: now,
+                    status: ok,
+                    alternativa_escolhida: "A".into(),
+                    tempo_gasto_segundos: 45,
+                    session_uuid: sess.into(),
+                    modo_sessao: mode.into(),
+                    modo_prova: None,
+                    concurso: None,
+                    canonical_subject_id: None,
+                    canonical_topic_id: None,
+                    dias_desde_ultima_sessao: 0,
+                    dias_desde_ultima_revisao: None,
+                    percentual_acertos_acumulado: 50.0,
+                    tempo_medio_acumulado: 45.0,
+                    nivel_confianca: 2,
+                    spaced_repetition_interval: 1,
+                    spaced_repetition_score: 0.0,
+                    streak_atual: 0,
+                    points_session: 0.0,
+                    is_revision: false,
+                    is_blank,
+                    confidence_explicit: true,
+                    selected_evidence_id: None,
+                    position_in_session: None,
+                    elapsed_session_seconds: Some(elapsed),
+                    session_interrupted: interrupted,
+                }
+            };
+
+        let mut sessions = Vec::new();
+        // 3 qualifying uninterrupted SIMULADO sessions (>= 5400s, 45 answered items each -> 135 >= 120):
+        // High early accuracy (22/23) vs low late accuracy (4/22) -> detects fatigue!
+        for s_idx in 1..=3 {
+            let sid = format!("sim-ok-{s_idx}");
+            for i in 0..23 {
+                sessions.push(make_entry(
+                    &sid,
+                    "SIMULADO",
+                    600 + i * 60,
+                    i < 22,
+                    false,
+                    false,
+                ));
+            }
+            for i in 0..22 {
+                sessions.push(make_entry(
+                    &sid,
+                    "SIMULADO",
+                    5400 + i * 120,
+                    i < 4,
+                    false,
+                    false,
+                ));
+            }
+            // Strategic blanks inside simulado must be ignored without corrupting counts
+            sessions.push(make_entry(&sid, "SIMULADO", 7200, false, true, false));
+        }
+        // Interrupted simulado and STANDARD sessions must be ignored completely
+        for i in 0..50 {
+            sessions.push(make_entry(
+                "sim-interrupted",
+                "SIMULADO",
+                6000,
+                true,
+                false,
+                i == 49,
+            ));
+            sessions.push(make_entry(
+                "std-ignored",
+                "STANDARD",
+                6000,
+                true,
+                false,
+                false,
+            ));
+        }
+
+        let act = UserActivityDocument {
+            id: Some(ObjectId::new()),
+            user_id: 1,
+            question_id: ObjectId::new(),
+            datas: ActivityDates {
+                ultima_sessao: now,
+                ultima_revisao: None,
+                data_primeira_sessao: now,
+                data_primeiro_acerto: None,
+            },
+            tempos: Default::default(),
+            disciplina: "Direito".into(),
+            past_sessions: sessions,
+            quantidade_praticas: 135,
+            quantidade_acertos: 78,
+            quantidade_erros: 57,
+            percentual_acertos: 57.7,
+            percentual_revisoes_sucesso: None,
+            var_alternativa_escolhida: 0.0,
+            frequencia_estudo_mes: 1.0,
+            spaced_repetition_interval: 1,
+            spaced_repetition_score: 0.0,
+            streak_atual: 0,
+            streak_max: 0,
+            points: 0.2,
+            points_with_decay: 0.2,
+            dominada: false,
+            nivel_confianca_med_rec: Some(2),
+            revisao_necessaria: false,
+            in_error_notebook: false,
+            high_confidence_error_flag: false,
+            user_note: None,
+            canonical_subject_id: None,
+            canonical_topic_id: None,
+            memory_stability_days: 2.0,
+            memory_difficulty: 5.0,
+        };
+
+        let report = evaluate_from_activities(&[act]);
+        assert_eq!(report.qualifying_sessions, 3);
+        assert_eq!(report.qualifying_attempts, 135);
+        assert_eq!(report.status, FatigueStatus::FatigueDetected);
+        assert_eq!(report.curve_300m.len(), 6);
     }
 }

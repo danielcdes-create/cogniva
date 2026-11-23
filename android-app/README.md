@@ -1,4 +1,4 @@
-# 📱 Cogniva Android App (`android-app` `2.4.1` / `build 31`)
+# 📱 Cogniva Android App (`android-app` `2.4.2` / `build 32`)
 
 Aplicativo nativo Android construído em **Kotlin + Jetpack Compose (Material 3)** com persistência local **Room v7** (com schema exportado em `7.json`), **Módulo Missões Audiovisual Interativo** (`MissionsScreen.kt`), **Motores Simétricos de Decisão & Curva de 300 Minutos** (`PerformanceEngines.kt`, `contract_version: 5`), **Protocolo de Entrada de 60 Segundos ("Terça · 22h")**, **Consulta Contextual em Camada (Catálogo + IA + Google Partial Custom Tab)**, criptografia de sessão no **Android Keystore**, contraste **WCAG 2.1 AA** e sincronização *offline-first* idempotente com o backend `cogniva-api`.
 
@@ -6,7 +6,7 @@ Aplicativo nativo Android construído em **Kotlin + Jetpack Compose (Material 3)
 
 ---
 
-## 1. Arquitetura do Cliente (`2.4.1`)
+## 1. Arquitetura do Cliente (`2.4.2`)
 
 - **Autenticação Nativa, Modo Convidado e Direitos LGPD ([`AuthStore.kt`](app/src/main/java/br/com/concursoprep/app/data/AuthStore.kt), [`OnboardingScreen.kt`](app/src/main/java/br/com/concursoprep/app/ui/screens/OnboardingScreen.kt), [`AccountLinkForm.kt`](app/src/main/java/br/com/concursoprep/app/ui/screens/AccountLinkForm.kt), [`SettingsScreen.kt`](app/src/main/java/br/com/concursoprep/app/ui/screens/SettingsScreen.kt)):**
   - Início imediato como convidado (online ou offline) ou autenticação por e-mail e senha (`Entrar` / `Criar conta`).

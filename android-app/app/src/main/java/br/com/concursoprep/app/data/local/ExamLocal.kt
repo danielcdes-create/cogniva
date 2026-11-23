@@ -147,6 +147,11 @@ interface ExamDao {
     suspend fun listMastery(): List<CanonicalMasteryEntity>
     @Query("DELETE FROM exam_subjects WHERE examId=:id") suspend fun clearSubjects(id: String)
     @Query("DELETE FROM exam_topics WHERE examId=:id") suspend fun clearTopics(id: String)
+    @Query("DELETE FROM exam_topics") suspend fun clearAllTopics()
+    @Query("DELETE FROM exam_subjects") suspend fun clearAllSubjects()
+    @Query("DELETE FROM user_exams") suspend fun clearAllExams()
+    @Query("DELETE FROM canonical_mastery") suspend fun clearAllMastery()
+    @Query("DELETE FROM career_trunks") suspend fun clearAllTrunks()
     @Query("UPDATE user_exams SET isActiveInLadder=:active WHERE examId=:id") suspend fun setActive(id: String, active: Boolean)
     @Query("UPDATE user_exams SET syncError=:error WHERE examId=:id") suspend fun setSyncError(id: String, error: String?)
 

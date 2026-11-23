@@ -128,9 +128,7 @@ pub fn decode(mut raw: Document) -> Result<QuestionDocument, AppError> {
                 ] {
                     if let Ok(old) = raw.get_str(field) {
                         if old != value {
-                            return Err(AppError::Conflict(
-                                "Vínculo canônico divergente".into(),
-                            ));
+                            return Err(AppError::Conflict("Vínculo canônico divergente".into()));
                         }
                     }
                     raw.insert(field, value);
@@ -147,13 +145,16 @@ pub fn decode(mut raw: Document) -> Result<QuestionDocument, AppError> {
 
     if let Some(year_bson) = raw.get("exam_year").cloned() {
         if !matches!(year_bson, Bson::Null) {
-            let year = crate::services::question_contracts::checked_bson_i32(&year_bson, "exam_year")
-                .map_err(|_| AppError::Conflict("Ano da prova inválido".into()))?;
+            let year =
+                crate::services::question_contracts::checked_bson_i32(&year_bson, "exam_year")
+                    .map_err(|_| AppError::Conflict("Ano da prova inválido".into()))?;
             if !(crate::services::question_contracts::MIN_EXAM_YEAR
                 ..=crate::services::question_contracts::MAX_EXAM_YEAR)
                 .contains(&year)
             {
-                return Err(AppError::Conflict("Ano da prova fora da faixa válida".into()));
+                return Err(AppError::Conflict(
+                    "Ano da prova fora da faixa válida".into(),
+                ));
             }
             raw.insert("exam_year", Bson::Int32(year));
         }
@@ -216,7 +217,10 @@ mod tests {
         );
         assert!(decode(raw.clone()).is_err());
         raw.remove("classification");
-        assert_eq!(before.revision().unwrap(), decode(raw).unwrap().revision().unwrap());
+        assert_eq!(
+            before.revision().unwrap(),
+            decode(raw).unwrap().revision().unwrap()
+        );
 
         let q: serde_json::Value = serde_json::from_str(include_str!(
             "../../../shared/examples/question-contracts/question-multiple-choice.json"

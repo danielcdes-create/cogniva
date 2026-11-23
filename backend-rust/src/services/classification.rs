@@ -25,12 +25,17 @@ pub fn prompt_sha256() -> String {
     format!("{:x}", Sha256::digest(CLASSIFICATION_PROMPT.as_bytes()))
 }
 fn generation_prompt() -> String {
-    let version = contracts::catalog_ref()["catalog_version"].as_i64().unwrap();
+    let version = contracts::catalog_ref()["catalog_version"]
+        .as_i64()
+        .unwrap();
     if version == 1 {
         CLASSIFICATION_PROMPT.into()
     } else {
         CLASSIFICATION_PROMPT
-            .replace("\"catalog_version\":1", &format!("\"catalog_version\":{version}"))
+            .replace(
+                "\"catalog_version\":1",
+                &format!("\"catalog_version\":{version}"),
+            )
             .replace("prompt_version=2", "prompt_version=3")
     }
 }
@@ -79,7 +84,12 @@ fn duplicate(error: &mongodb::error::Error) -> bool {
 }
 
 pub fn parse_model_output(raw: &str) -> Result<Value, AppError> {
-    parse_model_output_for(raw, contracts::catalog_ref()["catalog_version"].as_i64().unwrap())
+    parse_model_output_for(
+        raw,
+        contracts::catalog_ref()["catalog_version"]
+            .as_i64()
+            .unwrap(),
+    )
 }
 pub(crate) fn parse_model_output_for(raw: &str, expected_version: i64) -> Result<Value, AppError> {
     let cleaned = super::question_import::strip_json_fences(raw);
@@ -97,8 +107,7 @@ pub(crate) fn parse_model_output_for(raw: &str, expected_version: i64) -> Result
     let version = value["catalog_version"]
         .as_i64()
         .ok_or_else(|| bad("Versão de catálogo ausente"))?;
-    if version !=expected_version || !super::catalog_runtime::version_known(version)
-    {
+    if version != expected_version || !super::catalog_runtime::version_known(version) {
         return Err(bad("Versão de catálogo desconhecida"));
     }
     let links = value["links"]
@@ -131,7 +140,7 @@ pub(crate) fn parse_model_output_for(raw: &str, expected_version: i64) -> Result
         let topic = link["topic_id"]
             .as_str()
             .ok_or_else(|| bad("Tópico inválido"))?;
-        if !super::catalog_runtime::topic_at(version,subject, topic) {
+        if !super::catalog_runtime::topic_at(version, subject, topic) {
             return Err(bad("ID fora do catálogo ou de outra disciplina"));
         }
         if !seen.insert(topic.to_owned()) {
@@ -294,7 +303,7 @@ pub fn grading_revision_of(raw: &Document) -> Result<String, AppError> {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn build_custom_review_event(
+pub(crate) fn build_custom_review_event(
     seed: &str,
     user: i64,
     action: &str,
@@ -629,7 +638,9 @@ pub async fn generate_for_actor(
             .and_then(|r| r.get_document(id).ok());
         let result = match saved {
             Some(saved) => json_of(saved),
-            None => generate_one_for_actor(db, config, actor_user_id, id, reason, operation).await?,
+            None => {
+                generate_one_for_actor(db, config, actor_user_id, id, reason, operation).await?
+            }
         };
         if result["suggestion"].is_null() {
             return Err(conflict(
@@ -881,58 +892,71 @@ pub(crate) async fn generate_one_for_actor(
             return Err(error);
         }
     };
-    quota_guard.commit();
-    let superseded = json!({"decided_at":now_z(),"actor":{"type":"SYSTEM","id":"classification-lease"},"reason":"Resposta de geração substituída por reprocessamento explícito.","resulting_classification_revision":null});
-    if commands
-        .find_one(doc! {"_id":&reservation,"generation":generation,"status":"reserved"})
-        .await?
-        .is_none()
-    {
-        suggestion["status"] = json!("SUPERSEDED");
-        suggestion["resolution"] = superseded.clone();
-        suggestions
+    let persist_outcome: Result<Value, AppError> = async {
+        let superseded = json!({"decided_at":now_z(),"actor":{"type":"SYSTEM","id":"classification-lease"},"reason":"Resposta de geração substituída por reprocessamento explícito.","resulting_classification_revision":null});
+        if commands
+            .find_one(doc! {"_id":&reservation,"generation":generation,"status":"reserved"})
+            .await?
+            .is_none()
+        {
+            suggestion["status"] = json!("SUPERSEDED");
+            suggestion["resolution"] = superseded.clone();
+            suggestions
+                .update_one(
+                    doc! {"_id":&suggestion_key},
+                    doc! {"$setOnInsert":as_doc(suggestion)?},
+                )
+                .upsert(true)
+                .await?;
+            return Err(conflict(
+                "Resposta tardia preservada sem substituir a geração atual",
+            ));
+        }
+        if suggestions
+            .find_one(doc! {"_id": &suggestion_key})
+            .await?
+            .is_none()
+        {
+            suggestions.insert_one(as_doc(suggestion.clone())?).await?;
+        }
+        if let Some(previous_id) = previous
+            .as_ref()
+            .and_then(|r| r.get_str("suggestion_id").ok())
+            .filter(|id| *id != suggestion_key)
+        {
+            suggestions.update_one(doc! {"_id": previous_id, "status": "PENDING"}, doc! {"$set": {"status": "SUPERSEDED", "resolution": as_doc(json!({"decided_at": now_z(), "actor": {"type":"SYSTEM","id":"classification-reprocess"}, "reason": reprocess.unwrap_or("Reprocessamento explícito."), "resulting_classification_revision": null}))?}}).await?;
+        }
+        let committed = commands
             .update_one(
-                doc! {"_id":&suggestion_key},
-                doc! {"$setOnInsert":as_doc(suggestion)?},
-            )
-            .upsert(true)
-            .await?;
-        return Err(conflict(
-            "Resposta tardia preservada sem substituir a geração atual",
-        ));
-    }
-    if suggestions
-        .find_one(doc! {"_id": &suggestion_key})
-        .await?
-        .is_none()
-    {
-        suggestions.insert_one(as_doc(suggestion.clone())?).await?;
-    }
-    if let Some(previous_id) = previous
-        .as_ref()
-        .and_then(|r| r.get_str("suggestion_id").ok())
-        .filter(|id| *id != suggestion_key)
-    {
-        suggestions.update_one(doc! {"_id": previous_id, "status": "PENDING"}, doc! {"$set": {"status": "SUPERSEDED", "resolution": as_doc(json!({"decided_at": now_z(), "actor": {"type":"SYSTEM","id":"classification-reprocess"}, "reason": reprocess.unwrap_or("Reprocessamento explícito."), "resulting_classification_revision": null}))?}}).await?;
-    }
-    let committed = commands
-        .update_one(
-            doc! {"_id": &reservation,"generation":generation,"status":"reserved"},
-            doc! {"$set": {"status": "proposed", "suggestion_id": &suggestion_key}},
-        )
-        .await?;
-    if committed.matched_count != 1 {
-        suggestions
-            .update_one(
-                doc! {"_id":&suggestion_key,"status":"PENDING"},
-                doc! {"$set":{"status":"SUPERSEDED","resolution":as_doc(superseded)?}},
+                doc! {"_id": &reservation,"generation":generation,"status":"reserved"},
+                doc! {"$set": {"status": "proposed", "suggestion_id": &suggestion_key}},
             )
             .await?;
-        return Err(conflict(
-            "Geração substituída; resposta não aplicada ao lote",
-        ));
+        if committed.matched_count != 1 {
+            suggestions
+                .update_one(
+                    doc! {"_id":&suggestion_key,"status":"PENDING"},
+                    doc! {"$set":{"status":"SUPERSEDED","resolution":as_doc(superseded)?}},
+                )
+                .await?;
+            return Err(conflict(
+                "Geração substituída; resposta não aplicada ao lote",
+            ));
+        }
+        Ok(json!({"status":"proposed","provider_call":true,"suggestion": suggestion}))
     }
-    Ok(json!({"status":"proposed","provider_call":true,"suggestion": suggestion}))
+    .await;
+
+    match persist_outcome {
+        Ok(resp) => {
+            quota_guard.commit();
+            Ok(resp)
+        }
+        Err(err) => {
+            quota_guard.release_now().await;
+            Err(err)
+        }
+    }
 }
 
 fn human_provenance(
@@ -1155,8 +1179,9 @@ pub async fn decide(db: &Database, user: i64, request: &Value) -> Result<Value, 
     let catalog_version = contracts::catalog_ref()["catalog_version"]
         .as_i64()
         .unwrap();
-    let suggestion_matches_question = if let Some(s_sem) =
-        suggestion_json.get("question_semantic_revision").and_then(Value::as_str)
+    let suggestion_matches_question = if let Some(s_sem) = suggestion_json
+        .get("question_semantic_revision")
+        .and_then(Value::as_str)
     {
         s_sem == semantic
     } else {
@@ -1837,13 +1862,15 @@ async fn supersede_stale(
     let collection = question_storage::collection(db, "question_exam_compatibility");
     let mut cursor = collection.find(doc! {"owner_user_id": user, "exam_id": exam_id, "question_id": question_id, "status": "CONFIRMED"}).await?;
     while let Some(row) = cursor.try_next().await? {
-        let same_question_version = if let Ok(stored_sem) = row.get_str("question_semantic_revision") {
-            !semantic.is_empty() && stored_sem == semantic
-        } else {
-            row.get_str("question_content_revision").ok() == Some(content)
-        };
+        let same_question_version =
+            if let Ok(stored_sem) = row.get_str("question_semantic_revision") {
+                !semantic.is_empty() && stored_sem == semantic
+            } else {
+                row.get_str("question_content_revision").ok() == Some(content)
+            };
         let same_exam = i64_of(&row, "exam_revision") == Some(exam_revision);
-        let same_catalog = i64_of(&row, "catalog_version").is_some_and(super::catalog_runtime::version_known);
+        let same_catalog =
+            i64_of(&row, "catalog_version").is_some_and(super::catalog_runtime::version_known);
         if !(same_question_version && same_exam && same_catalog) {
             let id = row.get_str("_id").unwrap_or("").to_owned();
             collection

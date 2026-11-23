@@ -976,7 +976,7 @@ def normalize_question_to_v2(
             cls = doc["classification"]
             raw_links = cls.get("links") if isinstance(cls.get("links"), list) else []
             remapped_links: list[dict] = []
-            seen_link_topics: set[str] = set()
+            seen_link_keys: set[tuple[str, str | None]] = set()
             for raw_lk in raw_links:
                 if not isinstance(raw_lk, dict):
                     continue
@@ -989,10 +989,12 @@ def normalize_question_to_v2(
                     lk["subject_id"], lk["topic_id"] = tflat_map[orig_tid]
                 elif orig_sid in sid_map:
                     lk["subject_id"] = sid_map[orig_sid]
-                if lk.get("topic_id") in seen_link_topics:
+                if not isinstance(lk.get("topic_id"), str):
                     continue
-                if isinstance(lk.get("topic_id"), str):
-                    seen_link_topics.add(lk["topic_id"])
+                dedup_key = (lk["topic_id"], lk.get("concept_id"))
+                if dedup_key in seen_link_keys:
+                    continue
+                seen_link_keys.add(dedup_key)
                 remapped_links.append(lk)
 
             links_valid = bool(remapped_links) and all(
@@ -1046,10 +1048,9 @@ def normalize_question_to_v2(
         if default_contest_tag and not doc.get("concursos"):
             doc["concursos"] = default_contest_tag
 
-        doc["content_revision"] = qc.content_revision(doc)
-        doc["content_hash_version"] = "question-v2-jcs-sha256"
+        qc.populate_v2_1_hashes(doc)
 
-        # Ensure validity matches recomputed content_revision or gracefully resets to UNKNOWN
+        # Ensure validity matches recomputed semantic_revision or content_revision, else reset to UNKNOWN
         if isinstance(doc.get("validity"), dict):
             val = doc["validity"]
             if val.get("status") in ("CURRENT", "OBSOLETE"):
@@ -1060,10 +1061,19 @@ def normalize_question_to_v2(
                 has_due = val.get("status") != "CURRENT" or val.get("basis") != "LEGAL" or bool(
                     val.get("review_due_on")
                 )
+                eval_mode = val.get("evaluation_mode")
+                eval_sem = val.get("evaluated_semantic_revision")
+                if eval_mode == "SEMANTIC" or eval_sem is not None:
+                    revision_matches = (
+                        eval_mode in (None, "SEMANTIC")
+                        and eval_sem == doc["semantic_revision"]
+                    )
+                else:
+                    revision_matches = val.get("evaluated_content_revision") == doc["content_revision"]
                 if (
                     val.get("revision", 0) > 0
                     and qc.human_review(decision)
-                    and val.get("evaluated_content_revision") == doc["content_revision"]
+                    and revision_matches
                     and has_evidence
                     and has_due
                 ):
@@ -1902,7 +1912,7 @@ def run_mongo_migration(
     return stats
 
 
-def main():
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-uri", default=os.environ.get("SOURCE_MONGODB_URI", ""))
     parser.add_argument("--source-db", default="CNU")
@@ -1915,7 +1925,7 @@ def main():
     mode_group = parser.add_mutually_exclusive_group()
     mode_group.add_argument("--dry-run", action="store_true")
     mode_group.add_argument("--apply", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     effective_dry_run = bool(args.dry_run) or not bool(args.apply)
 
@@ -1945,7 +1955,8 @@ def main():
         args.output_report.parent.mkdir(parents=True, exist_ok=True)
         args.output_report.write_text(output + "\n", encoding="utf-8")
     print(output)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

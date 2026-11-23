@@ -127,4 +127,69 @@ class MarkdownParserTest {
         assertFalse(MarkdownParser.isSafeHttpsUrl("file:///etc/passwd"))
         assertFalse(MarkdownParser.isSafeHttpsUrl("intent://evil"))
     }
+
+    @Test
+    fun allowsUtf8WikipediaHttpsLinksAndRejectsUserInfoUrls() {
+        val wikiUrl = "https://pt.wikipedia.org/wiki/Constituição_de_1988"
+        val wikiUrl2 = "https://pt.wikipedia.org/wiki/Administração_pública"
+        assertTrue(MarkdownParser.isSafeHttpsUrl(wikiUrl))
+        assertTrue(MarkdownParser.isSafeHttpsUrl(wikiUrl2))
+        assertFalse(MarkdownParser.isSafeHttpsUrl("https://user@evil.com"))
+        assertFalse(MarkdownParser.isSafeHttpsUrl("https://user:secret@evil.com/phish"))
+
+        val md = "Leia [Constituição]($wikiUrl) mas ignore [Phishing](https://user@evil.com/login)."
+        val annotated = MarkdownParser.parseSimpleMarkdownToAnnotatedString(md)
+        assertEquals("Leia Constituição mas ignore Phishing.", annotated.text)
+
+        val links = annotated.getLinkAnnotations(0, annotated.text.length)
+        assertEquals(1, links.size)
+        val link = links.single().item as LinkAnnotation.Url
+        assertEquals(wikiUrl, link.url)
+    }
+
+    @Test
+    fun treatsFourOrMoreBacktickFencesAsMultilineCodeBlocksInsteadOfInlineCode() {
+        val bareFourFence = """
+            Introdução
+            ````
+            val x = 1 + 2
+            val y = **literal**
+            ````
+            Conclusão
+        """.trimIndent()
+        val parsedBare = MarkdownParser.parseSimpleMarkdownToAnnotatedString(bareFourFence)
+        assertEquals(
+            listOf(
+                "Introdução",
+                "val x = 1 + 2",
+                "val y = **literal**",
+                "Conclusão"
+            ),
+            parsedBare.text.lines()
+        )
+        val bareCodeSpans = parsedBare.spanStyles.filter { it.item.fontFamily == FontFamily.Monospace }
+        assertEquals(2, bareCodeSpans.size)
+
+        // Nested 3-backtick fence inside a 4-backtick fence stays literal until closing 4-backtick fence
+        val nestedFence = """
+            ````markdown
+            ```sql
+            SELECT 1;
+            ```
+            ````
+            Fora do bloco.
+        """.trimIndent()
+        val parsedNested = MarkdownParser.parseSimpleMarkdownToAnnotatedString(nestedFence)
+        assertEquals(
+            listOf(
+                "```sql",
+                "SELECT 1;",
+                "```",
+                "Fora do bloco."
+            ),
+            parsedNested.text.lines()
+        )
+        val nestedCodeSpans = parsedNested.spanStyles.filter { it.item.fontFamily == FontFamily.Monospace }
+        assertEquals(3, nestedCodeSpans.size)
+    }
 }

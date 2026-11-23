@@ -148,4 +148,96 @@ class MissionsModuleTest {
         val archivedSpec = spec.copy(careers = spec.careers.map { it.copy(status = "ARCHIVED") })
         assertEquals(null, MissionsCatalogLoader.buildDetailView(archivedSpec, mission.missionId, completedRecord, 20, 5))
     }
+
+    @Test
+    fun canAccessSceneAndShouldAutoAdvanceSceneEnforceSequentialDecisionGatesAndUserIntervention() {
+        val spec = MissionsCatalogLoader.loadBundled()
+        val mission = spec.careers.first().disciplines.first().seasons.first().missions.first()
+
+        // 1. Initial NOT_STARTED state: only scene 1 is accessible; jumping to scene 2 or 5 is blocked
+        val initialDetail = MissionsCatalogLoader.buildDetailView(spec, mission.missionId, null, 10, 0)!!
+        val scenes = initialDetail.scenes
+        assertEquals(5, scenes.size)
+        assertTrue(MissionsFinanceMath.canAccessScene(scenes, scenes[0].sceneId, initialDetail.narrativeProgress))
+        assertFalse(MissionsFinanceMath.canAccessScene(scenes, scenes[1].sceneId, initialDetail.narrativeProgress))
+        assertFalse(MissionsFinanceMath.canAccessScene(scenes, scenes[4].sceneId, initialDetail.narrativeProgress))
+        assertFalse(MissionsFinanceMath.canAccessScene(emptyList(), scenes[0].sceneId, initialDetail.narrativeProgress))
+
+        // 2. After completing scenes 0 and 1, scene 2 (order 3) becomes accessible, while scene 3 (order 4) stays locked
+        val midRecord = LocalMissionProgressRecord(
+            missionId = mission.missionId,
+            status = "IN_PROGRESS",
+            currentSceneId = scenes[1].sceneId,
+            completedSceneIds = listOf(scenes[0].sceneId, scenes[1].sceneId)
+        )
+        val midDetail = MissionsCatalogLoader.buildDetailView(spec, mission.missionId, midRecord, 10, 0)!!
+        assertTrue(MissionsFinanceMath.canAccessScene(midDetail.scenes, scenes[2].sceneId, midDetail.narrativeProgress))
+        assertFalse(MissionsFinanceMath.canAccessScene(midDetail.scenes, scenes[3].sceneId, midDetail.narrativeProgress))
+
+        // 3. COMPLETED mission unlocks free navigation across all scenes
+        val doneRecord = midRecord.copy(
+            status = "COMPLETED",
+            completedSceneIds = scenes.map { it.sceneId }
+        )
+        val doneDetail = MissionsCatalogLoader.buildDetailView(spec, mission.missionId, doneRecord, 10, 0)!!
+        scenes.forEach { sc ->
+            assertTrue(MissionsFinanceMath.canAccessScene(doneDetail.scenes, sc.sceneId, doneDetail.narrativeProgress))
+        }
+
+        // 4. shouldAutoAdvanceScene respects scene flags, decision gates, user intervention, video errors, and terminal scene
+        val nonDecisionScene = scenes.first { !it.requiresDecisionToAdvance && it.nextSceneId != null }
+            .copy(autoAdvanceOnVideoEnd = true)
+        assertTrue(
+            MissionsFinanceMath.shouldAutoAdvanceScene(
+                scene = nonDecisionScene,
+                autoAdvanceEnabled = true,
+                userIntervened = false,
+                videoUnavailableOrErrored = false
+            )
+        )
+        assertFalse(
+            MissionsFinanceMath.shouldAutoAdvanceScene(
+                scene = nonDecisionScene,
+                autoAdvanceEnabled = false,
+                userIntervened = false,
+                videoUnavailableOrErrored = false
+            )
+        )
+        assertFalse(
+            MissionsFinanceMath.shouldAutoAdvanceScene(
+                scene = nonDecisionScene,
+                autoAdvanceEnabled = true,
+                userIntervened = true,
+                videoUnavailableOrErrored = false
+            )
+        )
+        assertFalse(
+            MissionsFinanceMath.shouldAutoAdvanceScene(
+                scene = nonDecisionScene,
+                autoAdvanceEnabled = true,
+                userIntervened = false,
+                videoUnavailableOrErrored = true
+            )
+        )
+        // Decision scene NEVER auto-advances even if autoAdvanceOnVideoEnd were true
+        val decisionScene = scenes.first { it.requiresDecisionToAdvance }.copy(autoAdvanceOnVideoEnd = true)
+        assertFalse(
+            MissionsFinanceMath.shouldAutoAdvanceScene(
+                scene = decisionScene,
+                autoAdvanceEnabled = true,
+                userIntervened = false,
+                videoUnavailableOrErrored = false
+            )
+        )
+        // Terminal scene (nextSceneId == null) NEVER auto-advances
+        val terminalNoDecision = nonDecisionScene.copy(nextSceneId = null)
+        assertFalse(
+            MissionsFinanceMath.shouldAutoAdvanceScene(
+                scene = terminalNoDecision,
+                autoAdvanceEnabled = true,
+                userIntervened = false,
+                videoUnavailableOrErrored = false
+            )
+        )
+    }
 }

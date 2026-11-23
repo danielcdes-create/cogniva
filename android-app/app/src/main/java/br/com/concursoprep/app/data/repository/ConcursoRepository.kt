@@ -5,7 +5,6 @@ import br.com.concursoprep.app.BuildConfig
 import br.com.concursoprep.app.data.AuthStore
 import br.com.concursoprep.app.data.local.*
 import br.com.concursoprep.app.data.remote.*
-import br.com.concursoprep.app.data.update.AppUpdateManager
 import br.com.concursoprep.app.domain.exam.*
 import br.com.concursoprep.app.domain.missions.*
 import br.com.concursoprep.app.domain.model.*
@@ -175,11 +174,15 @@ class ConcursoRepository(
                     .forEach { dao.acknowledgeAttempt(it.attemptId, ownerUserId) }
                 durable?.reports(ownerUserId).orEmpty()
                     .forEach { durable?.acknowledgeReport(it.eventId, ownerUserId) }
-                durable?.pausedSession(ownerUserId)
-                    ?.let { durable?.completeSession(it.sessionId, ownerUserId) }
+                durable?.deleteSessionsForOwner(ownerUserId)
                 durable?.clearAllLearning()
                 durable?.clearAllMetadata()
                 dao.clearCachedQuestions()
+                examDao.clearAllTopics()
+                examDao.clearAllSubjects()
+                examDao.clearAllExams()
+                examDao.clearAllMastery()
+                examDao.clearAllTrunks()
             }
         }
         return auth?.wipeAccountAndResetToGuest(ownerUserId, postSwitchMessage) ?: 0L
@@ -687,12 +690,14 @@ class ConcursoRepository(
         var strategicOmissions = 0
 
         val cellCounts = HashMap<Pair<String, Int>, Pair<Int, Int>>()
+        val countedAttemptIds = HashSet<String>()
         for (row in rows) {
             val q = cachedById[row.questionId]
             val qt = if (q?.questionType == QuestionType.TRUE_FALSE) "TRUE_FALSE" else "MULTIPLE_CHOICE"
             val correctEvId = q?.effectiveEvidenceChallenge()?.correctEvidenceId
             var seenCorrectBefore = false
             for (ev in row.events.sortedBy { safeInstant(it.occurredAt) }) {
+                countedAttemptIds += ev.attemptId
                 if (ev.isBlank) {
                     strategicOmissions++
                     continue
@@ -724,7 +729,7 @@ class ConcursoRepository(
             }
         }
         val pendingUnsyncedBlanks = dao.getAllPendingAttempts().count {
-            it.ownerUserId == userId && it.syncError == null && it.isBlank
+            it.ownerUserId == userId && it.syncError == null && it.isBlank && it.attemptId !in countedAttemptIds
         }
         strategicOmissions += pendingUnsyncedBlanks
 
@@ -1137,7 +1142,8 @@ class ConcursoRepository(
         mutationMutex.withLock {
             transaction {
                 val pendingRow = dao.findPendingAttemptInSession(sessionUuid, questionId)
-                dao.updateAttemptEvidence(sessionUuid, questionId, cleanEvId)
+                    ?.takeIf { it.ownerUserId == userId }
+                dao.updateAttemptEvidence(sessionUuid, questionId, cleanEvId, userId)
                 val resolvedAttemptId = pendingRow?.attemptId ?: deterministicAttemptId(sessionUuid, questionId)
 
                 // Atualiza imediatamente o registro local já confirmado (caso o lote tenha sincronizado antes do toque)
@@ -1357,9 +1363,12 @@ class ConcursoRepository(
                 ?.let { runCatching { json.decodeFromString<List<PendingEvidencePatch>>(it) }.getOrDefault(emptyList()) }
                 .orEmpty()
             if (rawPatches.isNotEmpty()) {
-                val activePendingIds = dao.getAllPendingAttempts().filter { it.ownerUserId == userId }.map { it.attemptId }.toSet()
+                val quarantinedIds = dao.getAllPendingAttempts()
+                    .filter { it.ownerUserId == userId && it.syncError != null }
+                    .map { it.attemptId }
+                    .toSet()
                 val remainingPatches = mutableListOf<PendingEvidencePatch>()
-                for (patch in rawPatches) {
+                for ((idx, patch) in rawPatches.withIndex()) {
                     if (patch.ownerUserId != userId) {
                         remainingPatches += patch
                         continue
@@ -1372,16 +1381,24 @@ class ConcursoRepository(
                                 selectedEvidenceId = patch.selectedEvidenceId
                             )
                         )
-                        if (resp.status == "applied") {
+                        if (resp.status == "applied" || resp.status == "already_applied") {
                             synced++
-                        } else if (patch.attemptId in activePendingIds) {
+                        } else if (patch.attemptId !in quarantinedIds) {
+                            // Retém com segurança em "pending_parent_attempt" até confirmação pelo servidor
                             remainingPatches += patch
                             transient = true
                         }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: retrofit2.HttpException) {
-                        if (e.code() == 401) throw e
+                        if (e.code() == 401) {
+                            val tail = rawPatches.subList(idx, rawPatches.size)
+                            val preserved = remainingPatches + tail
+                            mutationMutex.withLock {
+                                metadata("pending_evidence_patches", json.encodeToString(preserved))
+                            }
+                            throw e
+                        }
                         if (e.code() !in listOf(400, 404, 422)) {
                             remainingPatches += patch
                             transient = true
@@ -1493,11 +1510,23 @@ class ConcursoRepository(
             require(response.projectionVersion == 1 && response.questions.map { it.questionId }.toSet() == ids.toSet()) { "Resposta de cache incompleta; estado anterior preservado." }
             mutationMutex.withLock {
                 transaction {
+                    val existingById = dao.findQuestionsByIds(ids).associateBy { it.id }
                     response.questions.forEach { row ->
                         if (row.question == null) blocked += row.questionId else {
                             require(row.question.id == row.questionId)
                             blocked -= row.questionId
-                            dao.insertQuestions(listOf(QuestionCacheMapping.toEntity(row.question, json)))
+                            val mapped = QuestionCacheMapping.toEntity(row.question, json)
+                            val prev = existingById[row.questionId]
+                            val preserved = if (prev != null && row.question.userStats == null) {
+                                mapped.copy(
+                                    inErrorNotebook = prev.inErrorNotebook,
+                                    isMastered = prev.isMastered,
+                                    userNote = prev.userNote
+                                )
+                            } else {
+                                mapped
+                            }
+                            dao.insertQuestions(listOf(preserved))
                         }
                     }
                     metadata("cache_unavailable_ids", json.encodeToString(blocked.toList()))
@@ -1743,8 +1772,19 @@ class ConcursoRepository(
         File(directory, "cogniva-preservados-${System.currentTimeMillis()}.json").also { it.writeText(document.toString(), Charsets.UTF_8) }
     }
 
-    suspend fun getLocalStorageStats(): Pair<Int, Int> =
-        dao.countCachedQuestions() to (dao.getAllPendingAttempts().count { it.ownerUserId == ownerUserId } + (durable?.reports(ownerUserId)?.size ?: 0) + examDao.listPendingExams().size)
+    suspend fun getLocalStorageStats(): Pair<Int, Int> {
+        val pendingAttemptsCount = dao.getAllPendingAttempts().count { it.ownerUserId == ownerUserId }
+        val pendingReportsCount = durable?.reports(ownerUserId)?.size ?: 0
+        val pendingExamsCount = examDao.listPendingExams().size
+        val pendingPatchesCount = metadata("pending_evidence_patches")
+            ?.takeIf { it.isNotBlank() }
+            ?.let { runCatching { json.decodeFromString<List<PendingEvidencePatch>>(it) }.getOrDefault(emptyList()) }
+            .orEmpty()
+            .count { it.ownerUserId == ownerUserId }
+        val dirtyMissionsCount = loadLocalMissionsEnvelope().missions.values.count { it.dirty }
+        val totalPending = pendingAttemptsCount + pendingReportsCount + pendingExamsCount + pendingPatchesCount + dirtyMissionsCount
+        return dao.countCachedQuestions() to totalPending
+    }
 
     suspend fun clearLocalQuestionCache() {
         val hasActiveSession = durable?.pausedSession(ownerUserId) != null
@@ -1780,39 +1820,6 @@ class ConcursoRepository(
     }
 
     suspend fun fetchRemoteApkInfo(): ApkInfoDto? = try { api.getApkInfo() } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
-
-    suspend fun downloadApkUpdate(targetDir: File, expectedInfo: ApkInfoDto? = null): File? = withContext(Dispatchers.IO) {
-        val info = expectedInfo ?: fetchRemoteApkInfo() ?: return@withContext null
-        val validated = AppUpdateManager.validateMetadata(info, BuildConfig.VERSION_CODE)
-        val downloadUrl = AppUpdateManager.resolveDownloadUrl(BuildConfig.API_BASE_URL, validated.downloadPath)
-        val client = OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(120, TimeUnit.SECONDS)
-            .build()
-        targetDir.mkdirs()
-        val destination = File(targetDir, "cogniva-${validated.versionCode}.apk")
-        try {
-            client.newCall(Request.Builder().url(downloadUrl).header("Accept-Encoding", "identity").build()).execute().use { response ->
-                if (!response.isSuccessful) return@withContext null
-                val body = response.body ?: return@withContext null
-                body.byteStream().use { input ->
-                    AppUpdateManager.downloadVerifyAndStreamToSink(
-                        source = input,
-                        validated = validated,
-                        updatesDir = targetDir,
-                        sinkOpener = { FileOutputStream(destination) }
-                    )
-                }
-            }
-            destination
-        } catch (e: java.io.IOException) {
-            runCatching { destination.delete() }
-            throw java.io.IOException("Falha de conexão durante o download da atualização. Tente novamente.", e)
-        } finally {
-            client.dispatcher.executorService.shutdown()
-            client.connectionPool.evictAll()
-        }
-    }
 
     // --- Módulo Missões (Sincronização Online + Persistência Local por Conta + Cache de Vídeo) ---
 
@@ -1878,31 +1885,137 @@ class ConcursoRepository(
         return LocalMissionQuestionCounts(eligible.size, practicedCount, masteredCount)
     }
 
+    private suspend fun submitRecordedDecisionSteps(missionId: String, dec: LocalRecordedDecision) {
+        if (dec.firstSelectedOptionId.isNotBlank() && dec.firstSelectedOptionId != dec.latestSelectedOptionId) {
+            api.submitMissionDecision(
+                missionId,
+                buildJsonObject {
+                    put("scene_id", dec.sceneId)
+                    put("interaction_id", dec.interactionId)
+                    put("selected_option_id", dec.firstSelectedOptionId)
+                    put("time_spent_ms", 1000L)
+                    put("used_transcript_fallback", false)
+                }
+            )
+        }
+        api.submitMissionDecision(
+            missionId,
+            buildJsonObject {
+                put("scene_id", dec.sceneId)
+                put("interaction_id", dec.interactionId)
+                put("selected_option_id", dec.latestSelectedOptionId)
+                put("time_spent_ms", 1000L)
+                put("used_transcript_fallback", false)
+            }
+        )
+    }
+
     private suspend fun flushDirtyMissionRecord(missionId: String, rec: LocalMissionProgressRecord): Boolean {
         if (!rec.dirty) return true
         return runCatching {
             auth?.ensureSession(api, ownerUserId)
-            for ((_, dec) in rec.decisions) {
-                api.submitMissionDecision(
-                    missionId,
-                    buildJsonObject {
-                        put("scene_id", dec.sceneId)
-                        put("interaction_id", dec.interactionId)
-                        put("selected_option_id", dec.latestSelectedOptionId)
-                        put("time_spent_ms", 1000L)
-                        put("used_transcript_fallback", false)
+            val spec = runCatching { MissionsCatalogLoader.loadBundled() }.getOrNull()
+            val missionSpec = spec?.careers?.asSequence()
+                ?.flatMap { it.disciplines.asSequence() }
+                ?.flatMap { it.seasons.asSequence() }
+                ?.flatMap { it.missions.asSequence() }
+                ?.firstOrNull { it.missionId == missionId }
+            val orderedScenes = missionSpec?.scenes?.sortedBy { it.order }.orEmpty()
+            val sceneOrderById = orderedScenes.associate { it.sceneId to it.order }
+            val terminalSceneIds = orderedScenes.filter { it.nextSceneId == null }.map { it.sceneId }.toSet()
+            val curScene = rec.currentSceneId.takeIf { it.isNotBlank() }
+            val completedSet = rec.completedSceneIds.toSet()
+
+            val orderedDecisions = rec.decisions.values.sortedWith(
+                compareBy<LocalRecordedDecision> { sceneOrderById[it.sceneId] ?: Int.MAX_VALUE }
+                    .thenBy { it.interactionId }
+            )
+            val decisionsByScene = orderedDecisions.groupBy { it.sceneId }
+            val handledDecisionIds = HashSet<String>()
+            val syncedCompletedIds = HashSet<String>()
+            val syncedPositionScenes = HashSet<String>()
+
+            // 1. Cenas anteriores na ordem declarativa (decisões 1ª/última tentativa, conclusão e posição)
+            for (sc in orderedScenes.filter { it.sceneId !in terminalSceneIds }) {
+                for (dec in decisionsByScene[sc.sceneId].orEmpty()) {
+                    submitRecordedDecisionSteps(missionId, dec)
+                    handledDecisionIds += dec.interactionId
+                }
+                val isCompleted = sc.sceneId in completedSet
+                val nonFinalPos = if (sc.sceneId != curScene) rec.scenePositionsMs[sc.sceneId] else null
+                if (isCompleted) {
+                    api.updateMissionProgress(
+                        missionId,
+                        buildJsonObject {
+                            put("completed_scene_id", sc.sceneId)
+                            if (nonFinalPos != null) {
+                                put("current_scene_id", sc.sceneId)
+                                put("playback_position_ms", nonFinalPos)
+                            }
+                        }
+                    )
+                    syncedCompletedIds += sc.sceneId
+                    if (nonFinalPos != null) syncedPositionScenes += sc.sceneId
+                } else if (nonFinalPos != null) {
+                    val priorRequiredAnswered = orderedScenes
+                        .filter { it.order < sc.order && it.requiresDecisionToAdvance }
+                        .all { p -> p.interaction?.interactionId?.let { rec.decisions.containsKey(it) } == true }
+                    if (priorRequiredAnswered || rec.status == "COMPLETED") {
+                        api.updateMissionProgress(
+                            missionId,
+                            buildJsonObject {
+                                put("current_scene_id", sc.sceneId)
+                                put("playback_position_ms", nonFinalPos)
+                            }
+                        )
+                        syncedPositionScenes += sc.sceneId
                     }
-                )
+                }
             }
+
             for (doneId in rec.completedSceneIds) {
+                if (doneId !in syncedCompletedIds && doneId !in terminalSceneIds) {
+                    api.updateMissionProgress(
+                        missionId,
+                        buildJsonObject { put("completed_scene_id", doneId) }
+                    )
+                    syncedCompletedIds += doneId
+                }
+            }
+
+            // 2. Decisões restantes (incluindo cena terminal) já ordenadas por cena
+            for (dec in orderedDecisions) {
+                if (dec.interactionId !in handledDecisionIds) {
+                    submitRecordedDecisionSteps(missionId, dec)
+                    handledDecisionIds += dec.interactionId
+                }
+            }
+
+            for (doneId in rec.completedSceneIds) {
+                if (doneId !in syncedCompletedIds && decisionsByScene[doneId].isNullOrEmpty()) {
+                    api.updateMissionProgress(
+                        missionId,
+                        buildJsonObject { put("completed_scene_id", doneId) }
+                    )
+                    syncedCompletedIds += doneId
+                }
+            }
+
+            // 3. Posições restantes de cenas != curScene antes de definir current_scene_id final
+            val remainingPositions = rec.scenePositionsMs.entries
+                .filter { (sid, _) -> sid != curScene && sid !in syncedPositionScenes }
+                .sortedBy { (sid, _) -> sceneOrderById[sid] ?: Int.MAX_VALUE }
+            for ((sid, pos) in remainingPositions) {
                 api.updateMissionProgress(
                     missionId,
                     buildJsonObject {
-                        put("completed_scene_id", doneId)
+                        put("current_scene_id", sid)
+                        put("playback_position_ms", pos)
                     }
                 )
             }
-            val curScene = rec.currentSceneId.takeIf { it.isNotBlank() }
+
+            // 4. Define current_scene_id final, posição da cena atual e eventual conclusão
             api.updateMissionProgress(
                 missionId,
                 buildJsonObject {
@@ -2084,9 +2197,11 @@ class ConcursoRepository(
     ): MissionDetailView {
         val spec = MissionsCatalogLoader.loadBundled()
         var savedRecord: LocalMissionProgressRecord? = null
+        var wasAlreadyDirty = false
         mutationMutex.withLock {
             val env = loadLocalMissionsEnvelope()
             val prev = env.missions[missionId] ?: LocalMissionProgressRecord(missionId = missionId)
+            wasAlreadyDirty = prev.dirty
             val nextDone = if (completedSceneId != null && !prev.completedSceneIds.contains(completedSceneId)) {
                 prev.completedSceneIds + completedSceneId
             } else {
@@ -2120,6 +2235,11 @@ class ConcursoRepository(
             )
             savedRecord = updated
             saveLocalMissionsEnvelope(env.copy(missions = env.missions + (missionId to updated)))
+        }
+
+        if (wasAlreadyDirty && savedRecord != null) {
+            flushDirtyMissionRecord(missionId, savedRecord!!)
+            return openMissionDetail(missionId, resume = false)
         }
 
         val pushed = runCatching {
@@ -2165,9 +2285,11 @@ class ConcursoRepository(
         val isCorrect = interSpec.expectedOptionId == selectedOptionId
 
         var savedRecord: LocalMissionProgressRecord? = null
+        var wasAlreadyDirty = false
         mutationMutex.withLock {
             val env = loadLocalMissionsEnvelope()
             val prev = env.missions[missionId] ?: LocalMissionProgressRecord(missionId = missionId)
+            wasAlreadyDirty = prev.dirty
             val prevDec = prev.decisions[interactionId]
             val recorded = if (prevDec == null) {
                 LocalRecordedDecision(
@@ -2199,6 +2321,11 @@ class ConcursoRepository(
             )
             savedRecord = updated
             saveLocalMissionsEnvelope(env.copy(missions = env.missions + (missionId to updated)))
+        }
+
+        if (wasAlreadyDirty && savedRecord != null) {
+            flushDirtyMissionRecord(missionId, savedRecord!!)
+            return openMissionDetail(missionId, resume = false)
         }
 
         val pushed = runCatching {
@@ -2312,6 +2439,7 @@ class ConcursoRepository(
         cacheRootDir: File,
         assetId: String,
         expectedSha256: String? = null,
+        apiBaseUrl: String = BuildConfig.API_BASE_URL,
     ): File? = withContext(Dispatchers.IO) {
         val cleanAssetId = assetId.replace(Regex("[^a-zA-Z0-9_-]"), "")
         if (cleanAssetId.isEmpty()) return@withContext null
@@ -2339,7 +2467,7 @@ class ConcursoRepository(
                 }.getOrNull()
             } ?: return@withLock null
 
-            val baseUrl = BuildConfig.API_BASE_URL.trimEnd('/')
+            val baseUrl = apiBaseUrl.trimEnd('/')
             val url = "$baseUrl/missions/media/$cleanAssetId"
             val tmpFile = File(missionsDir, "$cleanAssetId-${UUID.randomUUID()}.part")
             val client = OkHttpClient.Builder()

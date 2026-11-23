@@ -412,64 +412,71 @@ def run_mongo_migration(mongo_uri: str, db_name: str, catalog: dict, apply: bool
     from pymongo import MongoClient
 
     client = MongoClient(mongo_uri)
-    db = client[db_name]
-    raw_questions = list(db["todasQuestoes"].find({}))
-    rev_events = list(db["question_revision_events"].find({}))
-    existing_reviews = list(db["question_review_events"].find({}))
+    try:
+        db = client[db_name]
+        raw_questions = list(db["todasQuestoes"].find({}))
+        rev_events = list(db["question_revision_events"].find({}))
+        existing_reviews = list(db["question_review_events"].find({}))
 
-    result = migrate_documents(
-        questions=raw_questions,
-        catalog=catalog,
-        revision_events=rev_events,
-        existing_review_events=existing_reviews,
-    )
-    report = dict(result["report"])
-    report["dry_run"] = not apply
+        result = migrate_documents(
+            questions=raw_questions,
+            catalog=catalog,
+            revision_events=rev_events,
+            existing_review_events=existing_reviews,
+        )
+        report = dict(result["report"])
+        report["dry_run"] = not apply
 
-    if apply and result["migration_events"]:
-        by_oid = {q["_id"]: q for q in result["questions"] if isinstance(q.get("_id"), ObjectId)}
-        for ev in result["review_events"]:
-            rid = ev["_id"]
-            payload = {k: v for k, v in ev.items() if k != "_id"}
-            db["question_review_events"].update_one({"_id": rid}, {"$setOnInsert": payload}, upsert=True)
-        for mev in result["migration_events"]:
-            oid = ObjectId(mev["question_id"])
-            updated_doc = by_oid[oid]
-            set_fields = {
-                "semantic_revision": updated_doc["semantic_revision"],
-                "semantic_hash_version": updated_doc["semantic_hash_version"],
-                "grading_revision": updated_doc["grading_revision"],
-                "grading_hash_version": updated_doc["grading_hash_version"],
-                "origins": updated_doc["origins"],
-                "classification": updated_doc["classification"],
-                "validity": updated_doc["validity"],
-            }
-            db["todasQuestoes"].update_one(
-                {"_id": oid, "content_revision": mev["content_revision"]},
-                {"$set": set_fields},
-            )
-            mev_id = mev["_id"]
-            mev_payload = {k: v for k, v in mev.items() if k != "_id"}
-            db["question_migration_events"].update_one({"_id": mev_id}, {"$setOnInsert": mev_payload}, upsert=True)
+        if apply and result["migration_events"]:
+            by_oid = {q["_id"]: q for q in result["questions"] if isinstance(q.get("_id"), ObjectId)}
+            for ev in result["review_events"]:
+                rid = ev["_id"]
+                payload = {k: v for k, v in ev.items() if k != "_id"}
+                db["question_review_events"].update_one({"_id": rid}, {"$setOnInsert": payload}, upsert=True)
+            for mev in result["migration_events"]:
+                oid = ObjectId(mev["question_id"])
+                updated_doc = by_oid[oid]
+                set_fields = {
+                    "semantic_revision": updated_doc["semantic_revision"],
+                    "semantic_hash_version": updated_doc["semantic_hash_version"],
+                    "grading_revision": updated_doc["grading_revision"],
+                    "grading_hash_version": updated_doc["grading_hash_version"],
+                    "origins": updated_doc["origins"],
+                    "classification": updated_doc["classification"],
+                    "validity": updated_doc["validity"],
+                }
+                db["todasQuestoes"].update_one(
+                    {"_id": oid, "content_revision": mev["content_revision"]},
+                    {"$set": set_fields},
+                )
+                mev_id = mev["_id"]
+                mev_payload = {k: v for k, v in mev.items() if k != "_id"}
+                db["question_migration_events"].update_one({"_id": mev_id}, {"$setOnInsert": mev_payload}, upsert=True)
 
-    client.close()
-    return report
+        return report
+    finally:
+        client.close()
 
 
-def main():
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input-json", type=Path, help="Offline JSON array of V2 questions to migrate")
     parser.add_argument("--output-json", type=Path, help="Optional output path for migrated JSON array")
+    parser.add_argument("--report-out", type=Path, help="Optional output path to persist migration report JSON")
     parser.add_argument("--mongo-uri", type=str, help="MongoDB URI for live migration")
-    parser.add_argument("--db-name", type=str, default="cogniva", help="MongoDB database name")
+    parser.add_argument("--db-name", "--db", dest="db_name", type=str, default="cogniva", help="MongoDB database name")
     parser.add_argument("--apply", action="store_true", help="Persist changes (default is dry-run)")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     catalog = read(ROOT / "shared/knowledge-catalog.json")
     if args.mongo_uri:
         report = run_mongo_migration(args.mongo_uri, args.db_name, catalog, apply=args.apply)
-        print(json.dumps(report, indent=2, ensure_ascii=False))
-        return
+        serialized = json.dumps(report, indent=2, ensure_ascii=False)
+        if args.report_out:
+            args.report_out.parent.mkdir(parents=True, exist_ok=True)
+            args.report_out.write_text(serialized + "\n", encoding="utf-8")
+        print(serialized)
+        return 0
 
     if args.input_json:
         docs = json.loads(args.input_json.read_text(encoding="utf-8"))
@@ -477,15 +484,20 @@ def main():
         report = dict(result["report"])
         report["dry_run"] = not args.apply
         if args.apply and args.output_json:
+            args.output_json.parent.mkdir(parents=True, exist_ok=True)
             args.output_json.write_text(
                 json.dumps(result["questions"], indent=2, ensure_ascii=False) + "\n",
                 encoding="utf-8",
             )
-        print(json.dumps(report, indent=2, ensure_ascii=False))
-        return
+        serialized = json.dumps(report, indent=2, ensure_ascii=False)
+        if args.report_out:
+            args.report_out.parent.mkdir(parents=True, exist_ok=True)
+            args.report_out.write_text(serialized + "\n", encoding="utf-8")
+        print(serialized)
+        return 0
 
     parser.error("Provide either --input-json or --mongo-uri")
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

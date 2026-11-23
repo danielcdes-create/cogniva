@@ -89,7 +89,10 @@ pub fn compatibility_matches_question(
     if rec.get("question_id").and_then(Value::as_str) != Some(qid) {
         return false;
     }
-    if let Some(rec_sem) = rec.get("question_semantic_revision").and_then(Value::as_str) {
+    if let Some(rec_sem) = rec
+        .get("question_semantic_revision")
+        .and_then(Value::as_str)
+    {
         return rec_sem == computed_semantic;
     }
     rec.get("question_content_revision").and_then(Value::as_str)
@@ -335,10 +338,6 @@ pub fn evaluate_bson_question_for_practice(
         trusted_review_context,
         mode,
     )
-}
-
-pub fn utc_today() -> NaiveDate {
-    chrono::Utc::now().date_naive()
 }
 
 #[cfg(test)]

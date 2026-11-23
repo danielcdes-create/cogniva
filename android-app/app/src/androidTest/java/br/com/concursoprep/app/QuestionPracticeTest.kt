@@ -2,8 +2,15 @@ package br.com.concursoprep.app
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasScrollToNodeAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.lifecycle.ViewModelStore
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
@@ -17,23 +24,33 @@ import br.com.concursoprep.app.ui.MainViewModel
 import br.com.concursoprep.app.ui.screens.QuestionSessionScreen
 import br.com.concursoprep.app.ui.theme.ConcursoPrepTheme
 import kotlinx.coroutines.runBlocking
-import java.io.IOException
-import java.lang.reflect.Proxy
-import java.util.UUID
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.IOException
+import java.lang.reflect.Proxy
+import java.util.UUID
 
-/** Actual fetch -> cache -> durable session -> question UI -> queued answer. */
+/** Actual fetch -> cache -> durable session -> real Compose UI interaction -> queued answer. */
 @RunWith(AndroidJUnit4::class)
 class QuestionPracticeTest {
     @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
 
-    @Test fun shuffleOpensALegacyQuestionAndSavesAnAnswerDespiteArchivedPlannerContext() = runBlocking {
+    @Test
+    fun shuffleOpensALegacyQuestionAndSubmitsAnswerThroughComposeUi() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val name = "practice_fixture_${UUID.randomUUID()}.db"
-        val db = Room.databaseBuilder(context, AppDatabase::class.java, name).build()
+        val db = Room.databaseBuilder(context, AppDatabase::class.java, name)
+            .addMigrations(
+                ExamMigrations.MIGRATION_1_2,
+                ExamMigrations.MIGRATION_2_3,
+                ExamMigrations.MIGRATION_3_4,
+                ExamMigrations.MIGRATION_4_5,
+                ExamMigrations.MIGRATION_5_6,
+                ExamMigrations.MIGRATION_6_7
+            )
+            .build()
         val store = ViewModelStore()
         var repo: ConcursoRepository? = null
         try {
@@ -42,19 +59,38 @@ class QuestionPracticeTest {
             db.examDao().upsertExam(ExamLocalMapping.toEntity(archived))
             db.examDao().upsertSubjects(ExamLocalMapping.subjectsOf(archived))
             db.examDao().upsertTopics(ExamLocalMapping.topicsOf(archived))
-            val q = QuestionCacheMapping.withRevision(QuestionDto(
-                id = "000000000000000000000001", question = "Questão sintética recuperada para praticar",
-                answers = listOf("Alternativa A", "Alternativa B"), correctAnswerIndices = listOf(1),
-                disciplina = "Direito do Trabalho", source = "Fixture", level = "Médio"
-            ))
+            val q = QuestionCacheMapping.withRevision(
+                QuestionDto(
+                    id = "000000000000000000000001",
+                    question = "Questão sintética recuperada para praticar",
+                    answers = listOf("Alternativa A", "Alternativa B"),
+                    correctAnswerIndices = listOf(1),
+                    disciplina = "Direito do Trabalho",
+                    source = "Fixture",
+                    level = "Médio"
+                )
+            )
             var sent: QuizGeneratePayload? = null
-            val api = Proxy.newProxyInstance(ConcursoApiService::class.java.classLoader, arrayOf(ConcursoApiService::class.java)) { _, method, args ->
+            val api = Proxy.newProxyInstance(
+                ConcursoApiService::class.java.classLoader,
+                arrayOf(ConcursoApiService::class.java)
+            ) { _, method, args ->
                 when (method.name) {
-                    "generateQuizQuestions" -> { sent = args!![0] as QuizGeneratePayload; listOf(q) }
+                    "generateQuizQuestions" -> {
+                        sent = args!![0] as QuizGeneratePayload
+                        listOf(q)
+                    }
                     else -> throw IOException("Synthetic offline API: ${method.name}")
                 }
             } as ConcursoApiService
-            val repository = ConcursoRepository(api, db.concursoDao(), db.examDao(), durable = db.durableDao(), database = db, ownerUserId = 123)
+            val repository = ConcursoRepository(
+                api,
+                db.concursoDao(),
+                db.examDao(),
+                durable = db.durableDao(),
+                database = db,
+                ownerUserId = 123L
+            )
             repo = repository
             lateinit var model: MainViewModel
             rule.runOnUiThread {
@@ -62,36 +98,81 @@ class QuestionPracticeTest {
                 store.put("practice", model)
                 model.startQuizSession(QuizMode.SHUFFLE, 10, "CPNU")
             }
-            rule.waitUntil(30000) { model.activeSession.value != null }
+            rule.waitUntil(30_000) { model.activeSession.value != null }
             val session = model.activeSession.value!!
             assertNull(sent!!.contestId)
             assertNull(session.exam)
             assertEquals(listOf(q.id), session.questions.map { it.id })
             assertNull(session.questions.single().canonicalTopicId)
             assertEquals(q.id, repository.pausedSession()!!.questions.single().id)
+
             rule.setContent {
                 ConcursoPrepTheme {
                     QuestionSessionScreen(
-                        questions = session.questions, isSimuladoMode = false, snapshot = session,
-                        aiTutorMarkdown = null, aiTutorTitle = null,
-                        onRequestAiTutor = { _, _, _, _ -> }, onDismissAiSheet = {},
-                        onSubmitAnswer = { question, choice, confidence, seconds -> model.submitAnswer(question, choice, confidence, seconds) },
-                        onReportProblem = { _, _ -> }, onExitSession = {}
+                        questions = session.questions,
+                        isSimuladoMode = false,
+                        snapshot = session,
+                        onUpdateSession = { model.updateSession(it) },
+                        aiTutorMarkdown = null,
+                        aiTutorTitle = null,
+                        onRequestAiTutor = { _, _, _, _ -> },
+                        onDismissAiSheet = {},
+                        onSubmitAnswer = { question, choice, confidence, seconds ->
+                            model.submitAnswer(question, choice, confidence, seconds)
+                        },
+                        onSubmitExtendedAnswer = { question, choice, confidence, seconds, isBlank, explicit ->
+                            model.submitAnswer(
+                                question = question,
+                                chosenIndex = choice,
+                                confidenceLevel = confidence,
+                                timeSpentSeconds = seconds,
+                                isBlank = isBlank,
+                                confidenceExplicit = explicit
+                            )
+                        },
+                        requireExplicitConfidence = true,
+                        onReportProblem = { _, _ -> },
+                        onExitSession = {}
                     )
                 }
             }
+
             rule.onNodeWithText(q.question).assertIsDisplayed()
-            assertTrue(model.submitAnswer(session.questions.single(), 1, 3, 10))
+            rule.onNodeWithTag("confirm_answer_cta").assertIsNotEnabled()
+
+            // 1. Click option B in Compose UI
+            rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Alternativa B"))
+            rule.onNodeWithText("Alternativa B").performClick()
+            // Explicit confidence still required before confirm CTA enables
+            rule.onNodeWithTag("confirm_answer_cta").assertIsNotEnabled()
+
+            // 2. Select confidence ("Certeza Absoluta" = 3) in Compose UI
+            rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Certeza Absoluta"))
+            rule.onNodeWithText("Certeza Absoluta").performClick()
+
+            // 3. Click Confirm Answer CTA button in Compose UI
+            rule.onNodeWithTag("confirm_answer_cta").assertIsEnabled().performClick()
+
+            rule.waitUntil(15_000) {
+                model.activeSession.value?.answers?.get(q.id)?.submitted == true
+            }
+
             val pending = db.concursoDao().getAllPendingAttempts().single()
             assertEquals(123L, pending.ownerUserId)
             assertEquals(q.id, pending.questionId)
+            assertEquals(1, pending.chosenIndex)
+            assertEquals("Alternativa B", pending.chosenText)
+            assertTrue(pending.isCorrect)
+            assertEquals(3, pending.confidenceLevel)
+            assertTrue(pending.confidenceExplicit)
             assertTrue(pending.questionRevision.isNotBlank())
             assertTrue(repository.pausedSession()!!.answers.getValue(q.id).submitted)
         } finally {
             rule.runOnUiThread { store.clear() }
             repo?.awaitIdleForClose()
             db.close()
-            check(name.startsWith("practice_fixture_")); context.deleteDatabase(name)
+            check(name.startsWith("practice_fixture_"))
+            context.deleteDatabase(name)
         }
     }
 }

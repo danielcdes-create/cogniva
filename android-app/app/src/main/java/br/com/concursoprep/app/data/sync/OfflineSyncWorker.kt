@@ -33,12 +33,14 @@ class OfflineSyncWorker(
     }
 
     companion object {
+        const val IMMEDIATE_WORK_NAME = "CognivaImmediateSync"
+        const val UNIQUE_WORK_NAME = "ConcursoPrepOfflineSyncWork"
+
         fun enqueueNow(context: Context) {
-            val request=androidx.work.OneTimeWorkRequestBuilder<OfflineSyncWorker>()
+            val request = androidx.work.OneTimeWorkRequestBuilder<OfflineSyncWorker>()
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build()
-            WorkManager.getInstance(context).enqueueUniqueWork("CognivaImmediateSync",androidx.work.ExistingWorkPolicy.APPEND_OR_REPLACE,request)
+            WorkManager.getInstance(context).enqueueUniqueWork(IMMEDIATE_WORK_NAME, androidx.work.ExistingWorkPolicy.APPEND_OR_REPLACE, request)
         }
-        private const val UNIQUE_WORK_NAME = "ConcursoPrepOfflineSyncWork"
 
         fun schedulePeriodicSync(context: Context) {
             val constraints = Constraints.Builder()

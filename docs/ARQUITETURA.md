@@ -1,6 +1,6 @@
 # Arquitetura do Ecossistema Cogniva 2.0
 
-Este documento descreve a arquitetura unificada do **Cogniva `2.4.1`** (`build 31`), consolidando os contratos compartilhados (`contract_version: 5`), o backend Rust (`cogniva-api`), o módulo experiencial **Missões** (`/missoes/` e Android), a arquitetura em 3 camadas (Diagnóstico de 3 Sinais sob Escassez `< 15`, Simulador de Decisão sob Incerteza & Curva de 300 min e Protocolo de Entrada de 60s), o painel administrativo web (`/admin/`), o aplicativo Android *offline-first* (`Room v7`), a governança LGPD e a infraestrutura de entrega contínua.
+Este documento descreve a arquitetura unificada do **Cogniva `2.4.2`** (`build 32`), consolidando os contratos compartilhados (`contract_version: 5`), o backend Rust (`cogniva-api`), o módulo experiencial **Missões** (`/missoes/` e Android), a arquitetura em 3 camadas (Diagnóstico de 3 Sinais sob Escassez `< 15`, Simulador de Decisão sob Incerteza & Curva de 300 min e Protocolo de Entrada de 60s), o painel administrativo web (`/admin/`), o aplicativo Android *offline-first* (`Room v7`), a governança LGPD e a infraestrutura de entrega contínua.
 
 ---
 
@@ -9,14 +9,14 @@ Este documento descreve a arquitetura unificada do **Cogniva `2.4.1`** (`build 3
 ```mermaid
 flowchart LR
   subgraph Clientes
-    AND["Android App 2.4.1 / build 31 (Kotlin / Compose / Room v7)"]
+    AND["Android App 2.4.2 / build 32 (Kotlin / Compose / Room v7)"]
     MIS["Portal Web /missoes/ (ES Modules + HTTP Range + CSP)"]
     ADM["Painel Web /admin/ (ES Modules + CSP + WCAG AA)"]
   end
 
   subgraph Servidor["VPS DigitalOcean"]
     NGX["Nginx TLS + HSTS + Rate Limit IPv6 /64 + Gate 503"]
-    API["cogniva-api 2.4.1 (Rust / Axum / Tokio · Contract v5)"]
+    API["cogniva-api 2.4.2 (Rust / Axum / Tokio · Contract v5)"]
   end
 
   subgraph Dados["Persistência e Contratos"]

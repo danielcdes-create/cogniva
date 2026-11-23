@@ -9,7 +9,7 @@ from pathlib import Path
 import re
 from typing import Any
 
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, FormatChecker
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = ROOT / "shared" / "schemas" / "missions.schema.json"
@@ -61,7 +61,7 @@ def validate_missions_catalog(
 ) -> dict[str, Any]:
     schema_obj = schema or load_schema()
     Draft202012Validator.check_schema(schema_obj)
-    validator = Draft202012Validator(schema_obj)
+    validator = Draft202012Validator(schema_obj, format_checker=FormatChecker())
     errors = sorted(validator.iter_errors(catalog), key=lambda e: list(e.path))
     if errors:
         first = errors[0]
@@ -71,9 +71,22 @@ def validate_missions_catalog(
     _scan_for_forbidden_paths(catalog)
 
     knowledge = knowledge_catalog or load_knowledge_catalog()
-    valid_trunks = {t["trunk_id"] for t in knowledge.get("trunks", [])}
-    valid_subjects = {s["subject_id"] for s in knowledge.get("subjects", [])}
-    base_topics = {t["topic_id"] for t in knowledge.get("topics", [])}
+    valid_trunks = {
+        t["trunk_id"] for t in knowledge.get("trunks", []) if t.get("status") == "ACTIVE"
+    }
+    valid_subjects = {
+        s["subject_id"] for s in knowledge.get("subjects", []) if s.get("status") == "ACTIVE"
+    }
+    base_topics = {
+        t["topic_id"]
+        for t in knowledge.get("topics", [])
+        if t.get("status") == "ACTIVE" and t.get("subject_id") in valid_subjects
+    }
+    inactive_topics = {
+        t["topic_id"]
+        for t in knowledge.get("topics", [])
+        if t.get("status") != "ACTIVE" or t.get("subject_id") not in valid_subjects
+    }
 
     assets_by_id: dict[str, dict[str, Any]] = {}
     for asset in catalog["media_assets"]:
@@ -119,7 +132,7 @@ def validate_missions_catalog(
         career_ids.add(cid)
         if career["trunk_id"] not in valid_trunks:
             raise MissionContractError(
-                f"trunk_id inexistente no catálogo canônico: {career['trunk_id']}"
+                f"trunk_id inexistente ou depreciado no catálogo canônico: {career['trunk_id']}"
             )
 
         for disc in career["disciplines"]:
@@ -129,7 +142,7 @@ def validate_missions_catalog(
             discipline_ids.add(did)
             if disc["canonical_subject_id"] not in valid_subjects:
                 raise MissionContractError(
-                    f"canonical_subject_id inexistente: {disc['canonical_subject_id']}"
+                    f"canonical_subject_id inexistente ou depreciado: {disc['canonical_subject_id']}"
                 )
 
             for season in disc["seasons"]:
@@ -147,22 +160,26 @@ def validate_missions_catalog(
                     curr = mission["curriculum"]
                     if curr["canonical_subject_id"] not in valid_subjects:
                         raise MissionContractError(
-                            f"Missão {mid}: canonical_subject_id inválido {curr['canonical_subject_id']}"
+                            f"Missão {mid}: canonical_subject_id inválido ou depreciado {curr['canonical_subject_id']}"
                         )
                     for rel_subj in curr.get("related_subject_ids", []):
                         if rel_subj not in valid_subjects:
                             raise MissionContractError(
-                                f"Missão {mid}: related_subject_id inválido {rel_subj}"
+                                f"Missão {mid}: related_subject_id inválido ou depreciado {rel_subj}"
                             )
                     for tid in curr["primary_topic_ids"]:
                         if not CANONICAL_TOPIC_RE.match(tid):
                             raise MissionContractError(
                                 f"Missão {mid}: primary_topic_id fora do padrão canônico: {tid}"
                             )
-                    for f_tid in curr.get("fallback_topic_ids", []):
-                        if f_tid not in base_topics:
+                        if tid in inactive_topics:
                             raise MissionContractError(
-                                f"Missão {mid}: fallback_topic_id ausente no catálogo base: {f_tid}"
+                                f"Missão {mid}: primary_topic_id depreciado no catálogo: {tid}"
+                            )
+                    for f_tid in curr.get("fallback_topic_ids", []):
+                        if not CANONICAL_TOPIC_RE.match(f_tid) or f_tid not in base_topics:
+                            raise MissionContractError(
+                                f"Missão {mid}: fallback_topic_id ausente ou depreciado no catálogo base: {f_tid}"
                             )
 
                     scenes = mission["scenes"]
@@ -188,18 +205,34 @@ def validate_missions_catalog(
                         concept_keys.add(ckey)
                         if concept["canonical_subject_id"] not in valid_subjects:
                             raise MissionContractError(
-                                f"Conceito {ckey}: canonical_subject_id inválido"
+                                f"Conceito {ckey}: canonical_subject_id inválido ou depreciado"
                             )
                         for tid in concept["canonical_topic_ids"]:
                             if not CANONICAL_TOPIC_RE.match(tid):
                                 raise MissionContractError(
                                     f"Conceito {ckey}: canonical_topic_id inválido {tid}"
                                 )
-                        if not any(
-                            tid in base_topics for tid in concept["canonical_topic_ids"]
-                        ) and not curr.get("fallback_topic_ids"):
+                            if tid in inactive_topics:
+                                raise MissionContractError(
+                                    f"Conceito {ckey}: canonical_topic_id depreciado {tid}"
+                                )
+                        for f_sid in concept.get("fallback_subject_ids", []):
+                            if f_sid not in valid_subjects:
+                                raise MissionContractError(
+                                    f"Conceito {ckey}: fallback_subject_id inválido ou depreciado {f_sid}"
+                                )
+                        for f_tid in concept.get("fallback_topic_ids", []):
+                            if not CANONICAL_TOPIC_RE.match(f_tid) or f_tid not in base_topics:
+                                raise MissionContractError(
+                                    f"Conceito {ckey}: fallback_topic_id inválido ou depreciado {f_tid}"
+                                )
+                        if (
+                            not any(tid in base_topics for tid in concept["canonical_topic_ids"])
+                            and not any(tid in base_topics for tid in concept.get("fallback_topic_ids", []))
+                            and not curr.get("fallback_topic_ids")
+                        ):
                             raise MissionContractError(
-                                f"Conceito {ckey}: exige pelo menos um tópico base de fallback"
+                                f"Conceito {ckey}: exige pelo menos um tópico base ativo de fallback"
                             )
                         for r_scene in concept["related_scene_ids"]:
                             if r_scene not in scene_id_set:
@@ -219,6 +252,10 @@ def validate_missions_catalog(
                                 f"Cena {scene['scene_id']}: character_id inexistente {scene['character_id']}"
                             )
                         next_sid = scene.get("next_scene_id")
+                        if next_sid == scene["scene_id"]:
+                            raise MissionContractError(
+                                f"Cena {scene['scene_id']}: auto-loop proibido (next_scene_id == scene_id)"
+                            )
                         if idx < len(scenes) - 1:
                             if not next_sid or next_sid not in scene_id_set:
                                 raise MissionContractError(
@@ -257,10 +294,15 @@ def validate_missions_catalog(
                                 )
                             for opt in interaction["options"]:
                                 branch = opt.get("branch_scene_id")
-                                if branch is not None and branch not in scene_id_set:
-                                    raise MissionContractError(
-                                        f"Interação {iid}: branch_scene_id inválido {branch}"
-                                    )
+                                if branch is not None:
+                                    if branch == scene["scene_id"]:
+                                        raise MissionContractError(
+                                            f"Interação {iid}: auto-loop proibido em branch_scene_id ({branch})"
+                                        )
+                                    if branch not in scene_id_set:
+                                        raise MissionContractError(
+                                            f"Interação {iid}: branch_scene_id inválido {branch}"
+                                        )
                             for ckey in interaction["revisit_concept_keys"]:
                                 if ckey not in concept_keys:
                                     raise MissionContractError(
@@ -304,7 +346,7 @@ def validate_missions_catalog(
     }
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="Validate missions catalog")
     parser.add_argument(
@@ -312,13 +354,16 @@ def main() -> None:
         action="store_true",
         help="Require physical MP4 files to exist and match SHA-256",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    if not args.check and not args.verify_media:
+        parser.error("Informe --check e/ou --verify-media")
     summary = validate_missions_catalog(
         load_missions_catalog(),
         require_media_files=args.verify_media,
     )
     print(json.dumps(summary, indent=2, ensure_ascii=False))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

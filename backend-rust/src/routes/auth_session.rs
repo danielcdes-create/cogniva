@@ -1,9 +1,7 @@
 use crate::{
     error::AppError,
     models::user::{UserDocument, UserProfileDto},
-    security::{
-        self, SessionUser, MOBILE_SESSION_TTL_SECS, WEB_COOKIE_NAME, WEB_SESSION_TTL_SECS,
-    },
+    security::{self, SessionUser, MOBILE_SESSION_TTL_SECS, WEB_COOKIE_NAME, WEB_SESSION_TTL_SECS},
     services::{
         rate_limit,
         scheduler::{run_daily_reviews_decay_and_countdown, DailyMaintenanceReport},
@@ -41,7 +39,7 @@ fn argon2_semaphore() -> Arc<tokio::sync::Semaphore> {
         .clone()
 }
 
-fn dummy_password_hash() -> &'static str {
+fn dummy_password_hash_blocking() -> &'static str {
     DUMMY_PASSWORD_HASH.get_or_init(|| {
         let salt = SaltString::generate(&mut OsRng);
         Argon2::default()
@@ -49,6 +47,16 @@ fn dummy_password_hash() -> &'static str {
             .expect("dummy argon2 hash")
             .to_string()
     })
+}
+
+pub async fn dummy_password_hash() -> Result<&'static str, AppError> {
+    if let Some(cached) = DUMMY_PASSWORD_HASH.get() {
+        return Ok(cached.as_str());
+    }
+    let _permit = acquire_argon2_permit().await?;
+    tokio::task::spawn_blocking(dummy_password_hash_blocking)
+        .await
+        .map_err(|_| AppError::Internal("Falha na tarefa de criptografia".into()))
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -156,18 +164,23 @@ pub fn validate_password_strength(password: &str) -> Result<(), AppError> {
     Ok(())
 }
 
+async fn acquire_argon2_permit_with_timeout(
+    sem: &Arc<tokio::sync::Semaphore>,
+    wait_timeout: std::time::Duration,
+) -> Result<tokio::sync::OwnedSemaphorePermit, AppError> {
+    tokio::time::timeout(wait_timeout, sem.clone().acquire_owned())
+        .await
+        .map_err(|_| {
+            AppError::TemporarilyUnavailable(
+                "Servidor ocupado processando autenticações. Tente novamente em instantes.".into(),
+            )
+        })?
+        .map_err(|_| AppError::Internal("Semáforo de criptografia indisponível".into()))
+}
+
 async fn acquire_argon2_permit() -> Result<tokio::sync::OwnedSemaphorePermit, AppError> {
-    tokio::time::timeout(
-        std::time::Duration::from_secs(5),
-        argon2_semaphore().acquire_owned(),
-    )
-    .await
-    .map_err(|_| {
-        AppError::TemporarilyUnavailable(
-            "Servidor ocupado processando autenticações. Tente novamente em instantes.".into(),
-        )
-    })?
-    .map_err(|_| AppError::Internal("Semáforo de criptografia indisponível".into()))
+    let sem = argon2_semaphore();
+    acquire_argon2_permit_with_timeout(&sem, std::time::Duration::from_secs(5)).await
 }
 
 pub async fn hash_password(password: String) -> Result<String, AppError> {
@@ -188,21 +201,33 @@ pub async fn hash_password(password: String) -> Result<String, AppError> {
     .map_err(|_| AppError::Internal("Falha na tarefa de criptografia".into()))?
 }
 
-pub async fn verify_password(password: String, password_hash: String) -> Result<bool, AppError> {
+pub async fn verify_password_hash(
+    password: String,
+    password_hash: Option<String>,
+) -> Result<bool, AppError> {
     if password.len() > MAX_PASSWORD_BYTES {
         return Ok(false);
     }
     let _permit = acquire_argon2_permit().await?;
     tokio::task::spawn_blocking(move || {
-        let Ok(parsed) = PasswordHash::new(&password_hash) else {
+        let has_real_hash = password_hash.is_some();
+        let target_hash = password_hash
+            .as_deref()
+            .unwrap_or_else(|| dummy_password_hash_blocking());
+        let Ok(parsed) = PasswordHash::new(target_hash) else {
             return Ok(false);
         };
-        Ok(Argon2::default()
+        let verified = Argon2::default()
             .verify_password(password.as_bytes(), &parsed)
-            .is_ok())
+            .is_ok();
+        Ok(has_real_hash && verified)
     })
     .await
     .map_err(|_| AppError::Internal("Falha na verificação de credencial".into()))?
+}
+
+pub async fn verify_password(password: String, password_hash: String) -> Result<bool, AppError> {
+    verify_password_hash(password, Some(password_hash)).await
 }
 
 pub fn build_named_web_cookie(
@@ -267,7 +292,8 @@ pub async fn issue_db_session(
             "expires_at": expires_at,
         })
         .await?;
-    let token = security::sign_session_token(&state.config.jwt_secret, user_id, &sid, purpose, ttl)?;
+    let token =
+        security::sign_session_token(&state.config.jwt_secret, user_id, &sid, purpose, ttl)?;
     Ok((token, ttl))
 }
 
@@ -482,39 +508,118 @@ pub async fn handle_guest_session(
                 60,
             )
             .await?;
-            let mut uid = random_safe_user_id();
-            while users.find_one(doc! { "user_id": uid }).await?.is_some() {
-                uid = random_safe_user_id();
+
+            let mut reused_web_guest: Option<UserDocument> = None;
+            if is_student_web {
+                for cookie_tok in security::extract_web_cookies(&headers) {
+                    let Ok(claims) = security::verify_session_token(
+                        &state.config.jwt_secret,
+                        &cookie_tok,
+                        "web",
+                    ) else {
+                        continue;
+                    };
+                    let active_session = state
+                        .db
+                        .collection::<Document>("sessions")
+                        .find_one(doc! {
+                            "_id": &claims.sid,
+                            "user_id": claims.uid,
+                            "purpose": "web",
+                            "revoked": false,
+                            "expires_at": { "$gt": now }
+                        })
+                        .await?;
+                    if active_session.is_none() {
+                        continue;
+                    }
+                    if let Some(mut existing) =
+                        users.find_one(doc! { "user_id": claims.uid }).await?
+                    {
+                        if existing.is_guest {
+                            let mut set_doc = doc! { "updated_at": now };
+                            if let Some(name) = req
+                                .display_name
+                                .as_deref()
+                                .map(str::trim)
+                                .filter(|s| !s.is_empty())
+                            {
+                                let clean_name: String = name.chars().take(120).collect();
+                                set_doc.insert("display_name", &clean_name);
+                                existing.display_name = Some(clean_name);
+                            }
+                            existing.updated_at = Some(now);
+                            state
+                                .db
+                                .collection::<Document>("usuarios")
+                                .update_one(
+                                    doc! { "user_id": existing.user_id },
+                                    doc! { "$set": set_doc },
+                                )
+                                .await?;
+                            reused_web_guest = Some(existing);
+                            break;
+                        }
+                    }
+                }
             }
-            let doc = UserDocument {
-                id: None,
-                user_id: uid,
-                email: None,
-                email_normalized: None,
-                password_hash: None,
-                display_name: Some(
-                    req.display_name
-                        .as_deref()
-                        .map(str::trim)
-                        .filter(|s| !s.is_empty())
-                        .unwrap_or("Estudante")
-                        .chars()
-                        .take(120)
-                        .collect(),
-                ),
-                role: "student".to_string(),
-                is_guest: true,
-                installation_id: None,
-                installation_secret_sha256: None,
-                active_contest_ids: vec!["CPNU".to_string()],
-                daily_questions_target: 30,
-                daily_study_hours_target: 3.0,
-                onboarding_completed: false,
-                created_at: Some(now),
-                updated_at: Some(now),
-            };
-            users.insert_one(&doc).await?;
-            doc
+
+            if let Some(existing_guest) = reused_web_guest {
+                existing_guest
+            } else {
+                let display_clean: String = req
+                    .display_name
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or("Estudante")
+                    .chars()
+                    .take(120)
+                    .collect();
+                let mut inserted_doc: Option<UserDocument> = None;
+                for _ in 0..8 {
+                    let mut uid = random_safe_user_id();
+                    while users.find_one(doc! { "user_id": uid }).await?.is_some() {
+                        uid = random_safe_user_id();
+                    }
+                    let doc = UserDocument {
+                        id: None,
+                        user_id: uid,
+                        email: None,
+                        email_normalized: None,
+                        password_hash: None,
+                        display_name: Some(display_clean.clone()),
+                        role: "student".to_string(),
+                        is_guest: true,
+                        installation_id: None,
+                        installation_secret_sha256: None,
+                        active_contest_ids: vec!["CPNU".to_string()],
+                        daily_questions_target: 30,
+                        daily_study_hours_target: 3.0,
+                        onboarding_completed: false,
+                        created_at: Some(now),
+                        updated_at: Some(now),
+                    };
+                    match users.insert_one(&doc).await {
+                        Ok(_) => {
+                            inserted_doc = Some(doc);
+                            break;
+                        }
+                        Err(e)
+                            if e.to_string().contains("E11000")
+                                || e.to_string().contains("11000") =>
+                        {
+                            continue;
+                        }
+                        Err(e) => return Err(e.into()),
+                    }
+                }
+                inserted_doc.ok_or_else(|| {
+                    AppError::Conflict(
+                        "Conflito concorrente ao iniciar sessão convidada; tente novamente.".into(),
+                    )
+                })?
+            }
         }
         _ => {
             return Err(AppError::BadRequest(
@@ -550,6 +655,17 @@ pub async fn handle_register(
         security::verify_csrf_same_origin(&headers, &Method::POST, &state.config.public_origin)?;
     }
 
+    // Se o cliente enviou Authorization explícito, valida estritamente o JWT antes do banco
+    // para jamais descartar silenciosamente o progresso convidado em uma conta nova vazia!
+    let explicit_bearer_claims = if headers.contains_key(header::AUTHORIZATION) {
+        let bearer = security::extract_bearer_token(&headers)
+            .ok_or_else(|| AppError::Unauthorized("Cabeçalho Authorization inválido".into()))?;
+        let claims = security::verify_session_token(&state.config.jwt_secret, &bearer, "mobile")?;
+        Some(claims)
+    } else {
+        None
+    };
+
     let (email_clean, email_norm) = normalize_and_validate_email(&req.email)?;
     validate_password_strength(&req.password)?;
     rate_limit::check_auth_rate_limit(&state.db, "register", &email_norm, 10, 300).await?;
@@ -562,47 +678,35 @@ pub async fn handle_register(
         ));
     }
 
-    let users_raw = state.db.collection::<Document>("usuarios");
-    if users_raw
-        .find_one(doc! { "email_normalized": &email_norm })
-        .await?
-        .is_some()
-    {
-        return Err(AppError::Conflict(
-            "Este e-mail já está cadastrado. Entre com sua senha.".into(),
-        ));
-    }
-
-    let password_hash = hash_password(req.password).await?;
     let now = bson::DateTime::now();
-    let role = if is_bootstrap_admin {
-        "admin".to_string()
-    } else {
-        "student".to_string()
-    };
-
-    // Verifica se há sessão Bearer ou Cookie convidada ativa para upgrade in-place (preservando todo o progresso!)
-    let mut upgraded_user: Option<UserDocument> = None;
-    let mut active_guest_claims: Option<security::TokenClaims> = None;
-    if let Some(bearer) = security::extract_bearer_token(&headers) {
-        if let Ok(claims) =
-            security::verify_session_token(&state.config.jwt_secret, &bearer, "mobile")
-        {
-            let active_session = state
-                .db
-                .collection::<Document>("sessions")
-                .find_one(doc! {
-                    "_id": &claims.sid,
-                    "user_id": claims.uid,
-                    "purpose": "mobile",
-                    "revoked": false,
-                    "expires_at": { "$gt": now }
-                })
-                .await?;
-            if active_session.is_some() {
-                active_guest_claims = Some(claims);
-            }
+    let mut active_guest_claims: Option<(security::TokenClaims, bool)> = None;
+    if let Some(claims) = explicit_bearer_claims {
+        let active_session = state
+            .db
+            .collection::<Document>("sessions")
+            .find_one(doc! {
+                "_id": &claims.sid,
+                "user_id": claims.uid,
+                "purpose": "mobile",
+                "revoked": false,
+                "expires_at": { "$gt": now }
+            })
+            .await?;
+        if active_session.is_none() {
+            return Err(AppError::Unauthorized(
+                "Sessão convidada expirada ou revogada. Atualize a sessão antes de concluir o cadastro."
+                    .into(),
+            ));
         }
+        let existing = load_user(&state.db, claims.uid).await.map_err(|_| {
+            AppError::Unauthorized("Conta convidada da sessão não encontrada".into())
+        })?;
+        if !existing.is_guest || existing.email_normalized.is_some() {
+            return Err(AppError::Unauthorized(
+                "Esta sessão já pertence a uma conta cadastrada.".into(),
+            ));
+        }
+        active_guest_claims = Some((claims, true));
     } else if is_student_web {
         for cookie_tok in security::extract_web_cookies(&headers) {
             if let Ok(claims) =
@@ -620,19 +724,88 @@ pub async fn handle_register(
                     })
                     .await?;
                 if active_session.is_some() {
-                    active_guest_claims = Some(claims);
-                    break;
+                    if let Ok(existing) = load_user(&state.db, claims.uid).await {
+                        if existing.is_guest && existing.email_normalized.is_none() {
+                            active_guest_claims = Some((claims, false));
+                            break;
+                        }
+                    }
                 }
             }
         }
     }
 
-    if let Some(claims) = active_guest_claims {
-        {
-            {
-                if let Ok(existing) = load_user(&state.db, claims.uid).await {
-                    if existing.is_guest && existing.email_normalized.is_none() {
-                        let mut set_doc = doc! {
+    let users_raw = state.db.collection::<Document>("usuarios");
+    if users_raw
+        .find_one(doc! { "email_normalized": &email_norm })
+        .await?
+        .is_some()
+    {
+        return Err(AppError::Conflict(
+            "Este e-mail já está cadastrado. Entre com sua senha.".into(),
+        ));
+    }
+
+    let password_hash = hash_password(req.password).await?;
+    let role = if is_bootstrap_admin {
+        "admin".to_string()
+    } else {
+        "student".to_string()
+    };
+
+    // Promove conta convidada ativa in-place (preservando todo o progresso!)
+    let mut upgraded_user: Option<UserDocument> = None;
+    let require_upgrade = active_guest_claims
+        .as_ref()
+        .is_some_and(|(_, req_up)| *req_up);
+    if let Some((claims, _)) = active_guest_claims {
+        if let Ok(existing) = load_user(&state.db, claims.uid).await {
+            if existing.is_guest && existing.email_normalized.is_none() {
+                let mut set_doc = doc! {
+                    "email": &email_clean,
+                    "email_normalized": &email_norm,
+                    "password_hash": &password_hash,
+                    "is_guest": false,
+                    "role": &role,
+                    "updated_at": now,
+                };
+                if let Some(name) = req
+                    .display_name
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                {
+                    set_doc.insert("display_name", name.chars().take(120).collect::<String>());
+                }
+                let unset_guest_inst = doc! {
+                    "installation_id": "",
+                    "installation_secret_sha256": "",
+                };
+                let res = users_raw
+                    .update_one(
+                        doc! {
+                            "user_id": existing.user_id,
+                            "is_guest": true,
+                            "email_normalized": { "$exists": false }
+                        },
+                        doc! { "$set": set_doc, "$unset": unset_guest_inst.clone() },
+                    )
+                    .await;
+                match res {
+                    Ok(r) if r.matched_count == 1 => {
+                        let _ = state
+                            .db
+                            .collection::<Document>("sessions")
+                            .update_many(
+                                doc! { "user_id": existing.user_id },
+                                doc! { "$set": { "revoked": true } },
+                            )
+                            .await;
+                        upgraded_user = Some(load_user(&state.db, existing.user_id).await?);
+                    }
+                    Ok(_) => {
+                        // Caso email_normalized estivesse gravado como null explícito
+                        let mut retry_set = doc! {
                             "email": &email_clean,
                             "email_normalized": &email_norm,
                             "password_hash": &password_hash,
@@ -646,101 +819,51 @@ pub async fn handle_register(
                             .map(str::trim)
                             .filter(|s| !s.is_empty())
                         {
-                            set_doc.insert(
-                                "display_name",
-                                name.chars().take(120).collect::<String>(),
-                            );
+                            retry_set
+                                .insert("display_name", name.chars().take(120).collect::<String>());
                         }
-                        let unset_guest_inst = doc! {
-                            "installation_id": "",
-                            "installation_secret_sha256": "",
-                        };
-                        let res = users_raw
+                        let r2 = users_raw
                             .update_one(
                                 doc! {
                                     "user_id": existing.user_id,
                                     "is_guest": true,
-                                    "email_normalized": { "$exists": false }
+                                    "email_normalized": bson::Bson::Null
                                 },
-                                doc! { "$set": set_doc, "$unset": unset_guest_inst.clone() },
+                                doc! { "$set": retry_set, "$unset": unset_guest_inst },
                             )
-                            .await;
-                        match res {
-                            Ok(r) if r.matched_count == 1 => {
-                                let _ = state
-                                    .db
-                                    .collection::<Document>("sessions")
-                                    .update_many(
-                                        doc! { "user_id": existing.user_id },
-                                        doc! { "$set": { "revoked": true } },
-                                    )
-                                    .await;
-                                upgraded_user = Some(load_user(&state.db, existing.user_id).await?);
-                            }
-                            Ok(_) => {
-                                // Caso email_normalized estivesse gravado como null explícito
-                                let mut retry_set = doc! {
-                                    "email": &email_clean,
-                                    "email_normalized": &email_norm,
-                                    "password_hash": &password_hash,
-                                    "is_guest": false,
-                                    "role": &role,
-                                    "updated_at": now,
-                                };
-                                if let Some(name) = req
-                                    .display_name
-                                    .as_deref()
-                                    .map(str::trim)
-                                    .filter(|s| !s.is_empty())
-                                {
-                                    retry_set.insert(
-                                        "display_name",
-                                        name.chars().take(120).collect::<String>(),
-                                    );
+                            .await
+                            .map_err(|e| {
+                                if e.to_string().contains("E11000") {
+                                    AppError::Conflict("Este e-mail já está cadastrado.".into())
+                                } else {
+                                    e.into()
                                 }
-                                let r2 = users_raw
-                                    .update_one(
-                                        doc! {
-                                            "user_id": existing.user_id,
-                                            "is_guest": true,
-                                            "email_normalized": bson::Bson::Null
-                                        },
-                                        doc! { "$set": retry_set, "$unset": unset_guest_inst },
-                                    )
-                                    .await
-                                    .map_err(|e| {
-                                        if e.to_string().contains("E11000") {
-                                            AppError::Conflict(
-                                                "Este e-mail já está cadastrado.".into(),
-                                            )
-                                        } else {
-                                            e.into()
-                                        }
-                                    })?;
-                                if r2.matched_count == 1 {
-                                    let _ = state
-                                        .db
-                                        .collection::<Document>("sessions")
-                                        .update_many(
-                                            doc! { "user_id": existing.user_id },
-                                            doc! { "$set": { "revoked": true } },
-                                        )
-                                        .await;
-                                    upgraded_user =
-                                        Some(load_user(&state.db, existing.user_id).await?);
-                                }
-                            }
-                            Err(e) if e.to_string().contains("E11000") => {
-                                return Err(AppError::Conflict(
-                                    "Este e-mail já está cadastrado.".into(),
-                                ));
-                            }
-                            Err(e) => return Err(e.into()),
+                            })?;
+                        if r2.matched_count == 1 {
+                            let _ = state
+                                .db
+                                .collection::<Document>("sessions")
+                                .update_many(
+                                    doc! { "user_id": existing.user_id },
+                                    doc! { "$set": { "revoked": true } },
+                                )
+                                .await;
+                            upgraded_user = Some(load_user(&state.db, existing.user_id).await?);
                         }
                     }
+                    Err(e) if e.to_string().contains("E11000") => {
+                        return Err(AppError::Conflict("Este e-mail já está cadastrado.".into()));
+                    }
+                    Err(e) => return Err(e.into()),
                 }
             }
         }
+    }
+
+    if require_upgrade && upgraded_user.is_none() {
+        return Err(AppError::Unauthorized(
+            "Não foi possível promover a sessão convidada informada.".into(),
+        ));
     }
 
     let user = if let Some(u) = upgraded_user {
@@ -848,12 +971,8 @@ async fn login_inner(
         .find_one(doc! { "email_normalized": &email_norm })
         .await?;
 
-    let candidate_hash = found
-        .as_ref()
-        .and_then(|u| u.password_hash.clone())
-        .unwrap_or_else(|| dummy_password_hash().to_string());
-
-    let ok = verify_password(req.password, candidate_hash).await?;
+    let candidate_hash = found.as_ref().and_then(|u| u.password_hash.clone());
+    let ok = verify_password_hash(req.password, candidate_hash).await?;
     let Some(mut user) = found.filter(|u| ok && u.password_hash.is_some()) else {
         return Err(AppError::Unauthorized("E-mail ou senha incorretos".into()));
     };
@@ -899,7 +1018,9 @@ pub async fn handle_logout(
     if had_web_cookies {
         security::verify_csrf_same_origin(&headers, &Method::POST, &state.config.public_origin)?;
         for token in cookies {
-            if let Ok(claims) = security::verify_session_token(&state.config.jwt_secret, &token, "web") {
+            if let Ok(claims) =
+                security::verify_session_token(&state.config.jwt_secret, &token, "web")
+            {
                 let _ = state
                     .db
                     .collection::<Document>("sessions")
@@ -973,6 +1094,28 @@ pub fn validate_delete_confirmation(body: &[u8]) -> Result<(), AppError> {
     Ok(())
 }
 
+pub const LGPD_PERSONAL_REVIEW_EVENT_ACTIONS: &[&str] = &[
+    "COMPATIBILITY_CONFIRM",
+    "COMPATIBILITY_EXCLUDE",
+    "EVALUATION_CONFIRM",
+    "COMPATIBILITY_DECIDED",
+    "COMPATIBILITY_REVOKED",
+    "ANSWER_EVALUATED",
+    "EVALUATION_CONFIRMED",
+];
+
+impl LgpdDeletionPlan {
+    /// Retorna a sequência efetiva de expurgo das coleções em `delete_filters`
+    /// (`sessions` penúltima e `usuarios` estritamente por último).
+    pub fn ordered_delete_steps(&self) -> Vec<(&'static str, &Document)> {
+        self.delete_filters
+            .iter()
+            .rev()
+            .map(|(c, f)| (*c, f))
+            .collect()
+    }
+}
+
 pub fn lgpd_deletion_plan(uid: i64) -> LgpdDeletionPlan {
     let uid_str = uid.to_string();
     let uid_escaped = regex::escape(&uid_str);
@@ -1034,6 +1177,11 @@ pub fn lgpd_deletion_plan(uid: i64) -> LgpdDeletionPlan {
         ("mission_progress", doc! { "user_id": uid }),
     ];
 
+    let personal_actions: Vec<bson::Bson> = LGPD_PERSONAL_REVIEW_EVENT_ACTIONS
+        .iter()
+        .map(|s| bson::Bson::String((*s).to_string()))
+        .collect();
+
     let scoped_cleanup_filters = vec![
         (
             "question_commands",
@@ -1042,13 +1190,13 @@ pub fn lgpd_deletion_plan(uid: i64) -> LgpdDeletionPlan {
         (
             "question_review_events",
             doc! {
-                "actor.id": &uid_str,
-                "event_type": {
-                    "$in": [
-                        "COMPATIBILITY_CONFIRM",
-                        "COMPATIBILITY_EXCLUDE",
-                        "EVALUATION_CONFIRM"
-                    ]
+                "$or": [
+                    { "actor_user_id": uid },
+                    { "principal_id": &uid_str },
+                    { "actor.id": &uid_str }
+                ],
+                "action": {
+                    "$in": personal_actions
                 }
             },
         ),
@@ -1139,7 +1287,10 @@ pub async fn handle_delete_account(
     let report_res = state
         .db
         .collection::<Document>("reportedQuestoes")
-        .update_many(plan.report_anonymize_filter, plan.report_anonymize_update)
+        .update_many(
+            plan.report_anonymize_filter.clone(),
+            plan.report_anonymize_update.clone(),
+        )
         .await?;
 
     // 2. Remove comandos/eventos pessoais do titular sem tocar em registros editoriais compartilhados.
@@ -1153,7 +1304,7 @@ pub async fn handle_delete_account(
     }
 
     // 3. Remove dados pessoais e histórico primeiro, revogando sessões e a conta (`usuarios`) estritamente por último.
-    for (coll_name, filter) in plan.delete_filters.iter().rev() {
+    for (coll_name, filter) in plan.ordered_delete_steps() {
         let res = state
             .db
             .collection::<Document>(coll_name)
@@ -1290,9 +1441,7 @@ pub async fn mint_ephemeral_admin_token(
         .find_one(filter)
         .await?
         .ok_or_else(|| {
-            AppError::NotFound(
-                "Nenhuma conta administrativa ativa encontrada em usuarios".into(),
-            )
+            AppError::NotFound("Nenhuma conta administrativa ativa encontrada em usuarios".into())
         })?;
     let ttl = 900_i64;
     let sid = uuid::Uuid::new_v4().to_string();
@@ -1418,7 +1567,11 @@ mod tests {
             .find(|(c, _)| *c == "tutor_budgets")
             .unwrap();
         assert_eq!(
-            budget_filter.get_document("_id").unwrap().get_str("$ne").unwrap(),
+            budget_filter
+                .get_document("_id")
+                .unwrap()
+                .get_str("$ne")
+                .unwrap(),
             "global"
         );
 
@@ -1461,7 +1614,9 @@ mod tests {
             .map(|v| v.to_str().unwrap().to_string())
             .collect();
         assert_eq!(cookies.len(), 2);
-        assert!(cookies.iter().any(|c| c.starts_with("cogniva_web_session=; ") && c.contains("Max-Age=0")));
+        assert!(cookies
+            .iter()
+            .any(|c| c.starts_with("cogniva_web_session=; ") && c.contains("Max-Age=0")));
 
         let mut bearer_headers = HeaderMap::new();
         bearer_headers.insert(header::AUTHORIZATION, "Bearer tok-mobile".parse().unwrap());
@@ -1474,5 +1629,227 @@ mod tests {
         )
         .unwrap();
         assert!(mobile_resp.headers().get(header::SET_COOKIE).is_none());
+    }
+
+    fn get_dotted_bson<'a>(doc: &'a Document, key: &str) -> Option<&'a bson::Bson> {
+        let mut cur_doc = doc;
+        let mut parts = key.split('.').peekable();
+        while let Some(part) = parts.next() {
+            let val = cur_doc.get(part)?;
+            if parts.peek().is_none() {
+                return Some(val);
+            }
+            cur_doc = val.as_document()?;
+        }
+        None
+    }
+
+    fn bson_values_equal(a: &bson::Bson, b: &bson::Bson) -> bool {
+        match (a, b) {
+            (bson::Bson::Int32(x), bson::Bson::Int64(y)) => i64::from(*x) == *y,
+            (bson::Bson::Int64(x), bson::Bson::Int32(y)) => *x == i64::from(*y),
+            _ => a == b,
+        }
+    }
+
+    fn bson_filter_matches_doc(filter: &Document, candidate: &Document) -> bool {
+        for (k, v) in filter {
+            if k == "$or" {
+                let Some(clauses) = v.as_array() else {
+                    return false;
+                };
+                if !clauses.iter().any(|c| {
+                    c.as_document()
+                        .is_some_and(|sub| bson_filter_matches_doc(sub, candidate))
+                }) {
+                    return false;
+                }
+                continue;
+            }
+            let actual = get_dotted_bson(candidate, k);
+            if let Some(op_doc) = v.as_document() {
+                if let Ok(allowed) = op_doc.get_array("$in") {
+                    let Some(act_val) = actual else {
+                        return false;
+                    };
+                    if !allowed.iter().any(|item| bson_values_equal(item, act_val)) {
+                        return false;
+                    }
+                    continue;
+                }
+            }
+            let Some(act_val) = actual else {
+                return false;
+            };
+            if !bson_values_equal(v, act_val) {
+                return false;
+            }
+        }
+        true
+    }
+
+    #[test]
+    fn lgpd_deletion_plan_matches_real_review_events_and_deletes_sessions_and_usuarios_last() {
+        use crate::services::{classification, question_storage};
+
+        let target_uid = 4242_i64;
+        let other_uid = 9999_i64;
+        let plan = lgpd_deletion_plan(target_uid);
+
+        // Verify strict reverse execution order: sessions second-to-last, usuarios strictly last!
+        let ordered = plan.ordered_delete_steps();
+        assert!(ordered.len() >= 10);
+        assert_eq!(ordered[ordered.len() - 2].0, "sessions");
+        assert_eq!(ordered[ordered.len() - 1].0, "usuarios");
+
+        let (_, rev_ev_filter) = plan
+            .scoped_cleanup_filters
+            .iter()
+            .find(|(c, _)| *c == "question_review_events")
+            .expect("question_review_events scoped filter");
+
+        let hash64 = "b".repeat(64);
+        let reviewer_target = question_storage::ReviewerContext::admin(target_uid);
+        let reviewer_other = question_storage::ReviewerContext::admin(other_uid);
+
+        // 1. Real personal compatibility & evaluation events generated by question_storage & classification MUST match
+        let (_, compat_confirm_doc) = question_storage::build_review_event_doc(
+            "seed-compat-confirm",
+            &reviewer_target,
+            "COMPATIBILITY_CONFIRM",
+            "compat-1",
+            1,
+            &hash64,
+            &hash64,
+            "2026-11-23T00:00:00Z",
+        )
+        .unwrap();
+        assert!(bson_filter_matches_doc(rev_ev_filter, &compat_confirm_doc));
+
+        let (_, compat_exclude_doc) = classification::build_custom_review_event(
+            "seed-compat-exclude",
+            target_uid,
+            "COMPATIBILITY_EXCLUDE",
+            "REJECTED",
+            "compat-2",
+            1,
+            &hash64,
+            &hash64,
+        )
+        .unwrap();
+        assert!(bson_filter_matches_doc(rev_ev_filter, &compat_exclude_doc));
+
+        let (_, eval_confirm_doc) = question_storage::build_review_event_doc(
+            "seed-eval-confirm",
+            &reviewer_target,
+            "EVALUATION_CONFIRM",
+            "eval-1",
+            1,
+            &hash64,
+            &hash64,
+            "2026-11-23T00:00:00Z",
+        )
+        .unwrap();
+        assert!(bson_filter_matches_doc(rev_ev_filter, &eval_confirm_doc));
+
+        // Legacy/nested actor.id personal event shapes MUST also match
+        let legacy_actor_nested = doc! {
+            "actor": { "type": "HUMAN", "id": target_uid.to_string() },
+            "action": "COMPATIBILITY_DECIDED",
+        };
+        assert!(bson_filter_matches_doc(rev_ev_filter, &legacy_actor_nested));
+
+        // 2. Personal events belonging to another user MUST NOT match
+        let (_, other_user_doc) = question_storage::build_review_event_doc(
+            "seed-other-user",
+            &reviewer_other,
+            "COMPATIBILITY_CONFIRM",
+            "compat-other",
+            1,
+            &hash64,
+            &hash64,
+            "2026-11-23T00:00:00Z",
+        )
+        .unwrap();
+        assert!(!bson_filter_matches_doc(rev_ev_filter, &other_user_doc));
+
+        // 3. Shared editorial events authored by target_uid MUST be preserved (never deleted!)
+        for editorial_action in [
+            "CLASSIFICATION_CONFIRM",
+            "ORIGIN_CONFIRM",
+            "VALIDITY_CONFIRM_CURRENT",
+            "VALIDITY_CONFIRM_OBSOLETE",
+            "SUGGESTION_ACCEPT",
+            "SUGGESTION_REJECT",
+        ] {
+            let (_, editorial_doc) = classification::build_custom_review_event(
+                &format!("seed-ed-{editorial_action}"),
+                target_uid,
+                editorial_action,
+                "APPROVED",
+                "q-shared",
+                1,
+                &hash64,
+                &hash64,
+            )
+            .unwrap();
+            assert!(
+                !bson_filter_matches_doc(rev_ev_filter, &editorial_doc),
+                "Shared editorial action {editorial_action} must NOT be purged by LGPD deletion"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn argon2id_semaphore_enforces_concurrency_cap_timeout_and_pre_semaphore_length_guard() {
+        use std::time::Duration;
+        use tokio::sync::Semaphore;
+
+        assert_eq!(MAX_CONCURRENT_ARGON2, 3);
+        let test_sem = Arc::new(Semaphore::new(MAX_CONCURRENT_ARGON2));
+
+        // Hold all 3 permits -> 4th caller times out cleanly with 503 TemporarilyUnavailable
+        let p1 = acquire_argon2_permit_with_timeout(&test_sem, Duration::from_millis(50))
+            .await
+            .unwrap();
+        let p2 = acquire_argon2_permit_with_timeout(&test_sem, Duration::from_millis(50))
+            .await
+            .unwrap();
+        let p3 = acquire_argon2_permit_with_timeout(&test_sem, Duration::from_millis(50))
+            .await
+            .unwrap();
+
+        let saturated_err =
+            acquire_argon2_permit_with_timeout(&test_sem, Duration::from_millis(25)).await;
+        assert!(matches!(
+            saturated_err,
+            Err(AppError::TemporarilyUnavailable(_))
+        ));
+
+        // Releasing 1 permit allows a queued caller to acquire within timeout
+        let sem_arc = Arc::new(Semaphore::new(MAX_CONCURRENT_ARGON2));
+        let g1 = sem_arc.clone().acquire_owned().await.unwrap();
+        let g2 = sem_arc.clone().acquire_owned().await.unwrap();
+        let g3 = sem_arc.clone().acquire_owned().await.unwrap();
+        let sem_waiter = sem_arc.clone();
+        let waiter = tokio::spawn(async move {
+            acquire_argon2_permit_with_timeout(&sem_waiter, Duration::from_millis(500))
+                .await
+                .is_ok()
+        });
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        drop(g1);
+        assert!(waiter.await.unwrap());
+        drop((g2, g3, p1, p2, p3));
+
+        // Password > 1024 bytes is rejected immediately BEFORE touching Argon2id semaphore
+        let oversized = "Z".repeat(MAX_PASSWORD_BYTES + 1);
+        assert!(hash_password(oversized.clone()).await.is_err());
+        assert!(!verify_password_hash(oversized, None).await.unwrap());
+
+        // Dummy Argon2id timing-equalization path runs inside spawn_blocking without blocking Tokio
+        assert!(!verify_password_hash("SenhaIncorreta99!".to_string(), None)
+            .await
+            .unwrap());
     }
 }

@@ -77,14 +77,18 @@ pub async fn load(
         } else {
             row.get_str("question_content_revision").ok() == Some(content_hash.as_str())
         };
-        if !revision_matches || !super::catalog_runtime::version_known(number(&row, "catalog_version"))
+        if !revision_matches
+            || !super::catalog_runtime::version_known(number(&row, "catalog_version"))
         {
             continue;
         }
         result.push(Decision {
             question_id: id.into(),
             question_revision: q.question_revision.clone(),
-            question_semantic_revision: row.get_str("question_semantic_revision").ok().map(Into::into),
+            question_semantic_revision: row
+                .get_str("question_semantic_revision")
+                .ok()
+                .map(Into::into),
             exam_id: row.get_str("exam_id").unwrap_or("").into(),
             exam_revision: number(&row, "exam_revision"),
             component_id: row.get_str("component_id").unwrap_or("").into(),
@@ -214,9 +218,11 @@ pub async fn filter(
     component: Option<&ExamSubjectConfig>,
     questions: Vec<QuestionDocument>,
 ) -> Result<Vec<QuestionDocument>, AppError> {
-    Ok(filter_with_mode(state, user, exam, component, questions, false)
-        .await?
-        .0)
+    Ok(
+        filter_with_mode(state, user, exam, component, questions, false)
+            .await?
+            .0,
+    )
 }
 
 #[cfg(test)]

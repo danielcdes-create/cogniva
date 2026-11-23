@@ -1,6 +1,6 @@
-# Arquitetura em 3 Camadas: Diagnóstico por Evidências, Decisão sob Incerteza e Protocolo de 60s (`2.4.1`)
+# Arquitetura em 3 Camadas: Diagnóstico por Evidências, Decisão sob Incerteza e Protocolo de 60s (`2.4.2`)
 
-Este documento especifica a arquitetura pedagógica, estatística e comportamental do **Cogniva `2.4.1`** (`build 31`, `contract_version: 5`), implementada com simetria matemática bit a bit entre Python, o backend Rust ([`backend-rust/src/services/`](../backend-rust/src/services/)) e o cliente Android *offline-first* ([`PerformanceEngines.kt`](../android-app/app/src/main/java/br/com/concursoprep/app/domain/exam/PerformanceEngines.kt)).
+Este documento especifica a arquitetura pedagógica, estatística e comportamental do **Cogniva `2.4.2`** (`build 32`, `contract_version: 5`), implementada com simetria matemática bit a bit entre Python, o backend Rust ([`backend-rust/src/services/`](../backend-rust/src/services/)) e o cliente Android *offline-first* ([`PerformanceEngines.kt`](../android-app/app/src/main/java/br/com/concursoprep/app/domain/exam/PerformanceEngines.kt)).
 
 A solução abandona três ilusões clássicas de plataformas para concursos:
 1. Que são necessárias milhares de questões sintéticas para diagnosticar um conceito;

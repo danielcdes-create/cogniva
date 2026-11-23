@@ -67,10 +67,7 @@ pub async fn me(
     })))
 }
 
-pub async fn logout(
-    state: State<Arc<AppState>>,
-    headers: HeaderMap,
-) -> Result<Response, AppError> {
+pub async fn logout(state: State<Arc<AppState>>, headers: HeaderMap) -> Result<Response, AppError> {
     auth_session::handle_logout(state, headers).await
 }
 
@@ -90,15 +87,12 @@ mod tests {
         assert!(remote.contains("; Secure"));
 
         h.insert(header::HOST, "127.0.0.1:8876".parse().unwrap());
-        assert!(!auth_session::build_web_cookie(
-            &h,
-            "http://127.0.0.1:8876",
-            "synthetic",
-            20
-        )
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .contains("; Secure"));
+        assert!(
+            !auth_session::build_web_cookie(&h, "http://127.0.0.1:8876", "synthetic", 20)
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .contains("; Secure")
+        );
     }
 }

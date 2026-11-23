@@ -61,10 +61,14 @@ fn index<'a>(
     Ok(map)
 }
 pub fn validate(catalog: &Value) -> Result<Value, AppError> {
-    let snapshot=super::catalog_runtime::snapshot();
-    validate_against(catalog,&snapshot.current,&snapshot.registry)
+    let snapshot = super::catalog_runtime::snapshot();
+    validate_against(catalog, &snapshot.current, &snapshot.registry)
 }
-pub fn validate_against(catalog:&Value,baseline:&Value,registry_base:&Value)->Result<Value,AppError>{
+pub fn validate_against(
+    catalog: &Value,
+    baseline: &Value,
+    registry_base: &Value,
+) -> Result<Value, AppError> {
     static SCHEMA: OnceLock<jsonschema::Validator> = OnceLock::new();
     let validator = SCHEMA.get_or_init(|| {
         jsonschema::options()
@@ -96,7 +100,11 @@ pub fn validate_against(catalog:&Value,baseline:&Value,registry_base:&Value)->Re
     }
     let sources = index(catalog, "sources", "source_id")?;
     let trunks = index(catalog, "trunks", "trunk_id")?;
-    if !trunks.values().any(|t|t["status"]=="ACTIVE"){return Err(bad("Mantenha ao menos um tronco ativo para novos cadastros"));}
+    if !trunks.values().any(|t| t["status"] == "ACTIVE") {
+        return Err(bad(
+            "Mantenha ao menos um tronco ativo para novos cadastros",
+        ));
+    }
     let subjects = index(catalog, "subjects", "subject_id")?;
     let topics = index(catalog, "topics", "topic_id")?;
     let mut all = HashSet::new();
@@ -325,7 +333,7 @@ pub fn validate_against(catalog:&Value,baseline:&Value,registry_base:&Value)->Re
             return Err(bad("Ciclo detectado em prerequisite_concept_ids"));
         }
     }
-    let mut registry: Value =registry_base.clone();
+    let mut registry: Value = registry_base.clone();
     let mut entries = Vec::new();
     for (entity, rows) in [
         ("TRUNK", &trunks),
@@ -396,9 +404,15 @@ pub async fn save(state: &AppState, user: i64, r: DraftRequest) -> Result<Value,
         return Err(AppError::Conflict("Revisão do rascunho ausente".into()));
     }
     if r.base_catalog_sha256 != hash(&question_contracts::catalog_ref()) {
-        return Err(AppError::Conflict("O catálogo de referência mudou; revise a proposta preservada".into()));
+        return Err(AppError::Conflict(
+            "O catálogo de referência mudou; revise a proposta preservada".into(),
+        ));
     }
-    let validation=if r.status=="REVIEW_READY"{validate(&r.catalog)?}else{json!(null)};
+    let validation = if r.status == "REVIEW_READY" {
+        validate(&r.catalog)?
+    } else {
+        json!(null)
+    };
     let catalog =
         Bson::try_from(payload["catalog"].clone()).map_err(|_| bad("Catálogo não armazenável"))?;
     let version_doc = doc! {
@@ -430,7 +444,10 @@ pub async fn save(state: &AppState, user: i64, r: DraftRequest) -> Result<Value,
         }
     }
     versions
-        .update_one(doc! { "_id": &version_key }, doc! { "$setOnInsert": version_doc })
+        .update_one(
+            doc! { "_id": &version_key },
+            doc! { "$setOnInsert": version_doc },
+        )
         .upsert(true)
         .await?;
     Ok(json!({ "draft": Bson::Document(head).into_relaxed_extjson(), "validation": validation }))
@@ -465,7 +482,9 @@ pub async fn get_for_review(state: &AppState, user: i64, id: &str) -> Result<Val
         None => coll
             .find_one(doc! { "draft_id": id, "status": "REVIEW_READY" })
             .await?
-            .ok_or_else(|| AppError::NotFound("Rascunho ausente ou não liberado para revisão".into()))?,
+            .ok_or_else(|| {
+                AppError::NotFound("Rascunho ausente ou não liberado para revisão".into())
+            })?,
     };
     Ok(Bson::Document(row).into_relaxed_extjson())
 }

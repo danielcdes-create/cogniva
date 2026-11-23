@@ -210,9 +210,7 @@ fn both_runtimes_share_utf8_mastery_weighted_score_srs_and_calendar_fixtures() {
         assert!((res.p0 - v["expected_p0"].as_f64().unwrap()).abs() < 1e-8);
         assert!((res.p_at_time - v["expected_pt"].as_f64().unwrap()).abs() < 1e-8);
         assert!((res.expected_value - v["expected_ev"].as_f64().unwrap()).abs() < 1e-8);
-        assert!(
-            (res.risk_neutral_threshold - v["expected_p_star"].as_f64().unwrap()).abs() < 1e-8
-        );
+        assert!((res.risk_neutral_threshold - v["expected_p_star"].as_f64().unwrap()).abs() < 1e-8);
         assert!(
             (res.prob_goal_if_answer - v["expected_prob_goal_if_answer"].as_f64().unwrap()).abs()
                 < 1e-8
@@ -248,8 +246,14 @@ fn both_runtimes_share_utf8_mastery_weighted_score_srs_and_calendar_fixtures() {
         );
         let posture_str = serde_json::to_value(dec.posture).unwrap();
         let action_str = serde_json::to_value(dec.recommended_action).unwrap();
-        assert_eq!(posture_str.as_str().unwrap(), v["expected_posture"].as_str().unwrap());
-        assert_eq!(action_str.as_str().unwrap(), v["expected_action"].as_str().unwrap());
+        assert_eq!(
+            posture_str.as_str().unwrap(),
+            v["expected_posture"].as_str().unwrap()
+        );
+        assert_eq!(
+            action_str.as_str().unwrap(),
+            v["expected_action"].as_str().unwrap()
+        );
     }
     for v in f["fatigue"].as_array().unwrap() {
         let rep = crate::services::fatigue_engine::evaluate_fatigue_with_difficulty(
@@ -264,13 +268,19 @@ fn both_runtimes_share_utf8_mastery_weighted_score_srs_and_calendar_fixtures() {
             v["late_mean_minutes"].as_f64().unwrap(),
         );
         let status_str = serde_json::to_value(rep.status).unwrap();
-        assert_eq!(status_str.as_str().unwrap(), v["expected_status"].as_str().unwrap());
+        assert_eq!(
+            status_str.as_str().unwrap(),
+            v["expected_status"].as_str().unwrap()
+        );
         match (rep.estimated_lambda, v["expected_lambda"].as_f64()) {
             (None, None) => {}
             (Some(a), Some(b)) => assert!((a - b).abs() < 1e-8),
             other => panic!("fatigue lambda mismatch: {other:?}"),
         }
-        match (rep.shrunk_accuracy_delta, v["expected_shrunk_delta"].as_f64()) {
+        match (
+            rep.shrunk_accuracy_delta,
+            v["expected_shrunk_delta"].as_f64(),
+        ) {
             (None, None) => {}
             (Some(a), Some(b)) => assert!((a - b).abs() < 1e-8),
             other => panic!("fatigue delta mismatch: {other:?}"),
@@ -328,7 +338,8 @@ async fn structured_error_response_carries_stable_code_field_and_correlation_id(
 }
 
 #[test]
-fn operational_grading_change_preserves_semantic_validity_while_substantive_change_invalidates_t04_t05_t24() {
+fn operational_grading_change_preserves_semantic_validity_while_substantive_change_invalidates_t04_t05_t24(
+) {
     use crate::services::question_eligibility::{
         evaluate_question_eligibility, EligibilityMode, TrustedReviewContext,
     };
@@ -442,6 +453,8 @@ fn operational_grading_change_preserves_semantic_validity_while_substantive_chan
         EligibilityMode::DiscursiveExplicit,
     );
     assert!(!elig_stale.eligible);
-    assert!(elig_stale.reason_codes.contains(&"SEMANTIC_REVISION_MISMATCH"));
+    assert!(elig_stale
+        .reason_codes
+        .contains(&"SEMANTIC_REVISION_MISMATCH"));
     assert!(elig_stale.reason_codes.contains(&"QUESTION_NOT_ELIGIBLE"));
 }

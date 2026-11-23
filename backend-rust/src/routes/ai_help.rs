@@ -107,7 +107,64 @@ fn percent_encode_path_segment(raw: &str) -> String {
     out
 }
 
-/// Endpoint `POST /api/v1/questions/:id/ai/:kind`
+fn validate_lookup_selected_text(raw: &str) -> Result<&str, AppError> {
+    let trimmed = raw.trim();
+    let char_count = trimmed.chars().count();
+    if !(1..=240).contains(&char_count) {
+        return Err(AppError::BadRequest(
+            "Selecione um trecho entre 1 e 240 caracteres para consultar.".into(),
+        ));
+    }
+    Ok(trimmed)
+}
+
+pub(crate) async fn fetch_wikimedia_summary(
+    api_base_url: &str,
+    trimmed_query: &str,
+) -> Option<EncyclopedicSummaryDto> {
+    let wiki_seg = percent_encode_path_segment(trimmed_query);
+    let wiki_url = format!("{}/{wiki_seg}", api_base_url.trim_end_matches('/'));
+    tokio::time::timeout(std::time::Duration::from_millis(2200), async {
+        let mut resp = shared_http_client()
+            .get(&wiki_url)
+            .header("User-Agent", "Cogniva/2.4 (Educacao Concursos)")
+            .send()
+            .await
+            .ok()?;
+        if !resp.status().is_success() {
+            return None;
+        }
+        let mut body_buf = Vec::with_capacity(4096);
+        while let Ok(Some(chunk)) = resp.chunk().await {
+            if body_buf.len() + chunk.len() > 64 * 1024 {
+                return None;
+            }
+            body_buf.extend_from_slice(&chunk);
+        }
+        let val: serde_json::Value = serde_json::from_slice(&body_buf).ok()?;
+        let title = val["title"].as_str().unwrap_or("").trim().to_string();
+        let extract = val["extract"].as_str().unwrap_or("").trim().to_string();
+        let page_url = val["content_urls"]["desktop"]["page"]
+            .as_str()
+            .filter(|u| u.starts_with("https://"))
+            .unwrap_or("https://pt.wikipedia.org")
+            .to_string();
+        if !title.is_empty()
+            && !extract.is_empty()
+            && val["type"].as_str() != Some("disambiguation")
+        {
+            Some(EncyclopedicSummaryDto {
+                title,
+                extract,
+                source_url: page_url,
+            })
+        } else {
+            None
+        }
+    })
+    .await
+    .unwrap_or(None)
+}
 /// Exemplos de `:kind`: `explanation`, `contextual-hint`, `dr-sincero`, `child-friendly-pre`,
 /// `child-friendly-post`, `extra-concepts`, `mnemonic`, `plausibility`, `term-lookup`, `term-lookup-post`
 pub async fn handle_question_ai_assist(
@@ -152,12 +209,7 @@ pub async fn handle_question_contextual_lookup(
     Path(question_id): Path<String>,
     Json(req): Json<ContextualLookupRequest>,
 ) -> Result<Json<ContextualLookupResponse>, AppError> {
-    let trimmed = req.selected_text.trim();
-    if trimmed.is_empty() || trimmed.chars().count() > 240 {
-        return Err(AppError::BadRequest(
-            "Selecione um trecho entre 1 e 240 caracteres para consultar.".into(),
-        ));
-    }
+    let trimmed = validate_lookup_selected_text(&req.selected_text)?;
     crate::services::rate_limit::check_auth_rate_limit(
         &state.db,
         "ctx_lookup",
@@ -203,7 +255,8 @@ pub async fn handle_question_contextual_lookup(
         let uri = ns["canonical_uri"].as_str().unwrap_or("");
         let hay = fold_search_key(&format!("{title} {} {excerpt}", locator.unwrap_or("")));
         let hit = hay.contains(&folded_query)
-            || (!terms.is_empty() && terms.iter().filter(|t| hay.contains(t.as_str())).count() >= terms.len().min(2));
+            || (!terms.is_empty()
+                && terms.iter().filter(|t| hay.contains(t.as_str())).count() >= terms.len().min(2));
         if hit {
             normative_matches.push(NormativeLookupItemDto {
                 source_id: ns["source_id"].as_str().unwrap_or("").to_string(),
@@ -226,7 +279,8 @@ pub async fn handle_question_contextual_lookup(
         let label = c["label"].as_str().unwrap_or("");
         let hay = fold_search_key(label);
         if hay.contains(&folded_query)
-            || (!terms.is_empty() && terms.iter().filter(|t| hay.contains(t.as_str())).count() >= terms.len().min(2))
+            || (!terms.is_empty()
+                && terms.iter().filter(|t| hay.contains(t.as_str())).count() >= terms.len().min(2))
         {
             concept_matches.push(ConceptLookupItemDto {
                 concept_id: c["concept_id"].as_str().unwrap_or("").to_string(),
@@ -239,51 +293,8 @@ pub async fn handle_question_contextual_lookup(
     }
 
     // Síntese enciclopédica rápida via Wikimedia PT REST API (timeout total de 2.2s e teto de 64 KB no corpo)
-    let wiki_seg = percent_encode_path_segment(trimmed);
-    let wiki_url = format!("https://pt.wikipedia.org/api/rest_v1/page/summary/{wiki_seg}");
-    let encyclopedic_summary = tokio::time::timeout(
-        std::time::Duration::from_millis(2200),
-        async {
-            let mut resp = shared_http_client()
-                .get(&wiki_url)
-                .header("User-Agent", "Cogniva/2.4 (Educacao Concursos)")
-                .send()
-                .await
-                .ok()?;
-            if !resp.status().is_success() {
-                return None;
-            }
-            let mut body_buf = Vec::with_capacity(4096);
-            while let Ok(Some(chunk)) = resp.chunk().await {
-                if body_buf.len() + chunk.len() > 64 * 1024 {
-                    return None;
-                }
-                body_buf.extend_from_slice(&chunk);
-            }
-            let val: serde_json::Value = serde_json::from_slice(&body_buf).ok()?;
-            let title = val["title"].as_str().unwrap_or("").trim().to_string();
-            let extract = val["extract"].as_str().unwrap_or("").trim().to_string();
-            let page_url = val["content_urls"]["desktop"]["page"]
-                .as_str()
-                .filter(|u| u.starts_with("https://"))
-                .unwrap_or("https://pt.wikipedia.org")
-                .to_string();
-            if !title.is_empty()
-                && !extract.is_empty()
-                && val["type"].as_str() != Some("disambiguation")
-            {
-                Some(EncyclopedicSummaryDto {
-                    title,
-                    extract,
-                    source_url: page_url,
-                })
-            } else {
-                None
-            }
-        },
-    )
-    .await
-    .unwrap_or(None);
+    let encyclopedic_summary =
+        fetch_wikimedia_summary("https://pt.wikipedia.org/api/rest_v1/page/summary", trimmed).await;
 
     let contextual_q = format!("{trimmed} {disciplina}");
     let google_search_url = format!(
@@ -310,4 +321,106 @@ pub async fn handle_question_contextual_lookup(
         planalto_search_url,
         jurisprudence_search_url,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{routing::get, Router};
+    use serde_json::json;
+
+    #[test]
+    fn path_segment_encoding_search_folding_and_query_bounds_prevent_traversal_and_unicode_drift() {
+        assert_eq!(percent_encode_path_segment("."), "%2E");
+        assert_eq!(percent_encode_path_segment(" .. "), "%2E%2E");
+        assert_eq!(percent_encode_path_segment("a/b"), "a%2Fb");
+        assert_eq!(
+            percent_encode_path_segment("Princípio da Legalidade"),
+            "Princ%C3%ADpio_da_Legalidade"
+        );
+        assert_eq!(
+            fold_search_key("Administração Pública — Ação Direta"),
+            "administracao publica — acao direta"
+        );
+
+        assert!(validate_lookup_selected_text("   ").is_err());
+        assert_eq!(validate_lookup_selected_text(" Selic ").unwrap(), "Selic");
+        let exact_240 = "á".repeat(240);
+        assert_eq!(
+            validate_lookup_selected_text(&exact_240)
+                .unwrap()
+                .chars()
+                .count(),
+            240
+        );
+        let too_long_241 = "á".repeat(241);
+        assert!(validate_lookup_selected_text(&too_long_241).is_err());
+    }
+
+    #[tokio::test]
+    async fn wikimedia_summary_filters_disambiguation_caps_at_64kib_and_blocks_non_https_page_url()
+    {
+        let mock = Router::new().route(
+            "/summary/:slug",
+            get(|Path(slug): Path<String>| async move {
+                match slug.as_str() {
+                    "Ambiguo" => axum::Json(json!({
+                        "type": "disambiguation",
+                        "title": "Ambiguo",
+                        "extract": "Pode referir-se a múltiplos conceitos.",
+                        "content_urls": { "desktop": { "page": "https://pt.wikipedia.org/wiki/Ambiguo" } }
+                    }))
+                    .into_response(),
+                    "Gigante" => {
+                        let huge = "X".repeat(66 * 1024);
+                        axum::Json(json!({
+                            "type": "standard",
+                            "title": "Gigante",
+                            "extract": huge,
+                            "content_urls": { "desktop": { "page": "https://pt.wikipedia.org/wiki/Gigante" } }
+                        }))
+                        .into_response()
+                    }
+                    "HttpInseguro" => axum::Json(json!({
+                        "type": "standard",
+                        "title": "Taxa Selic",
+                        "extract": "Taxa básica de juros da economia brasileira.",
+                        "content_urls": { "desktop": { "page": "http://evil.example/selic" } }
+                    }))
+                    .into_response(),
+                    _ => axum::Json(json!({
+                        "type": "standard",
+                        "title": "Banco Central do Brasil",
+                        "extract": "Autarquia federal integrante do Sistema Financeiro Nacional.",
+                        "content_urls": { "desktop": { "page": "https://pt.wikipedia.org/wiki/Banco_Central_do_Brasil" } }
+                    }))
+                    .into_response(),
+                }
+            }),
+        );
+        use axum::response::IntoResponse;
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let srv = tokio::spawn(async move { axum::serve(listener, mock).await.unwrap() });
+        let base = format!("http://{addr}/summary");
+
+        assert!(fetch_wikimedia_summary(&base, "Ambiguo").await.is_none());
+        assert!(fetch_wikimedia_summary(&base, "Gigante").await.is_none());
+
+        let sanitized = fetch_wikimedia_summary(&base, "HttpInseguro")
+            .await
+            .expect("valid summary with fallback https url");
+        assert_eq!(sanitized.title, "Taxa Selic");
+        assert_eq!(sanitized.source_url, "https://pt.wikipedia.org");
+
+        let valid = fetch_wikimedia_summary(&base, "Banco Central")
+            .await
+            .expect("valid summary");
+        assert_eq!(
+            valid.source_url,
+            "https://pt.wikipedia.org/wiki/Banco_Central_do_Brasil"
+        );
+        srv.abort();
+    }
 }

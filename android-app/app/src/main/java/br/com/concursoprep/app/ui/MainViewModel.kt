@@ -22,7 +22,6 @@ import java.util.UUID
 
 sealed interface ApkInstallEvent {
     data object NeedsUnknownSourcesPermission : ApkInstallEvent
-    data class ReadyToInstall(val apkFile: File) : ApkInstallEvent
     data class ConfirmSessionInstall(val confirmationIntent: Intent) : ApkInstallEvent
 }
 

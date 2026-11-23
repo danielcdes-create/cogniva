@@ -70,7 +70,9 @@ pub async fn questions(
     }
     if let Some(cstate) = q.classification_state.filter(|s| !s.is_empty()) {
         if !["CONFIRMED", "PROPOSED", "UNCLASSIFIED"].contains(&cstate.as_str()) {
-            return Err(AppError::BadRequest("Estado de classificação inválido".into()));
+            return Err(AppError::BadRequest(
+                "Estado de classificação inválido".into(),
+            ));
         }
         filter.insert("classification.state", cstate);
     }
@@ -194,8 +196,7 @@ pub async fn prepare_question(
         .map(str::to_string)
         .or_else(|| question_contracts::semantic_hash(&old).ok());
     let changed = body.document["content_revision"] != old["content_revision"];
-    let semantic_changed =
-        Some(new_semantic_revision.as_str()) != old_semantic_revision.as_deref();
+    let semantic_changed = Some(new_semantic_revision.as_str()) != old_semantic_revision.as_deref();
     let incoming_status = body.document["validity"]["status"]
         .as_str()
         .unwrap_or("UNDER_REVIEW")
@@ -226,8 +227,11 @@ pub async fn prepare_question(
         let fallback_evidence = body.document["origins"]
             .as_array()
             .and_then(|arr| {
-                arr.iter()
-                    .find_map(|o| o.get("source_reference").filter(|sr| sr.is_object()).cloned())
+                arr.iter().find_map(|o| {
+                    o.get("source_reference")
+                        .filter(|sr| sr.is_object())
+                        .cloned()
+                })
             })
             .unwrap_or_else(|| {
                 json!({
@@ -404,7 +408,8 @@ pub async fn summary(
 ) -> Result<Json<Value>, AppError> {
     let questions = question_storage::collection(&state.db, "todasQuestoes");
     let reports = state.db.collection::<Document>("reportedQuestoes");
-    let suggestions = question_storage::collection(&state.db, "question_classification_suggestions");
+    let suggestions =
+        question_storage::collection(&state.db, "question_classification_suggestions");
     let (
         count,
         current_count,
@@ -561,7 +566,11 @@ pub async fn list_reports(
         "open" => doc! { "fix.status_solved": { "$ne": true } },
         "resolved" => doc! { "fix.status_solved": true },
         "all" => doc! {},
-        _ => return Err(AppError::BadRequest("Filtro de status de reporte inválido".into())),
+        _ => {
+            return Err(AppError::BadRequest(
+                "Filtro de status de reporte inválido".into(),
+            ))
+        }
     };
     let rows: Vec<Document> = state
         .db

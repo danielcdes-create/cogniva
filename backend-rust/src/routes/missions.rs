@@ -203,26 +203,29 @@ pub async fn get_mission_detail(
     };
 
     let mut progress_doc = load_single_progress(&state, user.user_id, &mission.mission_id).await?;
-    if query.resume && progress_doc.as_ref().is_some_and(|d| d.status == "IN_PROGRESS") {
+    if query.resume
+        && progress_doc
+            .as_ref()
+            .is_some_and(|d| d.status == "IN_PROGRESS")
+    {
         let now_iso = Utc::now().to_rfc3339();
-        if let Ok(updated) =
-            missions::mutate_progress_cas(&state, user.user_id, mission, |doc| {
-                if doc.status == "IN_PROGRESS" {
-                    doc.resume_count = doc.resume_count.saturating_add(1);
-                    doc.last_resumed_at = Some(now_iso.clone());
-                    doc.updated_at = now_iso.clone();
-                    let current_sid = doc.current_scene_id.clone();
-                    append_bounded_telemetry(
-                        &mut doc.telemetry_events,
-                        "MISSION_RESUMED",
-                        Some(&current_sid),
-                        None,
-                        &now_iso,
-                    );
-                }
-                Ok(())
-            })
-            .await
+        if let Ok(updated) = missions::mutate_progress_cas(&state, user.user_id, mission, |doc| {
+            if doc.status == "IN_PROGRESS" {
+                doc.resume_count = doc.resume_count.saturating_add(1);
+                doc.last_resumed_at = Some(now_iso.clone());
+                doc.updated_at = now_iso.clone();
+                let current_sid = doc.current_scene_id.clone();
+                append_bounded_telemetry(
+                    &mut doc.telemetry_events,
+                    "MISSION_RESUMED",
+                    Some(&current_sid),
+                    None,
+                    &now_iso,
+                );
+            }
+            Ok(())
+        })
+        .await
         {
             progress_doc = Some(updated);
         }
@@ -230,8 +233,7 @@ pub async fn get_mission_detail(
 
     let duration = calculate_mission_duration(mission, &catalog.assets);
     let narrative_progress = summarize_narrative_progress(mission, progress_doc.as_ref());
-    let interaction_performance =
-        summarize_interaction_performance(mission, progress_doc.as_ref());
+    let interaction_performance = summarize_interaction_performance(mission, progress_doc.as_ref());
     let worked_concepts = build_worked_concepts_view(
         &mission.curriculum,
         &interaction_performance.concepts_for_review,
@@ -366,7 +368,11 @@ pub async fn update_mission_progress(
                 ));
             };
             if doc.status != "COMPLETED" {
-                for prior in mission.scenes.iter().filter(|s| s.order < target_spec.order) {
+                for prior in mission
+                    .scenes
+                    .iter()
+                    .filter(|s| s.order < target_spec.order)
+                {
                     if prior.requires_decision_to_advance {
                         let answered = prior
                             .interaction
@@ -396,8 +402,7 @@ pub async fn update_mission_progress(
             );
         } else if let Some(pos) = req.playback_position_ms {
             let cur = doc.current_scene_id.clone();
-            doc.scene_positions_ms
-                .insert(cur, pos.clamp(0, 3_600_000));
+            doc.scene_positions_ms.insert(cur, pos.clamp(0, 3_600_000));
         }
 
         if req.mark_mission_completed == Some(true) {
@@ -465,7 +470,9 @@ pub async fn submit_mission_decision(
         .iter()
         .find(|s| s.scene_id == req.scene_id.trim())
     else {
-        return Err(AppError::BadRequest("Cena não encontrada nesta missão".into()));
+        return Err(AppError::BadRequest(
+            "Cena não encontrada nesta missão".into(),
+        ));
     };
     let Some(interaction) = scene
         .interaction
@@ -779,7 +786,9 @@ pub async fn get_mission_practice_questions(
 pub async fn admin_missions_overview(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Value>, AppError> {
+    let catalog = load_effective_catalog(&state).await?;
     Ok(Json(missions::admin_overview_payload(
+        &catalog,
         &state.config.missions_media_dir,
     )))
 }
@@ -788,11 +797,26 @@ async fn resolve_media_asset_fast(
     state: &AppState,
     clean_id: &str,
 ) -> Result<Option<missions::MediaAssetSpec>, AppError> {
-    if let Some(static_asset) = missions::find_media_asset(clean_id) {
-        return Ok(Some(static_asset.clone()));
-    }
     let catalog = load_effective_catalog(state).await?;
     Ok(catalog.assets.get(clean_id).cloned())
+}
+
+/// Avalia `If-Range` segundo RFC 9110 §13.1.5 (comparação forte de ETag):
+/// rejeita weak ETags (`W/` / `w/`) e valores sem aspas fortes, exigindo igualdade exata.
+pub fn if_range_matches(raw_if_range: &str, strong_etag_quoted: &str) -> bool {
+    let trimmed = raw_if_range.trim();
+    if trimmed.is_empty()
+        || trimmed.starts_with("W/")
+        || trimmed.starts_with("w/")
+        || strong_etag_quoted.starts_with("W/")
+        || strong_etag_quoted.starts_with("w/")
+    {
+        return false;
+    }
+    if !trimmed.starts_with('"') || !trimmed.ends_with('"') || trimmed.len() < 2 {
+        return false;
+    }
+    trimmed == strong_etag_quoted
 }
 
 /// `GET /api/v1/missions/captions/:asset_id`: Legendas sincronizadas WebVTT em português brasileiro.
@@ -832,7 +856,9 @@ pub async fn stream_mission_media(
         .strip_suffix(".mp4")
         .unwrap_or_else(|| raw_asset_id.trim());
     let Some(asset) = resolve_media_asset_fast(&state, clean_id).await? else {
-        return Err(AppError::NotFound("Ativo audiovisual não registrado".into()));
+        return Err(AppError::NotFound(
+            "Ativo audiovisual não registrado".into(),
+        ));
     };
 
     let Some(file_path) = resolve_media_path(&state.config.missions_media_dir, &asset) else {
@@ -887,15 +913,7 @@ pub async fn stream_mission_media(
         .and_then(|v| v.to_str().ok())
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .is_some_and(|raw_ir| {
-            let norm = raw_ir
-                .strip_prefix("W/")
-                .or_else(|| raw_ir.strip_prefix("w/"))
-                .unwrap_or(raw_ir)
-                .trim()
-                .trim_matches('"');
-            !norm.eq_ignore_ascii_case(etag.trim_matches('"'))
-        });
+        .is_some_and(|raw_ir| !if_range_matches(raw_ir, &etag));
     let range_raw = if if_range_mismatch {
         None
     } else {
@@ -976,13 +994,12 @@ mod tests {
     use std::path::PathBuf;
 
     async fn state_with_media_dir(dir: PathBuf) -> Arc<AppState> {
-        let client = Client::with_uri_str("mongodb://127.0.0.1:27099")
-            .await
-            .unwrap();
+        let uri = "mongodb://127.0.0.1:27099/?serverSelectionTimeoutMS=20&connectTimeoutMS=20";
+        let client = Client::with_uri_str(uri).await.unwrap();
         let cfg = AppConfig {
             bind_ip: IpAddr::V4(Ipv4Addr::LOCALHOST),
             port: 0,
-            mongodb_uri: "mongodb://127.0.0.1:27099".into(),
+            mongodb_uri: uri.into(),
             mongodb_db: "synthetic".into(),
             public_origin: "https://cogniva.local".into(),
             admin_emails: HashSet::new(),
@@ -1073,6 +1090,64 @@ mod tests {
         .unwrap_err();
         let missing_resp = missing_err.into_response();
         assert_eq!(missing_resp.status(), StatusCode::NOT_FOUND);
+        let missing_bytes = axum::body::to_bytes(missing_resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let missing_json: Value = serde_json::from_slice(&missing_bytes).unwrap();
+        assert_eq!(missing_json["code"], "MEDIA_ASSET_UNAVAILABLE");
+
+        // 4b. RFC 9110 §13.1.5 If-Range: strong match -> 206; mismatch -> 200 full; weak ETag W/ -> 200 full
+        let mut strong_ir_headers = HeaderMap::new();
+        strong_ir_headers.insert(header::RANGE, "bytes=100-299".parse().unwrap());
+        strong_ir_headers.insert(header::IF_RANGE, etag.parse().unwrap());
+        let resp_ir_strong = stream_mission_media(
+            State(state.clone()),
+            strong_ir_headers,
+            Path("asset-bcb-m01-v01-alerta".into()),
+        )
+        .await
+        .unwrap();
+        assert_eq!(resp_ir_strong.status(), StatusCode::PARTIAL_CONTENT);
+        let ir_strong_bytes = axum::body::to_bytes(resp_ir_strong.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(&ir_strong_bytes[..], &payload[100..300]);
+
+        let mut mismatch_ir_headers = HeaderMap::new();
+        mismatch_ir_headers.insert(header::RANGE, "bytes=100-299".parse().unwrap());
+        mismatch_ir_headers.insert(header::IF_RANGE, "\"stale-etag\"".parse().unwrap());
+        let resp_ir_mismatch = stream_mission_media(
+            State(state.clone()),
+            mismatch_ir_headers,
+            Path("asset-bcb-m01-v01-alerta".into()),
+        )
+        .await
+        .unwrap();
+        assert_eq!(resp_ir_mismatch.status(), StatusCode::OK);
+        let ir_mismatch_bytes = axum::body::to_bytes(resp_ir_mismatch.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(ir_mismatch_bytes.len(), payload.len());
+
+        let mut weak_ir_headers = HeaderMap::new();
+        weak_ir_headers.insert(header::RANGE, "bytes=100-299".parse().unwrap());
+        weak_ir_headers.insert(header::IF_RANGE, format!("W/{etag}").parse().unwrap());
+        let resp_ir_weak = stream_mission_media(
+            State(state.clone()),
+            weak_ir_headers,
+            Path("asset-bcb-m01-v01-alerta".into()),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            resp_ir_weak.status(),
+            StatusCode::OK,
+            "RFC 9110 §13.1.5 requires weak ETag in If-Range to fall back to 200 full representation"
+        );
+        let ir_weak_bytes = axum::body::to_bytes(resp_ir_weak.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(ir_weak_bytes.len(), payload.len());
 
         // 5. Captions WebVTT endpoint serves all 5 assets cleanly
         for asset_id in [

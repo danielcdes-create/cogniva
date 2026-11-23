@@ -1,6 +1,6 @@
 # Contratos e Schema de Questões V2 (Cogniva 2.3 — Compatível `schema_version = 2`)
 
-No **Cogniva `2.4.1`** (`NT-COGNIVA-QUESTIONS-002` + Ficha Editorial Rastreável & Grafo de Conceitos), 100% do acervo em `cogniva.todasQuestoes` preserva `schema_version = 2` com endurecimento completo de proveniência autenticada, separação entre identidade semântica e política de correção, vínculo opcional a conceitos (`concept_id`), desafio de evidência pós-resposta (`evidence_challenge`), **Ficha Editorial Rastreável (`editorial_card`)**, idempotência transacional, elegibilidade centralizada e validação estrita de `ObjectId` e inteiros.
+No **Cogniva `2.4.2`** (`NT-COGNIVA-QUESTIONS-002` + Ficha Editorial Rastreável & Grafo de Conceitos), 100% do acervo em `cogniva.todasQuestoes` preserva `schema_version = 2` com endurecimento completo de proveniência autenticada, separação entre identidade semântica e política de correção, vínculo opcional a conceitos (`concept_id`), desafio de evidência pós-resposta (`evidence_challenge`), **Ficha Editorial Rastreável (`editorial_card`)**, idempotência transacional, elegibilidade centralizada e validação estrita de `ObjectId` e inteiros.
 
 Os contratos formais residem em:
 - Schema JSON canônico: [`shared/schemas/question-contracts.schema.json`](../shared/schemas/question-contracts.schema.json)
@@ -153,7 +153,7 @@ A rotina [`scripts/migrate_questions_v2_1.py`](../scripts/migrate_questions_v2_1
    ```
    Atualiza apenas campos derivados V2.1 ausentes (sem apagar campos ou eventos históricos). Reexecutar `--apply` converge com `0` mutações adicionais.
 3. **Atualização do Validador MongoDB:**
-   Ao iniciar o backend Rust (`question_storage::prepare`), a migração `question-v2-validator-2.1.0` (`validator_revision = 4`) verifica `count_documents({ "$nor": [target_validator] }) == 0` e promove `collMod` (`strict` / `error`) com recibo auditável em `cogniva_schema_versions`.
+   Ao iniciar o backend Rust (`question_storage::prepare`), a migração `question-v2-validator-2.3.0` (`validator_revision = 6`) verifica `count_documents({ "$nor": [target_validator] }) == 0` e promove `collMod` (`strict` / `error`) com recibo auditável em `cogniva_schema_versions`.
 
 ---
 

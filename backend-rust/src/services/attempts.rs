@@ -29,7 +29,8 @@ pub fn next_error_notebook(
 }
 
 fn payload_hash(item: &AnswerAttemptItem) -> String {
-    let mut core=item.clone();core.exam_component_id=None;
+    let mut core = item.clone();
+    core.exam_component_id = None;
     let mut payload = serde_json::to_value(core).expect("serializable attempt");
     // This hint is never trusted as a result, nor part of the event's authoritative meaning.
     payload.as_object_mut().unwrap().remove("is_correct");
@@ -71,6 +72,30 @@ fn receipt(
     Ok(None)
 }
 
+pub(crate) fn validate_selected_evidence_id(
+    evidence_id: &str,
+    question: &QuestionDocument,
+) -> Result<String, AppError> {
+    let trimmed = evidence_id.trim();
+    if trimmed.is_empty() || trimmed.len() > 100 {
+        return Err(AppError::BadRequest(
+            "Identificador de evidência fora dos limites".into(),
+        ));
+    }
+    if let Some(challenge) = question.effective_evidence_challenge() {
+        if !challenge
+            .options
+            .iter()
+            .any(|opt| opt.evidence_id == trimmed)
+        {
+            return Err(AppError::BadRequest(
+                "Identificador de evidência não pertence às opções desta questão".into(),
+            ));
+        }
+    }
+    Ok(trimmed.to_string())
+}
+
 fn validate(
     item: &AnswerAttemptItem,
     question: &QuestionDocument,
@@ -93,8 +118,8 @@ fn validate(
             "Alternativa não corresponde à versão da questão".into(),
         ));
     }
-    if item.selected_evidence_id.as_ref().is_some_and(|s| s.len() > 100) {
-        return Err(AppError::BadRequest("Identificador de evidência fora dos limites".into()));
+    if let Some(raw_ev) = item.selected_evidence_id.as_deref() {
+        validate_selected_evidence_id(raw_ev, question)?;
     }
     // Submitted taxonomy is historical client context, never authority. A
     // review may change it while the exact same content is queued offline.
@@ -159,8 +184,7 @@ fn project(
     at: DateTime<Utc>,
 ) -> Result<(Document, Document, ProcessedAttemptResult), AppError> {
     let correct = !item.is_blank && question.answer_indices()?.contains(&item.chosen_index);
-    let prior_had_history =
-        !activity.past_sessions.is_empty() || activity.quantidade_praticas > 0;
+    let prior_had_history = !activity.past_sessions.is_empty() || activity.quantidade_praticas > 0;
     let prior_ultima_sessao = prior_had_history.then_some(activity.datas.ultima_sessao);
 
     let mut event = PastSessionEntry {
@@ -191,7 +215,10 @@ fn project(
         is_revision: false,
         is_blank: item.is_blank,
         confidence_explicit: item.confidence_explicit,
-        selected_evidence_id: item.selected_evidence_id.clone(),
+        selected_evidence_id: item
+            .selected_evidence_id
+            .as_deref()
+            .map(|s| s.trim().to_string()),
         position_in_session: item.position_in_session,
         elapsed_session_seconds: item.elapsed_session_seconds,
         session_interrupted: item.session_interrupted,
@@ -203,10 +230,13 @@ fn project(
         .sort_by_key(|s| (s.data, s.attempt_id.clone(), s.session_uuid.clone()));
 
     if !item.is_blank {
-        activity.quantidade_praticas = activity
-            .quantidade_praticas
-            .saturating_add(1)
-            .max(activity.past_sessions.iter().filter(|s| !s.is_blank).count() as i32);
+        activity.quantidade_praticas = activity.quantidade_praticas.saturating_add(1).max(
+            activity
+                .past_sessions
+                .iter()
+                .filter(|s| !s.is_blank)
+                .count() as i32,
+        );
         if correct {
             activity.quantidade_acertos += 1;
         } else {
@@ -254,7 +284,7 @@ fn project(
     };
     let mut final_streak = calculate_streak_and_points(&[]);
     let mut final_score = 0.0;
-    let mut final_interval = 1;
+    let mut final_interval = 0;
     let mut running_stability = 0.0f64;
     let mut running_difficulty = 5.0f64;
 
@@ -409,8 +439,11 @@ fn project(
         last_answered.is_some_and(|la| !la.status && la.nivel_confianca >= 2);
     activity.in_error_notebook = replay_notebook;
     activity.var_alternativa_escolhida = calculate_alternative_variation(&answered_sessions);
-    activity.frequencia_estudo_mes =
-        calculate_monthly_study_frequency(&activity.past_sessions, Utc::now());
+    activity.frequencia_estudo_mes = if answered_sessions.is_empty() {
+        0.0
+    } else {
+        calculate_monthly_study_frequency(&answered_sessions, Utc::now())
+    };
     activity.canonical_subject_id = question
         .canonical_subject_id
         .clone()
@@ -424,6 +457,12 @@ fn project(
             activity.user_note = Some(note.clone());
         }
     }
+
+    let next_review_interval_days = if item.is_blank && answered_sessions.is_empty() {
+        0
+    } else {
+        activity.spaced_repetition_interval
+    };
 
     let ack = ProcessedAttemptResult {
         confidence_avg: activity.nivel_confianca_med_rec,
@@ -439,10 +478,11 @@ fn project(
         points_total: activity.points,
         points_with_decay: activity.points_with_decay,
         is_mastered: activity.dominada,
-        next_review_interval_days: final_interval,
+        next_review_interval_days,
         accuracy_accumulated_pct: activity.percentual_acertos,
         in_error_notebook: activity.in_error_notebook,
-        next_review_at: (monotonic_ultima + Duration::days(final_interval as i64)).to_rfc3339(),
+        next_review_at: (monotonic_ultima + Duration::days(next_review_interval_days as i64))
+            .to_rfc3339(),
         canonical_subject_id: activity.canonical_subject_id.clone(),
         canonical_topic_id: activity.canonical_topic_id.clone(),
     };
@@ -468,9 +508,15 @@ fn project(
         bson::to_document(&event).map_err(|_| AppError::Internal("Evento inválido".into()))?;
     event.insert("attempt_id", &item.attempt_id);
     event.insert("question_revision", &item.question_revision);
-    event.insert("submitted_canonical_subject_id",item.canonical_subject_id.clone());
-    event.insert("submitted_canonical_topic_id",item.canonical_topic_id.clone());
-    event.insert("exam_component_id",item.exam_component_id.clone());
+    event.insert(
+        "submitted_canonical_subject_id",
+        item.canonical_subject_id.clone(),
+    );
+    event.insert(
+        "submitted_canonical_topic_id",
+        item.canonical_topic_id.clone(),
+    );
+    event.insert("exam_component_id", item.exam_component_id.clone());
     event.insert("payload_sha256", payload_hash(item));
     event.insert("received_at", bson::DateTime::now());
     event.insert("ack", bson::to_document(&ack).unwrap());
@@ -656,19 +702,8 @@ pub async fn attach_evidence(
         .find_one(doc! { "_id": qid })
         .await?
     {
-        if let Ok(q_doc) = bson::from_document::<QuestionDocument>(raw_q) {
-            if let Some(challenge) = q_doc.effective_evidence_challenge() {
-                if !challenge
-                    .options
-                    .iter()
-                    .any(|opt| opt.evidence_id == trimmed)
-                {
-                    return Err(AppError::BadRequest(
-                        "Identificador de evidência não pertence às opções desta questão".into(),
-                    ));
-                }
-            }
-        }
+        let q_doc = crate::services::question_compatibility::decode(raw_q)?;
+        validate_selected_evidence_id(trimmed, &q_doc)?;
     }
     let activities = state.db.collection_with_options::<Document>(
         "userActivityLog",
@@ -705,7 +740,7 @@ mod tests {
     fn fixture_legacy_answer_is_authoritative_and_event_is_append_only() {
         let q:QuestionDocument=bson::from_document(doc!{"_id":ObjectId::new(),"question":"Q","answers":["A","B"],"correct_answers":["B"],"disciplina":"D"}).unwrap();
         let item = AnswerAttemptItem {
-            exam_component_id:None,
+            exam_component_id: None,
             attempt_id: uuid::Uuid::new_v4().to_string(),
             occurred_at: Utc::now().to_rfc3339(),
             client_answered_at: None,
@@ -732,8 +767,9 @@ mod tests {
         };
         let (fields, event, ack) =
             project(empty(123, &q, Utc::now()), &q, &item, Utc::now()).unwrap();
-        let mut contextual=item.clone();contextual.exam_component_id=Some("second-stage".into());
-        assert_eq!(payload_hash(&item),payload_hash(&contextual));
+        let mut contextual = item.clone();
+        contextual.exam_component_id = Some("second-stage".into());
+        assert_eq!(payload_hash(&item), payload_hash(&contextual));
         assert!(!ack.is_correct);
         assert!(!fields.contains_key("pastSessions"));
         assert!(!fields.contains_key("datas"));
@@ -881,13 +917,15 @@ mod tests {
                 None => empty(42, &q, at),
             };
             let (fields, event, _) = project(act, &q, item, at).unwrap();
-            let mut doc_state = existing.unwrap_or_else(|| doc! {
-                "_id": ObjectId::new(),
-                "user_id": 42_i64,
-                "question_id": q.id,
-                "datas": {},
-                "tempos": {},
-                "pastSessions": []
+            let mut doc_state = existing.unwrap_or_else(|| {
+                doc! {
+                    "_id": ObjectId::new(),
+                    "user_id": 42_i64,
+                    "question_id": q.id,
+                    "datas": {},
+                    "tempos": {},
+                    "pastSessions": []
+                }
             });
             for (k, v) in fields {
                 if let Some((parent, child)) = k.split_once('.') {
@@ -996,15 +1034,20 @@ mod tests {
             elapsed_session_seconds: Some(120),
             session_interrupted: false,
         };
-        let (fields_b, event_b, ack_b) =
-            project(empty(99, &q, now - Duration::days(10)), &q, &blank_only, now - Duration::days(10))
-                .unwrap();
+        let (fields_b, event_b, ack_b) = project(
+            empty(99, &q, now - Duration::days(10)),
+            &q,
+            &blank_only,
+            now - Duration::days(10),
+        )
+        .unwrap();
         assert!(!ack_b.high_confidence_error_alert);
         assert_eq!(ack_b.attempts_total, 0);
         assert_eq!(ack_b.confidence_avg, None);
+        assert_eq!(ack_b.next_review_interval_days, 0);
         assert!(!fields_b.get_bool("revisao_necessaria").unwrap());
 
-        let mut raw_doc = doc! {
+        let raw_doc = doc! {
             "_id": ObjectId::new(),
             "user_id": 99_i64,
             "question_id": q.id,
@@ -1017,7 +1060,7 @@ mod tests {
             "pastSessions": [event_b],
             "quantidade_praticas": 0,
         };
-        let act_b: UserActivityDocument = bson::from_document(raw_doc.clone()).unwrap();
+        let act_b: UserActivityDocument = bson::from_document(raw_doc).unwrap();
         assert!(!act_b.review_due(now));
 
         // Now answer with confidence 3 and 30s -> average confidence is 3 (not diluted by blank's 0)
@@ -1036,6 +1079,78 @@ mod tests {
         let (fields_a, _, ack_a) = project(act_b, &q, &answered, now).unwrap();
         assert_eq!(ack_a.confidence_avg, Some(3));
         assert!((fields_a.get_f64("tempos.tempo_medio_resposta").unwrap() - 30.0).abs() < 1e-6);
-        raw_doc.insert("dominada", false);
+    }
+
+    #[test]
+    fn selected_evidence_id_validation_rejects_unknown_option_and_accepts_valid_option_in_batch() {
+        let q_with_ev: QuestionDocument = bson::from_document(doc! {
+            "_id": ObjectId::new(),
+            "question": "A elevação da Selic reduz o PU da LTN.",
+            "answers": ["Certo", "Errado"],
+            "correct_answers": ["Certo"],
+            "disciplina": "Finanças",
+            "evidence_challenge": {
+                "prompt": "Qual relação fundamenta o item?",
+                "options": [
+                    { "evidence_id": "ev_correta", "text": "Relação inversa entre taxa de desconto e valor presente." },
+                    { "evidence_id": "ev_distrator", "text": "Indexação pós-fixada diária." }
+                ],
+                "correct_evidence_id": "ev_correta"
+            }
+        })
+        .unwrap();
+        let q_without_ev: QuestionDocument = bson::from_document(doc! {
+            "_id": ObjectId::new(),
+            "question": "Questão sem desafio de evidência.",
+            "answers": ["Certo", "Errado"],
+            "correct_answers": ["Certo"],
+            "disciplina": "Finanças"
+        })
+        .unwrap();
+
+        let make_attempt = |q: &QuestionDocument, ev: Option<&str>| AnswerAttemptItem {
+            exam_component_id: None,
+            attempt_id: uuid::Uuid::new_v4().to_string(),
+            occurred_at: Utc::now().to_rfc3339(),
+            client_answered_at: None,
+            question_revision: q.revision().unwrap(),
+            question_id: q.id.to_hex(),
+            chosen_index: 0,
+            chosen_text: "Certo".into(),
+            is_correct: true,
+            time_spent_seconds: 15,
+            confidence_level: 3,
+            session_uuid: "sess-ev".into(),
+            quiz_mode: "STANDARD".into(),
+            exam_block: None,
+            contest_id: None,
+            user_note: None,
+            canonical_subject_id: None,
+            canonical_topic_id: None,
+            is_blank: false,
+            confidence_explicit: true,
+            selected_evidence_id: ev.map(str::to_string),
+            position_in_session: None,
+            elapsed_session_seconds: None,
+            session_interrupted: false,
+        };
+
+        // Valid evidence_id accepted in batch validate
+        assert!(validate(&make_attempt(&q_with_ev, Some("ev_correta")), &q_with_ev).is_ok());
+        assert!(validate(&make_attempt(&q_with_ev, None), &q_with_ev).is_ok());
+
+        // Invalid evidence_id rejected in batch validate
+        assert!(validate(
+            &make_attempt(&q_with_ev, Some("ev_inexistente")),
+            &q_with_ev
+        )
+        .is_err());
+
+        // Non-empty evidence_id rejected when question has no evidence_challenge
+        assert!(validate(
+            &make_attempt(&q_without_ev, Some("ev_qualquer")),
+            &q_without_ev
+        )
+        .is_err());
     }
 }

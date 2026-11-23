@@ -61,7 +61,7 @@ def build_v2_question_from_simplified(
 
     if item.get("schema_version") == 2:
         doc = copy.deepcopy(item)
-        doc["content_revision"] = qc.content_revision(doc)
+        qc.populate_v2_1_hashes(doc)
         qc.validate_question(doc, catalog)
         return doc
 
@@ -167,6 +167,9 @@ def build_v2_question_from_simplified(
         canonical_topic_id = None
 
     confirm_origin = bool(item.get("confirm_origin"))
+    source_reference = item.get("source_reference")
+    if confirm_origin and not source_reference:
+        raise ValueError("confirm_origin=True requires a non-null source_reference")
     verification = "CONFIRMED" if (origin_kind == "AUTHOR_CREATED" or confirm_origin) else "PENDING"
 
     origins = [
@@ -179,7 +182,7 @@ def build_v2_question_from_simplified(
             "organizer": item.get("organizer"),
             "exam_year": item.get("exam_year"),
             "question_number": item.get("question_number"),
-            "source_reference": item.get("source_reference"),
+            "source_reference": source_reference,
             "provenance": copy.deepcopy(provenance),
         }
     ]
@@ -236,8 +239,19 @@ def build_v2_question_from_simplified(
     if concursos_override is not None:
         doc["concursos"] = concursos_override
 
+    qc.populate_v2_1_hashes(doc)
     qc.validate_question(doc, catalog)
     return doc
+
+
+def resolve_batch_files(batch_dir: Path) -> list[Path]:
+    """Validate that `batch_dir` exists and contains at least one `.json` batch file."""
+    if not batch_dir.is_dir():
+        raise FileNotFoundError(f"Diretório de lotes não encontrado: {batch_dir}")
+    batch_files = sorted(batch_dir.glob("*.json"))
+    if not batch_files:
+        raise ValueError(f"Nenhum arquivo JSON de lote encontrado em: {batch_dir}")
+    return batch_files
 
 
 def load_batch_files(batch_paths: list[Path]) -> list[tuple[str, int, dict]]:
@@ -385,6 +399,8 @@ def inspect_and_import_mongo(
     dry_run: bool = True,
     file_classification_map: dict[str, dict] | None = None,
 ) -> dict:
+    batch_files = resolve_batch_files(batch_dir)
+
     from bson import Int64, ObjectId, json_util
     from pymongo import MongoClient
 
@@ -496,11 +512,6 @@ def inspect_and_import_mongo(
                             }
                         )
 
-        if not batch_dir.is_dir():
-            raise FileNotFoundError(f"Diretório de lotes não encontrado: {batch_dir}")
-        batch_files = sorted(batch_dir.glob("*.json"))
-        if not batch_files:
-            raise ValueError(f"Nenhum arquivo JSON de lote encontrado em: {batch_dir}")
         records = load_batch_files(batch_files)
         now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -617,23 +628,23 @@ def inspect_and_import_mongo(
         client.close()
 
 
-def main():
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mongo-uri", default=os.environ.get("MONGODB_URI", ""))
     parser.add_argument("--target-db", default=os.environ.get("MONGODB_DB_NAME") or "cogniva")
     parser.add_argument("--batch-dir", type=Path, required=True)
     parser.add_argument("--apply", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if not args.mongo_uri:
         # Offline validation + deduplication mode
         catalog = kc.read(ROOT / "shared/knowledge-catalog.json")
-        batch_files = sorted(args.batch_dir.glob("*.json"))
+        batch_files = resolve_batch_files(args.batch_dir)
         records = load_batch_files(batch_files)
         _, report = deduplicate_and_prepare(records, catalog, existing_docs=[])
         report["dry_run"] = True
         print(json.dumps(report, ensure_ascii=False, indent=2))
-        return
+        return 0
 
     report = inspect_and_import_mongo(
         mongo_uri=args.mongo_uri,
@@ -642,7 +653,8 @@ def main():
         dry_run=not args.apply,
     )
     print(json.dumps(report, ensure_ascii=False, indent=2))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

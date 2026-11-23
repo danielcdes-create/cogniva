@@ -94,8 +94,7 @@ pub fn project(activity: &Document, question: &Document) -> Option<Evidence> {
         .into_iter()
         .rev()
         .collect();
-    let confidence =
-        (recent.iter().sum::<i32>() as f64 / recent.len() as f64 + 0.5).floor() as i32;
+    let confidence = (recent.iter().sum::<i32>() as f64 / recent.len() as f64 + 0.5).floor() as i32;
     let recorded_practices = activity.get_i32("quantidade_praticas").unwrap_or(0) as usize;
     let last = events.last()?;
     Some(Evidence {
@@ -144,7 +143,10 @@ pub struct UnitQuestionObservation {
     pub had_prior_verified_correct: bool,
     pub has_spaced_retention: bool,
     pub evidence_challenge_passed: Option<bool>,
+    pub first_answered_ms: i64,
     pub last_answered_ms: i64,
+    pub first_verified_correct_ms: Option<i64>,
+    pub last_verified_correct_ms: Option<i64>,
     pub avg_seconds: f64,
 }
 
@@ -188,6 +190,24 @@ pub fn project_units(activity: &Document, question: &Document) -> Vec<UnitQuesti
         return Vec::new();
     }
 
+    let effective_ch = q.effective_evidence_challenge();
+    let is_verified_correct_event = |e: &&Document| -> bool {
+        if e.get_bool("status").ok() != Some(true) || e.get_i32("nivel_confianca").unwrap_or(0) < 2
+        {
+            return false;
+        }
+        match (
+            e.get_str("selected_evidence_id")
+                .ok()
+                .map(str::trim)
+                .filter(|s| !s.is_empty()),
+            effective_ch.as_ref(),
+        ) {
+            (Some(sel), Some(ch)) => sel == ch.correct_evidence_id,
+            _ => true,
+        }
+    };
+
     let correct_attempts = events
         .iter()
         .filter(|e| e.get_bool("status").ok() == Some(true))
@@ -203,23 +223,29 @@ pub fn project_units(activity: &Document, question: &Document) -> Vec<UnitQuesti
         .get_datetime("data")
         .map(|t| t.timestamp_millis())
         .unwrap_or(last_answered_ms);
+    let verified_correct_timestamps: Vec<i64> = events
+        .iter()
+        .filter(|e| is_verified_correct_event(e))
+        .map(|e| {
+            e.get_datetime("data")
+                .map(|t| t.timestamp_millis())
+                .unwrap_or(last_answered_ms)
+        })
+        .collect();
+    let first_verified_correct_ms = verified_correct_timestamps.first().copied();
+    let last_verified_correct_ms = verified_correct_timestamps.last().copied();
     let had_prior_verified_correct = events[..events.len().saturating_sub(1)]
         .iter()
-        .any(|e| e.get_bool("status").ok() == Some(true) && e.get_i32("nivel_confianca").unwrap_or(0) >= 2);
-    let has_spaced_retention = events.iter().any(|e| {
-        e.get_bool("status").ok() == Some(true)
-            && e.get_i32("nivel_confianca").unwrap_or(0) >= 2
-            && e.get_datetime("data")
-                .map(|t| t.timestamp_millis() - first_ms >= 86_400_000)
-                .unwrap_or(false)
-    });
+        .any(is_verified_correct_event);
+    let has_spaced_retention = verified_correct_timestamps
+        .iter()
+        .any(|&ts| ts - first_ms >= 86_400_000);
     let total_secs: i64 = events
         .iter()
         .map(|e| e.get_i32("tempo_gasto_segundos").unwrap_or(45).max(1) as i64)
         .sum();
     let avg_seconds = (total_secs as f64) / (events.len() as f64);
 
-    let effective_ch = q.effective_evidence_challenge();
     let evidence_challenge_passed = match (
         last.get_str("selected_evidence_id").ok(),
         effective_ch.as_ref(),
@@ -247,7 +273,8 @@ pub fn project_units(activity: &Document, question: &Document) -> Vec<UnitQuesti
         if matches!(cls.get_str("state").ok(), Some("CONFIRMED" | "PARTIAL")) {
             if let Ok(links) = cls.get_array("links") {
                 for l in links.iter().filter_map(|v| v.as_document()) {
-                    let (Ok(subj), Ok(top)) = (l.get_str("subject_id"), l.get_str("topic_id")) else {
+                    let (Ok(subj), Ok(top)) = (l.get_str("subject_id"), l.get_str("topic_id"))
+                    else {
                         continue;
                     };
                     if !super::question_contracts::known_topic(subj, top) {
@@ -291,7 +318,10 @@ pub fn project_units(activity: &Document, question: &Document) -> Vec<UnitQuesti
                 had_prior_verified_correct,
                 has_spaced_retention,
                 evidence_challenge_passed,
+                first_answered_ms: first_ms,
                 last_answered_ms,
+                first_verified_correct_ms,
+                last_verified_correct_ms,
                 avg_seconds,
             }
         })
@@ -490,5 +520,72 @@ mod tests {
         assert!(evidence.mastered);
         q.insert("question", "Edited content");
         assert!(project(&row, &q).is_none());
+    }
+
+    #[test]
+    fn project_units_records_verified_correct_timestamps_and_ignores_blank_omissions() {
+        let value: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../shared/examples/question-contracts/question-multiple-choice.json"
+        ))
+        .unwrap();
+        let q = bson::Bson::try_from(value)
+            .unwrap()
+            .as_document()
+            .unwrap()
+            .clone();
+        let revision = question_compatibility::decode(q.clone())
+            .unwrap()
+            .revision()
+            .unwrap();
+
+        let blank_only_row = doc! {
+            "pastSessions": [
+                {
+                    "attempt_id": "blank-1",
+                    "question_revision": &revision,
+                    "status": false,
+                    "is_blank": true,
+                    "nivel_confianca": 0,
+                    "data": bson::DateTime::from_millis(1_000_000)
+                }
+            ]
+        };
+        assert!(project_units(&blank_only_row, &q).is_empty());
+
+        let mixed_row = doc! {
+            "pastSessions": [
+                {
+                    "attempt_id": "blank-0",
+                    "question_revision": &revision,
+                    "status": false,
+                    "is_blank": true,
+                    "nivel_confianca": 0,
+                    "data": bson::DateTime::from_millis(500_000)
+                },
+                {
+                    "attempt_id": "ans-1",
+                    "question_revision": &revision,
+                    "status": true,
+                    "is_blank": false,
+                    "nivel_confianca": 2,
+                    "data": bson::DateTime::from_millis(1_000_000)
+                },
+                {
+                    "attempt_id": "ans-2",
+                    "question_revision": &revision,
+                    "status": true,
+                    "is_blank": false,
+                    "nivel_confianca": 3,
+                    "data": bson::DateTime::from_millis(90_000_000)
+                }
+            ]
+        };
+        let obs = project_units(&mixed_row, &q);
+        assert_eq!(obs.len(), 1);
+        assert_eq!(obs[0].non_blank_attempts, 2);
+        assert_eq!(obs[0].first_answered_ms, 1_000_000);
+        assert_eq!(obs[0].first_verified_correct_ms, Some(1_000_000));
+        assert_eq!(obs[0].last_verified_correct_ms, Some(90_000_000));
+        assert!(obs[0].has_spaced_retention);
     }
 }

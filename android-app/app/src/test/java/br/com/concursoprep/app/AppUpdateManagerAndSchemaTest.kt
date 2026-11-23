@@ -1,8 +1,14 @@
 package br.com.concursoprep.app
 
 import br.com.concursoprep.app.data.local.ExamMigrations
+import br.com.concursoprep.app.data.update.ApkInstallStatusReceiver
 import br.com.concursoprep.app.data.update.AppUpdateManager
 import br.com.concursoprep.app.domain.model.ApkInfoDto
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
@@ -216,6 +222,108 @@ class AppUpdateManagerAndSchemaTest {
                 AppUpdateManager.resolveDownloadUrl("https://198.199.65.103/api/v1", "/api/v1/../../etc/passwd")
             }.isFailure
         )
+        // Blocks percent-encoded traversal (%2e, %2f, %5c case-insensitive), fragments (#), userInfo with password, custom base/target ports, and non-/api/ paths
+        listOf(
+            "/api/v1/%2e%2e/%2e%2e/etc/passwd",
+            "/api/v1/%2E%2E/secret",
+            "/api/v1/apk%2f..%2fsecret",
+            "/api/v1/apk%2Fdownload",
+            "/api/v1/apk%5cdownload",
+            "/api/v1/apk%5Cdownload",
+            "/api/v1/apk/download#fragment",
+            "https://198.199.65.103/api/v1/apk/download#evil",
+            "https://user:pass@198.199.65.103/api/v1/apk/download",
+            "https://198.199.65.103:9443/api/v1/apk/download",
+            "https://198.199.65.103/public/cogniva.apk"
+        ).forEach { maliciousPath ->
+            assertTrue(
+                "Expected rejection for downloadPath '$maliciousPath'",
+                runCatching {
+                    AppUpdateManager.resolveDownloadUrl("https://198.199.65.103/api/v1", maliciousPath)
+                }.isFailure
+            )
+        }
+        assertTrue(
+            runCatching {
+                AppUpdateManager.resolveDownloadUrl("https://user@198.199.65.103/api/v1", "/api/v1/apk/download")
+            }.isFailure
+        )
+        assertTrue(
+            runCatching {
+                AppUpdateManager.resolveDownloadUrl("https://198.199.65.103/api/v1#frag", "/api/v1/apk/download")
+            }.isFailure
+        )
+    }
+
+    @Test
+    fun uiCollectorLifecycleControlsApkInstallStatusReceiverConfirmationRouting() = runBlocking {
+        AppUpdateManager.resetUiCollectorsForTest()
+        val receivedEvents = java.util.Collections.synchronizedList(
+            mutableListOf<AppUpdateManager.InstallSessionEvent>()
+        )
+        // Simulate MainViewModel background collector on statusEvents (always subscribed while VM lives)
+        val collectorJob = CoroutineScope(Dispatchers.Unconfined).launch(start = CoroutineStart.UNDISPATCHED) {
+            AppUpdateManager.statusEvents.collect { receivedEvents.add(it) }
+        }
+        try {
+            // 1. ViewModel is subscribed, but MainActivity is STOPPED/rotating (no UI collector started):
+            //    hasActiveUiCollectors() MUST be false, and receiver MUST launch confirmIntent directly!
+            assertFalse(AppUpdateManager.hasActiveUiCollectors())
+            val dummyConfirmIntent = android.content.Intent()
+            var directStartCount = 0
+            ApkInstallStatusReceiver.handleInstallStatus(
+                status = android.content.pm.PackageInstaller.STATUS_PENDING_USER_ACTION,
+                confirmIntent = dummyConfirmIntent,
+                statusMessage = null,
+                startConfirmActivity = { directStartCount++ }
+            )
+            assertEquals(1, directStartCount)
+            assertTrue(receivedEvents.none { it is AppUpdateManager.InstallSessionEvent.PendingUserConfirmation })
+
+            // 2. MainActivity enters STARTED -> onUiCollectorStarted():
+            //    hasActiveUiCollectors() becomes true, and receiver routes PendingUserConfirmation to UI without duplicate direct start!
+            AppUpdateManager.onUiCollectorStarted()
+            assertTrue(AppUpdateManager.hasActiveUiCollectors())
+            ApkInstallStatusReceiver.handleInstallStatus(
+                status = android.content.pm.PackageInstaller.STATUS_PENDING_USER_ACTION,
+                confirmIntent = dummyConfirmIntent,
+                statusMessage = null,
+                startConfirmActivity = { directStartCount++ }
+            )
+            assertEquals(1, directStartCount)
+            assertEquals(1, receivedEvents.count { it is AppUpdateManager.InstallSessionEvent.PendingUserConfirmation })
+
+            // 3. MainActivity stops again (ON_STOP) -> onUiCollectorStopped():
+            //    hasActiveUiCollectors() immediately returns false, restoring direct fallback!
+            AppUpdateManager.onUiCollectorStopped()
+            assertFalse(AppUpdateManager.hasActiveUiCollectors())
+            ApkInstallStatusReceiver.handleInstallStatus(
+                status = android.content.pm.PackageInstaller.STATUS_PENDING_USER_ACTION,
+                confirmIntent = dummyConfirmIntent,
+                statusMessage = null,
+                startConfirmActivity = { directStartCount++ }
+            )
+            assertEquals(2, directStartCount)
+
+            // 4. STATUS_SUCCESS and STATUS_FAILURE emit status events cleanly
+            ApkInstallStatusReceiver.handleInstallStatus(
+                status = android.content.pm.PackageInstaller.STATUS_SUCCESS,
+                confirmIntent = null,
+                statusMessage = null,
+                startConfirmActivity = {}
+            )
+            ApkInstallStatusReceiver.handleInstallStatus(
+                status = android.content.pm.PackageInstaller.STATUS_FAILURE_ABORTED,
+                confirmIntent = null,
+                statusMessage = "Usuário cancelou",
+                startConfirmActivity = {}
+            )
+            assertTrue(receivedEvents.any { it is AppUpdateManager.InstallSessionEvent.Succeeded })
+            assertTrue(receivedEvents.any { it is AppUpdateManager.InstallSessionEvent.Failed && it.message.contains("Usuário cancelou") })
+        } finally {
+            collectorJob.cancel()
+            AppUpdateManager.resetUiCollectorsForTest()
+        }
     }
 
     @Test

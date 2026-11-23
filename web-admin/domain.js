@@ -24,6 +24,45 @@ export function matchesSearch(text, query) {
   return terms.every(term => haystack.includes(term));
 }
 
+const ALLOWED_CRITERION_KEYS = new Set(['criterion_id', 'description', 'max_points', 'essential']);
+
+function validateRubricCriteria(criteria, expectedMaxScore) {
+  if (!Array.isArray(criteria) || criteria.length === 0 || criteria.length > 30) {
+    throw new Error('JSON inválido na rubrica: rubric.criteria deve conter de 1 a 30 critérios.');
+  }
+  let totalPoints = 0;
+  for (const c of criteria) {
+    if (!c || typeof c !== 'object' || Array.isArray(c)) {
+      throw new Error('JSON inválido na rubrica: cada critério deve ser um objeto JSON.');
+    }
+    const unknownKey = Object.keys(c).find(k => !ALLOWED_CRITERION_KEYS.has(k));
+    if (unknownKey) {
+      throw new Error(`JSON inválido na rubrica: chave desconhecida no critério (${unknownKey}).`);
+    }
+    if (
+      typeof c.criterion_id !== 'string' ||
+      !c.criterion_id.trim() ||
+      c.criterion_id.length > 300 ||
+      typeof c.description !== 'string' ||
+      !c.description.trim() ||
+      c.description.length > 20000 ||
+      typeof c.max_points !== 'number' ||
+      !Number.isFinite(c.max_points) ||
+      c.max_points <= 0 ||
+      c.max_points > 100
+    ) {
+      throw new Error('JSON inválido na rubrica: cada critério exige criterion_id, description e max_points positivo.');
+    }
+    if (typeof c.essential !== 'boolean') {
+      throw new Error('JSON inválido na rubrica: cada critério exige o booleano essential (true ou false).');
+    }
+    totalPoints += c.max_points;
+  }
+  if (Math.abs(totalPoints - expectedMaxScore) > 1e-6) {
+    throw new Error(`JSON inválido na rubrica: os pontos dos critérios devem somar ${expectedMaxScore} (atual: ${totalPoints}).`);
+  }
+}
+
 export function parseOpenEndedGradingJson(rawText) {
   if (typeof rawText !== 'string' || !rawText.trim()) {
     throw new Error('JSON inválido na rubrica: informe o objeto JSON de correção e rubrica.');
@@ -37,23 +76,37 @@ export function parseOpenEndedGradingJson(rawText) {
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error('JSON inválido na rubrica: o campo deve conter um objeto JSON de correção.');
   }
-  if (parsed.strategy === 'RUBRIC' || parsed.rubric != null) {
-    const criteria = parsed.rubric?.criteria;
-    if (!Array.isArray(criteria) || criteria.length === 0) {
-      throw new Error('JSON inválido na rubrica: rubric.criteria deve conter ao menos um critério.');
-    }
-    let totalPoints = 0;
-    for (const c of criteria) {
-      if (!c || typeof c !== 'object' || typeof c.criterion_id !== 'string' || !c.criterion_id.trim() || typeof c.description !== 'string' || !c.description.trim() || typeof c.max_points !== 'number' || c.max_points <= 0) {
-        throw new Error('JSON inválido na rubrica: cada critério exige criterion_id, description e max_points positivo.');
-      }
-      totalPoints += c.max_points;
-    }
-    const maxScore = typeof parsed.max_score === 'number' && parsed.max_score > 0 ? parsed.max_score : 100;
-    if (Math.abs(totalPoints - maxScore) > 1e-6) {
-      throw new Error(`JSON inválido na rubrica: os pontos dos critérios devem somar ${maxScore} (atual: ${totalPoints}).`);
-    }
+  if (!['RUBRIC', 'SEMANTIC', 'AI'].includes(parsed.strategy)) {
+    throw new Error('JSON inválido na rubrica: strategy discursiva deve ser RUBRIC, SEMANTIC ou AI.');
   }
+  if (parsed.confirmation_policy !== 'HUMAN_REVIEW') {
+    throw new Error('JSON inválido na rubrica: confirmation_policy deve ser HUMAN_REVIEW.');
+  }
+  if (
+    !Array.isArray(parsed.expected_responses) ||
+    parsed.expected_responses.length < 1 ||
+    parsed.expected_responses.length > 20 ||
+    parsed.expected_responses.some(r => typeof r !== 'string' || !r.trim() || r.length > 20000)
+  ) {
+    throw new Error('JSON inválido na rubrica: informe ao menos uma resposta esperada em expected_responses.');
+  }
+  if (
+    !parsed.rubric ||
+    typeof parsed.rubric !== 'object' ||
+    Array.isArray(parsed.rubric) ||
+    !Number.isInteger(parsed.rubric.revision) ||
+    parsed.rubric.revision < 1
+  ) {
+    throw new Error('JSON inválido na rubrica: rubric.revision deve ser um inteiro maior ou igual a 1.');
+  }
+  const maxScore =
+    typeof parsed.max_score === 'number' && Number.isFinite(parsed.max_score) && parsed.max_score > 0 && parsed.max_score <= 100
+      ? parsed.max_score
+      : null;
+  if (maxScore === null) {
+    throw new Error('JSON inválido na rubrica: max_score deve ser um número positivo até 100.');
+  }
+  validateRubricCriteria(parsed.rubric.criteria, maxScore);
   return parsed;
 }
 
@@ -142,17 +195,7 @@ export function objectiveDraft(form) {
     if (typeof form.criteria !== 'string' || !form.criteria.trim()) throw new Error(RUBRIC_JSON_ERROR);
     try { criteria = JSON.parse(form.criteria); }
     catch { throw new Error(RUBRIC_JSON_ERROR); }
-    if (!Array.isArray(criteria) || criteria.length === 0) throw new Error('JSON inválido na rubrica: a rubrica discursiva exige ao menos um critério.');
-    let totalPoints = 0;
-    for (const c of criteria) {
-      if (!c || typeof c !== 'object' || typeof c.criterion_id !== 'string' || !c.criterion_id.trim() || typeof c.description !== 'string' || !c.description.trim() || typeof c.max_points !== 'number' || c.max_points <= 0) {
-        throw new Error('JSON inválido na rubrica: cada critério exige criterion_id, description e max_points positivo.');
-      }
-      totalPoints += c.max_points;
-    }
-    if (Math.abs(totalPoints - 100) > 1e-6) {
-      throw new Error(`Os pontos dos critérios da rubrica devem somar 100 (atual: ${totalPoints}).`);
-    }
+    validateRubricCriteria(criteria, 100);
     grading = {strategy:'RUBRIC',max_score:100,pass_score:60,expected_responses:[form.reference.trim()],rubric:{revision:1,criteria},engine:null,confirmation_policy:'HUMAN_REVIEW',policy_version:'open-rubric-human-review/1'};
   }
   const text = value => value?.trim() || null;
@@ -166,12 +209,8 @@ export function objectiveDraft(form) {
     if (!Number.isFinite(retrieved.getTime()) || retrieved.toISOString().slice(0,10)!==form.sourceDate) throw new Error('Data de consulta inválida.');
     source = {uri:form.sourceUri.trim(),title:form.sourceTitle.trim(),locator:text(form.sourceLocator),retrieved_at:retrieved.toISOString(),sha256:null};
   }
-  const draft = {question_type:form.kind,question:form.question,answers,correct_answer_indices:open || form.correctIndex === '' ? [] : [Number(form.correctIndex)],grading,origin_kind:form.originKind,subject_id:form.subjectId,topic_id:form.topicId,confirm_classification:form.confirmClassification,
+  return {question_type:form.kind,question:form.question,answers,correct_answer_indices:open || form.correctIndex === '' ? [] : [Number(form.correctIndex)],grading,origin_kind:form.originKind,subject_id:form.subjectId,topic_id:form.topicId,confirm_classification:form.confirmClassification,
     source_exam_code:text(form.sourceExamCode),institution:text(form.institution),organizer:text(form.organizer),exam_year:year?Number(year):null,question_number:text(form.questionNumber),source_reference:source,confirm_origin:!!form.confirmOrigin,explanation:text(form.explanation),level:text(form.level)};
-  if (text(form.conceptId)) {
-    draft.concept_id = text(form.conceptId);
-  }
-  return draft;
 }
 
 export function topicPath(catalog, topic) {
@@ -206,50 +245,14 @@ export function renameEntity(row, label) {
   return result;
 }
 
-export function newCatalogEntity(group, subjectId = '', topicId = '') {
+export function newCatalogEntity(group, subjectId = '') {
   if (group === 'trunks') {
     return {trunk_id:'',label:'',icon_key:'Work',aliases:[],source_ids:['WEB_EDITOR'],status:'ACTIVE'};
   }
   if (group === 'subjects') {
     return {subject_id:'',label:'',aliases:[],scope_note:'',status:'ACTIVE',revision:1,source_ids:['WEB_EDITOR'],trunk_links:[]};
   }
-  if (group === 'concepts') {
-    return {concept_id:'',subject_id:subjectId,topic_id:topicId,label:'',aliases:[],prerequisite_concept_ids:[],source_ids:['WEB_EDITOR'],default_incidence_weight:1.0,status:'ACTIVE',revision:1};
-  }
-  if (group === 'normative_sources') {
-    return {source_id:'',kind:'NORMATIVE_PROVISION',title:'',canonical_uri:'https://',locator:null,excerpt:'',content_sha256:'0'.repeat(64),updated_at:new Date().toISOString().slice(0,10),status:'ACTIVE'};
-  }
   return {topic_id:'',subject_id:subjectId,parent_topic_id:null,kind:'TOPIC',label:'',aliases:[],status:'ACTIVE',revision:1,source_ids:['WEB_EDITOR']};
-}
-
-export function orderedConcepts(catalog, topicId) {
-  const concepts = Array.isArray(catalog?.concepts) ? catalog.concepts : [];
-  return concepts
-    .filter(c => c.topic_id === topicId && c.status === 'ACTIVE')
-    .toSorted((a, b) => a.label.localeCompare(b.label, 'pt-BR'));
-}
-
-export function detectImpactedQuestionsBySourceHash(questions, previousSources, updatedSources, concepts = []) {
-  const prevMap = new Map((previousSources || []).map(s => [s.source_id, s.content_sha256]));
-  const changedSourceIds = new Set();
-  for (const next of (updatedSources || [])) {
-    const oldHash = prevMap.get(next.source_id);
-    if ((oldHash && oldHash !== next.content_sha256) || next.status === 'UNDER_REVIEW' || next.status === 'DEPRECATED') {
-      changedSourceIds.add(next.source_id);
-    }
-  }
-  if (!changedSourceIds.size) return [];
-  const impactedConceptIds = new Set(
-    (concepts || [])
-      .filter(c => Array.isArray(c.source_ids) && c.source_ids.some(sid => changedSourceIds.has(sid)))
-      .map(c => c.concept_id)
-  );
-  return (questions || [])
-    .filter(q => {
-      const links = q?.classification?.links || [];
-      return links.some(l => l?.concept_id && impactedConceptIds.has(l.concept_id));
-    })
-    .map(q => q._id?.$oid || q._id || q.id);
 }
 
 export function buildEditorialCard(input = {}) {
@@ -266,15 +269,33 @@ export function buildEditorialCard(input = {}) {
 
   const hasAny = provisions.length > 0 || testedRule || exceptionClause || decisiveStemExcerpt || officialSourceExcerpt || existingErrors.length > 0;
   if (!hasAny) return null;
+  if (provisions.some(p => p.length > 500)) {
+    throw new Error('Ficha editorial: cada dispositivo legal deve ter até 500 caracteres.');
+  }
   if (!testedRule) throw new Error('Ficha editorial: informe a regra cobrada.');
+  if (testedRule.length > 2000) throw new Error('Ficha editorial: a regra cobrada deve ter até 2000 caracteres.');
+  if (exceptionClause && exceptionClause.length > 2000) {
+    throw new Error('Ficha editorial: a exceção deve ter até 2000 caracteres.');
+  }
   if (!decisiveStemExcerpt) throw new Error('Ficha editorial: informe o trecho decisivo do enunciado.');
+  if (decisiveStemExcerpt.length > 1500) {
+    throw new Error('Ficha editorial: o trecho decisivo deve ter até 1500 caracteres.');
+  }
+  if (officialSourceExcerpt && officialSourceExcerpt.length > 3000) {
+    throw new Error('Ficha editorial: o fragmento da fonte oficial deve ter até 3000 caracteres.');
+  }
+  if (existingErrors.length > 8) {
+    throw new Error('Ficha editorial: informe até 8 erros conceituais plausíveis.');
+  }
 
   const seenIds = new Set();
   const plausible = existingErrors.map((err, idx) => {
     const eid = String(err?.error_id || `ERR_${idx + 1}`).trim();
     const label = String(err?.label ?? '').trim();
     const desc = String(err?.description ?? '').trim();
-    if (!eid || !label || !desc) throw new Error('Ficha editorial: cada erro conceitual exige identificador, rótulo e descrição.');
+    if (!eid || eid.length > 100 || !label || label.length > 300 || !desc || desc.length > 2000) {
+      throw new Error('Ficha editorial: cada erro conceitual exige identificador, rótulo e descrição válidos.');
+    }
     if (seenIds.has(eid)) throw new Error(`Ficha editorial: identificador de erro repetido (${eid}).`);
     seenIds.add(eid);
     return { error_id: eid, label, description: desc };
@@ -381,7 +402,7 @@ export function legacyQuestionDraft(raw,catalog,actor,originId){
 export function isQuestionDraftDirty(draft) {
   if (!draft) return false;
   if (draft.result) return false;
-  if (draft.submitted || draft.converted || draft.rubricError || draft.reconfirmValidity) return true;
+  if (draft.submitted || draft.converted || draft.rubricError || Boolean(draft.editorialError || draft.editorialDraft) || draft.reconfirmValidity) return true;
   if (draft.classificationChoice && draft.classificationChoice.confirmed === false) return true;
   if (!draft.original) return false;
   try {

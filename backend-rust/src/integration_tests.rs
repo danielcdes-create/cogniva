@@ -38,8 +38,7 @@ pub(super) fn config(uri: &str) -> AppConfig {
 
 pub(super) async fn seed_user_and_session(db: &Database, user_id: i64, is_admin: bool) {
     let now = bson::DateTime::now();
-    let expires_at =
-        bson::DateTime::from_chrono(chrono::Utc::now() + chrono::Duration::hours(24));
+    let expires_at = bson::DateTime::from_chrono(chrono::Utc::now() + chrono::Duration::hours(24));
     db.collection::<Document>("usuarios")
         .update_one(
             doc! { "user_id": user_id },
@@ -108,10 +107,11 @@ pub(super) fn v2_question_doc(
     base["correct_answer_indices"] = json!([correct_idx]);
     base["disciplina"] = json!(disciplina);
 
-    let rev = services::question_contracts::hash(&base).unwrap();
-    base["content_revision"] = json!(&rev);
+    services::question_contracts::populate_v2_1_hashes(&mut base).unwrap();
     base["validity"]["status"] = json!("CURRENT");
-    base["validity"]["evaluated_content_revision"] = json!(&rev);
+    base["validity"]["evaluated_content_revision"] = base["content_revision"].clone();
+    base["validity"]["evaluated_semantic_revision"] = base["semantic_revision"].clone();
+    base["validity"]["evaluation_mode"] = json!("SEMANTIC");
 
     if let Some((subj, topic)) = subject_and_topic {
         base["classification"]["state"] = json!("CONFIRMED");
@@ -133,11 +133,7 @@ pub(super) fn v2_question_doc(
         }
     }
 
-    Bson::try_from(base)
-        .unwrap()
-        .as_document()
-        .unwrap()
-        .clone()
+    Bson::try_from(base).unwrap().as_document().unwrap().clone()
 }
 
 pub(super) async fn request(
@@ -343,24 +339,44 @@ async fn web_admin_session_csrf_editor_and_catalog_versions() {
     let app = build_router(state.clone());
     services::question_storage::prepare(&db).await.unwrap();
 
-    let (status, headers, _page) = web(&app, "GET", "/admin/", None, None, false, json!(null)).await;
+    let (status, headers, _page) =
+        web(&app, "GET", "/admin/", None, None, false, json!(null)).await;
     assert_eq!(status, StatusCode::OK);
     assert!(headers["content-security-policy"]
         .to_str()
         .unwrap()
         .contains("frame-ancestors 'none'"));
-    let (help_status, help_headers, help_body) =
-        web(&app, "GET", "/admin/assets/help.js", None, None, false, json!(null)).await;
+    let (help_status, help_headers, help_body) = web(
+        &app,
+        "GET",
+        "/admin/assets/help.js",
+        None,
+        None,
+        false,
+        json!(null),
+    )
+    .await;
     assert_eq!(help_status, StatusCode::OK);
     assert!(help_headers["content-type"]
         .to_str()
         .unwrap()
         .starts_with("text/javascript"));
-    assert!(help_body.as_str().unwrap().contains("export function searchHelp"));
+    assert!(help_body
+        .as_str()
+        .unwrap()
+        .contains("export function searchHelp"));
     assert_eq!(
-        web(&app, "GET", "/admin/assets/unknown", None, None, false, json!(null))
-            .await
-            .0,
+        web(
+            &app,
+            "GET",
+            "/admin/assets/unknown",
+            None,
+            None,
+            false,
+            json!(null)
+        )
+        .await
+        .0,
         StatusCode::NOT_FOUND
     );
 
@@ -755,6 +771,52 @@ async fn cogniva_2_0_guest_upgrade_templates_and_report_isolation() {
     assert_eq!(up_json["profile"]["is_guest"], false);
     assert_eq!(up_json["profile"]["email"], "estudante@cogniva.local");
 
+    let promoted_user_doc = db
+        .collection::<Document>("usuarios")
+        .find_one(doc! { "_id": guest_uid })
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        !promoted_user_doc.contains_key("installation_id"),
+        "Guest upgrade must $unset installation_id"
+    );
+    assert!(
+        !promoted_user_doc.contains_key("installation_secret_sha256"),
+        "Guest upgrade must $unset installation_secret_sha256"
+    );
+    assert_eq!(
+        db.collection::<Document>("sessions")
+            .count_documents(doc! { "user_id": guest_uid, "revoked_at": { "$ne": null } })
+            .await
+            .unwrap(),
+        1,
+        "Prior guest session must be revoked upon promotion"
+    );
+
+    // Explicit revoked/non-guest Bearer token on /api/v1/auth/register returns 401 (never creates empty account!)
+    let dup_register_with_revoked = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/register")
+                .header("content-type", "application/json")
+                .header("authorization", format!("Bearer {guest_token}"))
+                .body(Body::from(
+                    json!({
+                        "email": "outro@cogniva.local",
+                        "password": "MinhaSenhaForte2026!",
+                        "display_name": "Outro"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(dup_register_with_revoked.status(), StatusCode::UNAUTHORIZED);
+
     // Login with email + password returns the same user_id, and logout revokes the Bearer token
     let (login_status, login_resp) = request(
         &app,
@@ -798,7 +860,15 @@ async fn cogniva_2_0_guest_upgrade_templates_and_report_isolation() {
     assert_eq!(after_logout.status(), StatusCode::UNAUTHORIZED);
 
     // 2. Global exam_templates vs customized user_exams + adopt-template (ADR-06)
-    let (_, exams_456) = request(&app, &secret, Some(456), "GET", "/api/v1/exams", Value::Null).await;
+    let (_, exams_456) = request(
+        &app,
+        &secret,
+        Some(456),
+        "GET",
+        "/api/v1/exams",
+        Value::Null,
+    )
+    .await;
     let mut custom_cpnu = exams_456
         .as_array()
         .unwrap()
@@ -848,7 +918,15 @@ async fn cogniva_2_0_guest_upgrade_templates_and_report_isolation() {
     .await;
     assert_eq!(tpl_st, StatusCode::OK);
 
-    let (_, list_123) = request(&app, &secret, Some(123), "GET", "/api/v1/exams", Value::Null).await;
+    let (_, list_123) = request(
+        &app,
+        &secret,
+        Some(123),
+        "GET",
+        "/api/v1/exams",
+        Value::Null,
+    )
+    .await;
     let cpnu_123 = list_123
         .as_array()
         .unwrap()
@@ -858,7 +936,15 @@ async fn cogniva_2_0_guest_upgrade_templates_and_report_isolation() {
     assert_eq!(cpnu_123["title"], "CPNU Edição Global 2026");
     assert_eq!(cpnu_123["upstream_update_available"], false);
 
-    let (_, list_456) = request(&app, &secret, Some(456), "GET", "/api/v1/exams", Value::Null).await;
+    let (_, list_456) = request(
+        &app,
+        &secret,
+        Some(456),
+        "GET",
+        "/api/v1/exams",
+        Value::Null,
+    )
+    .await;
     let cpnu_456 = list_456
         .as_array()
         .unwrap()
@@ -1045,9 +1131,16 @@ async fn question_import_review_receipts_and_ai_are_isolated() {
 
     let path = "/api/v1/admin/questions/import";
     assert_eq!(
-        request(&app, &secret, None, "GET", &format!("{path}/capabilities"), json!(null))
-            .await
-            .0,
+        request(
+            &app,
+            &secret,
+            None,
+            "GET",
+            &format!("{path}/capabilities"),
+            json!(null)
+        )
+        .await
+        .0,
         StatusCode::UNAUTHORIZED
     );
     assert_eq!(
@@ -1068,18 +1161,31 @@ async fn question_import_review_receipts_and_ai_are_isolated() {
         "operation_id": uuid::Uuid::new_v4().to_string(),
         "items": [draft.clone(), draft.clone()]
     });
-    let (status, preview) =
-        request(&app, &secret, Some(123), "POST", &format!("{path}/preview"), body.clone()).await;
+    let (status, preview) = request(
+        &app,
+        &secret,
+        Some(123),
+        "POST",
+        &format!("{path}/preview"),
+        body.clone(),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "{preview}");
     assert_eq!(preview["ready"], true);
     assert_ne!(
         preview["items"][0]["command"]["document"]["_id"],
         preview["items"][1]["command"]["document"]["_id"]
     );
-    let repeated_preview =
-        request(&app, &secret, Some(123), "POST", &format!("{path}/preview"), body)
-            .await
-            .1;
+    let repeated_preview = request(
+        &app,
+        &secret,
+        Some(123),
+        "POST",
+        &format!("{path}/preview"),
+        body,
+    )
+    .await
+    .1;
     assert_eq!(
         repeated_preview["items"][0]["command"]["operation_id"],
         preview["items"][0]["command"]["operation_id"]
@@ -1113,12 +1219,26 @@ async fn question_import_review_receipts_and_ai_are_isolated() {
     );
 
     let commit = json!({ "reviewed": true, "commands": commands });
-    let (status, first) =
-        request(&app, &secret, Some(123), "POST", &format!("{path}/commit"), commit.clone()).await;
+    let (status, first) = request(
+        &app,
+        &secret,
+        Some(123),
+        "POST",
+        &format!("{path}/commit"),
+        commit.clone(),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "{first}");
     assert_eq!(first["complete"], true);
-    let (_, replay) =
-        request(&app, &secret, Some(123), "POST", &format!("{path}/commit"), commit).await;
+    let (_, replay) = request(
+        &app,
+        &secret,
+        Some(123),
+        "POST",
+        &format!("{path}/commit"),
+        commit,
+    )
+    .await;
     assert_eq!(replay["complete"], true);
     assert_eq!(replay["items"][0]["receipt"]["status"], "already_applied");
     assert_eq!(
@@ -1135,13 +1255,27 @@ async fn question_import_review_receipts_and_ai_are_isolated() {
         "mode": "GENERATE",
         "text": "Create one synthetic arithmetic question"
     });
-    let (status, generated) =
-        request(&app, &secret, Some(123), "POST", &format!("{path}/assist"), assist.clone()).await;
+    let (status, generated) = request(
+        &app,
+        &secret,
+        Some(123),
+        "POST",
+        &format!("{path}/assist"),
+        assist.clone(),
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "{generated}");
     assert_eq!(
-        request(&app, &secret, Some(123), "POST", &format!("{path}/assist"), assist)
-            .await
-            .1,
+        request(
+            &app,
+            &secret,
+            Some(123),
+            "POST",
+            &format!("{path}/assist"),
+            assist
+        )
+        .await
+        .1,
         generated
     );
     assert_eq!(hits.load(Ordering::SeqCst), 1);
@@ -1236,7 +1370,10 @@ async fn knowledge_selection_cache_and_shared_progress_preserve_attempts() {
         .try_collect()
         .await
         .unwrap();
-    assert!(services::knowledge::load(&db, 123).await.unwrap().is_empty());
+    assert!(services::knowledge::load(&db, 123)
+        .await
+        .unwrap()
+        .is_empty());
 
     let mut suggestion: Value = serde_json::from_str(include_str!(
         "../../shared/examples/question-contracts/suggestion-pending.json"
@@ -1247,6 +1384,7 @@ async fn knowledge_selection_cache_and_shared_progress_preserve_attempts() {
     suggestion["question_id"] = json!(first.to_hex());
     suggestion["question_content_revision"] =
         json!(services::classification::content_revision_of(&raw).unwrap());
+    suggestion["question_semantic_revision"] = json!(raw.get_str("semantic_revision").unwrap());
     suggestion["expected_classification_revision"] = json!(0);
     db.collection::<Document>("question_classification_suggestions")
         .insert_one(
@@ -1561,7 +1699,10 @@ async fn xai_generates_missing_resource_once_and_persists_for_reuse() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(row.get_str("mnemonico").unwrap(), "Memória sintética validada.");
+    assert_eq!(
+        row.get_str("mnemonico").unwrap(),
+        "Memória sintética validada."
+    );
     assert!(row.get_document("ai_resource_meta").is_ok());
     let cached = get_or_generate_ai_assist(&db, &cfg, &key, AiAssistKind::Explanation, None)
         .await
@@ -1569,6 +1710,99 @@ async fn xai_generates_missing_resource_once_and_persists_for_reuse() {
     assert!(cached.from_cache);
     assert_eq!(hits.load(Ordering::SeqCst), 1);
     server.abort();
+
+    // Verify tutor_budgets refund on HTTP 500 vs charge/commit on persistent double pre-answer spoiler
+    let spoiler_mode = Arc::new(AtomicUsize::new(0));
+    let mode_clone = spoiler_mode.clone();
+    let quota_mock = Router::new().route(
+        "/responses",
+        axum::routing::post(move || {
+            let mode_clone = mode_clone.clone();
+            async move {
+                if mode_clone.load(Ordering::SeqCst) == 0 {
+                    (
+                        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                        axum::Json(json!({ "error": "upstream 500" })),
+                    )
+                } else {
+                    (
+                        axum::http::StatusCode::OK,
+                        axum::Json(json!({
+                            "status": "completed",
+                            "output": [{
+                                "type": "message",
+                                "content": [{ "type": "output_text", "text": "O gabarito é B, alternativa correta B." }]
+                            }]
+                        })),
+                    )
+                }
+            }
+        }),
+    );
+    let q_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let q_addr = q_listener.local_addr().unwrap();
+    let q_server = tokio::spawn(async move { axum::serve(q_listener, quota_mock).await.unwrap() });
+    let mut q_cfg = cfg.clone();
+    q_cfg.xai_base_url = format!("http://{q_addr}");
+    use services::ai_tutor::get_or_generate_ai_assist_with_context;
+    seed_user_and_session(&db, 777, false).await;
+
+    // Mode 0: HTTP 500 refunds user & global tutor_budgets back to 0
+    assert!(get_or_generate_ai_assist_with_context(
+        &db,
+        &q_cfg,
+        &key,
+        AiAssistKind::ContextualHint,
+        Some(0),
+        Some(777),
+        false,
+        None,
+        None,
+    )
+    .await
+    .is_err());
+    let refunded_user = db
+        .collection::<Document>("tutor_budgets")
+        .find_one(doc! { "_id": 777_i64 })
+        .await
+        .unwrap()
+        .unwrap();
+    let refunded_cnt = refunded_user
+        .get_i32("count")
+        .map(i64::from)
+        .or_else(|_| refunded_user.get_i64("count"))
+        .unwrap_or(0);
+    assert_eq!(refunded_cnt, 0);
+
+    // Mode 1: Persistent pre-answer spoiler across initial + corrective calls CHARGES quota (count == 1)
+    spoiler_mode.store(1, Ordering::SeqCst);
+    assert!(get_or_generate_ai_assist_with_context(
+        &db,
+        &q_cfg,
+        &key,
+        AiAssistKind::ContextualHint,
+        Some(0),
+        Some(777),
+        false,
+        None,
+        None,
+    )
+    .await
+    .is_err());
+    let charged_user = db
+        .collection::<Document>("tutor_budgets")
+        .find_one(doc! { "_id": 777_i64 })
+        .await
+        .unwrap()
+        .unwrap();
+    let charged_cnt = charged_user
+        .get_i32("count")
+        .map(i64::from)
+        .or_else(|_| charged_user.get_i64("count"))
+        .unwrap_or(0);
+    assert_eq!(charged_cnt, 1);
+    q_server.abort();
+
     assert!(name.starts_with("cogniva_test_"));
     db.drop().await.unwrap();
 }
@@ -1638,10 +1872,14 @@ async fn editable_exam_components_and_deletion_survive_sync_without_touching_his
     edit.subjects[0].topics.clear();
     edit.subjects[0].display_name = "Túneis revisados".into();
     let command = serde_json::to_value(&edit).unwrap();
-    let (status, updated) =
-        request(&app, &secret, Some(123), "PUT", &path, command.clone()).await;
+    let (status, updated) = request(&app, &secret, Some(123), "PUT", &path, command.clone()).await;
     assert_eq!(status, StatusCode::OK, "{updated}");
-    assert_eq!(request(&app, &secret, Some(123), "PUT", &path, command).await.1, updated);
+    assert_eq!(
+        request(&app, &secret, Some(123), "PUT", &path, command)
+            .await
+            .1,
+        updated
+    );
 
     let mut removed: ExamBlueprint = serde_json::from_value(updated).unwrap();
     removed.status = ExamLifecycleStatus::Excluido;
@@ -1715,11 +1953,10 @@ async fn stage3_storage_validators_indexes_cas_and_legacy_preservation() {
         .try_collect()
         .await
         .unwrap();
-    assert!(indexes.iter().any(|i| i
-        .options
-        .as_ref()
-        .and_then(|o| o.name.as_deref())
-        == Some("qv2_classification_validity")));
+    assert!(indexes
+        .iter()
+        .any(|i| i.options.as_ref().and_then(|o| o.name.as_deref())
+            == Some("qv2_classification_validity")));
 
     let mut q = fixture("question-multiple-choice.json");
     let id = ObjectId::new();
@@ -1741,16 +1978,23 @@ async fn stage3_storage_validators_indexes_cas_and_legacy_preservation() {
     // Strict MongoDB $jsonSchema rejects invalid answers array
     assert!(db
         .collection::<Document>("todasQuestoes")
-        .update_one(doc! { "_id": id }, doc! { "$set": { "answers": ["invalid"] } })
+        .update_one(
+            doc! { "_id": id },
+            doc! { "$set": { "answers": ["invalid"] } }
+        )
         .await
         .is_err());
 
     let state = AppState::new(db.clone(), config(&uri));
     let mut open = fixture("question-open-ai.json");
     open["_id"] = json!({ "$oid": ObjectId::new().to_hex() });
-    storage::create(&db, 123, req_fn(open, uuid::Uuid::new_v4().to_string(), 0, false))
-        .await
-        .unwrap();
+    storage::create(
+        &db,
+        123,
+        req_fn(open, uuid::Uuid::new_v4().to_string(), 0, false),
+    )
+    .await
+    .unwrap();
     let mut obsolete = fixture("question-obsolete.json");
     obsolete["_id"] = json!({ "$oid": ObjectId::new().to_hex() });
     storage::create(
@@ -1777,8 +2021,9 @@ async fn stage3_storage_validators_indexes_cas_and_legacy_preservation() {
     let mut changed = Bson::Document(row).into_relaxed_extjson();
     changed["revision"] = json!(2);
     changed["question"] = json!("Enunciado sintético revisado");
-    changed["content_revision"] = json!(contract::hash(&changed).unwrap());
+    contract::populate_v2_1_hashes(&mut changed).unwrap();
     changed["validity"]["evaluated_content_revision"] = changed["content_revision"].clone();
+    changed["validity"]["evaluated_semantic_revision"] = changed["semantic_revision"].clone();
     changed["validity"]["revision"] = json!(2);
     let op = uuid::Uuid::new_v4().to_string();
     storage::save(&db, 123, req_fn(changed.clone(), op.clone(), 1, false))
@@ -1814,7 +2059,7 @@ async fn etapa5_classification_is_reviewable_and_pending_proposals_do_not_change
     let name = format!("cogniva_test_{}", uuid::Uuid::new_v4().simple());
     let db = client.database(&name);
 
-    let hits = Arc::new( std::sync::atomic::AtomicUsize::new(0));
+    let hits = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let steps = Arc::new(Mutex::new(VecDeque::new()));
     #[derive(Clone)]
     enum Step {
@@ -1899,7 +2144,10 @@ async fn etapa5_classification_is_reviewable_and_pending_proposals_do_not_change
     assert_eq!(status, StatusCode::FORBIDDEN);
 
     // Invalid model output rejected and quota refunded
-    steps.lock().unwrap().push_back(Step::Text("{\"tool\":\"shell\"}".into()));
+    steps
+        .lock()
+        .unwrap()
+        .push_back(Step::Text("{\"tool\":\"shell\"}".into()));
     let (status, _) = request(
         &app,
         &secret,
@@ -2302,7 +2550,10 @@ async fn nt_cogniva_questions_002_provenance_idempotency_concurrency_and_eligibi
     .await;
     assert_eq!(replay_st, StatusCode::OK);
     assert_eq!(commit_replay["idempotent_replay"], true);
-    assert_eq!(commit_replay["items"][0]["receipt"]["status"], "already_applied");
+    assert_eq!(
+        commit_replay["items"][0]["receipt"]["status"],
+        "already_applied"
+    );
 
     let mut mutated_cmd = valid_cmd;
     mutated_cmd["document"]["level"] = json!("Avançada");
@@ -2495,15 +2746,13 @@ async fn missions_end_to_end_flow_range_streaming_isolation_and_epistemology() {
 
     // Prepare isolated synthetic media directory so HTTP Range streaming works deterministically
     // both on Windows dev machines and on clean CI runners without 22 MB binary checkouts.
-    let tmp_media_dir =
-        std::env::temp_dir().join(format!("cogniva_missions_media_{}", uuid::Uuid::new_v4().simple()));
+    let tmp_media_dir = std::env::temp_dir().join(format!(
+        "cogniva_missions_media_{}",
+        uuid::Uuid::new_v4().simple()
+    ));
     std::fs::create_dir_all(&tmp_media_dir).unwrap();
     let synthetic_mp4: Vec<u8> = (0..5000_usize).map(|i| (i % 251) as u8).collect();
-    std::fs::write(
-        tmp_media_dir.join("Vídeo 1 — O alerta.mp4"),
-        &synthetic_mp4,
-    )
-    .unwrap();
+    std::fs::write(tmp_media_dir.join("Vídeo 1 — O alerta.mp4"), &synthetic_mp4).unwrap();
 
     let mut cfg = config(&uri);
     cfg.missions_media_dir = tmp_media_dir.clone();
@@ -2621,7 +2870,8 @@ async fn missions_end_to_end_flow_range_streaming_isolation_and_epistemology() {
     assert_eq!(admin_denied.status(), StatusCode::FORBIDDEN);
 
     // 3. HTTP Range video streaming (206 Partial Content, ETag 304, invalid range 416, no gzip) & WebVTT captions
-    let token_456 = security::sign_session_token(&secret, 456, "test-sid-456", "mobile", 3600).unwrap();
+    let token_456 =
+        security::sign_session_token(&secret, 456, "test-sid-456", "mobile", 3600).unwrap();
     let range_res = app
         .clone()
         .oneshot(
@@ -2637,10 +2887,7 @@ async fn missions_end_to_end_flow_range_streaming_isolation_and_epistemology() {
         .await
         .unwrap();
     assert_eq!(range_res.status(), StatusCode::PARTIAL_CONTENT);
-    assert_eq!(
-        range_res.headers().get("accept-ranges").unwrap(),
-        "bytes"
-    );
+    assert_eq!(range_res.headers().get("accept-ranges").unwrap(), "bytes");
     assert_eq!(
         range_res.headers().get("content-range").unwrap(),
         "bytes 100-1099/5000"
@@ -2708,6 +2955,68 @@ async fn missions_end_to_end_flow_range_streaming_isolation_and_epistemology() {
         .await
         .unwrap();
     assert_eq!(missing_media.status(), StatusCode::NOT_FOUND);
+    let missing_media_bytes = axum::body::to_bytes(missing_media.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let missing_media_json: Value = serde_json::from_slice(&missing_media_bytes).unwrap();
+    assert_eq!(missing_media_json["code"], "MEDIA_ASSET_UNAVAILABLE");
+
+    // Student-web repeat /api/v1/auth/guest with existing active cookie reuses user_id (preserving mission_progress)
+    let guest_web_reuse = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/guest")
+                .header("content-type", "application/json")
+                .header("origin", "http://127.0.0.1:8876")
+                .header("x-cogniva-csrf", "1")
+                .header("cookie", &cookie_pair)
+                .body(Body::from(json!({ "client": "student_web" }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(guest_web_reuse.status(), StatusCode::OK);
+    let reuse_cookie = guest_web_reuse
+        .headers()
+        .get("set-cookie")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_string();
+    let reuse_body: Value = serde_json::from_slice(
+        &axum::body::to_bytes(guest_web_reuse.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let me_with_reused_cookie = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/auth/me")
+                .header("cookie", &reuse_cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(me_with_reused_cookie.status(), StatusCode::OK);
+    let me_reused_json: Value = serde_json::from_slice(
+        &axum::body::to_bytes(me_with_reused_cookie.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        me_reused_json["user_id"], reuse_body["profile"]["user_id"],
+        "Repeated student_web guest bootstrap must reuse the existing guest user_id"
+    );
 
     // WebVTT captions endpoint serves valid UTF-8 WEBVTT
     let vtt_res = app
@@ -2734,7 +3043,15 @@ async fn missions_end_to_end_flow_range_streaming_isolation_and_epistemology() {
     assert!(vtt_body.contains("Uma alta inesperada dos juros"));
 
     // 4. Pilot Mission Flow, Anti-Tampering, User Isolation & Epistemological Separation
-    let (st, cat_456) = request(&app, &secret, Some(456), "GET", "/api/v1/missions", Value::Null).await;
+    let (st, cat_456) = request(
+        &app,
+        &secret,
+        Some(456),
+        "GET",
+        "/api/v1/missions",
+        Value::Null,
+    )
+    .await;
     assert_eq!(st, StatusCode::OK);
     assert_eq!(
         cat_456["careers"][0]["display_header"],
@@ -2805,10 +3122,12 @@ async fn missions_end_to_end_flow_range_streaming_isolation_and_epistemology() {
     assert_eq!(dec1_wrong["decision"]["is_correct"], false);
     assert_eq!(dec1_wrong["decision"]["expected_option_id"], "B");
     assert_eq!(dec1_wrong["decision"]["first_attempt_correct"], false);
-    assert!(!dec1_wrong["interaction_performance"]["concepts_for_review"]
-        .as_array()
-        .unwrap()
-        .is_empty());
+    assert!(
+        !dec1_wrong["interaction_performance"]["concepts_for_review"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
 
     // Retry Scene 3 with "B" -> latest is_correct=true, attempt_count=2, first_attempt_correct stays false
     let (dec1_retry_st, dec1_right) = request(
@@ -2831,9 +3150,18 @@ async fn missions_end_to_end_flow_range_streaming_isolation_and_epistemology() {
     assert_eq!(dec1_right["decision"]["attempt_count"], 2);
 
     // User isolation: Student 789 still sees NOT_STARTED and 0 decisions
-    let (_, cat_789) = request(&app, &secret, Some(789), "GET", "/api/v1/missions", Value::Null).await;
+    let (_, cat_789) = request(
+        &app,
+        &secret,
+        Some(789),
+        "GET",
+        "/api/v1/missions",
+        Value::Null,
+    )
+    .await;
     assert_eq!(
-        cat_789["careers"][0]["disciplines"][0]["seasons"][0]["missions"][0]["narrative_progress"]["status"],
+        cat_789["careers"][0]["disciplines"][0]["seasons"][0]["missions"][0]["narrative_progress"]
+            ["status"],
         "NOT_STARTED"
     );
 
@@ -2863,7 +3191,10 @@ async fn missions_end_to_end_flow_range_streaming_isolation_and_epistemology() {
     )
     .await;
     assert_eq!(res_st, StatusCode::OK);
-    assert_eq!(resumed["narrative_progress"]["current_scene_id"], "cena-05-desafio-duration");
+    assert_eq!(
+        resumed["narrative_progress"]["current_scene_id"],
+        "cena-05-desafio-duration"
+    );
     assert_eq!(resumed["narrative_progress"]["resume_count"], 1);
 
     // Scene 5: answer "B" (5-year bond) -> completes mission
@@ -2885,8 +3216,14 @@ async fn missions_end_to_end_flow_range_streaming_isolation_and_epistemology() {
     assert_eq!(dec2_res["decision"]["is_correct"], true);
     assert_eq!(dec2_res["mission_completed"], true);
     assert_eq!(dec2_res["narrative_progress"]["status"], "COMPLETED");
-    assert_eq!(dec2_res["interaction_performance"]["first_attempt_correct_count"], 1);
-    assert_eq!(dec2_res["interaction_performance"]["latest_correct_count"], 2);
+    assert_eq!(
+        dec2_res["interaction_performance"]["first_attempt_correct_count"],
+        1
+    );
+    assert_eq!(
+        dec2_res["interaction_performance"]["latest_correct_count"],
+        2
+    );
 
     // 5. Epistemological Separation: 0 docs added to `todasQuestoes`, `userActivityLog`, or `attempt_receipts`
     assert_eq!(
@@ -2984,6 +3321,38 @@ async fn missions_end_to_end_flow_range_streaming_isolation_and_epistemology() {
     assert_eq!(rep_res["narrative_progress"]["status"], "IN_PROGRESS");
     assert_eq!(rep_res["narrative_progress"]["completed_runs_count"], 1);
 
+    // Seed personal vs shared editorial review events before LGPD deletion
+    let dummy_hash = "a".repeat(64);
+    let reviewer_456 = services::question_storage::ReviewerContext::admin(456);
+    let (personal_ev_id, personal_ev_doc) = services::question_storage::build_review_event_doc(
+        "lgpd-personal-456",
+        &reviewer_456,
+        "COMPATIBILITY_CONFIRM",
+        "compat-456",
+        1,
+        &dummy_hash,
+        &dummy_hash,
+        "2026-11-20T12:00:00Z",
+    )
+    .unwrap();
+    let (editorial_ev_id, editorial_ev_doc) = services::question_storage::build_review_event_doc(
+        "lgpd-editorial-456",
+        &reviewer_456,
+        "CLASSIFICATION_CONFIRM",
+        &human_mfin_oid.to_hex(),
+        1,
+        &dummy_hash,
+        &dummy_hash,
+        "2026-11-20T12:00:00Z",
+    )
+    .unwrap();
+    services::question_storage::persist_review_event_idempotent(&db, None, &personal_ev_doc)
+        .await
+        .unwrap();
+    services::question_storage::persist_review_event_idempotent(&db, None, &editorial_ev_doc)
+        .await
+        .unwrap();
+
     let (del_st, _) = request(
         &app,
         &secret,
@@ -3001,6 +3370,36 @@ async fn missions_end_to_end_flow_range_streaming_isolation_and_epistemology() {
             .unwrap(),
         0,
         "LGPD Art. 18 deletion must purge mission_progress for the deleted user"
+    );
+    assert_eq!(
+        db.collection::<Document>("question_review_events")
+            .count_documents(doc! { "_id": &personal_ev_id })
+            .await
+            .unwrap(),
+        0,
+        "LGPD deletion must purge personal question_review_events"
+    );
+    assert_eq!(
+        db.collection::<Document>("question_review_events")
+            .count_documents(doc! { "_id": &editorial_ev_id })
+            .await
+            .unwrap(),
+        1,
+        "LGPD deletion must preserve global editorial question_review_events"
+    );
+    assert_eq!(
+        db.collection::<Document>("sessions")
+            .count_documents(doc! { "user_id": 456_i64 })
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        db.collection::<Document>("usuarios")
+            .count_documents(doc! { "_id": 456_i64 })
+            .await
+            .unwrap(),
+        0
     );
 
     let _ = std::fs::remove_dir_all(&tmp_media_dir);

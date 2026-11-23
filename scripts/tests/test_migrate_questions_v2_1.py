@@ -154,6 +154,114 @@ class MigrateQuestionsV21Test(unittest.TestCase):
         self.assertEqual(result["questions"][1], stale_val)
         self.assertEqual(result["questions"][2], bad_oid)
 
+    def test_run_mongo_migration_optimistic_filter_close_in_finally_and_cli_report_out(self):
+        import io
+        import json
+        import tempfile
+        import types
+        from unittest import mock
+
+        q_verified = copy.deepcopy(read(BASE / "question-multiple-choice.json"))
+        q_verified["_id"] = {"$oid": "000000000000000000000099"}
+        for origin in q_verified["origins"]:
+            origin["provenance"]["actor"]["id"] = "42"
+        for link in q_verified["classification"]["links"]:
+            link["provenance"]["actor"]["id"] = "42"
+        q_verified["validity"]["decision"]["actor"]["id"] = "42"
+        bson_q = qc.contract_to_bson_question(q_verified)
+
+        rev_ev = {
+            "_id": "42:11111111-1111-4111-8111-111111111111",
+            "question_id": "000000000000000000000099",
+            "revision": 1,
+            "actor_user_id": 42,
+        }
+
+        class FakeCollection:
+            def __init__(self, rows, fail_on_find: bool = False):
+                self._rows = rows
+                self._fail_on_find = fail_on_find
+                self.updates: list[tuple[dict, dict, bool]] = []
+
+            def find(self, query):
+                if self._fail_on_find:
+                    raise RuntimeError("simulated mongo cursor error")
+                return copy.deepcopy(self._rows)
+
+            def update_one(self, flt, upd, upsert: bool = False):
+                self.updates.append((flt, upd, upsert))
+
+        class FakeClient:
+            instances: list["FakeClient"] = []
+
+            def __init__(self, uri, fail_on_find: bool = False):
+                self.uri = uri
+                self.closed = False
+                self.requested_dbs: list[str] = []
+                self.colls = {
+                    "todasQuestoes": FakeCollection([bson_q], fail_on_find=fail_on_find),
+                    "question_revision_events": FakeCollection([rev_ev]),
+                    "question_review_events": FakeCollection([]),
+                    "question_migration_events": FakeCollection([]),
+                }
+                FakeClient.instances.append(self)
+
+            def __getitem__(self, db_name: str):
+                self.requested_dbs.append(db_name)
+                return self.colls
+
+            def close(self):
+                self.closed = True
+
+        # 1. Dry-run via CLI with --db alias and --report-out writes zero Mongo mutations and closes client
+        FakeClient.instances.clear()
+        fake_pymongo = types.SimpleNamespace(MongoClient=lambda uri: FakeClient(uri))
+        with tempfile.TemporaryDirectory() as tmp:
+            report_out = Path(tmp) / "reports" / "mig-report.json"
+            with mock.patch.dict(sys.modules, {"pymongo": fake_pymongo}), mock.patch("sys.stdout", io.StringIO()):
+                rc = mig.main(
+                    [
+                        "--mongo-uri",
+                        "mongodb://127.0.0.1:27017",
+                        "--db",
+                        "cogniva_custom",
+                        "--report-out",
+                        str(report_out),
+                    ]
+                )
+            self.assertEqual(rc, 0)
+            client_dry = FakeClient.instances[-1]
+            self.assertTrue(client_dry.closed)
+            self.assertEqual(client_dry.requested_dbs, ["cogniva_custom"])
+            self.assertEqual(client_dry.colls["todasQuestoes"].updates, [])
+            saved_report = json.loads(report_out.read_text(encoding="utf-8"))
+            self.assertTrue(saved_report["dry_run"])
+            self.assertEqual(saved_report["migrated"], 1)
+
+        # 2. Apply mode uses optimistic content_revision filter and upserts review + migration events
+        FakeClient.instances.clear()
+        with mock.patch.dict(sys.modules, {"pymongo": fake_pymongo}):
+            rep_apply = mig.run_mongo_migration("mongodb://127.0.0.1:27017", "cogniva", self.catalog, apply=True)
+        self.assertFalse(rep_apply["dry_run"])
+        client_apply = FakeClient.instances[-1]
+        self.assertTrue(client_apply.closed)
+        q_updates = client_apply.colls["todasQuestoes"].updates
+        self.assertEqual(len(q_updates), 1)
+        flt, upd, upsert_flag = q_updates[0]
+        self.assertFalse(upsert_flag)
+        self.assertEqual(flt, {"_id": ObjectId("000000000000000000000099"), "content_revision": q_verified["content_revision"]})
+        self.assertIn("semantic_revision", upd["$set"])
+        self.assertGreaterEqual(len(client_apply.colls["question_review_events"].updates), 1)
+        self.assertEqual(len(client_apply.colls["question_migration_events"].updates), 1)
+
+        # 3. Exception during MongoDB query STILL closes client in finally
+        FakeClient.instances.clear()
+        failing_pymongo = types.SimpleNamespace(MongoClient=lambda uri: FakeClient(uri, fail_on_find=True))
+        with mock.patch.dict(sys.modules, {"pymongo": failing_pymongo}):
+            with self.assertRaisesRegex(RuntimeError, "simulated mongo cursor error"):
+                mig.run_mongo_migration("mongodb://127.0.0.1:27017", "cogniva", self.catalog, apply=True)
+        self.assertTrue(FakeClient.instances[-1].closed)
+
 
 if __name__ == "__main__":
     unittest.main()

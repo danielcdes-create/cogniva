@@ -22,10 +22,7 @@ object MarkdownParser {
         RegexOption.IGNORE_CASE
     )
     private val MULTI_NEWLINE_REGEX = Regex("\\n{3,}")
-    private val SAFE_HTTPS_URL_REGEX = Regex(
-        "^https://[A-Za-z0-9._~:/?#\\[\\]@!$&'()*+,;=%-]+$",
-        RegexOption.IGNORE_CASE
-    )
+    private val UNSAFE_URL_CHARS = setOf('<', '>', '"', '`', '\\', '{', '}', '|', '^')
     private val NUMBERED_LIST_REGEX = Regex("^(\\d+)[.)]\\s+(.*)$")
 
     fun sanitizeRawText(raw: String): String {
@@ -35,11 +32,15 @@ object MarkdownParser {
     }
 
     fun isSafeHttpsUrl(rawUrl: String): Boolean {
-        val trimmed = rawUrl.trim()
+        val trimmed = Normalizer.normalize(rawUrl.trim(), Normalizer.Form.NFC)
         if (!trimmed.startsWith("https://", ignoreCase = true)) return false
-        if (!SAFE_HTTPS_URL_REGEX.matches(trimmed)) return false
+        if (trimmed.any { it.isWhitespace() || it.isISOControl() || it in UNSAFE_URL_CHARS }) return false
         val uri = runCatching { URI(trimmed) }.getOrNull() ?: return false
-        return uri.scheme.equals("https", ignoreCase = true) && !uri.host.isNullOrBlank()
+        return uri.scheme.equals("https", ignoreCase = true) &&
+            !uri.host.isNullOrBlank() &&
+            uri.userInfo == null &&
+            uri.rawUserInfo == null &&
+            uri.rawAuthority?.contains('@') != true
     }
 
     fun parse(
@@ -56,40 +57,22 @@ object MarkdownParser {
         val sanitized = sanitizeRawText(raw)
         return buildAnnotatedString {
             val lines = sanitized.lines()
-            var inCodeFence = false
+            var activeFenceTicks = 0
             var emittedAnyLine = false
 
             for (line in lines) {
                 val trimmedLine = line.trimStart()
+                val leadingTicks = trimmedLine.takeWhile { it == '`' }.length
 
-                // Single-line fenced block: ```code```
-                if (!inCodeFence && trimmedLine.startsWith("```") && trimmedLine.length > 3 && trimmedLine.endsWith("```")) {
-                    if (emittedAnyLine) append("\n")
-                    emittedAnyLine = true
-                    val inlineFenceBody = trimmedLine.removePrefix("```").removeSuffix("```").trim()
-                    withStyle(
-                        SpanStyle(
-                            fontFamily = FontFamily.Monospace,
-                            background = codeBackgroundColor
-                        )
-                    ) {
-                        append(inlineFenceBody)
+                if (activeFenceTicks > 0) {
+                    if (leadingTicks >= activeFenceTicks && trimmedLine.substring(leadingTicks).isBlank()) {
+                        activeFenceTicks = 0
+                        continue
                     }
-                    continue
-                }
-
-                // Multi-line fenced code block toggle: ``` or ```lang
-                if (trimmedLine.startsWith("```")) {
-                    inCodeFence = !inCodeFence
-                    continue
-                }
-
-                if (emittedAnyLine) {
-                    append("\n")
-                }
-                emittedAnyLine = true
-
-                if (inCodeFence) {
+                    if (emittedAnyLine) {
+                        append("\n")
+                    }
+                    emittedAnyLine = true
                     withStyle(
                         SpanStyle(
                             fontFamily = FontFamily.Monospace,
@@ -100,6 +83,40 @@ object MarkdownParser {
                     }
                     continue
                 }
+
+                if (leadingTicks >= 3) {
+                    val trimmedEnd = trimmedLine.trimEnd()
+                    val afterLeading = trimmedEnd.substring(leadingTicks)
+                    val trailingTicks = afterLeading.takeLastWhile { it == '`' }.length
+                    val hasSingleLineClosedBody = afterLeading.length > trailingTicks &&
+                        trailingTicks == leadingTicks
+                    if (hasSingleLineClosedBody) {
+                        val inlineFenceBody = afterLeading.substring(0, afterLeading.length - trailingTicks).trim()
+                        if (inlineFenceBody.isNotEmpty()) {
+                            if (emittedAnyLine) append("\n")
+                            emittedAnyLine = true
+                            withStyle(
+                                SpanStyle(
+                                    fontFamily = FontFamily.Monospace,
+                                    background = codeBackgroundColor
+                                )
+                            ) {
+                                append(inlineFenceBody)
+                            }
+                            continue
+                        }
+                    }
+                    // Multi-line fenced code block opener: ```, ````, ```lang, ````markdown, etc.
+                    if (!afterLeading.contains('`')) {
+                        activeFenceTicks = leadingTicks
+                        continue
+                    }
+                }
+
+                if (emittedAnyLine) {
+                    append("\n")
+                }
+                emittedAnyLine = true
 
                 val isHeader = trimmedLine.startsWith("#")
                 val isBlockquote = trimmedLine.startsWith(">")
@@ -184,11 +201,13 @@ object MarkdownParser {
         val len = text.length
 
         while (i < len) {
-            // Check `code`
+            // Check `code` or ``code``
             if (text[i] == '`') {
-                val nextTick = text.indexOf('`', i + 1)
-                if (nextTick != -1) {
-                    val codeContent = text.substring(i + 1, nextTick)
+                val tickCount = text.substring(i).takeWhile { it == '`' }.length
+                val delimiter = "`".repeat(tickCount)
+                val closeIdx = text.indexOf(delimiter, i + tickCount)
+                if (closeIdx != -1) {
+                    val codeContent = text.substring(i + tickCount, closeIdx)
                     withStyle(
                         SpanStyle(
                             fontFamily = FontFamily.Monospace,
@@ -197,7 +216,7 @@ object MarkdownParser {
                     ) {
                         append(codeContent)
                     }
-                    i = nextTick + 1
+                    i = closeIdx + tickCount
                     continue
                 }
             }

@@ -75,7 +75,9 @@ fn normalized_weights(exam: &LeverageExam) -> HashMap<String, f64> {
         return weights;
     }
     for subject in live {
-        *weights.entry(subject.canonical_subject_id.clone()).or_insert(0.0) += subject.weight / sum;
+        *weights
+            .entry(subject.canonical_subject_id.clone())
+            .or_insert(0.0) += subject.weight / sum;
     }
     weights
 }
@@ -290,7 +292,13 @@ pub fn select_common_trunk_for_focuses(
         .collect();
     let pool: Vec<&LeverageExam> = exams
         .iter()
-        .filter(|exam| exam.is_active_in_ladder && !matches!(exam.status, ExamLifecycleStatus::Arquivado | ExamLifecycleStatus::Excluido))
+        .filter(|exam| {
+            exam.is_active_in_ladder
+                && !matches!(
+                    exam.status,
+                    ExamLifecycleStatus::Arquivado | ExamLifecycleStatus::Excluido
+                )
+        })
         .filter(|exam| slugs.is_empty() || slugs.contains(exam.trunk_slug.as_str()))
         .collect();
 
@@ -303,7 +311,9 @@ pub fn select_common_trunk_for_focuses(
             .iter()
             .filter(|subject| !subject.archived_only)
         {
-            if !seen_subjects.insert(&subject.canonical_subject_id) { continue; }
+            if !seen_subjects.insert(&subject.canonical_subject_id) {
+                continue;
+            }
             presence
                 .entry(subject.canonical_subject_id.clone())
                 .or_default()
@@ -358,7 +368,13 @@ pub fn readiness_for_blueprints(
 ) -> f64 {
     let primary = exams
         .iter()
-        .filter(|exam| exam.is_active_in_ladder && !matches!(exam.status, ExamLifecycleStatus::Arquivado | ExamLifecycleStatus::Excluido))
+        .filter(|exam| {
+            exam.is_active_in_ladder
+                && !matches!(
+                    exam.status,
+                    ExamLifecycleStatus::Arquivado | ExamLifecycleStatus::Excluido
+                )
+        })
         .min_by_key(|exam| exam.ladder_priority);
     let Some(exam) = primary else {
         return 0.0;
@@ -780,10 +796,7 @@ pub fn system_catalog() -> TrunkCatalog {
             CareerTrunk {
                 slug: slug.into(),
                 name: t["label"].as_str().unwrap().into(),
-                icon_key: t["icon_key"]
-                    .as_str()
-                    .unwrap_or("Work")
-                    .to_string(),
+                icon_key: t["icon_key"].as_str().unwrap_or("Work").to_string(),
                 core_subjects: core,
                 complementary_subjects: complementary,
                 is_system_default: true,
@@ -856,9 +869,12 @@ pub fn apply_publish(
         .iter()
         .flat_map(|s| {
             let lsid = s.local_subject_id.clone();
-            s.topics
-                .iter()
-                .map(move |t| ((lsid.clone(), t.canonical_topic_id.clone()), t.local_topic_id.clone()))
+            s.topics.iter().map(move |t| {
+                (
+                    (lsid.clone(), t.canonical_topic_id.clone()),
+                    t.local_topic_id.clone(),
+                )
+            })
         })
         .collect();
 
@@ -886,13 +902,17 @@ pub fn apply_publish(
             let mut next_topics = Vec::with_capacity(matching.len());
             for topic in matching {
                 let preferred = existing_local_ids
-                    .get(&(subject.local_subject_id.clone(), topic.canonical_topic_id.clone()))
+                    .get(&(
+                        subject.local_subject_id.clone(),
+                        topic.canonical_topic_id.clone(),
+                    ))
                     .cloned()
                     .unwrap_or_else(|| topic.canonical_topic_id.clone());
                 let local_tid = if used_local_topic_ids.insert(preferred.clone()) {
                     preferred
                 } else {
-                    let scoped = format!("{}--{}", subject.local_subject_id, topic.canonical_topic_id);
+                    let scoped =
+                        format!("{}--{}", subject.local_subject_id, topic.canonical_topic_id);
                     used_local_topic_ids.insert(scoped.clone());
                     scoped
                 };
@@ -919,7 +939,10 @@ pub fn apply_publish(
             let local_tid = if used_local_topic_ids.insert(topic.canonical_topic_id.clone()) {
                 topic.canonical_topic_id.clone()
             } else {
-                let scoped = format!("{}--{}", topic.canonical_subject_id, topic.canonical_topic_id);
+                let scoped = format!(
+                    "{}--{}",
+                    topic.canonical_subject_id, topic.canonical_topic_id
+                );
                 used_local_topic_ids.insert(scoped.clone());
                 scoped
             };
@@ -1503,7 +1526,10 @@ mod tests {
         )
         .unwrap();
         assert_eq!(card.canonical_subject_id, "FIN");
-        assert!(card.contest_names.iter().all(|name| name == "a" || name == "b"));
+        assert!(card
+            .contest_names
+            .iter()
+            .all(|name| name == "a" || name == "b"));
     }
 
     #[test]

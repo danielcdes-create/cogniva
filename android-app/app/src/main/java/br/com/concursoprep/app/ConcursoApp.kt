@@ -37,9 +37,15 @@ class ConcursoApp : Application() {
     private var accountDatabases: AccountDatabaseSession<AppDatabase>? = null
     private var activeHttpClient: OkHttpClient? = null
 
+    private suspend fun cancelAndAwaitSyncWorkers() {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { WorkManager.getInstance(this@ConcursoApp).cancelUniqueWork("CognivaImmediateSync").result.get() }
+            runCatching { WorkManager.getInstance(this@ConcursoApp).cancelUniqueWork(OfflineSyncWorker.UNIQUE_WORK_NAME).result.get() }
+        }
+    }
+
     suspend fun selectAccount(userId: Long) {
-        runCatching { WorkManager.getInstance(this).cancelUniqueWork("CognivaImmediateSync") }
-        runCatching { WorkManager.getInstance(this).cancelUniqueWork("CognivaOfflineSync") }
+        cancelAndAwaitSyncWorkers()
         if (::repository.isInitialized) {
             repository.awaitIdleForClose()
         }
@@ -53,8 +59,7 @@ class ConcursoApp : Application() {
      * e abre o novo banco limpo de convidado (LGPD Art. 18).
      */
     suspend fun wipeLocalAccountDatabaseAndOpenGuest(deletedUserId: Long, nextGuestUserId: Long) {
-        runCatching { WorkManager.getInstance(this).cancelUniqueWork("CognivaImmediateSync") }
-        runCatching { WorkManager.getInstance(this).cancelUniqueWork("CognivaOfflineSync") }
+        cancelAndAwaitSyncWorkers()
         if (::repository.isInitialized) {
             repository.awaitIdleForClose()
         }

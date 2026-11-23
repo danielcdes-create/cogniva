@@ -47,7 +47,8 @@ pub fn commit_payload_digest(
     reviewed: bool,
     commands: &[question_storage::SaveRequest],
 ) -> Result<String, AppError> {
-    let serialized = serde_json::to_value(commands).map_err(|_| bad("Comandos não serializáveis"))?;
+    let serialized =
+        serde_json::to_value(commands).map_err(|_| bad("Comandos não serializáveis"))?;
     commit_payload_digest_value(reviewed, &serialized)
 }
 fn uuid_for(seed: &str) -> String {
@@ -57,8 +58,13 @@ fn uuid_for(seed: &str) -> String {
     uuid::Uuid::from_bytes(id).to_string()
 }
 fn operation(id: &str) -> Result<(), AppError> {
-    uuid::Uuid::parse_str(id)
-        .map_err(|_| bad_code("SCHEMA_VALIDATION_FAILED", Some("operation_id"), "operation_id deve ser UUID"))?;
+    uuid::Uuid::parse_str(id).map_err(|_| {
+        bad_code(
+            "SCHEMA_VALIDATION_FAILED",
+            Some("operation_id"),
+            "operation_id deve ser UUID",
+        )
+    })?;
     Ok(())
 }
 fn bounded(items: &[Value]) -> Result<(), AppError> {
@@ -126,8 +132,7 @@ pub fn prepare(
             .get("evaluated_semantic_revision")
             .is_none_or(Value::is_null)
         {
-            cloned["validity"]["evaluated_semantic_revision"] =
-                cloned["semantic_revision"].clone();
+            cloned["validity"]["evaluated_semantic_revision"] = cloned["semantic_revision"].clone();
             cloned["validity"]["evaluation_mode"] = json!("SEMANTIC");
         }
         cloned
@@ -295,7 +300,9 @@ pub fn prepare(
     )
 }
 
-fn confirmed_official_exam_codes(origins: Option<&Vec<Value>>) -> std::collections::HashSet<String> {
+fn confirmed_official_exam_codes(
+    origins: Option<&Vec<Value>>,
+) -> std::collections::HashSet<String> {
     origins
         .into_iter()
         .flatten()
@@ -373,29 +380,38 @@ pub async fn preview(state: &AppState, user: i64, r: PreviewRequest) -> Result<V
     let content_revs: Vec<String> = items
         .iter()
         .filter(|i| i["valid"] == true)
-        .filter_map(|i| i["command"]["document"]["content_revision"].as_str().map(str::to_string))
+        .filter_map(|i| {
+            i["command"]["document"]["content_revision"]
+                .as_str()
+                .map(str::to_string)
+        })
         .collect();
     let semantic_revs: Vec<String> = items
         .iter()
         .filter(|i| i["valid"] == true)
-        .filter_map(|i| i["command"]["document"]["semantic_revision"].as_str().map(str::to_string))
+        .filter_map(|i| {
+            i["command"]["document"]["semantic_revision"]
+                .as_str()
+                .map(str::to_string)
+        })
         .collect();
 
-    let existing_by_hash: Vec<bson::Document> = if !content_revs.is_empty() || !semantic_revs.is_empty() {
-        question_storage::collection(&state.db, "todasQuestoes")
-            .find(doc! {
-                "$or": [
-                    { "content_revision": { "$in": &content_revs } },
-                    { "semantic_revision": { "$in": &semantic_revs } }
-                ]
-            })
-            .projection(doc! { "_id": 1, "content_revision": 1, "semantic_revision": 1 })
-            .await?
-            .try_collect()
-            .await?
-    } else {
-        Vec::new()
-    };
+    let existing_by_hash: Vec<bson::Document> =
+        if !content_revs.is_empty() || !semantic_revs.is_empty() {
+            question_storage::collection(&state.db, "todasQuestoes")
+                .find(doc! {
+                    "$or": [
+                        { "content_revision": { "$in": &content_revs } },
+                        { "semantic_revision": { "$in": &semantic_revs } }
+                    ]
+                })
+                .projection(doc! { "_id": 1, "content_revision": 1, "semantic_revision": 1 })
+                .await?
+                .try_collect()
+                .await?
+        } else {
+            Vec::new()
+        };
 
     let mut duplicate_warnings = Vec::new();
     let batch_snapshot: Vec<(usize, String, String, String)> = items
@@ -404,9 +420,15 @@ pub async fn preview(state: &AppState, user: i64, r: PreviewRequest) -> Result<V
         .filter_map(|i| {
             Some((
                 i["index"].as_u64()? as usize,
-                i["command"]["document"]["_id"]["$oid"].as_str()?.to_string(),
-                i["command"]["document"]["content_revision"].as_str()?.to_string(),
-                i["command"]["document"]["semantic_revision"].as_str()?.to_string(),
+                i["command"]["document"]["_id"]["$oid"]
+                    .as_str()?
+                    .to_string(),
+                i["command"]["document"]["content_revision"]
+                    .as_str()?
+                    .to_string(),
+                i["command"]["document"]["semantic_revision"]
+                    .as_str()?
+                    .to_string(),
             ))
         })
         .collect();
@@ -587,7 +609,10 @@ pub async fn commit_with_reviewer(
     let commits_coll = question_storage::collection(&state.db, "question_import_commits");
 
     let mut retrying_failed = false;
-    if let Some(existing) = commits_coll.find_one(doc! { "_id": &commit_record_id }).await? {
+    if let Some(existing) = commits_coll
+        .find_one(doc! { "_id": &commit_record_id })
+        .await?
+    {
         if existing.get_str("payload_digest").ok() != Some(actual_digest.as_str()) {
             return Err(AppError::conflict_code(
                 "IDEMPOTENCY_KEY_CONFLICT",
@@ -638,12 +663,13 @@ pub async fn commit_with_reviewer(
 
     // Cross-batch accidental duplicate content guard when not explicitly acknowledged (Sec. 5.5)
     if r.acknowledge_duplicates != Some(true) && !batch_content_revs.is_empty() {
-        let existing_dups: Vec<bson::Document> = question_storage::collection(&state.db, "todasQuestoes")
-            .find(doc! { "content_revision": { "$in": &batch_content_revs } })
-            .projection(doc! { "_id": 1, "content_revision": 1, "origins": 1 })
-            .await?
-            .try_collect()
-            .await?;
+        let existing_dups: Vec<bson::Document> =
+            question_storage::collection(&state.db, "todasQuestoes")
+                .find(doc! { "content_revision": { "$in": &batch_content_revs } })
+                .projection(doc! { "_id": 1, "content_revision": 1, "origins": 1 })
+                .await?
+                .try_collect()
+                .await?;
         if !existing_dups.is_empty() {
             for (cmd, crev) in r.commands.iter().zip(batch_content_revs.iter()) {
                 let cmd_oid = contracts::validate_contract_oid(&cmd.document["_id"], "_id")?;
@@ -743,13 +769,8 @@ pub async fn commit_with_reviewer(
     for (index, command) in r.commands.into_iter().enumerate() {
         let id = command.document["_id"].clone();
         let operation_id = command.operation_id.clone();
-        match question_storage::create_in_session(
-            &state.db,
-            tx_session.as_mut(),
-            reviewer,
-            command,
-        )
-        .await
+        match question_storage::create_in_session(&state.db, tx_session.as_mut(), reviewer, command)
+            .await
         {
             Ok(receipt) => results.push(json!({
                 "index": index,
@@ -792,7 +813,8 @@ pub async fn commit_with_reviewer(
         "payload_digest": actual_digest,
         "items": results
     });
-    let stored_resp = Bson::try_from(response.clone()).map_err(|_| bad("Recibo não armazenável"))?;
+    let stored_resp =
+        Bson::try_from(response.clone()).map_err(|_| bad("Recibo não armazenável"))?;
 
     if let Some(mut s) = tx_session {
         commits_coll
@@ -972,12 +994,8 @@ pub async fn assist(state: &AppState, user: i64, r: AssistRequest) -> Result<Val
         crate::services::ai_tutor::wrap_untrusted_xml("untrusted_raw_source", &r.text);
     let user_prompt = format!("Modo: {}\nMaterial bruto:\n{}", r.mode, fenced_material);
     let result = async {
-        let raw = crate::services::ai_tutor::call_xai_text(
-            &state.config,
-            PROMPT,
-            &user_prompt,
-        )
-        .await?;
+        let raw =
+            crate::services::ai_tutor::call_xai_text(&state.config, PROMPT, &user_prompt).await?;
         let items = parse_assistance(&raw)?;
         let response = json!({"assistance_id":r.operation_id,"items":items,"requires_review":true});
         let stored =

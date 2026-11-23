@@ -13,6 +13,9 @@ install -d -m 700 "$backup"
 if [ -f /etc/nginx/sites-available/cogniva ]; then
     cp -a /etc/nginx/sites-available/cogniva "$backup/cogniva"
 fi
+if [ -f /etc/nginx/conf.d/cogniva-rate-limits.conf ]; then
+    cp -a /etc/nginx/conf.d/cogniva-rate-limits.conf "$backup/cogniva-rate-limits.conf"
+fi
 install -d /var/www/cogniva-acme /etc/letsencrypt /var/lib/letsencrypt /var/log/letsencrypt
 
 if [ -f /etc/nginx/sites-available/cogniva ]; then
@@ -63,6 +66,13 @@ PY
 if ! nginx -t; then
     if [ -f "$backup/cogniva" ]; then
         cp -a "$backup/cogniva" /etc/nginx/sites-available/cogniva
+    else
+        rm -f /etc/nginx/sites-available/cogniva
+    fi
+    if [ -f "$backup/cogniva-rate-limits.conf" ]; then
+        cp -a "$backup/cogniva-rate-limits.conf" /etc/nginx/conf.d/cogniva-rate-limits.conf
+    else
+        rm -f /etc/nginx/conf.d/cogniva-rate-limits.conf
     fi
     exit 1
 fi

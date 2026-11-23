@@ -452,6 +452,126 @@ class QuestionContractsTest(unittest.TestCase):
         self.assertEqual(ctx.exception.code, "SCHEMA_VALIDATION_FAILED")
         self.assertEqual(ctx.exception.field, "editorial_card.plausible_conceptual_errors")
 
+    def test_concept_links_evidence_challenge_and_discursive_explicit_eligibility(self):
+        # 1. concept_id validation: distinct concepts on same topic_id allowed; duplicate/wrong/inactive rejected
+        cat_concepts = copy.deepcopy(self.catalog)
+        q_base = fixture("question-multiple-choice")
+        sid = q_base["classification"]["links"][0]["subject_id"]
+        tid = q_base["classification"]["links"][0]["topic_id"]
+        cat_concepts["concepts"] = [
+            {
+                "concept_id": "CONCEPT_A",
+                "subject_id": sid,
+                "topic_id": tid,
+                "label": "Conceito A",
+                "aliases": [],
+                "definition": "Definição A.",
+                "prerequisite_concept_ids": [],
+                "normative_source_ids": [],
+                "status": "ACTIVE",
+                "revision": 1,
+                "source_ids": ["EDITORIAL_V1"],
+            },
+            {
+                "concept_id": "CONCEPT_B",
+                "subject_id": sid,
+                "topic_id": tid,
+                "label": "Conceito B",
+                "aliases": [],
+                "definition": "Definição B.",
+                "prerequisite_concept_ids": [],
+                "normative_source_ids": [],
+                "status": "ACTIVE",
+                "revision": 1,
+                "source_ids": ["EDITORIAL_V1"],
+            },
+            {
+                "concept_id": "CONCEPT_DEPRECATED",
+                "subject_id": sid,
+                "topic_id": tid,
+                "label": "Conceito Depreciado",
+                "aliases": [],
+                "definition": "Definição antiga.",
+                "prerequisite_concept_ids": [],
+                "normative_source_ids": [],
+                "status": "DEPRECATED",
+                "revision": 1,
+                "source_ids": ["EDITORIAL_V1"],
+            },
+        ]
+
+        q_concepts = copy.deepcopy(q_base)
+        q_concepts["classification"]["links"][0]["concept_id"] = "CONCEPT_A"
+        sec = copy.deepcopy(q_concepts["classification"]["links"][0])
+        sec["link_id"] = "00000000-0000-4000-8000-000000000555"
+        sec["role"] = "SECONDARY"
+        sec["concept_id"] = "CONCEPT_B"
+        q_concepts["classification"]["links"].append(sec)
+        qc.validate_question(q_concepts, cat_concepts)
+
+        q_dup_concept = copy.deepcopy(q_concepts)
+        q_dup_concept["classification"]["links"][1]["concept_id"] = "CONCEPT_A"
+        with self.assertRaises(qc.ContractValidationError) as ctx_dup:
+            qc.validate_question(q_dup_concept, cat_concepts)
+        self.assertEqual(ctx_dup.exception.code, "DUPLICATE_TAXONOMY_LINK")
+
+        q_inactive_concept = copy.deepcopy(q_concepts)
+        q_inactive_concept["classification"]["links"][1]["concept_id"] = "CONCEPT_DEPRECATED"
+        with self.assertRaises(qc.ContractValidationError) as ctx_inact:
+            qc.validate_question(q_inactive_concept, cat_concepts)
+        self.assertEqual(ctx_inact.exception.code, "INACTIVE_TAXONOMY_LINK")
+
+        q_unknown_concept = copy.deepcopy(q_concepts)
+        q_unknown_concept["classification"]["links"][1]["concept_id"] = "CONCEPT_UNKNOWN"
+        with self.assertRaises(qc.ContractValidationError) as ctx_unk:
+            qc.validate_question(q_unknown_concept, cat_concepts)
+        self.assertEqual(ctx_unk.exception.code, "INVALID_TAXONOMY_LINK")
+
+        # 2. evidence_challenge validation
+        q_ev = copy.deepcopy(q_base)
+        q_ev["evidence_challenge"] = {
+            "prompt": "Qual fundamento sustenta diretamente o gabarito?",
+            "options": [
+                {"evidence_id": "EV_1", "text": "Fundamento normativo correto aplicável ao caso.", "source_id": "CF_1988"},
+                {"evidence_id": "EV_2", "text": "Distrator plausível baseado em regra revogada.", "source_id": None},
+                {"evidence_id": "EV_3", "text": "Distrator conceitual de outra esfera administrativa.", "source_id": None},
+            ],
+            "correct_evidence_id": "EV_1",
+        }
+        qc.validate_question(q_ev, self.catalog)
+
+        q_ev_dup = copy.deepcopy(q_ev)
+        q_ev_dup["evidence_challenge"]["options"][1]["evidence_id"] = "EV_1"
+        with self.assertRaises(qc.ContractValidationError) as ctx_ev_dup:
+            qc.validate_question(q_ev_dup, self.catalog)
+        self.assertEqual(ctx_ev_dup.exception.field, "evidence_challenge.options")
+
+        q_ev_missing = copy.deepcopy(q_ev)
+        q_ev_missing["evidence_challenge"]["correct_evidence_id"] = "EV_99"
+        with self.assertRaises(qc.ContractValidationError) as ctx_ev_miss:
+            qc.validate_question(q_ev_missing, self.catalog)
+        self.assertEqual(ctx_ev_miss.exception.field, "evidence_challenge.correct_evidence_id")
+
+        # 3. DISCURSIVE_EXPLICIT allows valid OPEN_ENDED question while STANDARD_OBJECTIVE excludes it
+        open_q = fixture("question-open-manual")
+        std_elig = qc.evaluate_question_eligibility(
+            open_q,
+            self.catalog,
+            evaluation_date="2026-11-15",
+            mode="STANDARD_OBJECTIVE",
+        )
+        self.assertFalse(std_elig["eligible"])
+        self.assertIn("OPEN_ENDED_EXCLUDED_FROM_OBJECTIVE_PRACTICE", std_elig["reason_codes"])
+
+        disc_elig = qc.evaluate_question_eligibility(
+            open_q,
+            self.catalog,
+            evaluation_date="2026-11-15",
+            mode="DISCURSIVE_EXPLICIT",
+        )
+        self.assertTrue(disc_elig["eligible"])
+        self.assertEqual(disc_elig["reason_codes"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

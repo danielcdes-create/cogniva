@@ -156,7 +156,8 @@ impl UserActivityDocument {
             return false;
         }
         let clamped_days = self.spaced_repetition_interval.clamp(1, 3650) as i64;
-        self.revisao_necessaria || now >= self.datas.ultima_sessao + chrono::Duration::days(clamped_days)
+        self.revisao_necessaria
+            || now >= self.datas.ultima_sessao + chrono::Duration::days(clamped_days)
     }
     pub fn error_notebook(&self) -> bool {
         if self.dominada {

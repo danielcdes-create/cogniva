@@ -38,6 +38,12 @@ data class QuestionImportDraft(
     val result: JsonObject? = null,
     val submitted: Boolean = false,
 ) {
+    val hasCompleteSourceReference: Boolean
+        get() = sourceUri.trim().matches(Regex("https?://.+", RegexOption.IGNORE_CASE)) &&
+            sourceTitle.isNotBlank() &&
+            sourceDate.trim().matches(Regex("[0-9]{4}-[0-9]{2}-[0-9]{2}")) &&
+            runCatching { java.time.LocalDate.parse(sourceDate.trim()) }.isSuccess
+
     fun items(): JsonArray {
         if (mode == "BULK") return parseQuestionImport(source)
         val year = examYear.trim().takeIf { it.isNotEmpty() }?.let {
@@ -53,6 +59,9 @@ data class QuestionImportDraft(
                 put("retrieved_at", "${date}T00:00:00Z"); put("sha256", JsonNull)
             }
         } else JsonNull
+        require(!confirmOrigin || (sourceReference !is JsonNull && assistanceId == null)) {
+            "Informe a fonte documental completa (URL HTTP/HTTPS, título e data AAAA-MM-DD) antes de confirmar a origem."
+        }
         val options = when (kind) {
             "TRUE_FALSE" -> listOf("Certo", "Errado")
             "OPEN_ENDED" -> emptyList()
@@ -105,6 +114,15 @@ fun parseQuestionImport(source: String): JsonArray {
     }
     require(items.size in 1..50) { "Cada lote deve conter de 1 a 50 questões." }
     require(items.all { it is JsonObject }) { "Cada questão deve ser um objeto JSON." }
+    items.forEachIndexed { idx, elem ->
+        val obj = elem.jsonObject
+        if (obj["confirm_origin"]?.jsonPrimitive?.booleanOrNull == true) {
+            val srcRef = obj["source_reference"]
+            require(srcRef is JsonObject && srcRef.isNotEmpty()) {
+                "Item ${idx + 1}: informe source_reference antes de confirmar confirm_origin."
+            }
+        }
+    }
     return items
 }
 

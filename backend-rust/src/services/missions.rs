@@ -469,6 +469,7 @@ pub fn validate_catalog_value(schema_val: &Value, raw_val: &Value) -> Result<(),
     Ok(())
 }
 
+#[cfg(test)]
 pub fn find_media_asset(asset_id: &str) -> Option<&'static MediaAssetSpec> {
     bundled_catalog()
         .media_assets
@@ -497,7 +498,10 @@ pub fn resolve_media_path(media_dir: &Path, asset: &MediaAssetSpec) -> Option<Pa
 }
 
 fn sanitize_vtt_single_line(raw: &str) -> String {
-    raw.replace(['\r', '\n'], " ").replace("-->", "->").trim().to_string()
+    raw.replace(['\r', '\n'], " ")
+        .replace("-->", "->")
+        .trim()
+        .to_string()
 }
 
 pub fn format_webvtt_timestamp(ms: u64) -> String {
@@ -663,7 +667,8 @@ pub fn summarize_narrative_progress(
         };
     };
 
-    let valid_scene_ids: HashSet<&str> = mission.scenes.iter().map(|s| s.scene_id.as_str()).collect();
+    let valid_scene_ids: HashSet<&str> =
+        mission.scenes.iter().map(|s| s.scene_id.as_str()).collect();
     let completed_scene_ids: Vec<String> = p
         .completed_scene_ids
         .iter()
@@ -832,6 +837,76 @@ pub fn resolve_active_mission_topics(curriculum: &CurriculumBindingSpec) -> Vec<
     resolved
 }
 
+pub fn has_non_blank_practice(act: &UserActivityDocument) -> bool {
+    act.quantidade_praticas > 0 || act.past_sessions.iter().any(|s| !s.is_blank)
+}
+
+pub fn summarize_demonstrated_mastery_from_activities(
+    available_count: usize,
+    resolved_topic_ids: Vec<String>,
+    activities: &[UserActivityDocument],
+) -> DemonstratedMasterySummaryDto {
+    if available_count == 0 {
+        return DemonstratedMasterySummaryDto {
+            mastery_state: "NO_QUESTIONS_AVAILABLE".to_string(),
+            mastery_label_pt: "Sem questões validadas disponíveis neste ambiente".to_string(),
+            available_human_questions_count: 0,
+            distinct_human_questions_practiced: 0,
+            mastered_human_questions_count: 0,
+            min_questions_for_mastery: MIN_HUMAN_QUESTIONS_FOR_MASTERY,
+            resolved_topic_ids,
+            practice_available: false,
+        };
+    }
+
+    let mut distinct_practiced = 0_usize;
+    let mut mastered_count = 0_usize;
+    for act in activities {
+        if has_non_blank_practice(act) {
+            distinct_practiced += 1;
+            if act.dominada {
+                mastered_count += 1;
+            }
+        }
+    }
+
+    let (mastery_state, mastery_label_pt) = if distinct_practiced == 0 {
+        (
+            "UNMEASURED".to_string(),
+            format!(
+                "Não medido em questões independentes (0/{MIN_HUMAN_QUESTIONS_FOR_MASTERY} questões humanas)"
+            ),
+        )
+    } else if distinct_practiced < MIN_HUMAN_QUESTIONS_FOR_MASTERY
+        || mastered_count < MIN_HUMAN_QUESTIONS_FOR_MASTERY
+    {
+        (
+            "EVIDENCE_IN_PROGRESS".to_string(),
+            format!(
+                "Evidência em construção ({distinct_practiced}/{MIN_HUMAN_QUESTIONS_FOR_MASTERY} questões humanas praticadas)"
+            ),
+        )
+    } else {
+        (
+            "VERIFIED_INDEPENDENT".to_string(),
+            format!(
+                "Domínio independente verificado ({mastered_count} questões humanas dominadas)"
+            ),
+        )
+    };
+
+    DemonstratedMasterySummaryDto {
+        mastery_state,
+        mastery_label_pt,
+        available_human_questions_count: available_count,
+        distinct_human_questions_practiced: distinct_practiced,
+        mastered_human_questions_count: mastered_count,
+        min_questions_for_mastery: MIN_HUMAN_QUESTIONS_FOR_MASTERY,
+        resolved_topic_ids,
+        practice_available: true,
+    }
+}
+
 pub async fn compute_demonstrated_mastery(
     state: &AppState,
     user_id: i64,
@@ -869,74 +944,31 @@ pub async fn compute_demonstrated_mastery(
 
     let available_count = candidate_questions.len();
     if available_count == 0 {
-        return Ok(DemonstratedMasterySummaryDto {
-            mastery_state: "NO_QUESTIONS_AVAILABLE".to_string(),
-            mastery_label_pt: "Sem questões validadas disponíveis neste ambiente".to_string(),
-            available_human_questions_count: 0,
-            distinct_human_questions_practiced: 0,
-            mastered_human_questions_count: 0,
-            min_questions_for_mastery: MIN_HUMAN_QUESTIONS_FOR_MASTERY,
+        return Ok(summarize_demonstrated_mastery_from_activities(
+            0,
             resolved_topic_ids,
-            practice_available: false,
-        });
+            &[],
+        ));
     }
 
     let eligible_ids: Vec<ObjectId> = candidate_questions.iter().map(|q| q.id).collect();
-    let mut cursor = state
+    let activities: Vec<UserActivityDocument> = state
         .db
         .collection::<UserActivityDocument>("userActivityLog")
         .find(doc! {
             "user_id": user_id,
-            "question_id": { "$in": eligible_ids }
+            "question_id": { "$in": eligible_ids },
+            "quantidade_praticas": { "$gt": 0 }
         })
+        .await?
+        .try_collect()
         .await?;
 
-    let mut distinct_practiced = 0_usize;
-    let mut mastered_count = 0_usize;
-    while let Some(act) = cursor.try_next().await? {
-        if act.quantidade_praticas > 0 || !act.past_sessions.is_empty() {
-            distinct_practiced += 1;
-            if act.dominada {
-                mastered_count += 1;
-            }
-        }
-    }
-
-    let (mastery_state, mastery_label_pt) = if distinct_practiced == 0 {
-        (
-            "UNMEASURED".to_string(),
-            format!(
-                "Não medido em questões independentes (0/{MIN_HUMAN_QUESTIONS_FOR_MASTERY} questões humanas)"
-            ),
-        )
-    } else if distinct_practiced < MIN_HUMAN_QUESTIONS_FOR_MASTERY
-        || mastered_count < MIN_HUMAN_QUESTIONS_FOR_MASTERY
-    {
-        (
-            "EVIDENCE_IN_PROGRESS".to_string(),
-            format!(
-                "Evidência em construção ({distinct_practiced}/{MIN_HUMAN_QUESTIONS_FOR_MASTERY} questões humanas praticadas)"
-            ),
-        )
-    } else {
-        (
-            "VERIFIED_INDEPENDENT".to_string(),
-            format!(
-                "Domínio independente verificado ({mastered_count} questões humanas dominadas)"
-            ),
-        )
-    };
-
-    Ok(DemonstratedMasterySummaryDto {
-        mastery_state,
-        mastery_label_pt,
-        available_human_questions_count: available_count,
-        distinct_human_questions_practiced: distinct_practiced,
-        mastered_human_questions_count: mastered_count,
-        min_questions_for_mastery: MIN_HUMAN_QUESTIONS_FOR_MASTERY,
+    Ok(summarize_demonstrated_mastery_from_activities(
+        available_count,
         resolved_topic_ids,
-        practice_available: true,
-    })
+        &activities,
+    ))
 }
 
 pub async fn fetch_related_human_questions(
@@ -988,7 +1020,8 @@ pub async fn fetch_related_human_questions(
         .collection::<Document>("userActivityLog")
         .find(doc! {
             "user_id": user_id,
-            "question_id": { "$in": candidate_ids }
+            "question_id": { "$in": candidate_ids },
+            "quantidade_praticas": { "$gt": 0 }
         })
         .projection(doc! { "question_id": 1, "dominada": 1 })
         .await?;
@@ -1026,7 +1059,10 @@ pub struct ResolvedCatalog {
 }
 
 impl ResolvedCatalog {
-    pub fn find_mission(&self, mission_id: &str) -> Option<(&CareerSpec, &DisciplineSpec, &SeasonSpec, &MissionSpec)> {
+    pub fn find_mission(
+        &self,
+        mission_id: &str,
+    ) -> Option<(&CareerSpec, &DisciplineSpec, &SeasonSpec, &MissionSpec)> {
         for career in &self.careers {
             if career.status == "ARCHIVED" {
                 continue;
@@ -1047,6 +1083,61 @@ impl ResolvedCatalog {
     }
 }
 
+pub fn apply_mission_definition_override(
+    careers: &mut [CareerSpec],
+    assets: &mut HashMap<String, MediaAssetSpec>,
+    characters: &mut HashMap<String, CharacterSpec>,
+    doc: &Document,
+) {
+    if let Ok(extra_assets) = doc.get_array("media_assets") {
+        for a in extra_assets {
+            if let Ok(parsed) = bson::from_bson::<MediaAssetSpec>(a.clone()) {
+                assets.insert(parsed.asset_id.clone(), parsed);
+            }
+        }
+    }
+    if let Ok(extra_chars) = doc.get_array("characters") {
+        for c in extra_chars {
+            if let Ok(parsed) = bson::from_bson::<CharacterSpec>(c.clone()) {
+                characters.insert(parsed.character_id.clone(), parsed);
+            }
+        }
+    }
+    if let (Ok(career_id), Ok(discipline_id), Ok(season_id), Ok(mission_bson)) = (
+        doc.get_str("career_id"),
+        doc.get_str("discipline_id"),
+        doc.get_str("season_id"),
+        doc.get("mission").ok_or(()),
+    ) {
+        if let Ok(mission) = bson::from_bson::<MissionSpec>(mission_bson.clone()) {
+            for career in careers.iter_mut() {
+                if career.career_id == career_id {
+                    for disc in &mut career.disciplines {
+                        if disc.discipline_id == discipline_id {
+                            for season in &mut disc.seasons {
+                                if season.season_id == season_id {
+                                    if let Some(existing) = season
+                                        .missions
+                                        .iter_mut()
+                                        .find(|m| m.mission_id == mission.mission_id)
+                                    {
+                                        if mission.version >= existing.version {
+                                            *existing = mission.clone();
+                                        }
+                                    } else {
+                                        season.missions.push(mission.clone());
+                                        season.missions.sort_by_key(|m| m.mission_number);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 pub async fn load_effective_catalog(state: &AppState) -> Result<ResolvedCatalog, AppError> {
     let base = bundled_catalog();
     let mut careers = base.careers.clone();
@@ -1063,64 +1154,21 @@ pub async fn load_effective_catalog(state: &AppState) -> Result<ResolvedCatalog,
         .map(|c| (c.character_id.clone(), c))
         .collect();
 
-    // Allow declarative extension from MongoDB `mission_definitions` without touching player code
+    // Allow declarative extension and asset/mission overrides from MongoDB `mission_definitions`
     if let Ok(mut cursor) = state
         .db
         .collection::<Document>("mission_definitions")
-        .find(doc! { "publication_state": "PUBLISHED" })
+        .find(doc! {
+            "$or": [
+                { "publication_state": "PUBLISHED" },
+                { "mission.publication_state": "PUBLISHED" }
+            ]
+        })
         .limit(100)
         .await
     {
         while let Ok(Some(doc)) = cursor.try_next().await {
-            if let Ok(extra_assets) = doc.get_array("media_assets") {
-                for a in extra_assets {
-                    if let Ok(parsed) = bson::from_bson::<MediaAssetSpec>(a.clone()) {
-                        assets.entry(parsed.asset_id.clone()).or_insert(parsed);
-                    }
-                }
-            }
-            if let Ok(extra_chars) = doc.get_array("characters") {
-                for c in extra_chars {
-                    if let Ok(parsed) = bson::from_bson::<CharacterSpec>(c.clone()) {
-                        characters.entry(parsed.character_id.clone()).or_insert(parsed);
-                    }
-                }
-            }
-            if let (Ok(career_id), Ok(discipline_id), Ok(season_id), Ok(mission_bson)) = (
-                doc.get_str("career_id"),
-                doc.get_str("discipline_id"),
-                doc.get_str("season_id"),
-                doc.get("mission").ok_or(()),
-            ) {
-                if let Ok(mission) = bson::from_bson::<MissionSpec>(mission_bson.clone()) {
-                    for career in &mut careers {
-                        if career.career_id == career_id {
-                            for disc in &mut career.disciplines {
-                                if disc.discipline_id == discipline_id {
-                                    for season in &mut disc.seasons {
-                                        if season.season_id == season_id {
-                                            if let Some(existing) = season
-                                                .missions
-                                                .iter_mut()
-                                                .find(|m| m.mission_id == mission.mission_id)
-                                            {
-                                                if mission.version >= existing.version {
-                                                    *existing = mission.clone();
-                                                }
-                                            } else {
-                                                season.missions.push(mission.clone());
-                                                season
-                                                    .missions
-                                                    .sort_by_key(|m| m.mission_number);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            apply_mission_definition_override(&mut careers, &mut assets, &mut characters, &doc);
         }
     }
 
@@ -1417,18 +1465,13 @@ pub fn new_initial_progress(user_id: i64, mission: &MissionSpec) -> MissionProgr
     }
 }
 
-pub fn admin_overview_payload(media_dir: &Path) -> Value {
-    let catalog = bundled_catalog();
-    let assets_map: HashMap<String, MediaAssetSpec> = catalog
-        .media_assets
-        .iter()
-        .cloned()
-        .map(|a| (a.asset_id.clone(), a))
-        .collect();
+pub fn admin_overview_payload(catalog: &ResolvedCatalog, media_dir: &Path) -> Value {
+    let base = bundled_catalog();
+    let mut sorted_assets: Vec<&MediaAssetSpec> = catalog.assets.values().collect();
+    sorted_assets.sort_by(|a, b| a.asset_id.cmp(&b.asset_id));
 
-    let assets_report: Vec<Value> = catalog
-        .media_assets
-        .iter()
+    let assets_report: Vec<Value> = sorted_assets
+        .into_iter()
         .map(|a| {
             let resolved = resolve_media_path(media_dir, a);
             json!({
@@ -1452,7 +1495,7 @@ pub fn admin_overview_payload(media_dir: &Path) -> Value {
         for disc in &career.disciplines {
             for season in &disc.seasons {
                 for m in &season.missions {
-                    let dur = calculate_mission_duration(m, &assets_map);
+                    let dur = calculate_mission_duration(m, &catalog.assets);
                     missions_report.push(json!({
                         "mission_id": m.mission_id,
                         "version": m.version,
@@ -1473,8 +1516,8 @@ pub fn admin_overview_payload(media_dir: &Path) -> Value {
     }
 
     json!({
-        "catalog_id": catalog.catalog_id,
-        "catalog_version": catalog.catalog_version,
+        "catalog_id": base.catalog_id,
+        "catalog_version": base.catalog_version,
         "student_portal_path": "/missoes/",
         "missions": missions_report,
         "media_assets": assets_report,
@@ -1614,5 +1657,158 @@ mod tests {
         assert!(perf
             .concepts_for_review
             .contains(&"relacao_taxas_precos".to_string()));
+    }
+
+    #[test]
+    fn demonstrated_mastery_ignores_blank_omissions_and_catalog_filters_archived_or_draft_items() {
+        use crate::models::activity::{ActivityDates, PastSessionEntry};
+
+        let now = Utc::now();
+        let blank_act = UserActivityDocument {
+            id: None,
+            user_id: 55,
+            question_id: ObjectId::new(),
+            datas: ActivityDates {
+                ultima_sessao: now,
+                ultima_revisao: None,
+                data_primeira_sessao: now,
+                data_primeiro_acerto: None,
+            },
+            tempos: Default::default(),
+            disciplina: "Finanças".into(),
+            past_sessions: vec![PastSessionEntry {
+                attempt_id: "blank-1".into(),
+                data: now,
+                status: false,
+                alternativa_escolhida: String::new(),
+                tempo_gasto_segundos: 5,
+                session_uuid: "sim-1".into(),
+                modo_sessao: "SIMULADO".into(),
+                modo_prova: None,
+                concurso: None,
+                canonical_subject_id: Some("MFIN".into()),
+                canonical_topic_id: Some("MFIN_01_004".into()),
+                dias_desde_ultima_sessao: 0,
+                dias_desde_ultima_revisao: None,
+                percentual_acertos_acumulado: 0.0,
+                tempo_medio_acumulado: 0.0,
+                nivel_confianca: 0,
+                spaced_repetition_interval: 0,
+                spaced_repetition_score: 0.0,
+                streak_atual: 0,
+                points_session: 0.0,
+                is_revision: false,
+                is_blank: true,
+                confidence_explicit: false,
+                selected_evidence_id: None,
+                position_in_session: None,
+                elapsed_session_seconds: Some(40),
+                session_interrupted: false,
+            }],
+            quantidade_praticas: 0,
+            quantidade_acertos: 0,
+            quantidade_erros: 0,
+            percentual_acertos: 0.0,
+            percentual_revisoes_sucesso: None,
+            var_alternativa_escolhida: 0.0,
+            frequencia_estudo_mes: 0.0,
+            spaced_repetition_interval: 0,
+            spaced_repetition_score: 0.0,
+            streak_atual: 0,
+            streak_max: 0,
+            points: 0.0,
+            points_with_decay: 0.0,
+            dominada: false,
+            nivel_confianca_med_rec: None,
+            revisao_necessaria: false,
+            in_error_notebook: false,
+            high_confidence_error_flag: false,
+            user_note: None,
+            canonical_subject_id: Some("MFIN".into()),
+            canonical_topic_id: Some("MFIN_01_004".into()),
+            memory_stability_days: 0.0,
+            memory_difficulty: 5.0,
+        };
+
+        assert!(!has_non_blank_practice(&blank_act));
+        let summary_blank = summarize_demonstrated_mastery_from_activities(
+            3,
+            vec!["MFIN_01_004".into()],
+            std::slice::from_ref(&blank_act),
+        );
+        assert_eq!(summary_blank.distinct_human_questions_practiced, 0);
+        assert_eq!(summary_blank.mastery_state, "UNMEASURED");
+
+        let mut practiced_act = blank_act.clone();
+        practiced_act.quantidade_praticas = 1;
+        practiced_act.quantidade_acertos = 1;
+        practiced_act.past_sessions[0].is_blank = false;
+        practiced_act.past_sessions[0].status = true;
+        assert!(has_non_blank_practice(&practiced_act));
+        let summary_practiced = summarize_demonstrated_mastery_from_activities(
+            3,
+            vec!["MFIN_01_004".into()],
+            &[blank_act, practiced_act],
+        );
+        assert_eq!(summary_practiced.distinct_human_questions_practiced, 1);
+        assert_eq!(summary_practiced.mastery_state, "EVIDENCE_IN_PROGRESS");
+
+        // ResolvedCatalog hides ARCHIVED careers and DRAFT missions, and apply_mission_definition_override updates existing assets
+        let base = bundled_catalog();
+        let mut careers = base.careers.clone();
+        let mut assets: HashMap<String, MediaAssetSpec> = base
+            .media_assets
+            .iter()
+            .cloned()
+            .map(|a| (a.asset_id.clone(), a))
+            .collect();
+        let mut characters: HashMap<String, CharacterSpec> = base
+            .characters
+            .iter()
+            .cloned()
+            .map(|c| (c.character_id.clone(), c))
+            .collect();
+
+        let mut overridden_asset = assets.get("asset-bcb-m01-v01-alerta").unwrap().clone();
+        overridden_asset.sha256 = "f".repeat(64);
+        overridden_asset.duration_seconds = 12.5;
+        let override_doc = doc! {
+            "media_assets": [bson::to_bson(&overridden_asset).unwrap()],
+        };
+        apply_mission_definition_override(
+            &mut careers,
+            &mut assets,
+            &mut characters,
+            &override_doc,
+        );
+        assert_eq!(
+            assets.get("asset-bcb-m01-v01-alerta").unwrap().sha256,
+            "f".repeat(64)
+        );
+
+        let mut draft_mission = careers[0].disciplines[0].seasons[0].missions[0].clone();
+        draft_mission.mission_id = "bcb-draft-hidden".into();
+        draft_mission.publication_state = "DRAFT".into();
+        careers[0].disciplines[0].seasons[0]
+            .missions
+            .push(draft_mission);
+
+        let mut archived_career = careers[0].clone();
+        archived_career.career_id = "archived-career".into();
+        archived_career.status = "ARCHIVED".into();
+        archived_career.disciplines[0].seasons[0].missions[0].mission_id =
+            "archived-mission".into();
+        careers.push(archived_career);
+
+        let resolved = ResolvedCatalog {
+            careers,
+            assets,
+            characters,
+        };
+        assert!(resolved
+            .find_mission("bcb-ef-t1-m01-choque-dos-juros")
+            .is_some());
+        assert!(resolved.find_mission("bcb-draft-hidden").is_none());
+        assert!(resolved.find_mission("archived-mission").is_none());
     }
 }

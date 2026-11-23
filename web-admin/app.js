@@ -73,6 +73,7 @@ const statuses = {
 };
 const classificationStates = {
   CONFIRMED:'Confirmada',
+  PARTIAL:'Parcial',
   PROPOSED:'Proposta',
   UNCLASSIFIED:'Sem classificação'
 };
@@ -177,6 +178,13 @@ function nextFocusKey(label, explicitKey) {
 function field(label,value,change,options = {}) {
   const id = `field-${++sequence}`;
   const focusKey = nextFocusKey(label, options.focusKey);
+  let lastDateVal = String(value ?? '');
+  const onDateUpdate = e => {
+    const nextVal = String(e.target.value ?? '');
+    if (nextVal === lastDateVal) return;
+    lastDateVal = nextVal;
+    change(nextVal);
+  };
   const input = options.options
     ? (() => {
         const sel = h('select',{id,'data-focus-key':focusKey,disabled:options.disabled,onchange:e=>change(e.target.value)},...options.options.map(([v,t])=>h('option',{value:v,selected:String(value ?? '')===String(v)},t)));
@@ -197,7 +205,8 @@ function field(label,value,change,options = {}) {
         maxlength:options.maxlength,
         placeholder:options.placeholder || '',
         class:options.code?'json-editor':'',
-        oninput:e=>change(e.target.value)
+        oninput:options.type === 'date' ? onDateUpdate : e=>change(e.target.value),
+        onchange:options.type === 'date' ? onDateUpdate : undefined
       });
   return h(
     'div',
@@ -484,7 +493,6 @@ export function navigate(page) {
 export async function loadData() {
   const requests = [
     ['catálogo base', 'base', () => api('admin/catalog/base')],
-    ['catálogo de troncos', 'templates', () => api('catalog/trunks')],
     ['templates de concursos', 'exams', () => api('admin/exam-templates')],
     ['capacidades de IA', 'capabilities', () => api('admin/questions/import/capabilities')],
     ['indicadores do acervo', 'summary', () => api('admin/summary')]
@@ -516,9 +524,6 @@ export async function loadData() {
       }
       if (key === 'capabilities' && !nextData.capabilities) {
         nextData.capabilities = {ai_available: false};
-      }
-      if (key === 'templates' && !nextData.templates) {
-        nextData.templates = {trunks: []};
       }
     }
   });
@@ -978,11 +983,21 @@ function examView() {
         if(!clean)return;
         edit(()=>{
           const prevKey=selectedExam;
-          exam._id=clean;
-          if(prevKey!==clean && !Object.hasOwn(ws.exams,clean)){
+          if(prevKey!==clean){
+            const existsOnServer=Array.isArray(data.exams) && data.exams.some(item=>item._id===clean);
+            if(Object.hasOwn(ws.exams,clean) || existsOnServer){
+              throw new Error(`Já existe um template com o ID "${clean}". Escolha outro identificador.`);
+            }
+            exam._id=clean;
             ws.exams[clean]=ws.exams[prevKey];
             delete ws.exams[prevKey];
+            if(examUiState.has(prevKey)){
+              examUiState.set(clean,examUiState.get(prevKey));
+              examUiState.delete(prevKey);
+            }
             selectedExam=clean;
+          } else {
+            exam._id=clean;
           }
         });
       },{required:true,disabled:!draft.isNew,maxlength:100,help:'Apenas letras, números, hífen ou sublinhado (ex.: BCB_2026).'}),
@@ -1344,7 +1359,8 @@ function questionView() {
 
   if(parsed.question_type==='OPEN_ENDED')root.append(openEndedBanner());
 
-  const raw=field('Documento JSON',draft.text,v=>edit(()=>{if(draft.submitted)return;draft.text=v;delete draft.rubricText;draft.rubricError=null;draft.preview=null;draft.operationId=uid();}),{multiline:true,rows:22,code:true,disabled:draft.submitted});
+  let sendBtn=null;
+  const raw=field('Documento JSON',draft.text,v=>edit(()=>{if(draft.submitted)return;draft.text=v;delete draft.rubricText;draft.rubricError=null;delete draft.editorialDraft;draft.editorialError=null;draft.preview=null;draft.operationId=uid();if(sendBtn)sendBtn.disabled=true;}),{multiline:true,rows:22,code:true,disabled:draft.submitted});
   const update=(fn,redraw=false)=>{
     if(draft.submitted)return;
     edit(()=>{
@@ -1352,6 +1368,7 @@ function questionView() {
       fn(q);
       if(q.question_type!=='OPEN_ENDED')q.correct_answers=q.correct_answer_indices.map(index=>q.answers[index]);
       draft.text=pretty(q);draft.preview=null;draft.operationId=uid();
+      if(sendBtn)sendBtn.disabled=true;
       const area=raw.querySelector('textarea');
       if(area)area.value=draft.text;
     });
@@ -1380,6 +1397,7 @@ function questionView() {
         draft.rubricError = error.message;
         draft.preview = null;
         draft.operationId = uid();
+        if (sendBtn) sendBtn.disabled = true;
         persist();
         notice(error.message,'error');
       }
@@ -1422,7 +1440,7 @@ function questionView() {
       decisiveStemExcerpt: edCard.decisive_stem_excerpt || '',
       officialSourceExcerpt: edCard.official_source_excerpt || ''
     };
-    const edErrorNode = h('p',{class:'field-error',hidden:!draft.editorialError},draft.editorialError || '');
+    const edErrorNode = h('p',{class:'field-error',role:'alert',hidden:!draft.editorialError},draft.editorialError || '');
     const syncEditorial = () => {
       draft.editorialDraft = edState;
       try {
@@ -1439,8 +1457,11 @@ function questionView() {
         });
       } catch (err) {
         draft.editorialError = err.message || 'Ficha editorial incompleta.';
+        draft.preview = null;
+        draft.operationId = uid();
         edErrorNode.textContent = draft.editorialError;
         edErrorNode.hidden = false;
+        if (sendBtn) sendBtn.disabled = true;
         persist();
       }
     };
@@ -1460,7 +1481,7 @@ function questionView() {
 
   const primary=parsed.classification.links.find(link=>link.role==='PRIMARY');
   const choice=draft.classificationChoice || {subjectId:primary?.subject_id || '',topicId:primary?.topic_id || '',confirmed:true};
-  const choose=fn=>{if(draft.submitted)return;edit(()=>{fn();choice.confirmed=false;draft.classificationChoice=choice;draft.preview=null;});render();};
+  const choose=fn=>{if(draft.submitted)return;edit(()=>{fn();choice.confirmed=false;draft.classificationChoice=choice;draft.preview=null;if(sendBtn)sendBtn.disabled=true;});render();};
   const questionTopics = orderedTopics(data.base.catalog, choice.subjectId)
     .filter(t=>t.status==='ACTIVE' || t.topic_id===choice.topicId);
   fields.append(
@@ -1490,7 +1511,7 @@ function questionView() {
         q.classification={
           revision:q.classification.revision,
           catalog_version:data.base.catalog.catalog_version,
-          state:choice.subjectId?'CONFIRMED':links.length?'PROPOSED':'UNCLASSIFIED',
+          state:choice.subjectId?'CONFIRMED':links.length?'PARTIAL':'UNCLASSIFIED',
           links
         };
         q.canonical_subject_id=choice.subjectId || null;
@@ -1502,6 +1523,7 @@ function questionView() {
   );
 
   const val=parsed.validity;
+  const todaySp=new Date().toLocaleDateString('en-CA',{timeZone:'America/Sao_Paulo'});
   fields.append(
     h('hr',{class:'divider'}),
     h('h3',{},'4. Validade do conteúdo'),
@@ -1511,16 +1533,36 @@ function questionView() {
         q.validity.evaluated_content_revision=null;
         q.validity.evaluated_semantic_revision=null;
         q.validity.evaluation_mode=null;
-        if((v==='CURRENT' || v==='OBSOLETE') && !q.validity.reference_date){
-          q.validity.reference_date=new Date().toLocaleDateString('en-CA',{timeZone:'America/Sao_Paulo'});
+        if(v==='CURRENT'){
+          if(!q.validity.reference_date){
+            q.validity.reference_date=todaySp;
+          }
+          q.validity.reason_codes=[];
+        } else if(v==='OBSOLETE'){
+          if(!q.validity.reference_date){
+            q.validity.reference_date=todaySp;
+          }
+          q.validity.review_due_on=null;
+          if(!Array.isArray(q.validity.reason_codes) || !q.validity.reason_codes.length){
+            q.validity.reason_codes=['FACT_CHANGED'];
+          }
+        } else if(v==='UNDER_REVIEW'){
+          q.validity.decision=null;
+          q.validity.reference_date=null;
+          q.validity.review_due_on=null;
+          if(!Array.isArray(q.validity.reason_codes) || !q.validity.reason_codes.length){
+            q.validity.reason_codes=['REVIEW_REQUESTED'];
+          }
+        } else {
+          q.validity.decision=null;
+          q.validity.reference_date=null;
+          q.validity.review_due_on=null;
+          q.validity.reason_codes=[];
         }
-        if(v==='CURRENT')q.validity.reason_codes=[];
-        else if(v==='UNDER_REVIEW' && (!Array.isArray(q.validity.reason_codes) || !q.validity.reason_codes.length))q.validity.reason_codes=['REVIEW_REQUESTED'];
-        else if(v==='OBSOLETE' && (!Array.isArray(q.validity.reason_codes) || !q.validity.reason_codes.length))q.validity.reason_codes=['FACT_CHANGED'];
       },true),{options:Object.entries(statuses)}),
       field('Base da avaliação',val.basis || 'TIMELESS',v=>update(q=>{q.validity.basis=v;},true),{options:Object.entries(validityBases)}),
       val.status==='CURRENT' || val.status==='OBSOLETE'
-        ? field('Data de referência (YYYY-MM-DD)',val.reference_date || new Date().toLocaleDateString('en-CA',{timeZone:'America/Sao_Paulo'}),v=>update(q=>{q.validity.reference_date=v.trim() || null;}),{type:'date'})
+        ? field('Data de referência (YYYY-MM-DD)',val.reference_date || todaySp,v=>update(q=>{q.validity.reference_date=v.trim() || null;}),{type:'date'})
         : null,
       val.status==='CURRENT'
         ? field(val.basis==='LEGAL'?'Próxima revisão obrigatória (YYYY-MM-DD)':'Próxima revisão prevista (opcional)',val.review_due_on || '',v=>update(q=>{q.validity.review_due_on=v.trim() || null;}),{type:'date'})
@@ -1543,6 +1585,7 @@ function questionView() {
       }
       draft.text=pretty(q);
       draft.preview=null;
+      if(sendBtn)sendBtn.disabled=true;
     }))
   );
 
@@ -1556,6 +1599,10 @@ function questionView() {
       const rawRubric = draft.rubricText ?? pretty(docPayload.grading);
       docPayload.grading = parseOpenEndedGradingJson(rawRubric);
       draft.rubricError = null;
+    }
+    if ((docPayload.validity?.status === 'CURRENT' || docPayload.validity?.status === 'OBSOLETE') && !docPayload.validity.reference_date) {
+      docPayload.validity.reference_date = todaySp;
+      draft.text = pretty(docPayload);
     }
     if(draft.reconfirmValidity){
       docPayload.validity.evaluated_content_revision=null;
@@ -1581,15 +1628,21 @@ function questionView() {
   root.append(card(
     h('p',{},'A prévia calcula o hash canônico JCS SHA-256 e as revisões de classificação e validade.'),
     fields,
-    h('details',{'data-panel-key':`question-json:${selectedQuestion}`},h('summary',{},'Metadados e contrato completo (JSON)'),raw,button('Atualizar formulário a partir do JSON',()=>{try{JSON.parse(draft.text);delete draft.rubricText;draft.rubricError=null;render();}catch(error){notice(`JSON inválido no contrato: ${error.message}`,'error');}})),
+    h('details',{'data-panel-key':`question-json:${selectedQuestion}`},h('summary',{},'Metadados e contrato completo (JSON)'),raw,button('Atualizar formulário a partir do JSON',()=>{try{JSON.parse(draft.text);delete draft.rubricText;draft.rubricError=null;delete draft.editorialDraft;draft.editorialError=null;persist();notice('');render();}catch(error){notice(`JSON inválido no contrato: ${error.message}`,'error');}})),
     validate
   ));
 
   if(draft.preview){
     let reviewed=false;
     const send=button(draft.submitted?'Conferir / reenviar edição':'Confirmar edição',()=>run('Gravando edição…',async()=>{
-      if (draft.preview.command?.document?.question_type === 'OPEN_ENDED' && draft.rubricError) {
+      if (draft.editorialError) {
+        throw new Error(`Ficha editorial inválida: ${draft.editorialError}`);
+      }
+      if (draft.rubricError) {
         throw new Error(draft.rubricError);
+      }
+      if (!draft.preview?.command) {
+        throw new Error('Valide a edição novamente antes de confirmar.');
       }
       draft.submitted=true;persist();
       try {
@@ -1610,6 +1663,7 @@ function questionView() {
         throw error;
       }
     }),'primary');
+    sendBtn=send;
     send.disabled=true;
     root.append(card(
       draft.preview.semantic_changed === false && draft.preview.content_changed
@@ -1618,7 +1672,7 @@ function questionView() {
           ? badge(`Conteúdo alterado · Validade resultante: ${statuses[draft.preview.command.document.validity.status] || draft.preview.command.document.validity.status}`,'warning')
           : badge(`Conteúdo preservado · Validade: ${statuses[draft.preview.command.document.validity.status] || draft.preview.command.document.validity.status}`,'good'),
       h('pre',{},pretty(draft.preview.command.document)),
-      check('Revisei o contrato final, a validade, a classificação e os metadados.',reviewed,value=>{reviewed=value;send.disabled=!value || !!draft.result;}),
+      check('Revisei o contrato final, a validade, a classificação e os metadados.',reviewed,value=>{reviewed=value;send.disabled=!value || !!draft.result || !draft.preview || Boolean(draft.editorialError || draft.rubricError);}),
       send
     ));
   }
@@ -1817,7 +1871,7 @@ function importView() {
 function fetchProposals() {
   run('Consultando propostas de classificação…',async()=>{
     const query=new URLSearchParams({limit:'50'});
-    if(proposalStatusFilter)query.set('status',proposalStatusFilter);
+    query.set('status',proposalStatusFilter || 'ALL');
     proposalsData=await api(`admin/classification/proposals?${query}`);
     data.summary=await api('admin/summary');
   });
@@ -1826,9 +1880,10 @@ function fetchProposals() {
 function classificationView() {
   ws.classificationAiOpId ||= uid();
   const root=h('div',{},heading('Classificação assistida por IA','Gere sugestões para questões sem tópico canônico e confirme cada vínculo com revisão humana.',button('Atualizar fila',fetchProposals,'primary')));
+  const effectiveFilter = proposalStatusFilter || 'ALL';
   const filterBar=h('div',{class:'toolbar'},
     h('select',{'aria-label':'Filtrar propostas por status','data-focus-key':'classification:status',onchange:e=>{proposalStatusFilter=e.target.value;fetchProposals();}},
-      ...[['PENDING','Pendentes de decisão'],['ACCEPTED','Aceitas'],['EDITED_ACCEPTED','Editadas e aceitas'],['DEFERRED','Adiadas'],['REJECTED','Rejeitadas'],['SUPERSEDED','Substituídas'],['','Todas']].map(([v,t])=>h('option',{value:v,selected:proposalStatusFilter===v},t))
+      ...[['PENDING','Pendentes de decisão'],['ACCEPTED','Aceitas'],['REJECTED','Rejeitadas'],['STALE','Desatualizadas (STALE)'],['SUPERSEDED','Substituídas'],['ALL','Todas']].map(([v,t])=>h('option',{value:v,selected:effectiveFilter===v},t))
     ),
     button('Carregar propostas',fetchProposals)
   );
@@ -1888,7 +1943,8 @@ function classificationView() {
 
   for(const item of proposalsData.items){
     const suggestionId=typeof item._id==='string'?item._id:(item._id?.$oid || '');
-    const primaryLink=(item.links || []).find(l=>l.role==='PRIMARY') || item.links?.[0] || {subject_id:'',topic_id:'',rationale:'',confidence:0};
+    const candidateLinks=item.proposed_links || item.links || [];
+    const primaryLink=candidateLinks.find(l=>l.role==='PRIMARY') || candidateLinks[0] || {subject_id:'',topic_id:'',rationale:'',confidence:0};
     let editSubject=primaryLink.subject_id || '';
     let editTopic=primaryLink.topic_id || '';
     let reasonText='Vínculo conferido manualmente no painel administrativo.';
@@ -1905,7 +1961,7 @@ function classificationView() {
         action,
         reason:reasonText.trim(),
         expected_content_revision:item.current_content_revision || item.question_content_revision,
-        expected_classification_revision:item.current_classification_revision ?? item.question_classification_revision ?? 0
+        expected_classification_revision:item.current_classification_revision ?? item.expected_classification_revision ?? item.question_classification_revision ?? 0
       };
       if(action==='edit_accept'){
         if(!editSubject || !editTopic){notice('Selecione disciplina e assunto para editar e aceitar.','error');return;}
@@ -1920,7 +1976,7 @@ function classificationView() {
       }
       await run('Registrando decisão de classificação…',async()=>{
         await api('admin/classification/decisions',{method:'POST',body});
-        proposalsData=await api(`admin/classification/proposals?status=${encodeURIComponent(proposalStatusFilter)}&limit=50`);
+        proposalsData=await api(`admin/classification/proposals?status=${encodeURIComponent(proposalStatusFilter || 'ALL')}&limit=50`);
         data.summary=await api('admin/summary');
         notice('Decisão registrada com sucesso.');
       });
@@ -2210,11 +2266,8 @@ function entityView() {
       saved[key]=String(saved[key] || '').trim();
       saved.label=saved.label.trim();
       saved.aliases=aliasText.split(/\n/).map(a=>a.trim()).filter(Boolean);
-      const refEntity = baselineRow || prior;
       if(baselineRow && baselineRow.label!==saved.label){
         saved=renameEntity({...saved,label:baselineRow.label},saved.label);
-      } else if(!baselineRow && refEntity && refEntity.label!==saved.label){
-        saved.label = saved.label;
       }
       saved.source_ids=[...new Set([...saved.source_ids,'WEB_EDITOR'])];
       if(saved.revision!=null && baselineRow)saved.revision=(baselineRow.revision || 1)+1;
@@ -2452,7 +2505,7 @@ export function shouldWarnBeforeUnload() {
 }
 
 export function getAppState() {
-  return {current, me, data, ws, busy, storageBlocked, quotaExceeded, loadErrors, selectedExam, selectedQuestion, questionPage, questionCursor, questionCursorStack, proposalsData, reportsData};
+  return {current, me, data, ws, busy, storageBlocked, quotaExceeded, loadErrors, selectedExam, selectedQuestion, questionPage, questionCursor, questionCursorStack, proposalsData, proposalStatusFilter, reportsData, reportStatusFilter, missionsAdminData};
 }
 
 export function setAppStateForTest(patch = {}) {
@@ -2470,7 +2523,10 @@ export function setAppStateForTest(patch = {}) {
   if ('questionCursor' in patch) questionCursor = patch.questionCursor;
   if ('questionCursorStack' in patch) questionCursorStack = patch.questionCursorStack;
   if ('proposalsData' in patch) proposalsData = patch.proposalsData;
+  if ('proposalStatusFilter' in patch) proposalStatusFilter = patch.proposalStatusFilter;
   if ('reportsData' in patch) reportsData = patch.reportsData;
+  if ('reportStatusFilter' in patch) reportStatusFilter = patch.reportStatusFilter;
+  if ('missionsAdminData' in patch) missionsAdminData = patch.missionsAdminData;
   if (me && $('#app') && $('#login')) {
     $('#login').hidden = true;
     $('#app').hidden = false;

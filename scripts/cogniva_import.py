@@ -163,6 +163,46 @@ def validate_items_locally(
                 raise ValueError(f"{loc}: MULTIPLE_CHOICE exige correct_answer_indices com 1 inteiro estrito em 0..4")
             if item.get("grading") is not None:
                 raise ValueError(f"{loc}: questões objetivas exigem grading = null")
+        elif qtype == "OPEN_ENDED":
+            if answers != []:
+                raise ValueError(f"{loc}: OPEN_ENDED exige answers == []")
+            if indices != []:
+                raise ValueError(f"{loc}: OPEN_ENDED exige correct_answer_indices == []")
+            grading = item.get("grading")
+            if not isinstance(grading, dict):
+                raise ValueError(f"{loc}: OPEN_ENDED exige objeto grading válido")
+            expected_responses = grading.get("expected_responses")
+            if (
+                not isinstance(expected_responses, list)
+                or not expected_responses
+                or any(not isinstance(r, str) or not r.strip() for r in expected_responses)
+            ):
+                raise ValueError(f"{loc}: OPEN_ENDED exige grading.expected_responses não vazio")
+            rubric = grading.get("rubric")
+            if not isinstance(rubric, dict):
+                raise ValueError(f"{loc}: OPEN_ENDED exige grading.rubric válido")
+            criteria = rubric.get("criteria")
+            if not isinstance(criteria, list) or not criteria:
+                raise ValueError(f"{loc}: OPEN_ENDED exige grading.rubric.criteria não vazio")
+            seen_crit_ids: set[str] = set()
+            for c_idx, crit in enumerate(criteria):
+                if not isinstance(crit, dict):
+                    raise ValueError(f"{loc}: critério {c_idx} deve ser objeto JSON")
+                cid = crit.get("criterion_id")
+                desc = crit.get("description")
+                pts = crit.get("max_points")
+                ess = crit.get("essential")
+                if not isinstance(cid, str) or not cid.strip() or cid in seen_crit_ids:
+                    raise ValueError(
+                        f"{loc}: criterion_id inválido ou duplicado em grading.rubric.criteria[{c_idx}]"
+                    )
+                seen_crit_ids.add(cid)
+                if not isinstance(desc, str) or not desc.strip():
+                    raise ValueError(f"{loc}: description ausente em grading.rubric.criteria[{c_idx}]")
+                if not isinstance(pts, (int, float)) or isinstance(pts, bool) or pts <= 0:
+                    raise ValueError(f"{loc}: max_points inválido em grading.rubric.criteria[{c_idx}]")
+                if not isinstance(ess, bool):
+                    raise ValueError(f"{loc}: essential booleano obrigatório em grading.rubric.criteria[{c_idx}]")
 
         origin_kind = item.get("origin_kind", "AUTHOR_CREATED")
         if origin_kind not in {"AUTHOR_CREATED", "OFFICIAL_EXAM", "LEGACY_IMPORT"}:
@@ -237,10 +277,6 @@ req_bundle = json.loads(zlib.decompress(base64.b64decode(raw_payload)).decode("u
 
 t0 = time.time()
 
-core = json.loads(subprocess.check_output(["docker", "inspect", "api-rust-core"]))[0]
-env = dict(row.split("=", 1) for row in core["Config"]["Env"] if "=" in row)
-jwt_secret = env["JWT_SECRET"]
-
 def b64u(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
 
@@ -253,11 +289,14 @@ def mint_ephemeral_admin_session(admin_email: str | None) -> tuple[int, str]:
     minted = json.loads(out[jpos:] if jpos >= 0 else out)
     return int(minted["user_id"]), str(minted["token"])
 
-ephemeral_session = False
+ephemeral_session = None
 explicit_uid = req_bundle.get("admin_user_id")
 explicit_sid = req_bundle.get("admin_sid")
 admin_email = req_bundle.get("admin_email")
 if explicit_uid and explicit_sid:
+    core = json.loads(subprocess.check_output(["docker", "inspect", "api-rust-core"]))[0]
+    env = dict(row.split("=", 1) for row in core["Config"]["Env"] if "=" in row)
+    jwt_secret = env["JWT_SECRET"]
     user_id = int(explicit_uid)
     sid = str(explicit_sid)
     now = int(time.time())
@@ -273,407 +312,425 @@ if explicit_uid and explicit_sid:
     sig = b64u(hmac.new(jwt_secret.encode(), f"{header}.{payload}".encode(), hashlib.sha256).digest())
     token = f"{header}.{payload}.{sig}"
 else:
-    user_id, token = mint_ephemeral_admin_session(admin_email)
-    ephemeral_session = True
+    ephemeral_session = mint_ephemeral_admin_session(admin_email)
+    user_id, token = ephemeral_session
 
-conn = http.client.HTTPConnection("127.0.0.1", 8001, timeout=120)
+conn = None
+try:
+    conn = http.client.HTTPConnection("127.0.0.1", 8001, timeout=120)
 
-def api(path: str, body=None, method: str | None = None):
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Connection": "keep-alive",
-    }
-    data = None
-    if body is not None:
-        headers["Content-Type"] = "application/json"
-        data = json.dumps(body, ensure_ascii=False).encode("utf-8")
-    m = method or ("POST" if body is not None else "GET")
-    try:
-        conn.request(m, path, body=data, headers=headers)
-        resp = conn.getresponse()
-        raw = resp.read()
-    except Exception:
-        conn.close()
-        conn.connect()
-        conn.request(m, path, body=data, headers=headers)
-        resp = conn.getresponse()
-        raw = resp.read()
-    if resp.status >= 400:
-        raise RuntimeError(f"HTTP {resp.status} {m} {path}: {raw.decode('utf-8', errors='replace')}")
-    return json.loads(raw.decode("utf-8"))
-
-op_ns = req_bundle["operation_ns"]
-def stable(s: str) -> str:
-    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"{op_ns}:{s}"))
-
-dry_run = bool(req_bundle.get("dry_run", False))
-acknowledge_duplicates = bool(req_bundle.get("acknowledge_duplicates", False))
-verify_quiz = bool(req_bundle.get("verify_quiz", True))
-validity_basis = req_bundle.get("validity_basis", "FACTUAL")
-review_due_on = req_bundle.get("review_due_on")
-exam_id = req_bundle["exam_id"]
-replace_custom = bool(req_bundle.get("replace_custom_placeholders", False))
-taxonomy = req_bundle.get("taxonomy") or {}
-packages = req_bundle["packages"]
-
-today_iso = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d")
-now_iso = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-summary_before = api("/api/v1/admin/summary")
-
-# 1. Check & update runtime Knowledge Catalog if needed
-base_cat = api("/api/v1/admin/catalog/base")
-cat = copy.deepcopy(base_cat["catalog"])
-existing_subjects = {s["subject_id"]: s for s in cat["subjects"]}
-existing_topics = {t["topic_id"]: t for t in cat["topics"]}
-added_catalog_ids = []
-
-for s_spec in taxonomy.get("subjects") or []:
-    sid_key = s_spec["subject_id"]
-    if sid_key not in existing_subjects:
-        new_subj = {
-            "subject_id": sid_key,
-            "label": s_spec["label"],
-            "aliases": s_spec.get("aliases") or [],
-            "scope_note": s_spec.get("scope_note") or f"Conteúdo programático de {s_spec['label']}.",
-            "status": "ACTIVE",
-            "revision": 1,
-            "source_ids": s_spec.get("source_ids") or ["EDITORIAL_V1"],
-            "trunk_links": s_spec["trunk_links"],
+    def api(path: str, body=None, method: str | None = None):
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Connection": "keep-alive",
         }
-        cat["subjects"].append(new_subj)
-        existing_subjects[sid_key] = new_subj
-        added_catalog_ids.append(sid_key)
+        data = None
+        if body is not None:
+            headers["Content-Type"] = "application/json"
+            data = json.dumps(body, ensure_ascii=False).encode("utf-8")
+        m = method or ("POST" if body is not None else "GET")
+        try:
+            conn.request(m, path, body=data, headers=headers)
+            resp = conn.getresponse()
+            raw = resp.read()
+        except Exception:
+            conn.close()
+            conn.connect()
+            conn.request(m, path, body=data, headers=headers)
+            resp = conn.getresponse()
+            raw = resp.read()
+        if resp.status >= 400:
+            raise RuntimeError(f"HTTP {resp.status} {m} {path}: {raw.decode('utf-8', errors='replace')}")
+        return json.loads(raw.decode("utf-8"))
 
-for p_spec in taxonomy.get("parent_topics") or []:
-    tid = p_spec["topic_id"]
-    if tid not in existing_topics:
-        new_parent = {
-            "topic_id": tid,
-            "subject_id": p_spec["subject_id"],
-            "parent_topic_id": None,
-            "kind": "TOPIC",
-            "label": p_spec["label"],
-            "aliases": p_spec.get("aliases") or [],
-            "status": "ACTIVE",
-            "revision": 1,
-            "source_ids": p_spec.get("source_ids") or ["EDITORIAL_V1"],
-        }
-        cat["topics"].append(new_parent)
-        existing_topics[tid] = new_parent
-        added_catalog_ids.append(tid)
+    op_ns = req_bundle["operation_ns"]
+    def stable(s: str) -> str:
+        return str(uuid.uuid5(uuid.NAMESPACE_URL, f"{op_ns}:{s}"))
 
-syllabus_title_overrides = {}
-for st_spec in taxonomy.get("subtopics") or []:
-    tid = st_spec["topic_id"]
-    if st_spec.get("syllabus_display_title"):
-        syllabus_title_overrides[tid] = st_spec["syllabus_display_title"]
-    if tid not in existing_topics:
-        parent_id = st_spec["parent_topic_id"]
-        new_sub = {
-            "topic_id": tid,
-            "subject_id": st_spec["subject_id"],
-            "parent_topic_id": parent_id,
-            "kind": "SUBTOPIC",
-            "label": st_spec["label"],
-            "aliases": st_spec.get("aliases") or [],
-            "status": "ACTIVE",
-            "revision": 1,
-            "source_ids": st_spec.get("source_ids") or ["EDITORIAL_V1"],
-        }
-        cat["topics"].append(new_sub)
-        existing_topics[tid] = new_sub
-        added_catalog_ids.append(tid)
+    dry_run = bool(req_bundle.get("dry_run", False))
+    acknowledge_duplicates = bool(req_bundle.get("acknowledge_duplicates", False))
+    verify_quiz = bool(req_bundle.get("verify_quiz", True))
+    validity_basis = req_bundle.get("validity_basis", "FACTUAL")
+    review_due_on = req_bundle.get("review_due_on")
+    exam_id = req_bundle["exam_id"]
+    replace_custom = bool(req_bundle.get("replace_custom_placeholders", False))
+    taxonomy = req_bundle.get("taxonomy") or {}
+    packages = req_bundle["packages"]
 
-# Verify every (subject_id, topic_id) referenced by items exists and is a leaf SUBTOPIC (or active TOPIC)
-referenced_pairs = set()
-for pkg in packages:
-    for chunk in pkg["chunks"]:
-        for it in chunk:
-            s_id = it["subject_id"]
-            t_id = it["topic_id"]
-            if s_id not in existing_subjects:
-                raise RuntimeError(f"Disciplina '{s_id}' ausente no catálogo ativo; declare em taxonomy.subjects.")
-            if t_id not in existing_topics:
-                raise RuntimeError(f"Tópico '{t_id}' ausente no catálogo ativo; declare em taxonomy.parent_topics / taxonomy.subtopics.")
-            if existing_topics[t_id]["subject_id"] != s_id:
-                raise RuntimeError(f"Tópico '{t_id}' pertence a '{existing_topics[t_id]['subject_id']}', não a '{s_id}'.")
-            referenced_pairs.add((s_id, t_id))
+    today_iso = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d")
+    now_iso = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-catalog_activated_version = base_cat["catalog"]["catalog_version"]
-if added_catalog_ids:
-    cat["catalog_version"] = int(cat["catalog_version"]) + 1
-    cat["updated_at"] = dt.datetime.now(dt.timezone(dt.timedelta(hours=-3))).date().isoformat()
-    val = api("/api/v1/admin/catalog/validate", cat)
-    if not val.get("valid"):
-        raise RuntimeError(f"Falha na validação do catálogo v{cat['catalog_version']}: {val}")
-    if not dry_run:
-        draft_id = stable(f"catalog-draft-v{cat['catalog_version']}-{hashlib.sha256(','.join(added_catalog_ids).encode()).hexdigest()[:8]}")
-        draft_res = api("/api/v1/admin/catalog/drafts", {
-            "draft_id": draft_id,
-            "expected_revision": 0,
-            "base_catalog_sha256": base_cat["sha256"],
-            "status": "REVIEW_READY",
-            "catalog": cat,
-        })
-        draft_rev = draft_res.get("revision") or draft_res["draft"]["revision"]
-        act_res = api("/api/v1/admin/catalog/activate", {
-            "operation_id": stable(f"catalog-activate-v{cat['catalog_version']}-{draft_id}"),
-            "draft_id": draft_id,
-            "expected_draft_revision": draft_rev,
-            "expected_catalog_hash": base_cat["sha256"],
-            "reviewed": True,
-            "reason": f"Ativação de {len(added_catalog_ids)} entidades no catálogo via cogniva_import.",
-        })
-        catalog_activated_version = act_res["activated_version"]
+    summary_before = api("/api/v1/admin/summary")
 
-# 2. Ensure leaf subtopics are registered in the target exam template & sync user_exams
-templates = api("/api/v1/admin/exam-templates")
-exam_tpl = next((t for t in templates if t["_id"] == exam_id), None)
-if exam_tpl is None:
-    raise RuntimeError(f"Template de concurso '{exam_id}' não encontrado em /api/v1/admin/exam-templates")
+    # 1. Check & update runtime Knowledge Catalog if needed
+    base_cat = api("/api/v1/admin/catalog/base")
+    cat = copy.deepcopy(base_cat["catalog"])
+    existing_sources = {s["source_id"]: s for s in cat.get("sources", [])}
+    existing_subjects = {s["subject_id"]: s for s in cat["subjects"]}
+    existing_topics = {t["topic_id"]: t for t in cat["topics"]}
+    added_catalog_ids = []
 
-subject_meta = {}
-for s in exam_tpl["subjects"]:
-    subject_meta[s["canonical_subject_id"]] = {
-        "component_id": s["local_subject_id"],
-        "disciplina": s["display_name"],
-        "subject_ref": s,
-    }
-
-topics_with_children = {
-    t["parent_topic_id"] for t in existing_topics.values() if t.get("parent_topic_id")
-}
-
-exam_modified = False
-for s_id, t_id in sorted(referenced_pairs):
-    if t_id in topics_with_children:
-        raise RuntimeError(
-            f"O tópico '{t_id}' é um TOPIC pai com subassuntos filhos. "
-            "Classifique as questões sempre em um SUBTOPIC folha para preservar o rastreamento de domínio."
-        )
-    if s_id not in subject_meta:
-        raise RuntimeError(
-            f"A disciplina '{s_id}' não possui componente na grade do concurso '{exam_id}'. "
-            "Adicione o componente da disciplina ao template do concurso antes de vincular."
-        )
-    s_obj = subject_meta[s_id]["subject_ref"]
-    if replace_custom:
-        filtered = [t for t in s_obj["topics"] if t.get("canonical_topic_id") is not None]
-        if len(filtered) != len(s_obj["topics"]):
-            s_obj["topics"] = filtered
-            exam_modified = True
-    comp_topic_ids = {t.get("canonical_topic_id") for t in s_obj["topics"]}
-    if t_id not in comp_topic_ids:
-        t_obj = existing_topics[t_id]
-        parent_id = t_obj.get("parent_topic_id")
-        if t_id in syllabus_title_overrides:
-            display_title = syllabus_title_overrides[t_id]
-        elif parent_id and parent_id in existing_topics:
-            display_title = f"{existing_topics[parent_id]['label']} › {t_obj['label']}"
-        else:
-            display_title = t_obj["label"]
-        prefix = s_obj["local_subject_id"].lower()
-        s_obj["topics"].append({
-            "local_topic_id": f"{prefix}-cat-{t_id}",
-            "canonical_topic_id": t_id,
-            "canonical_subject_id": s_id,
-            "display_title": display_title,
-            "diff_status": "PRE_EDITAL_BASE",
-        })
-        exam_modified = True
-
-if exam_modified and not dry_run:
-    exam_tpl = api(f"/api/v1/admin/exam-templates/{exam_id}", exam_tpl, method="PUT")
-if not dry_run:
-    user_exam = api(f"/api/v1/exams/{exam_id}/adopt-template", {})
-else:
-    user_exam = exam_tpl
-
-# 3. Preview, stamp CONFIRMED + CURRENT, Commit, Replay, and Bind DIRECT Compatibility
-package_reports = []
-all_imported = []
-
-for pkg in packages:
-    pkg_key = pkg["package_key"]
-    explicit_comp_id = pkg.get("component_id")
-    committed_count = 0
-    replayed_count = 0
-    compat_count = 0
-
-    for chunk_idx, chunk in enumerate(pkg["chunks"]):
-        preview = api("/api/v1/admin/questions/import/preview", {
-            "operation_id": stable(f"preview:{pkg_key}:c{chunk_idx}"),
-            "items": chunk,
-        })
-        if not preview.get("ready") or len(preview.get("items", [])) != len(chunk):
-            raise RuntimeError(f"Preview reprovado em {pkg_key} chunk {chunk_idx}: {json.dumps(preview, ensure_ascii=False)}")
-
-        dup_warnings = preview.get("duplicate_warnings") or []
-        if dup_warnings and not acknowledge_duplicates:
-            raise RuntimeError(
-                f"Duplicidades potenciais detectadas em {pkg_key} chunk {chunk_idx} "
-                f"(passe --acknowledge-duplicates se intencional): {json.dumps(dup_warnings, ensure_ascii=False)}"
-            )
-
-        if dry_run:
-            committed_count += len(chunk)
-            continue
-
-        is_v2_1_commit = "idempotency_key" in preview
-        commands = []
-        for entry in preview["items"]:
-            cmd = copy.deepcopy(entry["command"])
-            doc = cmd["document"]
-            qid = doc["_id"]["$oid"]
-            plink = doc["classification"]["links"][0]
-            s_id = plink["subject_id"]
-            t_id = plink["topic_id"]
-            crev = doc["content_revision"]
-            srev = doc.get("semantic_revision")
-
-            doc["disciplina"] = subject_meta[s_id]["disciplina"]
-            doc["canonical_subject_id"] = s_id
-            doc["canonical_topic_id"] = t_id
-            doc["concursos"] = [exam_id]
-
-            validity_obj = {
-                "revision": 1,
-                "status": "CURRENT",
-                "basis": validity_basis,
-                "reference_date": today_iso,
-                "review_due_on": review_due_on,
-                "reason_codes": [],
-                "evaluated_content_revision": crev,
-                "decision": {
-                    "actor": {"type": "HUMAN", "id": str(user_id)},
-                    "method": "MANUAL_REVIEW",
-                    "rationale": "Validade atual conferida na importação administrativa revisada.",
-                    "recorded_at": now_iso,
-                    "evidence": [{
-                        "uri": f"urn:cogniva:admin-review:{qid}",
-                        "title": "Revisão administrativa explícita na importação de pacote Cogniva",
-                        "locator": None,
-                        "retrieved_at": now_iso,
-                        "sha256": None,
-                    }],
-                    "model": None,
-                    "prompt_id": None,
-                    "prompt_version": None,
-                    "source_suggestion_id": None,
-                },
-                "scope": "CURRENT_KNOWLEDGE",
-                "context_date": None,
+    for src_spec in taxonomy.get("sources") or []:
+        src_id = src_spec["source_id"]
+        if src_id not in existing_sources:
+            new_src = {
+                "source_id": src_id,
+                "kind": src_spec.get("kind") or "EDITORIAL_PROPOSAL",
+                "reference": src_spec["reference"],
+                "note": src_spec.get("note") or f"Fonte editorial registrada via cogniva_import ({src_id}).",
             }
-            if srev is not None:
-                validity_obj["evaluated_semantic_revision"] = srev
-                validity_obj["evaluation_mode"] = "SEMANTIC"
-            doc["validity"] = validity_obj
-            commands.append(cmd)
+            cat.setdefault("sources", []).append(new_src)
+            existing_sources[src_id] = new_src
+            added_catalog_ids.append(src_id)
 
-        commit_payload = {"reviewed": True, "commands": commands}
-        if is_v2_1_commit:
-            commit_payload["idempotency_key"] = stable(f"commit:{pkg_key}:c{chunk_idx}")
-            if dup_warnings and acknowledge_duplicates:
-                commit_payload["acknowledge_duplicates"] = True
+    for s_spec in taxonomy.get("subjects") or []:
+        sid_key = s_spec["subject_id"]
+        if sid_key not in existing_subjects:
+            new_subj = {
+                "subject_id": sid_key,
+                "label": s_spec["label"],
+                "aliases": s_spec.get("aliases") or [],
+                "scope_note": s_spec.get("scope_note") or f"Conteúdo programático de {s_spec['label']}.",
+                "status": "ACTIVE",
+                "revision": 1,
+                "source_ids": s_spec.get("source_ids") or ["EDITORIAL_V1"],
+                "trunk_links": s_spec["trunk_links"],
+            }
+            cat["subjects"].append(new_subj)
+            existing_subjects[sid_key] = new_subj
+            added_catalog_ids.append(sid_key)
 
-        commit_res = api("/api/v1/admin/questions/import/commit", commit_payload)
-        res_items = commit_res.get("items") or commit_res.get("results", [])
-        if not commit_res.get("complete") or len(res_items) != len(chunk) or not all(x.get("saved") for x in res_items):
-            raise RuntimeError(f"Commit falhou em {pkg_key} chunk {chunk_idx}: {commit_res}")
-        committed_count += len(res_items)
+    for p_spec in taxonomy.get("parent_topics") or []:
+        tid = p_spec["topic_id"]
+        if tid not in existing_topics:
+            new_parent = {
+                "topic_id": tid,
+                "subject_id": p_spec["subject_id"],
+                "parent_topic_id": None,
+                "kind": "TOPIC",
+                "label": p_spec["label"],
+                "aliases": p_spec.get("aliases") or [],
+                "status": "ACTIVE",
+                "revision": 1,
+                "source_ids": p_spec.get("source_ids") or ["EDITORIAL_V1"],
+            }
+            cat["topics"].append(new_parent)
+            existing_topics[tid] = new_parent
+            added_catalog_ids.append(tid)
 
-        replay_res = api("/api/v1/admin/questions/import/commit", commit_payload)
-        rep_items = replay_res.get("items") or replay_res.get("results", [])
-        if len(rep_items) != len(chunk) or not all(x.get("saved") and x["receipt"]["status"] == "already_applied" for x in rep_items):
-            raise RuntimeError(f"Verificação de replay idempotente falhou em {pkg_key} chunk {chunk_idx}: {replay_res}")
-        replayed_count += len(rep_items)
+    syllabus_title_overrides = {}
+    for st_spec in taxonomy.get("subtopics") or []:
+        tid = st_spec["topic_id"]
+        if st_spec.get("syllabus_display_title"):
+            syllabus_title_overrides[tid] = st_spec["syllabus_display_title"]
+        if tid not in existing_topics:
+            parent_id = st_spec["parent_topic_id"]
+            new_sub = {
+                "topic_id": tid,
+                "subject_id": st_spec["subject_id"],
+                "parent_topic_id": parent_id,
+                "kind": "SUBTOPIC",
+                "label": st_spec["label"],
+                "aliases": st_spec.get("aliases") or [],
+                "status": "ACTIVE",
+                "revision": 1,
+                "source_ids": st_spec.get("source_ids") or ["EDITORIAL_V1"],
+            }
+            cat["topics"].append(new_sub)
+            existing_topics[tid] = new_sub
+            added_catalog_ids.append(tid)
 
-        for cmd in commands:
-            doc = cmd["document"]
-            qid = doc["_id"]["$oid"]
-            plink = doc["classification"]["links"][0]
-            s_id = plink["subject_id"]
-            t_id = plink["topic_id"]
-            tlabel = existing_topics[t_id]["label"]
-            comp_id = explicit_comp_id or subject_meta[s_id]["component_id"]
-            rec = api(f"/api/v1/exams/{exam_id}/compatibility", {
-                "operation_id": stable(f"compat:{pkg_key}:{qid}:rev{user_exam['revision']}"),
-                "question_id": qid,
-                "exam_id": exam_id,
-                "component_id": comp_id,
-                "relation": "DIRECT",
-                "matched_topic_ids": [t_id],
-                "reason": f"Vínculo direto confirmado ao concurso {exam_id} ({comp_id} → {tlabel}).",
+    # Verify every (subject_id, topic_id) referenced by items exists and is a leaf SUBTOPIC (or active TOPIC)
+    referenced_pairs = set()
+    for pkg in packages:
+        for chunk in pkg["chunks"]:
+            for it in chunk:
+                s_id = it["subject_id"]
+                t_id = it["topic_id"]
+                if s_id not in existing_subjects:
+                    raise RuntimeError(f"Disciplina '{s_id}' ausente no catálogo ativo; declare em taxonomy.subjects.")
+                if t_id not in existing_topics:
+                    raise RuntimeError(f"Tópico '{t_id}' ausente no catálogo ativo; declare em taxonomy.parent_topics / taxonomy.subtopics.")
+                if existing_topics[t_id]["subject_id"] != s_id:
+                    raise RuntimeError(f"Tópico '{t_id}' pertence a '{existing_topics[t_id]['subject_id']}', não a '{s_id}'.")
+                referenced_pairs.add((s_id, t_id))
+
+    catalog_activated_version = base_cat["catalog"]["catalog_version"]
+    if added_catalog_ids:
+        cat["catalog_version"] = int(cat["catalog_version"]) + 1
+        cat["updated_at"] = dt.datetime.now(dt.timezone(dt.timedelta(hours=-3))).date().isoformat()
+        val = api("/api/v1/admin/catalog/validate", cat)
+        if not val.get("valid"):
+            raise RuntimeError(f"Falha na validação do catálogo v{cat['catalog_version']}: {val}")
+        if not dry_run:
+            draft_id = stable(f"catalog-draft-v{cat['catalog_version']}-{hashlib.sha256(','.join(added_catalog_ids).encode()).hexdigest()[:8]}")
+            draft_res = api("/api/v1/admin/catalog/drafts", {
+                "draft_id": draft_id,
+                "expected_revision": 0,
+                "base_catalog_sha256": base_cat["sha256"],
+                "status": "REVIEW_READY",
+                "catalog": cat,
             })
-            assert rec["question_id"] == qid and rec["relation"] == "DIRECT" and rec["status"] == "CONFIRMED"
-            compat_count += 1
-            all_imported.append({
-                "package_key": pkg_key,
-                "question_id": qid,
-                "subject_id": s_id,
-                "topic_id": t_id,
-                "topic_label": tlabel,
-                "content_revision": doc["content_revision"],
-                "import_operation_id": cmd["operation_id"],
-                "compatibility_id": rec["_id"],
+            draft_rev = draft_res.get("revision") or draft_res["draft"]["revision"]
+            act_res = api("/api/v1/admin/catalog/activate", {
+                "operation_id": stable(f"catalog-activate-v{cat['catalog_version']}-{draft_id}"),
+                "draft_id": draft_id,
+                "expected_draft_revision": draft_rev,
+                "expected_catalog_hash": base_cat["sha256"],
+                "reviewed": True,
+                "reason": f"Ativação de {len(added_catalog_ids)} entidades no catálogo via cogniva_import.",
             })
+            catalog_activated_version = act_res["activated_version"]
 
-    package_reports.append({
-        "package_key": pkg_key,
-        "chunks": len(pkg["chunks"]),
-        "count": pkg["count"],
-        "committed": committed_count,
-        "replayed": replayed_count,
-        "compatibility_bound": compat_count,
-    })
+    # 2. Ensure leaf subtopics are registered in the target exam template & sync user_exams
+    templates = api("/api/v1/admin/exam-templates")
+    exam_tpl = next((t for t in templates if t["_id"] == exam_id), None)
+    if exam_tpl is None:
+        raise RuntimeError(f"Template de concurso '{exam_id}' não encontrado em /api/v1/admin/exam-templates")
 
-# 4. Live quiz-draw verification per imported leaf subtopic
-quiz_verified_topics = {}
-if not dry_run and verify_quiz:
+    subject_meta = {}
+    for s in exam_tpl["subjects"]:
+        subject_meta[s["canonical_subject_id"]] = {
+            "component_id": s["local_subject_id"],
+            "disciplina": s["display_name"],
+            "subject_ref": s,
+        }
+
+    topics_with_children = {
+        t["parent_topic_id"] for t in existing_topics.values() if t.get("parent_topic_id")
+    }
+
+    exam_modified = False
     for s_id, t_id in sorted(referenced_pairs):
-        comp_id = subject_meta[s_id]["component_id"]
-        disciplina = subject_meta[s_id]["disciplina"]
-        drawn = api("/api/v1/quiz/generate", {
-            "user_id": user_id,
-            "mode": "STANDARD",
-            "quantity": 3,
-            "contest_id": exam_id,
-            "disciplina": disciplina,
-            "component_id": comp_id,
-            "syllabus_topic_id": t_id,
+        if t_id in topics_with_children:
+            raise RuntimeError(
+                f"O tópico '{t_id}' é um TOPIC pai com subassuntos filhos. "
+                "Classifique as questões sempre em um SUBTOPIC folha para preservar o rastreamento de domínio."
+            )
+        if s_id not in subject_meta:
+            raise RuntimeError(
+                f"A disciplina '{s_id}' não possui componente na grade do concurso '{exam_id}'. "
+                "Adicione o componente da disciplina ao template do concurso antes de vincular."
+            )
+        s_obj = subject_meta[s_id]["subject_ref"]
+        if replace_custom:
+            filtered = [t for t in s_obj["topics"] if t.get("canonical_topic_id") is not None]
+            if len(filtered) != len(s_obj["topics"]):
+                s_obj["topics"] = filtered
+                exam_modified = True
+        comp_topic_ids = {t.get("canonical_topic_id") for t in s_obj["topics"]}
+        if t_id not in comp_topic_ids:
+            t_obj = existing_topics[t_id]
+            parent_id = t_obj.get("parent_topic_id")
+            if t_id in syllabus_title_overrides:
+                display_title = syllabus_title_overrides[t_id]
+            elif parent_id and parent_id in existing_topics:
+                display_title = f"{existing_topics[parent_id]['label']} › {t_obj['label']}"
+            else:
+                display_title = t_obj["label"]
+            prefix = s_obj["local_subject_id"].lower()
+            s_obj["topics"].append({
+                "local_topic_id": f"{prefix}-cat-{t_id}",
+                "canonical_topic_id": t_id,
+                "canonical_subject_id": s_id,
+                "display_title": display_title,
+                "diff_status": "PRE_EDITAL_BASE",
+            })
+            exam_modified = True
+
+    if exam_modified and not dry_run:
+        exam_tpl = api(f"/api/v1/admin/exam-templates/{exam_id}", exam_tpl, method="PUT")
+    if not dry_run:
+        user_exam = api(f"/api/v1/exams/{exam_id}/adopt-template", {})
+    else:
+        user_exam = exam_tpl
+
+    # 3. Preview, stamp CONFIRMED + CURRENT, Commit, Replay, and Bind DIRECT Compatibility
+    package_reports = []
+    all_imported = []
+
+    for pkg in packages:
+        pkg_key = pkg["package_key"]
+        explicit_comp_id = pkg.get("component_id")
+        committed_count = 0
+        replayed_count = 0
+        compat_count = 0
+
+        for chunk_idx, chunk in enumerate(pkg["chunks"]):
+            preview = api("/api/v1/admin/questions/import/preview", {
+                "operation_id": stable(f"preview:{pkg_key}:c{chunk_idx}"),
+                "items": chunk,
+            })
+            if not preview.get("ready") or len(preview.get("items", [])) != len(chunk):
+                raise RuntimeError(f"Preview reprovado em {pkg_key} chunk {chunk_idx}: {json.dumps(preview, ensure_ascii=False)}")
+
+            dup_warnings = preview.get("duplicate_warnings") or []
+            if dup_warnings and not acknowledge_duplicates:
+                raise RuntimeError(
+                    f"Duplicidades potenciais detectadas em {pkg_key} chunk {chunk_idx} "
+                    f"(passe --acknowledge-duplicates se intencional): {json.dumps(dup_warnings, ensure_ascii=False)}"
+                )
+
+            if dry_run:
+                committed_count += len(chunk)
+                continue
+
+            is_v2_1_commit = "idempotency_key" in preview
+            commands = []
+            for entry in preview["items"]:
+                cmd = copy.deepcopy(entry["command"])
+                doc = cmd["document"]
+                qid = doc["_id"]["$oid"]
+                plink = doc["classification"]["links"][0]
+                s_id = plink["subject_id"]
+                t_id = plink["topic_id"]
+                crev = doc["content_revision"]
+                srev = doc.get("semantic_revision")
+
+                doc["disciplina"] = subject_meta[s_id]["disciplina"]
+                doc["canonical_subject_id"] = s_id
+                doc["canonical_topic_id"] = t_id
+                doc["concursos"] = [exam_id]
+
+                validity_obj = {
+                    "revision": 1,
+                    "status": "CURRENT",
+                    "basis": validity_basis,
+                    "reference_date": today_iso,
+                    "review_due_on": review_due_on,
+                    "reason_codes": [],
+                    "evaluated_content_revision": crev,
+                    "decision": {
+                        "actor": {"type": "HUMAN", "id": str(user_id)},
+                        "method": "MANUAL_REVIEW",
+                        "rationale": "Validade atual conferida na importação administrativa revisada.",
+                        "recorded_at": now_iso,
+                        "evidence": [{
+                            "uri": f"urn:cogniva:admin-review:{qid}",
+                            "title": "Revisão administrativa explícita na importação de pacote Cogniva",
+                            "locator": None,
+                            "retrieved_at": now_iso,
+                            "sha256": None,
+                        }],
+                        "model": None,
+                        "prompt_id": None,
+                        "prompt_version": None,
+                        "source_suggestion_id": None,
+                    },
+                    "scope": "CURRENT_KNOWLEDGE",
+                    "context_date": None,
+                }
+                if srev is not None:
+                    validity_obj["evaluated_semantic_revision"] = srev
+                    validity_obj["evaluation_mode"] = "SEMANTIC"
+                doc["validity"] = validity_obj
+                commands.append(cmd)
+
+            commit_payload = {"reviewed": True, "commands": commands}
+            if is_v2_1_commit:
+                commit_payload["idempotency_key"] = stable(f"commit:{pkg_key}:c{chunk_idx}")
+                if dup_warnings and acknowledge_duplicates:
+                    commit_payload["acknowledge_duplicates"] = True
+
+            commit_res = api("/api/v1/admin/questions/import/commit", commit_payload)
+            res_items = commit_res.get("items") or commit_res.get("results", [])
+            if not commit_res.get("complete") or len(res_items) != len(chunk) or not all(x.get("saved") for x in res_items):
+                raise RuntimeError(f"Commit falhou em {pkg_key} chunk {chunk_idx}: {commit_res}")
+            committed_count += len(res_items)
+
+            replay_res = api("/api/v1/admin/questions/import/commit", commit_payload)
+            rep_items = replay_res.get("items") or replay_res.get("results", [])
+            if len(rep_items) != len(chunk) or not all(x.get("saved") and x["receipt"]["status"] == "already_applied" for x in rep_items):
+                raise RuntimeError(f"Verificação de replay idempotente falhou em {pkg_key} chunk {chunk_idx}: {replay_res}")
+            replayed_count += len(rep_items)
+
+            for cmd in commands:
+                doc = cmd["document"]
+                qid = doc["_id"]["$oid"]
+                plink = doc["classification"]["links"][0]
+                s_id = plink["subject_id"]
+                t_id = plink["topic_id"]
+                tlabel = existing_topics[t_id]["label"]
+                comp_id = explicit_comp_id or subject_meta[s_id]["component_id"]
+                rec = api(f"/api/v1/exams/{exam_id}/compatibility", {
+                    "operation_id": stable(f"compat:{pkg_key}:{qid}:rev{user_exam['revision']}"),
+                    "question_id": qid,
+                    "exam_id": exam_id,
+                    "component_id": comp_id,
+                    "relation": "DIRECT",
+                    "matched_topic_ids": [t_id],
+                    "reason": f"Vínculo direto confirmado ao concurso {exam_id} ({comp_id} → {tlabel}).",
+                })
+                assert rec["question_id"] == qid and rec["relation"] == "DIRECT" and rec["status"] == "CONFIRMED"
+                compat_count += 1
+                all_imported.append({
+                    "package_key": pkg_key,
+                    "question_id": qid,
+                    "subject_id": s_id,
+                    "topic_id": t_id,
+                    "topic_label": tlabel,
+                    "content_revision": doc["content_revision"],
+                    "import_operation_id": cmd["operation_id"],
+                    "compatibility_id": rec["_id"],
+                })
+
+        package_reports.append({
+            "package_key": pkg_key,
+            "chunks": len(pkg["chunks"]),
+            "count": pkg["count"],
+            "committed": committed_count,
+            "replayed": replayed_count,
+            "compatibility_bound": compat_count,
         })
-        if not drawn:
-            raise RuntimeError(f"Sorteio de verificação retornou 0 questões para {s_id} / {t_id}")
-        for q in drawn:
-            if q.get("canonical_subject_id") != s_id or q.get("canonical_topic_id") != t_id or not q.get("knowledge_binding_verified"):
-                raise RuntimeError(f"Questão sorteada sem vínculo verificado em {t_id}: {q}")
-        quiz_verified_topics[t_id] = len(drawn)
 
-summary_after = api("/api/v1/admin/summary")
-if ephemeral_session:
-    try:
-        api("/api/v1/auth/logout", {}, method="POST")
-    except Exception:
-        pass
-conn.close()
+    # 4. Live quiz-draw verification per imported leaf subtopic
+    quiz_verified_topics = {}
+    if not dry_run and verify_quiz:
+        for s_id, t_id in sorted(referenced_pairs):
+            comp_id = subject_meta[s_id]["component_id"]
+            disciplina = subject_meta[s_id]["disciplina"]
+            drawn = api("/api/v1/quiz/generate", {
+                "user_id": user_id,
+                "mode": "STANDARD",
+                "quantity": 3,
+                "contest_id": exam_id,
+                "disciplina": disciplina,
+                "component_id": comp_id,
+                "syllabus_topic_id": t_id,
+            })
+            if not drawn:
+                raise RuntimeError(f"Sorteio de verificação retornou 0 questões para {s_id} / {t_id}")
+            for q in drawn:
+                if q.get("canonical_subject_id") != s_id or q.get("canonical_topic_id") != t_id or not q.get("knowledge_binding_verified"):
+                    raise RuntimeError(f"Questão sorteada sem vínculo verificado em {t_id}: {q}")
+            quiz_verified_topics[t_id] = len(drawn)
 
-print(json.dumps({
-    "complete": True,
-    "dry_run": dry_run,
-    "elapsed_seconds": round(time.time() - t0, 2),
-    "catalog_version": catalog_activated_version,
-    "added_catalog_ids": added_catalog_ids,
-    "exam_id": exam_id,
-    "exam_template_revision": exam_tpl["revision"],
-    "user_exam_revision": user_exam["revision"],
-    "total_questions": sum(p["count"] for p in package_reports),
-    "quiz_verified_topics": quiz_verified_topics,
-    "summary_before": summary_before,
-    "summary_after": summary_after,
-    "packages": package_reports,
-    "items": all_imported,
-}, ensure_ascii=False))
+    summary_after = api("/api/v1/admin/summary")
+
+    print(json.dumps({
+        "complete": True,
+        "dry_run": dry_run,
+        "elapsed_seconds": round(time.time() - t0, 2),
+        "catalog_version": catalog_activated_version,
+        "added_catalog_ids": added_catalog_ids,
+        "exam_id": exam_id,
+        "exam_template_revision": exam_tpl["revision"],
+        "user_exam_revision": user_exam["revision"],
+        "total_questions": sum(p["count"] for p in package_reports),
+        "quiz_verified_topics": quiz_verified_topics,
+        "summary_before": summary_before,
+        "summary_after": summary_after,
+        "packages": package_reports,
+        "items": all_imported,
+    }, ensure_ascii=False))
+finally:
+    if ephemeral_session is not None and conn is not None:
+        try:
+            api("/api/v1/auth/logout", {}, method="POST")
+        except Exception:
+            pass
+    if conn is not None:
+        conn.close()
 """
 
 
@@ -681,14 +738,16 @@ def merge_taxonomy(accum: dict[str, list[dict[str, Any]]], extra: dict[str, Any]
     if not extra:
         return
     for key, id_field in (
+        ("sources", "source_id"),
         ("subjects", "subject_id"),
         ("parent_topics", "topic_id"),
         ("subtopics", "topic_id"),
     ):
-        existing_ids = {row[id_field] for row in accum[key]}
+        bucket = accum.setdefault(key, [])
+        existing_ids = {row[id_field] for row in bucket}
         for entry in extra.get(key) or []:
             if entry[id_field] not in existing_ids:
-                accum[key].append(entry)
+                bucket.append(entry)
                 existing_ids.add(entry[id_field])
 
 
@@ -763,7 +822,7 @@ def load_package_file(
     return pkg, target, taxonomy
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ssh-host", default=DEFAULT_SSH_HOST, help="Host SSH da VPS Cogniva")
     parser.add_argument("--exam-id", default=None, help="ID do template de concurso (padrão: target.exam_id ou BCB 2027)")
@@ -808,13 +867,14 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", help="Valida catálogo e preview no servidor sem gravar alterações")
     parser.add_argument("--operation-ns", default="cogniva-package-import-v2", help="Namespace determinístico UUIDv5")
     parser.add_argument("--evidence-out", default=None, help="Caminho opcional para salvar o recibo completo em JSON")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if not args.batch and not args.file:
         parser.error("Informe ao menos um --file ou --batch")
 
     packages: list[dict[str, Any]] = []
     merged_taxonomy: dict[str, list[dict[str, Any]]] = {
+        "sources": [],
         "subjects": [],
         "parent_topics": [],
         "subtopics": [],

@@ -1,6 +1,6 @@
-pub mod config;
 #[cfg(test)]
 mod catalog_activation_tests;
+pub mod config;
 #[cfg(test)]
 mod contract_tests;
 pub mod error;
@@ -76,10 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err("JWT_SECRET deve ter pelo menos 32 caracteres aleatórios".into());
     }
 
-    tracing::info!(
-        "Conectando ao MongoDB (database: {})...",
-        config.mongodb_db
-    );
+    tracing::info!("Conectando ao MongoDB (database: {})...", config.mongodb_db);
 
     let mut client_opts = mongodb::options::ClientOptions::parse(&config.mongodb_uri).await?;
     if client_opts.max_pool_size.is_none() {
@@ -143,7 +140,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = build_router(state);
 
     let addr = config.bind_addr();
-    tracing::info!("🚀 cogniva-api v{} escutando em http://{}", env!("CARGO_PKG_VERSION"), addr);
+    tracing::info!(
+        "🚀 cogniva-api v{} escutando em http://{}",
+        env!("CARGO_PKG_VERSION"),
+        addr
+    );
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(
@@ -476,10 +477,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             "/api/v1/auth/native-session",
             post(routes::auth::handle_guest_session),
         )
-        .route(
-            "/api/v1/auth/register",
-            post(routes::auth::handle_register),
-        )
+        .route("/api/v1/auth/register", post(routes::auth::handle_register))
         .route("/api/v1/auth/login", post(routes::auth::handle_login))
         .route(
             "/api/v1/auth/web-session",
@@ -494,12 +492,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .layer(DefaultBodyLimit::max(2 * 1024 * 1024))
         .layer(CompressionLayer::new())
         .merge(authenticated_binary_routes)
-        .merge(
-            Router::new().route(
-                "/api/v1/apk/download",
-                get(routes::apk_ota::download_apk),
-            ),
-        )
+        .merge(Router::new().route("/api/v1/apk/download", get(routes::apk_ota::download_apk)))
         .layer(TraceLayer::new_for_http())
         .layer(cors)
         .with_state(state)
@@ -668,10 +661,7 @@ mod latest_apk_tests {
             )
             .await
             .unwrap();
-        assert_eq!(
-            not_modified.status(),
-            axum::http::StatusCode::NOT_MODIFIED
-        );
+        assert_eq!(not_modified.status(), axum::http::StatusCode::NOT_MODIFIED);
         assert_eq!(
             not_modified
                 .headers()
@@ -726,10 +716,9 @@ mod router_remediation_tests {
 
     #[tokio::test]
     async fn readiness_returns_503_when_mongodb_ping_fails() {
-        let app = test_app(
-            "mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=100&connectTimeoutMS=100",
-        )
-        .await;
+        let app =
+            test_app("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=100&connectTimeoutMS=100")
+                .await;
         let resp = app
             .oneshot(
                 Request::builder()
@@ -847,10 +836,30 @@ mod router_remediation_tests {
         let app = test_app("mongodb://127.0.0.1:27017").await;
 
         let cases = [
-            ("/api/v1/auth/guest", 20usize, "198.51.100.11", r#"{"installation_id":"partial"}"#),
-            ("/api/v1/auth/register", 10usize, "198.51.100.12", r#"{"email":"invalido","password":"x"}"#),
-            ("/api/v1/auth/login", 15usize, "198.51.100.13", r#"{"email":"invalido","password":"x"}"#),
-            ("/api/v1/auth/web-session", 10usize, "198.51.100.14", r#"{"email":"invalido","password":"x"}"#),
+            (
+                "/api/v1/auth/guest",
+                20usize,
+                "198.51.100.11",
+                r#"{"installation_id":"partial"}"#,
+            ),
+            (
+                "/api/v1/auth/register",
+                10usize,
+                "198.51.100.12",
+                r#"{"email":"invalido","password":"x"}"#,
+            ),
+            (
+                "/api/v1/auth/login",
+                15usize,
+                "198.51.100.13",
+                r#"{"email":"invalido","password":"x"}"#,
+            ),
+            (
+                "/api/v1/auth/web-session",
+                10usize,
+                "198.51.100.14",
+                r#"{"email":"invalido","password":"x"}"#,
+            ),
         ];
 
         for (uri, limit, ip, payload) in cases {
@@ -888,7 +897,11 @@ mod router_remediation_tests {
                 )
                 .await
                 .unwrap();
-            assert_eq!(throttled.status(), StatusCode::TOO_MANY_REQUESTS, "uri={uri}");
+            assert_eq!(
+                throttled.status(),
+                StatusCode::TOO_MANY_REQUESTS,
+                "uri={uri}"
+            );
         }
     }
 
@@ -904,7 +917,13 @@ mod router_remediation_tests {
         ] {
             let res = app
                 .clone()
-                .oneshot(Request::builder().method(Method::GET).uri(uri).body(Body::empty()).unwrap())
+                .oneshot(
+                    Request::builder()
+                        .method(Method::GET)
+                        .uri(uri)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
                 .await
                 .unwrap();
             assert_eq!(res.status(), StatusCode::OK, "uri={uri}");
@@ -946,7 +965,11 @@ mod router_remediation_tests {
                 )
                 .await
                 .unwrap();
-            assert_eq!(unauth.status(), StatusCode::UNAUTHORIZED, "uri={protected_uri}");
+            assert_eq!(
+                unauth.status(),
+                StatusCode::UNAUTHORIZED,
+                "uri={protected_uri}"
+            );
         }
 
         // Cookie-authenticated POST without X-Cogniva-CSRF is rejected before hitting DB
@@ -958,12 +981,161 @@ mod router_remediation_tests {
                     .header(header::CONTENT_TYPE, "application/json")
                     .header(header::COOKIE, "cogniva_web_session=fake-token")
                     .header(header::ORIGIN, "https://cogniva.local")
-                    .body(Body::from(r#"{"scene_id":"s","interaction_id":"i","selected_option_id":"B"}"#))
+                    .body(Body::from(
+                        r#"{"scene_id":"s","interaction_id":"i","selected_option_id":"B"}"#,
+                    ))
                     .unwrap(),
             )
             .await
             .unwrap();
         assert_eq!(missing_csrf.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn explicit_invalid_bearer_never_falls_back_to_web_cookie_and_enforces_host_and_v5_routes(
+    ) {
+        let secret = "test-secret-with-at-least-32-characters";
+        let app =
+            test_app("mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=20&connectTimeoutMS=20")
+                .await;
+
+        let valid_web_jwt =
+            security::sign_session_token(secret, 101, "sid-web-101", "web", 3600).unwrap();
+
+        // 1. Explicit invalid Bearer MUST return 401 even when accompanied by a syntactically valid web cookie (zero silent fallback!)
+        for bad_auth in ["Bearer invalido", "bearer malformado", "Basic abcdef=="] {
+            let me_resp = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method(Method::GET)
+                        .uri("/api/v1/auth/me")
+                        .header(header::AUTHORIZATION, bad_auth)
+                        .header(
+                            header::COOKIE,
+                            format!("cogniva_web_session={valid_web_jwt}"),
+                        )
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                me_resp.status(),
+                StatusCode::UNAUTHORIZED,
+                "bad_auth={bad_auth} must never fall back to cookie"
+            );
+
+            // 2. Explicit invalid/expired Bearer on /api/v1/auth/register MUST return 401 instead of creating a blank account!
+            let reg_resp = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method(Method::POST)
+                        .uri("/api/v1/auth/register")
+                        .header(header::CONTENT_TYPE, "application/json")
+                        .header("x-real-ip", "203.0.113.77")
+                        .header(header::AUTHORIZATION, bad_auth)
+                        .body(Body::from(
+                            r#"{"email":"novo@cogniva.local","password":"MinhaSenhaForte2026!","display_name":"Novo"}"#,
+                        ))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                reg_resp.status(),
+                StatusCode::UNAUTHORIZED,
+                "POST /api/v1/auth/register with explicit invalid Authorization={bad_auth} must return 401"
+            );
+        }
+
+        // 3. Case-insensitive `bearer <valid_mobile_jwt>` passes JWT parsing (hitting 500 DB timeout rather than 401)
+        let valid_mobile_jwt =
+            security::sign_session_token(secret, 101, "sid-mob-101", "mobile", 3600).unwrap();
+        let lower_bearer_resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/v1/study/next-action")
+                    .header(header::AUTHORIZATION, format!("bearer {valid_mobile_jwt}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_ne!(
+            lower_bearer_resp.status(),
+            StatusCode::UNAUTHORIZED,
+            "Lowercase `bearer ` scheme must pass JWT verification"
+        );
+
+        // 4. Host-header spoofing on cookie-authenticated mutating v5 endpoints is blocked with 403 before DB
+        for (method, uri, body) in [
+            (
+                Method::POST,
+                "/api/v1/questions/000000000000000000000001/lookup",
+                r#"{"selected_text":"Selic"}"#,
+            ),
+            (
+                Method::POST,
+                "/api/v1/quiz/attempt-evidence",
+                r#"{"attempt_id":"11111111-1111-4111-8111-111111111111","question_id":"000000000000000000000001","selected_evidence_id":"ev_a"}"#,
+            ),
+        ] {
+            let unauth = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method(method.clone())
+                        .uri(uri)
+                        .header(header::CONTENT_TYPE, "application/json")
+                        .body(Body::from(body))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(unauth.status(), StatusCode::UNAUTHORIZED, "uri={uri}");
+
+            let spoofed_host = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method(method)
+                        .uri(uri)
+                        .header(header::CONTENT_TYPE, "application/json")
+                        .header(header::HOST, "evil.example.com")
+                        .header(header::ORIGIN, "https://evil.example.com")
+                        .header("x-cogniva-csrf", "1")
+                        .header(
+                            header::COOKIE,
+                            format!("cogniva_web_session={valid_web_jwt}"),
+                        )
+                        .body(Body::from(body))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                spoofed_host.status(),
+                StatusCode::FORBIDDEN,
+                "Host spoofing must return 403 on {uri}"
+            );
+        }
+
+        // Unauthenticated GET /api/v1/study/next-action returns 401
+        let unauth_next = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/v1/study/next-action")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(unauth_next.status(), StatusCode::UNAUTHORIZED);
     }
 }
 

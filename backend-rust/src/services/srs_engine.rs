@@ -248,22 +248,10 @@ mod tests {
         assert_eq!(history.streak_max, 5);
         assert_eq!(history.streak_atual, 1);
 
-        let (score_current, interval_current) = calculate_spaced_repetition_interval(
-            history.streak_atual,
-            30.0,
-            25,
-            3,
-            true,
-            true,
-        );
-        let (score_peak, interval_peak) = calculate_spaced_repetition_interval(
-            history.streak_max,
-            30.0,
-            25,
-            3,
-            true,
-            true,
-        );
+        let (score_current, interval_current) =
+            calculate_spaced_repetition_interval(history.streak_atual, 30.0, 25, 3, true, true);
+        let (score_peak, interval_peak) =
+            calculate_spaced_repetition_interval(history.streak_max, 30.0, 25, 3, true, true);
         assert!(score_current < score_peak);
         assert_eq!(interval_current, 7);
         assert_eq!(interval_peak, 30);

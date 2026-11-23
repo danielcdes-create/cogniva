@@ -20,16 +20,6 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
     digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
-pub fn apk_info_value(version_code: i64, version_name: &str, apk_bytes: &[u8]) -> Value {
-    json!({
-        "version_code": version_code,
-        "version_name": version_name,
-        "size_bytes": apk_bytes.len() as u64,
-        "sha256_checksum": sha256_hex(apk_bytes),
-        "download_path": "/api/v1/apk/download"
-    })
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ApkMeta {
     pub path: PathBuf,
@@ -44,15 +34,6 @@ type ApkError = (StatusCode, String);
 
 fn apk_missing() -> ApkError {
     (StatusCode::NOT_FOUND, "APK indisponível".into())
-}
-
-#[cfg(test)]
-pub async fn read_apk_bytes(configured: &Path) -> Result<(PathBuf, Vec<u8>), ApkError> {
-    let apk = tokio::fs::canonicalize(configured)
-        .await
-        .map_err(|_| apk_missing())?;
-    let bytes = tokio::fs::read(&apk).await.map_err(|_| apk_missing())?;
-    Ok((apk, bytes))
 }
 
 pub fn format_apk_etag(sha256_hex: &str) -> String {
@@ -249,24 +230,84 @@ pub async fn download_apk(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::AppConfig;
+    use mongodb::Client;
+    use std::collections::HashSet;
+    use std::net::{IpAddr, Ipv4Addr};
+
+    async fn test_state_for_apk(apk_path: PathBuf, meta_path: PathBuf) -> Arc<AppState> {
+        let client = Client::with_uri_str(
+            "mongodb://127.0.0.1:27099/?serverSelectionTimeoutMS=20&connectTimeoutMS=20",
+        )
+        .await
+        .unwrap();
+        let cfg = AppConfig {
+            bind_ip: IpAddr::V4(Ipv4Addr::LOCALHOST),
+            port: 0,
+            mongodb_uri: "mongodb://127.0.0.1:27099".into(),
+            mongodb_db: "synthetic".into(),
+            public_origin: "https://cogniva.local".into(),
+            admin_emails: HashSet::new(),
+            xai_api_key: None,
+            xai_base_url: "https://api.x.ai/v1".into(),
+            xai_model: Some("grok-4".into()),
+            xai_daily_user_limit: 120,
+            xai_daily_global_limit: 500,
+            jwt_secret: "synthetic-only-secret-at-least-thirty-two-characters".into(),
+            apk_storage_path: apk_path,
+            apk_metadata_path: meta_path,
+            missions_media_dir: PathBuf::from("missing"),
+        };
+        Arc::new(AppState::new(client.database("synthetic"), cfg))
+    }
 
     #[tokio::test]
     async fn info_and_download_read_the_same_file_and_hide_os_errors() {
-        let dir = std::env::temp_dir().join(format!("cogniva-apk-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "cogniva-apk-test-{}",
+            uuid::Uuid::new_v4().simple()
+        ));
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("cogniva.apk");
+        let metadata_file = dir.join("output-metadata.json");
         std::fs::write(&file, b"same-bytes").unwrap();
+        std::fs::write(
+            &metadata_file,
+            serde_json::to_vec(&json!({
+                "elements": [{ "versionCode": 241, "versionName": "2.4.1" }]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
         let first_meta = read_apk_meta(&file).await.unwrap();
         let second_meta = read_apk_meta(&file).await.unwrap();
         assert_eq!(first_meta, second_meta);
         assert_eq!(first_meta.sha256, sha256_hex(b"same-bytes"));
         assert_eq!(first_meta.size_bytes, 10);
 
-        let (first_path, first) = read_apk_bytes(&file).await.unwrap();
-        let (second_path, second) = read_apk_bytes(&file).await.unwrap();
-        assert_eq!(first, second);
-        assert_eq!(first_path, second_path);
-        assert_eq!(first, b"same-bytes");
+        let state = test_state_for_apk(file.clone(), metadata_file.clone()).await;
+        let Json(info) = get_apk_info(State(state.clone())).await.unwrap();
+        assert_eq!(info["version_code"], 241);
+        assert_eq!(info["version_name"], "2.4.1");
+        assert_eq!(info["size_bytes"], 10);
+        assert_eq!(info["sha256_checksum"], sha256_hex(b"same-bytes"));
+
+        let resp = download_apk(State(state.clone()), HeaderMap::new())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let dl_bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(&dl_bytes[..], b"same-bytes");
+
+        // Cache invalidation when APK payload grows/updates on disk
+        std::fs::write(&file, b"updated-apk-payload").unwrap();
+        let refreshed_meta = read_apk_meta(&file).await.unwrap();
+        assert_eq!(refreshed_meta.size_bytes, 19);
+        assert_eq!(refreshed_meta.sha256, sha256_hex(b"updated-apk-payload"));
+
         let missing = read_apk_meta(&dir.join("absent.apk")).await.unwrap_err();
         assert_eq!(missing.0, StatusCode::NOT_FOUND);
         assert_eq!(missing.1, "APK indisponível");

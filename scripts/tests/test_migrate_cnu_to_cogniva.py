@@ -407,14 +407,94 @@ class MigrateCnuToCognivaTest(unittest.TestCase):
         self.assertIsInstance(patched_act["draft_revision"], FakeInt64)
 
     def test_cli_defaults_to_dry_run_without_apply_and_exam_schema_has_prova_realizada(self):
+        import io
         import json
+        import tempfile
+        from unittest import mock
 
-        src = (kc.ROOT / "scripts/migrate_cnu_to_cogniva.py").read_text(encoding="utf-8")
-        self.assertNotIn("effective_dry_run = False", src)
+        calls: list[dict] = []
+
+        def fake_run_mongo(**kwargs):
+            calls.append(kwargs)
+            return {"dry_run": kwargs["dry_run"], "source_writes": 0}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            report_path = Path(tmp) / "cnu-report.json"
+            with mock.patch.object(migrator, "run_mongo_migration", side_effect=fake_run_mongo), mock.patch(
+                "sys.stdout", io.StringIO()
+            ):
+                rc_default = migrator.main(
+                    [
+                        "--source-uri",
+                        "mongodb://localhost:27017",
+                        "--target-uri",
+                        "mongodb://localhost:27017",
+                        "--output-report",
+                        str(report_path),
+                    ]
+                )
+                rc_explicit_dry = migrator.main(
+                    [
+                        "--source-uri",
+                        "mongodb://localhost:27017",
+                        "--dry-run",
+                    ]
+                )
+                rc_apply = migrator.main(
+                    [
+                        "--source-uri",
+                        "mongodb://localhost:27017",
+                        "--apply",
+                    ]
+                )
+
+            self.assertEqual((rc_default, rc_explicit_dry, rc_apply), (0, 0, 0))
+            self.assertEqual([c["dry_run"] for c in calls], [True, True, False])
+            saved = json.loads(report_path.read_text(encoding="utf-8"))
+            self.assertTrue(saved["dry_run"])
+
         exam_schema = json.loads((kc.ROOT / "shared/schemas/exam-templates.schema.json").read_text(encoding="utf-8"))
         statuses = exam_schema["$defs"]["exam_template"]["properties"]["status"]["enum"]
         self.assertIn("PROVA_REALIZADA", statuses)
         self.assertNotIn("POS_PROVA", statuses)
+
+    def test_v2_normalization_populates_v2_1_hashes_and_preserves_semantic_validity(self):
+        open_q = copy.deepcopy(
+            kc.read(kc.ROOT / "shared/examples/question-contracts/question-open-manual.json")
+        )
+        qc.populate_v2_1_hashes(open_q)
+        open_q["validity"]["evaluated_semantic_revision"] = open_q["semantic_revision"]
+        open_q["validity"]["evaluation_mode"] = "SEMANTIC"
+        # Simulate non-semantic numeric score edit (content_revision changes, semantic_revision stays equal)
+        old_content_rev = open_q["content_revision"]
+        open_q["grading"]["max_score"] = 50
+        open_q["grading"]["pass_score"] = 30
+        open_q["grading"]["rubric"]["criteria"][0]["max_points"] = 25
+        open_q["grading"]["rubric"]["criteria"][1]["max_points"] = 25
+        open_q["validity"]["evaluated_content_revision"] = old_content_rev
+
+        normalized_current = migrator.normalize_question_to_v2(open_q, self.catalog)
+        qc.validate_question(normalized_current, self.catalog)
+        self.assertEqual(normalized_current["validity"]["status"], "CURRENT")
+        self.assertEqual(normalized_current["validity"]["evaluation_mode"], "SEMANTIC")
+        self.assertEqual(normalized_current["semantic_revision"], qc.semantic_revision(normalized_current))
+        self.assertEqual(normalized_current["grading_revision"], qc.grading_revision(normalized_current))
+
+        # OBSOLETE with valid SEMANTIC revision is also preserved
+        obsolete_sem = copy.deepcopy(
+            kc.read(kc.ROOT / "shared/examples/question-contracts/question-obsolete.json")
+        )
+        qc.populate_v2_1_hashes(obsolete_sem)
+        obsolete_sem["validity"]["evaluated_semantic_revision"] = obsolete_sem["semantic_revision"]
+        obsolete_sem["validity"]["evaluation_mode"] = "SEMANTIC"
+        normalized_obs = migrator.normalize_question_to_v2(obsolete_sem, self.catalog)
+        self.assertEqual(normalized_obs["validity"]["status"], "OBSOLETE")
+
+        # Stale evaluated_semantic_revision resets validity safely to UNKNOWN
+        stale_sem = copy.deepcopy(open_q)
+        stale_sem["validity"]["evaluated_semantic_revision"] = "0" * 64
+        normalized_stale = migrator.normalize_question_to_v2(stale_sem, self.catalog)
+        self.assertEqual(normalized_stale["validity"]["status"], "UNKNOWN")
 
 
 if __name__ == "__main__":

@@ -50,11 +50,7 @@ pub fn catalog() -> Value {
     (*catalog_ref()).clone()
 }
 
-fn bad_code(
-    code: &'static str,
-    field: Option<&str>,
-    message: impl Into<String>,
-) -> ContractError {
+fn bad_code(code: &'static str, field: Option<&str>, message: impl Into<String>) -> ContractError {
     ContractError::new(code, field, message)
 }
 
@@ -487,9 +483,9 @@ fn validate_http_uri_detailed(uri: &str, field: &str) -> Result<(), ContractErro
             && rest
                 .get(rest.len() - 4..)
                 .is_some_and(|ext| ext.eq_ignore_ascii_case(".pdf"))
-            && rest.bytes().all(|b| {
-                b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b':' | b'/' | b'-')
-            })
+            && rest
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b':' | b'/' | b'-'))
         {
             return Ok(());
         }
@@ -590,9 +586,7 @@ fn validate_provenance_integrity(p: &Value, field_prefix: &str) -> Result<(), Co
     validate_evidence_uris(&p["evidence"], field_prefix)?;
     if p["trust_level"] == "SERVER_VERIFIED" {
         let rev_id_field = format!("{field_prefix}.review_event_id");
-        let valid_uuid = p["review_event_id"]
-            .as_str()
-            .is_some_and(is_uuid_string);
+        let valid_uuid = p["review_event_id"].as_str().is_some_and(is_uuid_string);
         ensure(
             valid_uuid,
             "REVIEW_ACTOR_UNTRUSTED",
@@ -603,10 +597,7 @@ fn validate_provenance_integrity(p: &Value, field_prefix: &str) -> Result<(), Co
     Ok(())
 }
 
-pub fn reject_client_server_provenance(
-    p: &Value,
-    field_prefix: &str,
-) -> Result<(), ContractError> {
+pub fn reject_client_server_provenance(p: &Value, field_prefix: &str) -> Result<(), ContractError> {
     let Some(obj) = p.as_object() else {
         return Ok(());
     };
@@ -618,11 +609,7 @@ pub fn reject_client_server_provenance(
             "Cliente não pode autoatribuir review_event_id",
         ));
     }
-    if obj
-        .get("trust_level")
-        .and_then(Value::as_str)
-        == Some("SERVER_VERIFIED")
-    {
+    if obj.get("trust_level").and_then(Value::as_str) == Some("SERVER_VERIFIED") {
         let f = format!("{field_prefix}.trust_level");
         return Err(bad_code(
             "REVIEW_ACTOR_UNTRUSTED",
@@ -649,7 +636,10 @@ fn topic_valid_in_catalog(
     if let Some(cat) = catalog_override {
         let subj_status = cat["subjects"]
             .as_array()
-            .and_then(|arr| arr.iter().find(|s| s["subject_id"].as_str() == Some(subject)))
+            .and_then(|arr| {
+                arr.iter()
+                    .find(|s| s["subject_id"].as_str() == Some(subject))
+            })
             .and_then(|s| s["status"].as_str());
         let topic_obj = cat["topics"]
             .as_array()
@@ -1035,7 +1025,11 @@ pub fn validate_with_catalog(
         };
         if !topics.insert((top, concept_opt)) {
             let f = format!("{link_field}.topic_id");
-            return Err(bad_code("DUPLICATE_TAXONOMY_LINK", Some(&f), "Tópico/conceito repetido"));
+            return Err(bad_code(
+                "DUPLICATE_TAXONOMY_LINK",
+                Some(&f),
+                "Tópico/conceito repetido",
+            ));
         }
         if l["role"] == "PRIMARY" {
             if l["coverage"] != "DIRECT" {
@@ -1708,8 +1702,8 @@ mod tests {
     }
 
     #[test]
-    fn rejects_dangerous_uri_schemes_out_of_range_years_oversized_concursos_and_bson_i64_truncation()
-    {
+    fn rejects_dangerous_uri_schemes_out_of_range_years_oversized_concursos_and_bson_i64_truncation(
+    ) {
         validate_http_uri("https://www.planalto.gov.br/ccivil_03/constituicao/constituicao.htm")
             .unwrap();
         validate_http_uri("HTTP://example.org/edital.pdf").unwrap();

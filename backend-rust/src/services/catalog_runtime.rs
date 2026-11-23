@@ -133,7 +133,10 @@ pub fn effective_normative_sources(catalog: &Value) -> Vec<Value> {
             }
         }
     }
-    if let Some(arr) = seed_graph().get("normative_sources").and_then(Value::as_array) {
+    if let Some(arr) = seed_graph()
+        .get("normative_sources")
+        .and_then(Value::as_array)
+    {
         for item in arr {
             if let Some(id) = item["source_id"].as_str() {
                 if seen.insert(id.to_string()) {
@@ -287,7 +290,10 @@ impl Runtime {
                 .projection(doc! { "catalog": 0, "registry": 0 })
                 .await?
                 .ok_or_else(|| conflict("Ativação sem snapshot recuperável"))?;
-            cursor = event.get_str("parent_activation_id").ok().map(str::to_owned);
+            cursor = event
+                .get_str("parent_activation_id")
+                .ok()
+                .map(str::to_owned);
             lineage.push(id);
         }
         let mut next = (*bundled()).clone();

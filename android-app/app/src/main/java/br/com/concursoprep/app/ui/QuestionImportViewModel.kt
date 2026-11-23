@@ -29,7 +29,11 @@ data class QuestionImportUiState(
     val message: String? = null,
 )
 
-class QuestionImportViewModel(private val repository: ConcursoRepository) : ViewModel() {
+class QuestionImportViewModel(
+    private val repository: ConcursoRepository,
+    overrideScope: kotlinx.coroutines.CoroutineScope? = null
+) : ViewModel() {
+    private val vmScope: kotlinx.coroutines.CoroutineScope = overrideScope ?: viewModelScope
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val prettyJson = Json(json) { prettyPrint = true }
     private val storage = Mutex()
@@ -37,7 +41,7 @@ class QuestionImportViewModel(private val repository: ConcursoRepository) : View
     private val mutable = MutableStateFlow(QuestionImportUiState())
     val state = mutable.asStateFlow()
     init {
-        viewModelScope.launch {
+        vmScope.launch {
             try {
                 val saved = repository.loadQuestionImportDraft()
                 unreadableDraft = saved
@@ -53,7 +57,7 @@ class QuestionImportViewModel(private val repository: ConcursoRepository) : View
         }
     }
     fun checkAccess() {
-        viewModelScope.launch {
+        vmScope.launch {
             try {
                 val caps = repository.questionImportCapabilities()
                 mutable.value = mutable.value.copy(allowed = true, aiAvailable = caps["ai_available"]?.jsonPrimitive?.booleanOrNull == true, message = if (mutable.value.storageReady) null else mutable.value.message)
@@ -71,8 +75,13 @@ class QuestionImportViewModel(private val repository: ConcursoRepository) : View
             mutable.value = s.copy(message = "O material deve ter até 512 KiB. Divida-o em lotes menores.")
             return
         }
-        mutable.value = s.copy(draft = d.copy(preview = null, result = null, operationId = UUID.randomUUID().toString(), aiOperationId = UUID.randomUUID().toString()), message = null)
-        viewModelScope.launch { try { persist() } catch (e: Exception) { fail(e) } }
+        val safeDraft = if (d.mode == "SINGLE" && d.confirmOrigin && (!d.hasCompleteSourceReference || d.assistanceId != null)) {
+            d.copy(confirmOrigin = false)
+        } else {
+            d
+        }
+        mutable.value = s.copy(draft = safeDraft.copy(preview = null, result = null, operationId = UUID.randomUUID().toString(), aiOperationId = UUID.randomUUID().toString()), message = null)
+        vmScope.launch { try { persist() } catch (e: Exception) { fail(e) } }
     }
     private fun fail(e: Exception) {
         if (e is CancellationException) throw e
@@ -86,7 +95,7 @@ class QuestionImportViewModel(private val repository: ConcursoRepository) : View
     private fun action(block: suspend () -> Unit) {
         if (mutable.value.loading || !mutable.value.storageReady || mutable.value.busy) return
         mutable.value = mutable.value.copy(busy = true, message = null)
-        viewModelScope.launch {
+        vmScope.launch {
             try { persist(); block(); persist() } catch (e: Exception) { fail(e) }
             finally { mutable.value = mutable.value.copy(busy = false) }
         }
@@ -114,7 +123,7 @@ class QuestionImportViewModel(private val repository: ConcursoRepository) : View
                 if (mutable.value.loading || mutable.value.busy || mutable.value.draft.submitted) return
                 mutable.value = mutable.value.copy(draft = draft, storageReady = true, message = null)
                 unreadableDraft = null
-                viewModelScope.launch { try { persist() } catch (e: Exception) { fail(e) } }
+                vmScope.launch { try { persist() } catch (e: Exception) { fail(e) } }
             } catch (e: Exception) { fail(e) }
         } else edit { it.copy(mode = "BULK", source = text, assistanceId = null) }
     }
@@ -153,7 +162,7 @@ class QuestionImportViewModel(private val repository: ConcursoRepository) : View
         val d = mutable.value.draft
         if (d.submitted && d.result == null) return
         mutable.value = mutable.value.copy(draft = QuestionImportDraft(), message = null)
-        viewModelScope.launch { try { persist() } catch (e: Exception) { fail(e) } }
+        vmScope.launch { try { persist() } catch (e: Exception) { fail(e) } }
     }
     class Factory(private val repository: ConcursoRepository) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")

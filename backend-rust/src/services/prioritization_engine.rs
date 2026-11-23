@@ -191,3 +191,23 @@ fn next_unseen<T: Clone, F: Fn(&T) -> &str>(
     }
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn interleave_buckets_follows_40_40_20_cadence_deduplicates_and_backfills_shortfalls() {
+        let ret = vec!["R1", "R2", "SHARED", "R3"];
+        let gap = vec!["G1", "SHARED", "G2"];
+        let new_hi = vec!["N1", "N2"];
+
+        let mixed = interleave_buckets(&ret, &gap, &new_hi, 7, |s| s);
+        assert_eq!(mixed, vec!["R1", "G1", "R2", "SHARED", "N1", "R3", "G2"]);
+
+        // Backfills from remaining buckets when retention and gap are empty
+        let only_new = interleave_buckets::<&str, _>(&[], &[], &["N1", "N1", "N2", "N3"], 5, |s| s);
+        assert_eq!(only_new, vec!["N1", "N2", "N3"]);
+        assert!(interleave_buckets::<&str, _>(&ret, &gap, &new_hi, 0, |s| s).is_empty());
+    }
+}

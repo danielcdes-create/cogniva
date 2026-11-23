@@ -28,6 +28,7 @@ SERVICE = os.environ.get('COGNIVA_COMPOSE_SERVICE', 'api-rust-core')
 LOCAL_API = os.environ.get('COGNIVA_LOCAL_API', 'http://127.0.0.1:8001').rstrip('/')
 PUBLIC_ORIGIN = os.environ.get('COGNIVA_PUBLIC_ORIGIN', 'https://198.199.65.103').rstrip('/')
 SKIP_NGINX_GATE = os.environ.get('COGNIVA_SKIP_NGINX_GATE', '0') == '1'
+GATE_PATH = pathlib.Path(os.environ.get('COGNIVA_NGINX_GATE_PATH', '/etc/nginx/cogniva-gate.conf'))
 LOCK_PATH = ROOT / '.cogniva-deploy.lock'
 
 IMAGE_RE = re.compile(
@@ -154,7 +155,7 @@ def verify_neighbors(expected: dict[str, str]) -> None:
 def gate(paused: bool) -> None:
     if SKIP_NGINX_GATE:
         return
-    path = pathlib.Path('/etc/nginx/cogniva-gate.conf')
+    path = GATE_PATH
     temp = path.with_name(path.name + '.tmp')
     temp.write_text(f'set $cogniva_maintenance {1 if paused else 0};\n', encoding='utf-8')
     os.replace(temp, path)
@@ -186,21 +187,25 @@ def wait_ready(revision: str) -> None:
     raise RuntimeError('Candidate did not become ready with the expected revision')
 
 
-def main() -> None:
-    release = pathlib.Path(sys.argv[1]).resolve()
+def main(argv: list[str] | None = None) -> int:
+    args = list(sys.argv[1:] if argv is None else argv)
+    assert args, 'Missing release directory argument'
+    release = pathlib.Path(args[0]).resolve()
     assert (
         release.parent == ROOT / 'cogniva-releases'
         and re.fullmatch(r'[0-9a-f]{40}', release.name)
     ), 'Invalid release directory'
+    exercise_rollback = '--exercise-rollback' in args
 
     LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
     with LOCK_PATH.open('w', encoding='utf-8') as lock_file:
         if fcntl is not None:
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
-        _promote_locked(release)
+        _promote_locked(release, exercise_rollback=exercise_rollback)
+    return 0
 
 
-def _promote_locked(release: pathlib.Path) -> None:
+def _promote_locked(release: pathlib.Path, *, exercise_rollback: bool | None = None) -> None:
     manifest = json.loads((release / 'release.json').read_text(encoding='utf-8'))
     assert manifest['revision'] == release.name
     image = manifest['image']
@@ -304,7 +309,10 @@ def _promote_locked(release: pathlib.Path) -> None:
         assert sha(COMPOSE) == compose_hash, 'Shared Compose changed'
         verify_neighbors(others)
 
-        if '--exercise-rollback' in sys.argv:
+        do_exercise_rollback = (
+            exercise_rollback if exercise_rollback is not None else ('--exercise-rollback' in sys.argv)
+        )
+        if do_exercise_rollback:
             controlled_failure = True
             raise RuntimeError('CONTROLLED_SMOKE_FAILURE_FOR_ROLLBACK')
 
@@ -316,7 +324,7 @@ def _promote_locked(release: pathlib.Path) -> None:
                 **manifest,
                 'runtime_size_bytes': size,
                 'previous_image_id': old_image,
-                'previous_image': before['Config']['Image'],
+                'previous_image': old_runtime_ref,
             },
         )
         prune_old_releases({release.name, old_target_rev})
@@ -332,10 +340,18 @@ def _promote_locked(release: pathlib.Path) -> None:
     except BaseException as primary_error:
         if not runtime_mutated:
             if not SKIP_NGINX_GATE:
-                gate_path = pathlib.Path('/etc/nginx/cogniva-gate.conf')
-                gate_tmp = gate_path.with_name(gate_path.name + '.tmp')
-                gate_tmp.write_text('set $cogniva_maintenance 0;\n', encoding='utf-8')
-                os.replace(gate_tmp, gate_path)
+                try:
+                    gate_path = GATE_PATH
+                    gate_tmp = gate_path.with_name(gate_path.name + '.tmp')
+                    gate_tmp.write_text('set $cogniva_maintenance 0;\n', encoding='utf-8')
+                    os.replace(gate_tmp, gate_path)
+                except BaseException:
+                    pass
+                try:
+                    run('nginx', '-t')
+                    run('systemctl', 'reload', 'nginx')
+                except BaseException:
+                    pass
             raise
         restored_previous = False
         try:
@@ -380,4 +396,4 @@ def _promote_locked(release: pathlib.Path) -> None:
 
 
 if __name__ == '__main__':
-    main()
+    raise SystemExit(main())

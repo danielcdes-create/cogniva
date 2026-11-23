@@ -7,6 +7,7 @@ import br.com.concursoprep.app.data.repository.toPayload
 import br.com.concursoprep.app.domain.exam.*
 import br.com.concursoprep.app.domain.model.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.serialization.json.*
 import kotlinx.serialization.encodeToString
@@ -52,13 +53,26 @@ class RepositoryContractTest {
         val examRows=ConcurrentHashMap<String,UserExamEntity>()
         val subjectRows=ConcurrentHashMap<String,List<ExamSubjectEntity>>()
         val topicRows=ConcurrentHashMap<String,List<ExamTopicEntity>>()
+        val trunkRows=ConcurrentHashMap<String,CareerTrunkEntity>()
+        val masteryRows=ConcurrentHashMap<String,CanonicalMasteryEntity>()
+        val metadataFlows=ConcurrentHashMap<String,kotlinx.coroutines.flow.MutableStateFlow<String?>>()
+        val pendingCountFlow=kotlinx.coroutines.flow.MutableStateFlow(0)
+        val allExamsFlow=kotlinx.coroutines.flow.MutableStateFlow<List<UserExamEntity>>(emptyList())
         val learningChunkSizes=java.util.Collections.synchronizedList(mutableListOf<Int>())
         val questionChunkSizes=java.util.Collections.synchronizedList(mutableListOf<Int>())
         var remoteExams:List<ExamBlueprintPayload> = emptyList()
-        fun putExam(exam:StoredExam){examRows[exam.examId]=ExamLocalMapping.toEntity(exam);subjectRows[exam.examId]=ExamLocalMapping.subjectsOf(exam);topicRows[exam.examId]=ExamLocalMapping.topicsOf(exam)}
+        private fun refreshFlows(){
+            pendingCountFlow.value=pending.size
+            allExamsFlow.value=examRows.values.sortedWith(compareBy<UserExamEntity>{it.ladderPriority}.thenBy{it.shortName})
+        }
+        fun putExam(exam:StoredExam){examRows[exam.examId]=ExamLocalMapping.toEntity(exam);subjectRows[exam.examId]=ExamLocalMapping.subjectsOf(exam);topicRows[exam.examId]=ExamLocalMapping.topicsOf(exam);refreshFlows()}
         val dao=fake<ConcursoLocalDao>{method,args->when(method){
             "getAllPendingAttempts"->pending.values.sortedBy{it.createdAtEpochMs}
-            "getCachedQuestions"->questions.values.toList()
+            "getCachedQuestions"->{
+                val disc=args[0] as? String
+                val limit=(args[1] as? Int ?: Int.MAX_VALUE).coerceAtLeast(0)
+                questions.values.filter { disc==null || it.disciplina==disc }.take(limit)
+            }
             "findQuestionById"->questions[args[0]]
             "findQuestionsByIds"->{
                 val ids=(args[0] as List<*>).filterIsInstance<String>()
@@ -66,29 +80,35 @@ class RepositoryContractTest {
                 ids.mapNotNull { questions[it] }
             }
             "countPendingAttempts"->pending.size
+            "observePendingAttemptCount"->pendingCountFlow
             "countCachedQuestions"->questions.size
             "bindLegacyOwner"->{pending.replaceAll{_,a->if(a.ownerUserId==0L)a.copy(ownerUserId=args[0] as Long)else a};Unit}
             "findPendingAttemptInSession"->pending.values.find{it.sessionUuid==args[0]&&it.questionId==args[1]}
-            "enqueuePendingAttempt"->{val a=args[0] as PendingAttemptEntity;pending[a.attemptId]=a;Unit}
-            "acknowledgeAttempt"->{val a=pending[args[0]];if(a?.ownerUserId==args[1])pending.remove(args[0]);Unit}
+            "enqueuePendingAttempt"->{val a=args[0] as PendingAttemptEntity;pending[a.attemptId]=a;refreshFlows();Unit}
+            "acknowledgeAttempt"->{val a=pending[args[0]];if(a?.ownerUserId==args[1]){pending.remove(args[0]);refreshFlows()};Unit}
             "dismissQuarantinedAttempt"->{
                 val id=args[0] as String;val owner=args[1] as Long
                 val a=pending[id]
-                if(a!=null && a.ownerUserId==owner && a.syncError!=null){pending.remove(id);1}else 0
+                if(a!=null && a.ownerUserId==owner && a.syncError!=null){pending.remove(id);refreshFlows();1}else 0
             }
             "clearQuarantinedAttempts"->{
                 val owner=args[0] as Long
                 val toRemove=pending.values.filter{it.ownerUserId==owner && it.syncError!=null}.map{it.attemptId}
                 toRemove.forEach{pending.remove(it)}
+                refreshFlows()
                 toRemove.size
             }
             "markAttemptError"->{val a=pending[args[0]];if(a!=null&&a.ownerUserId==args[1])pending[a.attemptId]=a.copy(syncError=args[2] as String?);Unit}
             "insertQuestions"->{(args[0] as List<*>).filterIsInstance<CachedQuestionEntity>().forEach{questions[it.id]=it};Unit}
             "clearCachedQuestions"->{questions.clear();Unit}
-            "updateLearningFlags"->Unit
+            "updateLearningFlags"->{
+                val id=args[0] as String;val err=args[1] as Boolean;val mast=args[2] as Boolean
+                questions[id]?.let{questions[id]=it.copy(inErrorNotebook=err,isMastered=mast)}
+                Unit
+            }
             "updateAttemptEvidence"->{
-                val sessId=args[0] as String;val qId=args[1] as String;val evId=args[2] as String
-                pending.values.find { it.sessionUuid==sessId && it.questionId==qId }?.let {
+                val sessId=args[0] as String;val qId=args[1] as String;val evId=args[2] as String;val owner=args[3] as Long
+                pending.values.find { it.sessionUuid==sessId && it.questionId==qId && it.ownerUserId==owner }?.let {
                     pending[it.attemptId]=it.copy(selectedEvidenceId=evId)
                 }
                 Unit
@@ -96,17 +116,28 @@ class RepositoryContractTest {
             else->error("Unexpected DAO operation $method")
         }}
         val exams=fake<ExamDao>{method,args->when(method){
-            "countExams"->examRows.size.coerceAtLeast(1)
-            "listExams"->examRows.values.toList()
+            "observeAllExams"->allExamsFlow
+            "countExams"->examRows.size
+            "listExams"->examRows.values.sortedWith(compareBy<UserExamEntity>{it.ladderPriority}.thenBy{it.shortName})
             "listPendingExams"->examRows.values.filter { it.syncStatus!="SYNCED" }
-            "listTrunks"->emptyList<CareerTrunkEntity>()
-            "upsertTrunks"->Unit
-            "setActive"->{val id=args[0] as String;val act=args[1] as Boolean;examRows[id]?.let{examRows[id]=it.copy(isActiveInLadder=act)};Unit}
+            "listTrunks"->trunkRows.values.toList()
+            "upsertTrunks"->{(args[0] as List<*>).filterIsInstance<CareerTrunkEntity>().forEach{trunkRows[it.slug]=it};Unit}
+            "setTrunkFocus"->{val slug=args[0] as String;val foc=args[1] as Boolean;trunkRows[slug]?.let{trunkRows[slug]=it.copy(isFocusedTrunk=foc)};Unit}
+            "setActive"->{val id=args[0] as String;val act=args[1] as Boolean;examRows[id]?.let{examRows[id]=it.copy(isActiveInLadder=act);refreshFlows()};Unit}
+            "setSyncError"->{val id=args[0] as String;val err=args[1] as? String;examRows[id]?.let{examRows[id]=it.copy(syncError=err);refreshFlows()};Unit}
+            "markSynced"->{val id=args[0] as String;examRows[id]?.let{examRows[id]=it.copy(syncStatus="SYNCED");refreshFlows()};Unit}
             "subjectsFor"->subjectRows[args[0]].orEmpty()
             "topicsFor"->topicRows[args[0]].orEmpty()
-            "upsertExam"->{val e=args[0] as UserExamEntity;examRows[e.examId]=e;Unit}
+            "upsertExam"->{val e=args[0] as UserExamEntity;examRows[e.examId]=e;refreshFlows();Unit}
             "clearSubjects"->{subjectRows.remove(args[0]);Unit}
             "clearTopics"->{topicRows.remove(args[0]);Unit}
+            "clearAllTopics"->{topicRows.clear();Unit}
+            "clearAllSubjects"->{subjectRows.clear();Unit}
+            "clearAllExams"->{examRows.clear();refreshFlows();Unit}
+            "clearAllMastery"->{masteryRows.clear();Unit}
+            "clearAllTrunks"->{trunkRows.clear();Unit}
+            "upsertMastery"->{val m=args[0] as CanonicalMasteryEntity;masteryRows[m.canonicalTopicId]=m;Unit}
+            "listMastery"->masteryRows.values.toList()
             "upsertSubjects"->{(args[0] as List<*>).filterIsInstance<ExamSubjectEntity>().groupBy { it.examId }.forEach { (id,rows)->subjectRows[id]=rows };Unit}
             "upsertTopics"->{(args[0] as List<*>).filterIsInstance<ExamTopicEntity>().groupBy { it.examId }.forEach { (id,rows)->topicRows[id]=rows };Unit}
             else->error("Unexpected exam operation $method")
@@ -120,14 +151,32 @@ class RepositoryContractTest {
             }
             "putLearning"->{(args[0] as List<*>).filterIsInstance<LearningRecordEntity>().forEach{learning[it.questionId]=it};Unit}
             "metadata"->metadata[args[0]]
-            "deleteMetadata"->{metadata.remove(args[0] as String);Unit}
-            "clearAllMetadata"->{metadata.clear();Unit}
+            "deleteMetadata"->{
+                val k=args[0] as String
+                metadata.remove(k)
+                metadataFlows[k]?.value=null
+                Unit
+            }
+            "clearAllMetadata"->{
+                metadata.clear()
+                metadataFlows.values.forEach{it.value=null}
+                Unit
+            }
             "clearAllLearning"->{learning.clear();Unit}
             "preservedExamEdits"->metadata.filterKeys { it.startsWith("exam_backup:") }.map { LocalMetadataEntity(it.key,it.value) }
-            "putMetadata"->{val m=args[0] as LocalMetadataEntity;metadata[m.key]=m.value;Unit}
+            "putMetadata"->{
+                val m=args[0] as LocalMetadataEntity
+                metadata[m.key]=m.value
+                metadataFlows[m.key]?.value=m.value
+                Unit
+            }
             "reports"->reports.values.filter{it.ownerUserId==args[0]}
             "enqueueReport"->{val r=args[0] as PendingReportEntity;reports.putIfAbsent(r.eventId,r);Unit}
-            "acknowledgeReport"->{reports.remove(args[0]);Unit}
+            "acknowledgeReport"->{
+                val id=args[0] as String;val owner=args[1] as Long
+                if(reports[id]?.ownerUserId==owner)reports.remove(id)
+                Unit
+            }
             "createSession"->{val s=args[0] as QuizSessionEntity;sessions[s.sessionId]=s;Unit}
             "deactivateOtherSessions"->{
                 val owner=args[0] as Long;val keep=args[1] as String
@@ -145,6 +194,10 @@ class RepositoryContractTest {
                 val id=args[0] as String;val owner=args[1] as Long
                 sessions[id]?.takeIf{it.ownerUserId==owner}?.let{sessions[id]=it.copy(active=false)};Unit
             }
+            "deleteSessionsForOwner"->{
+                val owner=args[0] as Long
+                sessions.entries.removeIf{it.value.ownerUserId==owner};Unit
+            }
             "pausedSession"->{
                 val owner=args[0] as Long
                 sessions.values.filter{it.active && it.ownerUserId==owner}.maxByOrNull{it.updatedAt}
@@ -153,18 +206,37 @@ class RepositoryContractTest {
                 val cutoff=args[0] as Long
                 sessions.entries.removeIf{it.value.updatedAt<cutoff};Unit
             }
-            "observeMetadata"->flowOf(null)
+            "observeMetadata"->{
+                val k=args[0] as String
+                metadataFlows.computeIfAbsent(k){kotlinx.coroutines.flow.MutableStateFlow(metadata[k])}
+            }
             else->error("Unexpected durable operation $method")
         }}
         fun repository(
+            ownerUserId:Long=123L,
+            auth:br.com.concursoprep.app.data.AuthStore?=null,
             submit:(SubmitBatchPayload)->SubmitBatchResponseDto={throw IOException("Synthetic outage")},
             attachEvidence:(AttachAttemptEvidencePayload)->AttachAttemptEvidenceResponse={AttachAttemptEvidenceResponse("applied",it.attemptId,it.selectedEvidenceId)},
             sendReport:()->Unit={},
+            sendReportPayload:(String,ReportProblemPayload)->Unit={_,_->sendReport()},
             updateExam:(ExamBlueprintPayload)->ExamBlueprintPayload={throw IOException("Synthetic outage")},
             generate:(QuizGeneratePayload)->List<QuestionDto> = {throw IOException("Synthetic outage")},
             aiTutor:(String,String,Int?)->AiAssistResponseDto={_,_,_->throw IOException("Synthetic outage")},
+            aiTutorWithContext:(String,String,AiAssistRequestPayload)->AiAssistResponseDto={_,_,_->throw IOException("Synthetic offline contextual AI")},
+            lookupContext:(String,ContextualLookupRequestDto)->ContextualLookupResponseDto={_,_->throw IOException("Synthetic offline lookup")},
             saveOnboarding:(OnboardingPayload)->UserProfileDto={UserProfileDto(it.userId,displayName=it.displayName,dailyQuestionsTarget=it.dailyQuestionsTarget,dailyStudyHoursTarget=it.dailyStudyHoursTarget,activeContestIds=it.activeContestIds)},
-            deleteAccount:(DeleteAccountRequest)->retrofit2.Response<Unit> = {retrofit2.Response.success(Unit)}
+            guestSession:(NativeSessionPayload)->AuthSessionDto={throw IOException("Synthetic offline guest session")},
+            deleteAccount:(DeleteAccountRequest)->retrofit2.Response<Unit> = {retrofit2.Response.success(Unit)},
+            listMissions:()->JsonObject={throw IOException("Synthetic offline missions")},
+            getMissionDetail:(String,Boolean)->JsonObject={_,_->throw IOException("Synthetic offline mission detail")},
+            updateMissionProgress:(String,JsonObject)->JsonObject={_,_->throw IOException("Synthetic offline mission progress")},
+            submitMissionDecision:(String,JsonObject)->JsonObject={_,_->throw IOException("Synthetic offline mission decision")},
+            repeatMission:(String)->JsonObject={_->throw IOException("Synthetic offline mission repeat")},
+            getMissionPracticeQuestions:(String,JsonObject)->JsonObject={_,_->throw IOException("Synthetic offline mission practice")},
+            importCapabilities:()->JsonObject={buildJsonObject{put("ai_available",true)}},
+            previewImport:(JsonObject)->JsonObject={throw IOException("Synthetic offline preview")},
+            commitImport:(JsonObject)->JsonObject={throw IOException("Synthetic offline commit")},
+            assistImport:(JsonObject)->JsonObject={throw IOException("Synthetic offline assist")}
         ):ConcursoRepository {
             val api=fake<ConcursoApiService>{method,args->when(method){
                 "submitAttemptsBatch"->submit(args[0] as SubmitBatchPayload)
@@ -175,19 +247,30 @@ class RepositoryContractTest {
                 "knowledgeCatalog"->Json.parseToJsonElement(checkNotNull(javaClass.getResourceAsStream("/knowledge-catalog.json")).bufferedReader().readText()).jsonObject
                 "cacheState"->CacheStateResponse(1,(args[0] as CacheStatePayload).questionIds.map { CacheStateItem(it,questions[it]?.let { q->QuestionCacheMapping.toDto(q,json) }) })
                 "learningState"->LearningPage(emptyList())
-                "reportQuestionProblem"->{sendReport();Unit}
+                "reportQuestionProblem"->{sendReportPayload(args[0] as String,args[1] as ReportProblemPayload);Unit}
                 "generateQuizQuestions"->generate(args[0] as QuizGeneratePayload)
                 "requestAiTutor"->aiTutor(args[0] as String,args[1] as String,args[2] as Int?)
-                "requestAiTutorWithContext"->{throw IOException("Synthetic offline contextual AI")}
-                "lookupQuestionContext"->{throw IOException("Synthetic offline lookup")}
+                "requestAiTutorWithContext"->aiTutorWithContext(args[0] as String,args[1] as String,args[2] as AiAssistRequestPayload)
+                "lookupQuestionContext"->lookupContext(args[0] as String,args[1] as ContextualLookupRequestDto)
                 "saveOnboardingPreferences"->saveOnboarding(args[0] as OnboardingPayload)
-                "profile"->UserProfileDto(123,displayName="Estudante",isGuest=true)
+                "guestSession"->guestSession(args[0] as NativeSessionPayload)
+                "profile"->UserProfileDto(if(ownerUserId>0L)ownerUserId else 0L,displayName="Estudante",isGuest=true)
                 "getApkInfo"->{throw IOException("Synthetic offline APK check")}
                 "getNextAction"->{throw IOException("Synthetic offline next-action")}
                 "deleteAccount"->deleteAccount(args[0] as DeleteAccountRequest)
+                "listMissions"->listMissions()
+                "getMissionDetail"->getMissionDetail(args[0] as String,args[1] as Boolean)
+                "updateMissionProgress"->updateMissionProgress(args[0] as String,args[1] as JsonObject)
+                "submitMissionDecision"->submitMissionDecision(args[0] as String,args[1] as JsonObject)
+                "repeatMission"->repeatMission(args[0] as String)
+                "getMissionPracticeQuestions"->getMissionPracticeQuestions(args[0] as String,args[1] as JsonObject)
+                "questionImportCapabilities"->importCapabilities()
+                "previewQuestionImport"->previewImport(args[0] as JsonObject)
+                "commitQuestionImport"->commitImport(args[0] as JsonObject)
+                "assistQuestionImport"->assistImport(args[0] as JsonObject)
                 else->error("Unexpected API operation $method")
             }}
-            return ConcursoRepository(api,dao,exams,json,durable=durable,ownerUserId=123)
+            return ConcursoRepository(api,dao,exams,json,durable=durable,ownerUserId=ownerUserId,auth=auth)
         }
         fun add(a:PendingAttemptEntity){pending[a.attemptId]=a;questions[a.questionId]=QuestionCacheMapping.toEntity(question(a.questionId),json)}
     }
@@ -847,5 +930,532 @@ class RepositoryContractTest {
         val lookup = repo.lookupQuestionContext(q, "Art. 53")
         assertTrue(lookup.googleSearchUrl.startsWith("https://www.google.com/search?hl=pt-BR&q="))
         assertTrue(lookup.normativeMatches.any { it.sourceId == "LEI_9784_ART_53" })
+    }
+
+    @Test fun negativeOwnerUserIdSendsApiUserIdZeroWhilePreservingNegativeLocalOwner() = runBlocking {
+        val prefs = InMemorySharedPreferences()
+        val aesKey = TestAuthFixtures.newAes256Key()
+        val auth = br.com.concursoprep.app.data.AuthStore(prefs, keyProvider = { aesKey })
+        val negOwner = auth.localUserId
+        assertTrue(negOwner < 0L)
+        auth.select(negOwner)
+
+        val store = Store()
+        val q = question("0000000000000000000000a1")
+        val a = attempt(q = q, owner = negOwner)
+        store.add(a)
+
+        var submitUserId: Long? = null
+        var quizUserId: Long? = null
+        var onboardingUserId: Long? = null
+        var reportUserId: Long? = null
+        val jwt = TestAuthFixtures.buildJwt(System.currentTimeMillis() / 1000L + 3600L, sub = 5501L)
+
+        val repo = store.repository(
+            ownerUserId = negOwner,
+            auth = auth,
+            guestSession = {
+                AuthSessionDto(
+                    token = jwt,
+                    profile = UserProfileDto(userId = 5501L, displayName = "Convidado", isGuest = true)
+                )
+            },
+            submit = { batch ->
+                submitUserId = batch.userId
+                SubmitBatchResponseDto(1, listOf(ack(a)))
+            },
+            generate = { req ->
+                quizUserId = req.userId
+                listOf(q)
+            },
+            saveOnboarding = { payload ->
+                onboardingUserId = payload.userId
+                UserProfileDto(userId = 0L, displayName = payload.displayName, activeContestIds = payload.activeContestIds)
+            },
+            sendReportPayload = { _, payload ->
+                reportUserId = payload.userId
+            }
+        )
+
+        // Room stores negative owner locally before network sync
+        assertEquals(negOwner, store.pending.getValue(a.attemptId).ownerUserId)
+        val savedOnboarding = repo.saveOnboarding(negOwner, listOf("CPNU"), 30, 2.0, "Offline Guest")
+        assertEquals(0L, onboardingUserId)
+        assertEquals(negOwner, savedOnboarding.userId)
+
+        val generated = repo.fetchOrGetOfflineQuiz(negOwner, QuizMode.SHUFFLE, 5)
+        assertEquals(0L, quizUserId)
+        assertEquals(1, generated.size)
+
+        assertTrue(repo.reportQuestionProblem(negOwner, q.id, VALID_PROBLEM_CATEGORIES.first()))
+        assertEquals(negOwner, store.reports.values.single().ownerUserId)
+
+        val session = SessionSnapshot("sess-neg", negOwner, listOf(q), QuizMode.STANDARD, null)
+        repo.createSession(session)
+        assertEquals(negOwner, store.sessions.getValue("sess-neg").ownerUserId)
+
+        repo.syncPendingAttempts(negOwner)
+        assertEquals(0L, submitUserId)
+        assertEquals(0L, reportUserId)
+        assertEquals(jwt, auth.token(negOwner))
+    }
+
+    @Test fun lgpdDeleteAccountWipesAllPersonalTablesExamsSessionsAndMetadataCompletely() = runBlocking {
+        val prefs = InMemorySharedPreferences()
+        val aesKey = TestAuthFixtures.newAes256Key()
+        val auth = br.com.concursoprep.app.data.AuthStore(prefs, keyProvider = { aesKey })
+        val owner = 123L
+        auth.select(owner)
+        auth.accept(
+            AuthSessionDto(
+                token = TestAuthFixtures.buildJwt(System.currentTimeMillis() / 1000L + 3600L, sub = owner),
+                profile = UserProfileDto(userId = owner, email = "lgpd@cogniva.app", isGuest = false)
+            )
+        )
+
+        val store = Store()
+        val q = question("0000000000000000000000b1")
+        store.add(attempt(q = q, owner = owner))
+        store.learning[q.id] = LearningRecordEntity(
+            q.id,
+            1L,
+            json.encodeToString(
+                LearningRecord(q.id, q.disciplina, attempts = 1, correct = 1, accuracyPct = 100.0, isMastered = false, inErrorNotebook = false, highConfidenceError = false, points = 0.2, nextReviewAt = "2027-01-01T00:00:00Z")
+            )
+        )
+        store.metadata["pending_evidence_patches"] = """[{"ownerUserId":123,"attemptId":"a1","questionId":"${q.id}","selectedEvidenceId":"ev_decisive"}]"""
+        store.metadata["missions_state_v1"] = """{"ownerUserId":123,"missions":{"bcb-ef-t1-m01-choque-dos-juros":{"missionId":"bcb-ef-t1-m01-choque-dos-juros","dirty":true}}}"""
+        store.metadata["pending_profile"] = """{"user_id":123}"""
+        store.reports["rep-1"] = PendingReportEntity("rep-1", owner, q.id, VALID_PROBLEM_CATEGORIES.first())
+        store.sessions["sess-active"] = QuizSessionEntity("sess-active", owner, "{}", 1L, active = true)
+        store.sessions["sess-done"] = QuizSessionEntity("sess-done", owner, "{}", 2L, active = false)
+        store.putExam(ExamCatalog.systemExams().first())
+        store.masteryRows["FIN_PUB_01"] = CanonicalMasteryEntity("FIN_PUB_01", "FIN_PUB", 0.9, true)
+        store.trunkRows["fiscal"] = CareerTrunkEntity("fiscal", "Fiscal", "icon", true)
+
+        val repo = store.repository(ownerUserId = owner, auth = auth)
+        val nextGuestId = repo.deleteAccount("EXCLUIR", "Exclusão concluída.")
+
+        assertTrue(nextGuestId < 0L)
+        assertTrue(store.pending.isEmpty())
+        assertTrue(store.learning.isEmpty())
+        assertTrue(store.metadata.isEmpty())
+        assertTrue(store.questions.isEmpty())
+        assertTrue(store.reports.isEmpty())
+        assertTrue(store.sessions.isEmpty())
+        assertTrue(store.examRows.isEmpty())
+        assertTrue(store.subjectRows.isEmpty())
+        assertTrue(store.topicRows.isEmpty())
+        assertTrue(store.masteryRows.isEmpty())
+        assertTrue(store.trunkRows.isEmpty())
+        assertEquals(0, store.exams.countExams())
+        assertNull(auth.token(owner))
+    }
+
+    @Test fun strategicOmissionIsCountedExactlyOnceOfflineAndAfterSync() = runBlocking {
+        val store = Store()
+        val exam = ExamCatalog.systemExams().first().copy(
+            examId = "CPNU",
+            wrongAnswerPenalty = 1.0,
+            isActiveInLadder = true
+        )
+        store.putExam(exam)
+        val qCached = question("0000000000000000000000c1").copy(
+            questionType = QuestionType.TRUE_FALSE,
+            answers = listOf("Certo", "Errado"),
+            correctAnswerIndices = listOf(0)
+        )
+        store.questions[qCached.id] = QuestionCacheMapping.toEntity(qCached, json)
+        val repo = store.repository()
+
+        val blank1 = PendingAttemptEntity(
+            localId = 1,
+            questionId = qCached.id,
+            chosenIndex = -1,
+            chosenText = "",
+            isCorrect = false,
+            timeSpentSeconds = 9,
+            confidenceLevel = 0,
+            sessionUuid = "sess-blank-1",
+            quizMode = "STRATEGY_BATTERY",
+            examBlock = null,
+            contestId = "CPNU",
+            userNote = null,
+            ownerUserId = 123L,
+            attemptId = "blank-att-1",
+            questionRevision = qCached.questionRevision,
+            isBlank = true,
+            confidenceExplicit = true
+        )
+        repo.recordAttemptOfflineFirst(123L, blank1)
+
+        // Regression guard: must be 1, NEVER 2!
+        assertEquals(1, repo.getTodayDashboard(123L).nextAction!!.threeSignalSummary.strategicOmissions)
+        assertEquals(1, repo.getProgressAnalytics(123L).threeSignalSummary.strategicOmissions)
+
+        // Uncached question blank attempt also counts once
+        val blankUncached = blank1.copy(
+            localId = 2,
+            questionId = "0000000000000000000000c2",
+            sessionUuid = "sess-blank-2",
+            attemptId = "blank-att-2"
+        )
+        store.pending[blankUncached.attemptId] = blankUncached
+        assertEquals(2, repo.getProgressAnalytics(123L).threeSignalSummary.strategicOmissions)
+    }
+
+    @Test fun pendingEvidencePatchesHandlePendingParentRetry4xxDiscardAndMultiAccountIsolation() = runBlocking {
+        val store = Store()
+        val q = question("0000000000000000000000d1")
+        store.questions[q.id] = QuestionCacheMapping.toEntity(q, json)
+
+        // Multi-account DAO isolation on updateAttemptEvidence when sessionUuid + questionId collide
+        val att123 = attempt(q, owner = 123L, id = "att-123").copy(sessionUuid = "shared-sess")
+        val att999 = attempt(q, owner = 999L, id = "att-999").copy(sessionUuid = "shared-sess")
+        store.pending[att123.attemptId] = att123
+        store.pending[att999.attemptId] = att999
+
+        val baseRepo = store.repository(ownerUserId = 123L)
+        baseRepo.recordEvidenceSelection(123L, "shared-sess", q.id, "ev_decisive")
+        assertEquals("ev_decisive", store.pending.getValue("att-123").selectedEvidenceId)
+        assertNull(store.pending.getValue("att-999").selectedEvidenceId)
+
+        // Drain attempts, seed patch for 123L AND foreign patch for 999L
+        store.pending.clear()
+        store.metadata["pending_evidence_patches"] = """[
+            {"ownerUserId":123,"attemptId":"att-123","questionId":"${q.id}","selectedEvidenceId":"ev_decisive"},
+            {"ownerUserId":999,"attemptId":"att-999","questionId":"${q.id}","selectedEvidenceId":"ev_err_1"}
+        ]"""
+
+        // getLocalStorageStats counts ONLY owner 123L's patch (1), ignoring 999L
+        assertEquals(1, baseRepo.getLocalStorageStats().second)
+
+        val seenAttempts = mutableListOf<String>()
+
+        // 1. Server returns "pending_parent_attempt" even though pending_attempts was just drained -> MUST retain patch!
+        val repoPendingParent = store.repository(
+            ownerUserId = 123L,
+            attachEvidence = { p ->
+                seenAttempts += p.attemptId
+                AttachAttemptEvidenceResponse("pending_parent_attempt", p.attemptId, p.selectedEvidenceId)
+            }
+        )
+        assertTrue(runCatching { repoPendingParent.syncPendingAttempts(123L) }.isFailure)
+        assertEquals(listOf("att-123"), seenAttempts)
+        assertEquals(1, repoPendingParent.getLocalStorageStats().second)
+
+        // 2. Transient 500 and IOException retain patch for retry
+        val repo500 = store.repository(
+            ownerUserId = 123L,
+            attachEvidence = {
+                throw retrofit2.HttpException(retrofit2.Response.error<AttachAttemptEvidenceResponse>(500, "{}".toResponseBody("application/json".toMediaType())))
+            }
+        )
+        assertTrue(runCatching { repo500.syncPendingAttempts(123L) }.isFailure)
+        assertEquals(1, repo500.getLocalStorageStats().second)
+
+        val repoIo = store.repository(
+            ownerUserId = 123L,
+            attachEvidence = { throw IOException("timeout") }
+        )
+        assertTrue(runCatching { repoIo.syncPendingAttempts(123L) }.isFailure)
+        assertEquals(1, repoIo.getLocalStorageStats().second)
+
+        // 3. Terminal 404 discards 123L's patch cleanly while preserving 999L's patch untouched
+        val repo404 = store.repository(
+            ownerUserId = 123L,
+            attachEvidence = {
+                throw retrofit2.HttpException(retrofit2.Response.error<AttachAttemptEvidenceResponse>(404, "{}".toResponseBody("application/json".toMediaType())))
+            }
+        )
+        repo404.syncPendingAttempts(123L)
+        assertEquals(0, repo404.getLocalStorageStats().second)
+        assertTrue(store.metadata["pending_evidence_patches"].orEmpty().contains("\"ownerUserId\":999"))
+        assertFalse(store.metadata["pending_evidence_patches"].orEmpty().contains("\"ownerUserId\":123"))
+    }
+
+    @Test fun termLookupAndPreAnswerTutorNeverLeakExplanationWhilePostAnswerTermLookupFallsBack() = runBlocking {
+        val store = Store()
+        val secretExplanation = "GABARITO_OFICIAL_SECRETO_ART_37"
+        val q = question("0000000000000000000000e1").copy(explanation = secretExplanation)
+        store.questions[q.id] = QuestionCacheMapping.toEntity(q, json)
+
+        // Blank term validation without network call
+        assertEquals(
+            "Selecione um termo ou trecho do enunciado para consultar.",
+            store.repository().requestAiTermLookup(q.id, "   ", isAnswerSubmitted = false)
+        )
+
+        // 1. Offline IOException: pre-answer "term-lookup" NEVER leaks explanation; post-answer "term-lookup-post" DOES fall back
+        val offlineRepo = store.repository()
+        assertFalse(offlineRepo.requestAiTutor(q.id, "term-lookup").contains(secretExplanation))
+        assertFalse(offlineRepo.requestAiTermLookup(q.id, "Art. 37", isAnswerSubmitted = false).contains(secretExplanation))
+        assertTrue(offlineRepo.requestAiTermLookup(q.id, "Art. 37", isAnswerSubmitted = true).contains(secretExplanation))
+
+        // 2. HTTP 502 error: pre-answer NEVER leaks explanation; post-answer falls back with backend message
+        val http502Repo = store.repository(
+            aiTutor = { _, _, _ ->
+                throw retrofit2.HttpException(retrofit2.Response.error<AiAssistResponseDto>(502, """{"message":"IA fora do ar"}""".toResponseBody("application/json".toMediaType())))
+            },
+            aiTutorWithContext = { _, _, _ ->
+                throw retrofit2.HttpException(retrofit2.Response.error<AiAssistResponseDto>(502, """{"message":"IA fora do ar"}""".toResponseBody("application/json".toMediaType())))
+            }
+        )
+        val preTutor502 = http502Repo.requestAiTutor(q.id, "term-lookup")
+        assertTrue(preTutor502.contains("IA fora do ar"))
+        assertFalse(preTutor502.contains(secretExplanation))
+
+        val preLookup502 = http502Repo.requestAiTermLookup(q.id, "Art. 37", isAnswerSubmitted = false)
+        assertTrue(preLookup502.contains("IA fora do ar"))
+        assertFalse(preLookup502.contains(secretExplanation))
+
+        val postLookup502 = http502Repo.requestAiTermLookup(q.id, "Art. 37", isAnswerSubmitted = true)
+        assertTrue(postLookup502.contains("IA fora do ar"))
+        assertTrue(postLookup502.contains(secretExplanation))
+
+        // 3. Online success sends expected kind ("term-lookup" vs "term-lookup-post")
+        val seenKinds = mutableListOf<String>()
+        val okRepo = store.repository(
+            aiTutorWithContext = { _, kind, payload ->
+                seenKinds += "$kind:${payload.userNote}"
+                AiAssistResponseDto(q.id, kind, "Conceito explicado", fromCache = false)
+            }
+        )
+        assertEquals("Conceito explicado", okRepo.requestAiTermLookup(q.id, "  improbidade  ", isAnswerSubmitted = false))
+        assertEquals("Conceito explicado", okRepo.requestAiTermLookup(q.id, "improbidade", isAnswerSubmitted = true))
+        assertEquals(listOf("term-lookup:improbidade", "term-lookup-post:improbidade"), seenKinds)
+    }
+
+    @Test fun reactiveFlowsCachedQuestionFiltersAndLearningFlagUpdatesMatchDaoContract() = runBlocking {
+        val store = Store()
+        val qFin = question("0000000000000000000000f1").copy(disciplina = "Finanças Públicas")
+        val qAdm = question("0000000000000000000000f2").copy(disciplina = "Direito Administrativo")
+        store.questions[qFin.id] = QuestionCacheMapping.toEntity(qFin, json)
+        store.questions[qAdm.id] = QuestionCacheMapping.toEntity(qAdm, json)
+
+        assertEquals(1, store.dao.getCachedQuestions("Direito Administrativo", 10).size)
+        assertEquals(1, store.dao.getCachedQuestions(null, 1).size)
+
+        val a = attempt(qFin, owner = 123L).copy(isCorrect = false)
+        store.pending[a.attemptId] = a
+        val repo = store.repository(
+            submit = {
+                SubmitBatchResponseDto(
+                    1,
+                    listOf(ack(a).copy(isCorrect = false, inErrorNotebook = true, isMastered = false, correctTotal = 0, accuracyAccumulatedPct = 0.0))
+                )
+            }
+        )
+        val observedBefore = repo.observeSync().first()
+        assertNotNull(observedBefore)
+
+        repo.syncPendingAttempts(123L)
+        assertTrue(store.questions.getValue(qFin.id).inErrorNotebook)
+        assertFalse(store.questions.getValue(qFin.id).isMastered)
+        val observedAfter = repo.observeSync().first()
+        assertNotEquals(observedBefore, observedAfter)
+    }
+
+    @Test fun missionsOfflineFirstFlushesOrderedTwoStepDecisionsPositionsAndVerifiesVideoSha256() = runBlocking {
+        val prefs = InMemorySharedPreferences()
+        val aesKey = TestAuthFixtures.newAes256Key()
+        val auth = br.com.concursoprep.app.data.AuthStore(prefs, keyProvider = { aesKey })
+        auth.select(123L)
+        auth.accept(
+            AuthSessionDto(
+                token = TestAuthFixtures.buildJwt(System.currentTimeMillis() / 1000L + 3600L, sub = 123L),
+                profile = UserProfileDto(userId = 123L, isGuest = true)
+            )
+        )
+
+        val store = Store()
+        val missionId = "bcb-ef-t1-m01-choque-dos-juros"
+
+        // 1. Offline mutations keep dirty = true and count in getLocalStorageStats()
+        val offlineRepo = store.repository(ownerUserId = 123L, auth = auth)
+        offlineRepo.updateMissionProgressOfflineFirst(
+            missionId = missionId,
+            currentSceneId = "cena-02-o-problema",
+            completedSceneId = "cena-01-o-alerta",
+            playbackPositionMs = 8500L
+        )
+        offlineRepo.updateMissionProgressOfflineFirst(
+            missionId = missionId,
+            currentSceneId = "cena-03-primeira-decisao",
+            completedSceneId = "cena-02-o-problema"
+        )
+        // Student answers Scene 3 wrong ("A") then right ("B") while offline!
+        offlineRepo.submitMissionDecisionOfflineFirst(
+            missionId = missionId,
+            sceneId = "cena-03-primeira-decisao",
+            interactionId = "decisao-01-juros-preco-prefixado",
+            selectedOptionId = "A",
+            timeSpentMs = 4200L
+        )
+        offlineRepo.submitMissionDecisionOfflineFirst(
+            missionId = missionId,
+            sceneId = "cena-03-primeira-decisao",
+            interactionId = "decisao-01-juros-preco-prefixado",
+            selectedOptionId = "B",
+            timeSpentMs = 2100L
+        )
+        offlineRepo.updateMissionProgressOfflineFirst(
+            missionId = missionId,
+            currentSceneId = "cena-05-desafio-duration",
+            completedSceneId = "cena-04-explicacao",
+            playbackPositionMs = 14200L
+        )
+        offlineRepo.submitMissionDecisionOfflineFirst(
+            missionId = missionId,
+            sceneId = "cena-05-desafio-duration",
+            interactionId = "decisao-02-desafio-duration",
+            selectedOptionId = "B",
+            timeSpentMs = 3500L
+        )
+
+        // Force reverse map insertion order (Scene 5 before Scene 3) in stored JSON to prove flushDirtyMissionRecord sorts by scene order!
+        val rawEnv = json.decodeFromString<br.com.concursoprep.app.domain.missions.LocalMissionsStateEnvelope>(
+            store.metadata.getValue("missions_state_v1")
+        )
+        val rec = rawEnv.missions.getValue(missionId)
+        assertTrue(rec.dirty)
+        val reversedDecisions = linkedMapOf(
+            "decisao-02-desafio-duration" to rec.decisions.getValue("decisao-02-desafio-duration"),
+            "decisao-01-juros-preco-prefixado" to rec.decisions.getValue("decisao-01-juros-preco-prefixado")
+        )
+        store.metadata["missions_state_v1"] = json.encodeToString(
+            rawEnv.copy(missions = mapOf(missionId to rec.copy(decisions = reversedDecisions)))
+        )
+        assertEquals(1, offlineRepo.getLocalStorageStats().second)
+
+        // 2. Online flush enforces server state machine strictly (never 409 DECISION_REQUIRED_BEFORE_ADVANCE)
+        val callLog = mutableListOf<String>()
+        var scene3AnsweredOnServer = false
+        var scene3FirstWasWrong = false
+        val onlineRepo = store.repository(
+            ownerUserId = 123L,
+            auth = auth,
+            submitMissionDecision = { mid, body ->
+                assertEquals(missionId, mid)
+                val sid = body.getValue("scene_id").jsonPrimitive.content
+                val opt = body.getValue("selected_option_id").jsonPrimitive.content
+                if (sid == "cena-05-desafio-duration") {
+                    assertTrue("Scene 3 MUST be submitted before Scene 5!", scene3AnsweredOnServer)
+                }
+                if (sid == "cena-03-primeira-decisao") {
+                    if (!scene3AnsweredOnServer) {
+                        scene3FirstWasWrong = (opt == "A")
+                        scene3AnsweredOnServer = true
+                    }
+                }
+                callLog += "DECISION:$sid:$opt"
+                buildJsonObject {}
+            },
+            updateMissionProgress = { mid, body ->
+                assertEquals(missionId, mid)
+                val done = body["completed_scene_id"]?.jsonPrimitive?.contentOrNull
+                val cur = body["current_scene_id"]?.jsonPrimitive?.contentOrNull
+                val pos = body["playback_position_ms"]?.jsonPrimitive?.longOrNull
+                val comp = body["mark_mission_completed"]?.jsonPrimitive?.booleanOrNull == true
+                callLog += "PROGRESS:done=$done,cur=$cur,pos=$pos,completed=$comp"
+                buildJsonObject {}
+            },
+            listMissions = { buildJsonObject { put("careers", buildJsonArray {}) } }
+        )
+
+        onlineRepo.loadMissionsCatalog()
+        assertTrue("First wrong attempt 'A' must be sent before 'B' to preserve firstAttemptCorrect=false", scene3FirstWasWrong)
+
+        val idxScene3First = callLog.indexOf("DECISION:cena-03-primeira-decisao:A")
+        val idxScene3Second = callLog.indexOf("DECISION:cena-03-primeira-decisao:B")
+        val idxScene4Done = callLog.indexOfFirst { it.startsWith("PROGRESS:done=cena-04-explicacao") }
+        val idxScene5Dec = callLog.indexOf("DECISION:cena-05-desafio-duration:B")
+        val idxScene2Pos = callLog.indexOfFirst { it.contains("cur=cena-02-o-problema,pos=8500") }
+        val idxFinal = callLog.lastIndex
+
+        assertTrue(idxScene3First >= 0 && idxScene3First < idxScene3Second)
+        assertTrue("Prior scenes completedSceneIds must precede terminal decision", idxScene4Done in (idxScene3Second + 1) until idxScene5Dec)
+        assertTrue("Intermediate scene position must precede final current_scene_id", idxScene2Pos in 0 until idxFinal)
+        assertEquals(
+            "PROGRESS:done=null,cur=cena-05-desafio-duration,pos=14200,completed=true",
+            callLog[idxFinal]
+        )
+        assertEquals(0, onlineRepo.getLocalStorageStats().second)
+
+        // 3. Video cache (.sha256 sidecar hit, mismatch eviction, truncated rejection, path traversal confinement, live download)
+        val tempRoot = java.nio.file.Files.createTempDirectory("cogniva-mission-video").toFile()
+        try {
+            // Pure traversal characters become empty -> null
+            assertNull(onlineRepo.ensureMissionVideoCached(tempRoot, "../..", "a".repeat(64)))
+
+            val validBytes = ByteArray(2048) { idx -> (idx and 0xFF).toByte() }
+            val validSha = java.security.MessageDigest.getInstance("SHA-256")
+                .digest(validBytes)
+                .joinToString("") { "%02x".format(it) }
+
+            val missionsDir = java.io.File(tempRoot, "missions").apply { mkdirs() }
+            val cachedMp4 = java.io.File(missionsDir, "cena01.mp4").apply { writeBytes(validBytes) }
+            val cachedSha = java.io.File(missionsDir, "cena01.sha256").apply { writeText(validSha) }
+
+            // Cache hit returns existing file with zero network calls (even on repo without auth!)
+            val noAuthRepo = store.repository()
+            val hit = noAuthRepo.ensureMissionVideoCached(tempRoot, "cena01", validSha)
+            assertEquals(cachedMp4.canonicalPath, hit?.canonicalPath)
+
+            // Mismatched expected SHA-256 deletes stale .mp4 and .sha256 and refuses to serve it
+            val miss = noAuthRepo.ensureMissionVideoCached(tempRoot, "cena01", "f".repeat(64))
+            assertNull(miss)
+            assertFalse(cachedMp4.exists())
+            assertFalse(cachedSha.exists())
+
+            // Truncated file (<= 1024 bytes) is never served as cache hit even if .sha256 matches
+            val tinyBytes = ByteArray(512) { 0x42 }
+            val tinySha = java.security.MessageDigest.getInstance("SHA-256")
+                .digest(tinyBytes)
+                .joinToString("") { "%02x".format(it) }
+            java.io.File(missionsDir, "tiny.mp4").writeBytes(tinyBytes)
+            java.io.File(missionsDir, "tiny.sha256").writeText(tinySha)
+            assertNull(noAuthRepo.ensureMissionVideoCached(tempRoot, "tiny", tinySha))
+
+            // Live HTTP loopback ServerSocket verifies stream SHA-256 and confines traversal assetIds inside missionsDir
+            val serverSocket = java.net.ServerSocket(0, 8, java.net.InetAddress.getByName("127.0.0.1"))
+            val serverThread = Thread {
+                repeat(2) {
+                    runCatching {
+                        serverSocket.accept().use { sock ->
+                            val reader = sock.getInputStream().bufferedReader(Charsets.US_ASCII)
+                            while (true) {
+                                val line = reader.readLine() ?: break
+                                if (line.isEmpty()) break
+                            }
+                            val headers = "HTTP/1.1 200 OK\r\nContent-Type: video/mp4\r\nContent-Length: ${validBytes.size}\r\nConnection: close\r\n\r\n"
+                            val out = sock.getOutputStream()
+                            out.write(headers.toByteArray(Charsets.US_ASCII))
+                            out.write(validBytes)
+                            out.flush()
+                        }
+                    }
+                }
+            }.apply { isDaemon = true; start() }
+            try {
+                val localBase = "http://127.0.0.1:${serverSocket.localPort}/api/v1"
+                // Wrong expected hash rejects downloaded stream and leaves no file behind
+                assertNull(onlineRepo.ensureMissionVideoCached(tempRoot, "live_asset", "0".repeat(64), apiBaseUrl = localBase))
+                assertFalse(java.io.File(missionsDir, "live_asset.mp4").exists())
+
+                // Traversal attempt "../../asset_ok" is sanitized to "asset_ok" strictly inside missionsDir
+                val downloaded = onlineRepo.ensureMissionVideoCached(tempRoot, "../../asset_ok", validSha, apiBaseUrl = localBase)
+                assertNotNull(downloaded)
+                val parentDir = checkNotNull(downloaded!!.parentFile)
+                assertEquals(missionsDir.canonicalPath, parentDir.canonicalPath)
+                assertEquals("asset_ok.mp4", downloaded.name)
+                assertEquals(validSha, java.io.File(missionsDir, "asset_ok.sha256").readText().trim())
+            } finally {
+                runCatching { serverSocket.close() }
+                serverThread.join(2_000)
+            }
+        } finally {
+            tempRoot.deleteRecursively()
+        }
     }
 }

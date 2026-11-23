@@ -125,7 +125,7 @@ object LearningProjection {
                 isMastered=base.isMastered&&fresh.none { !it.isCorrect },
                 inErrorNotebook=base.inErrorNotebook||fresh.any { !it.isCorrect },events=events,
                 reviewRequired=if (nonBlankEvents.isEmpty()) base.reviewRequired else System.currentTimeMillis() >= nextReviewMillis,
-                practiceAvailable=true)
+                practiceAvailable=base.practiceAvailable ?: true)
         }
         var points = 0.0; var streak = 0; var errors = 0; var notebook = false
         val recentWindow = ArrayDeque<Int>()
@@ -152,6 +152,6 @@ object LearningProjection {
             notebook,
             last?.let { !it.isCorrect && it.confidenceLevel >= 2 } ?: false, points,
             nextReviewAt,
-            base?.revision ?: 0, events, confidence, reviewRequired = reviewRequired, practiceAvailable = true)
+            base?.revision ?: 0, events, confidence, reviewRequired = reviewRequired, practiceAvailable = base?.practiceAvailable ?: true)
     }
 }

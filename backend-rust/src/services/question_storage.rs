@@ -1,8 +1,4 @@
-use crate::{
-    error::AppError,
-    security::SessionUser,
-    services::question_contracts as contracts,
-};
+use crate::{error::AppError, security::SessionUser, services::question_contracts as contracts};
 use bson::{doc, oid::ObjectId, Bson, Document};
 use futures::TryStreamExt;
 use mongodb::{
@@ -58,8 +54,7 @@ pub fn deterministic_review_event_uuid(seed: &str) -> String {
 pub async fn topology_supports_transactions(db: &Database) -> bool {
     match db.run_command(doc! { "hello": 1 }).await {
         Ok(reply) => {
-            reply.get_str("setName").is_ok()
-                || reply.get_str("msg").ok() == Some("isdbgrid")
+            reply.get_str("setName").is_ok() || reply.get_str("msg").ok() == Some("isdbgrid")
         }
         Err(_) => false,
     }
@@ -416,9 +411,9 @@ pub fn is_sub5_multiple_choice_doc(doc: &Document) -> bool {
         Some("MULTIPLE_CHOICE") => doc.get_array("answers").is_ok_and(|arr| arr.len() < 5),
         Some("TRUE_FALSE" | "OPEN_ENDED") => false,
         Some(_) => false,
-        None => doc.get_array("answers").is_ok_and(|arr| {
-            !arr.is_empty() && arr.len() < 5 && !is_legacy_true_false_pair(arr)
-        }),
+        None => doc
+            .get_array("answers")
+            .is_ok_and(|arr| !arr.is_empty() && arr.len() < 5 && !is_legacy_true_false_pair(arr)),
     }
 }
 
@@ -775,9 +770,8 @@ async fn create_index_tolerant(
     }
 }
 
-pub async fn ensure_indexes(db: &Database) -> Result<Vec<String>, AppError> {
-    let mut created = Vec::new();
-    for (name, keys, label) in [
+pub fn regular_index_specs() -> Vec<(&'static str, Document, &'static str)> {
+    vec![
         (
             "todasQuestoes",
             doc! { "canonical_topic_id": 1 },
@@ -864,7 +858,7 @@ pub async fn ensure_indexes(db: &Database) -> Result<Vec<String>, AppError> {
         ),
         (
             "todasQuestoes",
-            doc! { "schema_version": 1, "audit_outbox.0": 1 },
+            doc! { "schema_outbox._id": 1, "schema_version": 1 },
             "idx_questions_schema_outbox",
         ),
         (
@@ -877,16 +871,8 @@ pub async fn ensure_indexes(db: &Database) -> Result<Vec<String>, AppError> {
             doc! { "scope": 1, "exam_id": 1, "revision": -1 },
             "idx_exam_revisions_lookup",
         ),
-        (
-            "sessions",
-            doc! { "user_id": 1 },
-            "idx_sessions_user_id",
-        ),
-        (
-            "tutor_budgets",
-            doc! { "day": 1 },
-            "idx_tutor_budgets_day",
-        ),
+        ("sessions", doc! { "user_id": 1 }, "idx_sessions_user_id"),
+        ("tutor_budgets", doc! { "day": 1 }, "idx_tutor_budgets_day"),
         (
             "catalog_editor_drafts",
             doc! { "owner_user_id": 1, "saved_at": -1 },
@@ -907,7 +893,12 @@ pub async fn ensure_indexes(db: &Database) -> Result<Vec<String>, AppError> {
             doc! { "fix.status_solved": 1, "data_report": -1 },
             "idx_reported_status_date",
         ),
-    ] {
+    ]
+}
+
+pub async fn ensure_indexes(db: &Database) -> Result<Vec<String>, AppError> {
+    let mut created = Vec::new();
+    for (name, keys, label) in regular_index_specs() {
         create_index_tolerant(
             db,
             name,
@@ -942,11 +933,7 @@ pub async fn ensure_indexes(db: &Database) -> Result<Vec<String>, AppError> {
             doc! { "exam_id": 1 },
             "idx_exam_templates_id",
         ),
-        (
-            "usuarios",
-            doc! { "user_id": 1 },
-            "idx_usuarios_user_id",
-        ),
+        ("usuarios", doc! { "user_id": 1 }, "idx_usuarios_user_id"),
         (
             "usuarios",
             doc! { "installation_id": 1 },
@@ -993,7 +980,12 @@ pub async fn ensure_indexes(db: &Database) -> Result<Vec<String>, AppError> {
     created.push("idx_usuarios_email_normalized".to_string());
 
     for (name, field, ttl, label) in [
-        ("sessions", "expires_at", Duration::ZERO, "idx_sessions_expires_ttl"),
+        (
+            "sessions",
+            "expires_at",
+            Duration::ZERO,
+            "idx_sessions_expires_ttl",
+        ),
         (
             "auth_rate_limits",
             "expires_at",
@@ -1112,7 +1104,8 @@ pub async fn flush_audit_with_session(
             if let Ok(rev_events) = event.get_array("review_events") {
                 for item in rev_events {
                     if let Some(rev_doc) = item.as_document() {
-                        persist_review_event_idempotent(db, session.as_deref_mut(), rev_doc).await?;
+                        persist_review_event_idempotent(db, session.as_deref_mut(), rev_doc)
+                            .await?;
                     }
                 }
             }
@@ -1154,7 +1147,7 @@ pub async fn flush_audit(db: &Database, id: ObjectId) -> Result<(), AppError> {
 
 pub async fn recover_audit(db: &Database) -> Result<(), AppError> {
     let mut rows = collection(db, "todasQuestoes")
-        .find(doc! { "schema_outbox": { "$exists": true } })
+        .find(doc! { "schema_outbox._id": { "$exists": true } })
         .await?;
     while let Some(row) = rows.try_next().await? {
         flush_audit(
@@ -1192,7 +1185,12 @@ fn strip_provenance_server_stamps(v: &Value) -> Value {
             let mut m = serde_json::Map::new();
             let is_prov = o.contains_key("actor") && o.contains_key("method");
             for (k, val) in o {
-                if is_prov && matches!(k.as_str(), "recorded_at" | "review_event_id" | "trust_level") {
+                if is_prov
+                    && matches!(
+                        k.as_str(),
+                        "recorded_at" | "review_event_id" | "trust_level"
+                    )
+                {
                     continue;
                 }
                 if k == "actor" && is_prov {
@@ -1236,10 +1234,7 @@ fn collect_existing_review_event_ids(old_ext: &Value) -> std::collections::HashS
     ids
 }
 
-fn ensure_no_spoofed_provenance(
-    old_ext: Option<&Value>,
-    next_doc: &Value,
-) -> Result<(), AppError> {
+fn ensure_no_spoofed_provenance(old_ext: Option<&Value>, next_doc: &Value) -> Result<(), AppError> {
     if let Some(old) = old_ext {
         let allowed = collect_existing_review_event_ids(old);
         if let Some(origins) = next_doc["origins"].as_array() {
@@ -1267,7 +1262,9 @@ fn ensure_no_spoofed_provenance(
                     if !allowed.contains(rev_id) {
                         return Err(AppError::bad_request_code(
                             "REVIEW_ACTOR_UNTRUSTED",
-                            Some(format!("classification.links.{idx}.provenance.review_event_id")),
+                            Some(format!(
+                                "classification.links.{idx}.provenance.review_event_id"
+                            )),
                             "Cliente não pode autoatribuir review_event_id não verificado",
                         ));
                     }
@@ -1645,12 +1642,14 @@ async fn save_internal(
     if let Some(prev) = old_ext.as_ref() {
         if let Ok(new_crev) = contracts::hash(&r.document) {
             if r.document["content_revision"].as_str() == Some(new_crev.as_str()) {
-                let carried_old_sem = r.document.get("semantic_revision").is_some_and(|v| {
-                    !v.is_null() && v == &prev["semantic_revision"]
-                });
-                let carried_old_grad = r.document.get("grading_revision").is_some_and(|v| {
-                    !v.is_null() && v == &prev["grading_revision"]
-                });
+                let carried_old_sem = r
+                    .document
+                    .get("semantic_revision")
+                    .is_some_and(|v| !v.is_null() && v == &prev["semantic_revision"]);
+                let carried_old_grad = r
+                    .document
+                    .get("grading_revision")
+                    .is_some_and(|v| !v.is_null() && v == &prev["grading_revision"]);
                 if carried_old_sem {
                     if let Ok(new_srev) = contracts::semantic_hash(&r.document) {
                         if r.document["validity"]["evaluated_content_revision"].as_str()
@@ -1669,8 +1668,7 @@ async fn save_internal(
                 if carried_old_grad {
                     if let Ok(new_grev) = contracts::grading_hash(&r.document) {
                         r.document["grading_revision"] = json!(new_grev);
-                        r.document["grading_hash_version"] =
-                            json!(contracts::GRADING_HASH_VERSION);
+                        r.document["grading_hash_version"] = json!(contracts::GRADING_HASH_VERSION);
                     }
                 }
             }
@@ -1724,10 +1722,7 @@ async fn save_internal(
 
     // Populate V2.1 semantic and grading signatures deterministically
     contracts::populate_v2_1_hashes(&mut r.document)?;
-    let computed_content = r.document["content_revision"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    let computed_content = r.document["content_revision"].as_str().unwrap().to_string();
     let computed_semantic = r.document["semantic_revision"]
         .as_str()
         .unwrap()
@@ -1785,19 +1780,20 @@ async fn save_internal(
     }
 
     // If caller didn't open a session and MongoDB topology supports transactions, start one!
-    let mut owned_session = if external_session.is_none() && topology_supports_transactions(db).await {
-        if let Ok(mut s) = db.client().start_session().await {
-            if s.start_transaction().await.is_ok() {
-                Some(s)
+    let mut owned_session =
+        if external_session.is_none() && topology_supports_transactions(db).await {
+            if let Ok(mut s) = db.client().start_session().await {
+                if s.start_transaction().await.is_ok() {
+                    Some(s)
+                } else {
+                    None
+                }
             } else {
                 None
             }
         } else {
             None
-        }
-    } else {
-        None
-    };
+        };
 
     let active_session: Option<&mut ClientSession> = match external_session {
         Some(s) => Some(s),
@@ -1851,7 +1847,10 @@ async fn execute_write_steps(
 ) -> Result<Value, AppError> {
     let commands = collection(db, "question_commands");
     let existing_cmd = if let Some(s) = session.as_deref_mut() {
-        commands.find_one(doc! { "_id": event_id }).session(s).await?
+        commands
+            .find_one(doc! { "_id": event_id })
+            .session(s)
+            .await?
     } else {
         commands.find_one(doc! { "_id": event_id }).await?
     };
@@ -1892,9 +1891,7 @@ async fn execute_write_steps(
         .unwrap()
         .iter()
         .find(|l| l["role"] == "PRIMARY");
-    if primary.is_none()
-        && raw.is_some_and(|d| d.get_str("canonical_topic_id").is_ok())
-    {
+    if primary.is_none() && raw.is_some_and(|d| d.get_str("canonical_topic_id").is_ok()) {
         return Err(err("Preserve o vínculo canônico confirmado na migração"));
     }
     let mirrors = primary.map(|p| (p["subject_id"].clone(), p["topic_id"].clone()));
@@ -1903,8 +1900,7 @@ async fn execute_write_steps(
     let old_semantic_rev = raw
         .and_then(|d| d.get_str("semantic_revision").ok().map(str::to_string))
         .or_else(|| old_ext.and_then(|prev| contracts::semantic_hash(prev).ok()));
-    let semantic_changed =
-        raw.is_some() && old_semantic_rev.as_deref() != Some(computed_semantic);
+    let semantic_changed = raw.is_some() && old_semantic_rev.as_deref() != Some(computed_semantic);
 
     let incoming_explanation = r
         .document
@@ -1995,10 +1991,7 @@ async fn execute_write_steps(
         .iter()
         .filter_map(|d| d.get_str("review_event_id").ok().map(str::to_string))
         .collect();
-    let review_events_bson: Vec<Bson> = review_events
-        .into_iter()
-        .map(Bson::Document)
-        .collect();
+    let review_events_bson: Vec<Bson> = review_events.into_iter().map(Bson::Document).collect();
 
     let event = doc! {
         "_id": event_id,
@@ -2534,5 +2527,22 @@ mod tests {
             "question_type": "OPEN_ENDED",
             "answers": []
         }));
+    }
+
+    #[test]
+    fn regular_index_specs_targets_schema_outbox_instead_of_legacy_audit_outbox() {
+        let specs = regular_index_specs();
+        let (_, keys, _) = specs
+            .iter()
+            .find(|(_, _, label)| *label == "idx_questions_schema_outbox")
+            .expect("idx_questions_schema_outbox must be registered");
+        assert!(
+            keys.contains_key("schema_outbox._id") || keys.contains_key("schema_outbox"),
+            "idx_questions_schema_outbox must index schema_outbox: {keys:?}"
+        );
+        assert!(
+            !keys.contains_key("audit_outbox.0"),
+            "idx_questions_schema_outbox must not reference non-existent audit_outbox.0"
+        );
     }
 }

@@ -161,8 +161,17 @@ fun QuestionImportScreen(viewModel: QuestionImportViewModel, onBack: () -> Unit)
                     OutlinedTextField(value = draft.sourceTitle, onValueChange = { value -> viewModel.edit { it.copy(sourceTitle = value, confirmOrigin = false) } }, label = { Text("Título do documento / fonte") }, enabled = editable, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(value = draft.sourceLocator, onValueChange = { value -> viewModel.edit { it.copy(sourceLocator = value, confirmOrigin = false) } }, label = { Text("Página / localização no documento") }, enabled = editable, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(value = draft.sourceDate, onValueChange = { value -> viewModel.edit { it.copy(sourceDate = value, confirmOrigin = false) } }, label = { Text("Data de consulta da fonte (AAAA-MM-DD)") }, enabled = editable, modifier = Modifier.fillMaxWidth())
+                    val canConfirmOrigin = draft.hasCompleteSourceReference && draft.assistanceId == null
                     Row {
-                        Checkbox(checked = draft.confirmOrigin, onCheckedChange = { value -> viewModel.edit { it.copy(confirmOrigin = value) } }, enabled = editable)
+                        Checkbox(
+                            checked = draft.confirmOrigin && canConfirmOrigin,
+                            onCheckedChange = { value ->
+                                if (!value || canConfirmOrigin) {
+                                    viewModel.edit { it.copy(confirmOrigin = value && canConfirmOrigin) }
+                                }
+                            },
+                            enabled = editable && canConfirmOrigin
+                        )
                         Text("Consultei a fonte e conferi a origem informada.", Modifier.padding(top = 12.dp))
                     }
                     Text("Sem conferência, a origem transcrita fica pendente. Origem conferida não significa validade atual do conteúdo.", style = MaterialTheme.typography.bodySmall)

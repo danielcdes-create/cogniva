@@ -1,17 +1,22 @@
 package br.com.concursoprep.app.data
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
-import android.util.Base64
 import br.com.concursoprep.app.data.remote.ConcursoApiService
 import br.com.concursoprep.app.data.remote.NativeSessionPayload
 import br.com.concursoprep.app.domain.model.AuthSessionDto
 import br.com.concursoprep.app.domain.model.UserProfileDto
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import java.nio.ByteBuffer
 import java.security.KeyStore
 import java.security.MessageDigest
 import java.security.SecureRandom
+import java.util.Base64
 import java.util.UUID
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -22,10 +27,16 @@ import javax.crypto.spec.GCMParameterSpec
  * Credenciais e seleção de conta isoladas do banco Room de cada `user_id`.
  * Segredos (`auth_token_*` e `installation_secret`) são cifrados em repouso via Android Keystore (AES-GCM).
  */
-class AuthStore(context: Context) {
-    private val prefs = context.getSharedPreferences("cogniva_prefs", Context.MODE_PRIVATE)
+class AuthStore internal constructor(
+    private val prefs: SharedPreferences,
+    private val keyProvider: (() -> SecretKey?)? = null
+) {
+    constructor(context: Context) : this(
+        context.getSharedPreferences("cogniva_prefs", Context.MODE_PRIVATE),
+        null
+    )
 
-    private fun keystoreKey(): SecretKey? = runCatching {
+    private fun keystoreKey(): SecretKey? = keyProvider?.let { return it() } ?: runCatching {
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         val existing = (ks.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry)?.secretKey
         if (existing != null) return@runCatching existing
@@ -48,25 +59,22 @@ class AuthStore(context: Context) {
         return runCatching {
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.ENCRYPT_MODE, key)
-            val iv = Base64.encodeToString(cipher.iv, Base64.NO_WRAP)
-            val ct = Base64.encodeToString(cipher.doFinal(plain.toByteArray(Charsets.UTF_8)), Base64.NO_WRAP)
+            val iv = Base64.getEncoder().encodeToString(cipher.iv)
+            val ct = Base64.getEncoder().encodeToString(cipher.doFinal(plain.toByteArray(Charsets.UTF_8)))
             "$ENC_PREFIX$iv:$ct"
         }.getOrDefault(plain)
     }
 
     private fun decryptSecret(stored: String?): String? {
         if (stored == null) return null
-        if (!stored.startsWith(ENC_PREFIX)) {
-            val upgraded = encryptSecret(stored)
-            return if (upgraded != stored) stored else stored
-        }
+        if (!stored.startsWith(ENC_PREFIX)) return stored
         val payload = stored.removePrefix(ENC_PREFIX)
         val sep = payload.indexOf(':')
         if (sep <= 0) return null
         val key = keystoreKey() ?: return null
         return runCatching {
-            val iv = Base64.decode(payload.substring(0, sep), Base64.NO_WRAP)
-            val ct = Base64.decode(payload.substring(sep + 1), Base64.NO_WRAP)
+            val iv = Base64.getDecoder().decode(payload.substring(0, sep))
+            val ct = Base64.getDecoder().decode(payload.substring(sep + 1))
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv))
             String(cipher.doFinal(ct), Charsets.UTF_8)
@@ -244,11 +252,10 @@ class AuthStore(context: Context) {
         val existing = token(owner)
         if (!existing.isNullOrBlank()) {
             val expires = runCatching {
-                val payload = String(
-                    Base64.decode(existing.split('.')[1], Base64.URL_SAFE or Base64.NO_WRAP),
-                    Charsets.UTF_8
-                )
-                org.json.JSONObject(payload).getLong("exp")
+                val segment = existing.split('.').getOrNull(1) ?: error("Invalid JWT")
+                val padded = segment.padEnd(((segment.length + 3) / 4) * 4, '=')
+                val payload = String(Base64.getUrlDecoder().decode(padded), Charsets.UTF_8)
+                Json.parseToJsonElement(payload).jsonObject["exp"]?.jsonPrimitive?.longOrNull ?: 0L
             }.getOrDefault(0L)
             if (expires > System.currentTimeMillis() / 1000 + 60) return
         }

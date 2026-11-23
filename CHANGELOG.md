@@ -4,6 +4,35 @@ Todas as mudanças arquiteturais, de segurança, acessibilidade e operacionais r
 
 ---
 
+## [2.4.2] - 2026-11-23 (build 32)
+
+Auditoria profunda de arquitetura de testes, eliminação de *Mock Drift* e código morto, correção de defeitos críticos e altos revelados pela suíte remediada e expansão de cobertura comportamental nas quatro camadas do ecossistema (`backend-rust/`, `android-app/`, `web-admin/` + `web-missions/` e `scripts/` + `deploy/`), documentada integralmente em [`TEST_AUDIT_REPORT.md`](TEST_AUDIT_REPORT.md).
+
+### 1. Backend Rust (`backend-rust/` — `113` testes unitários/roteador + `15` suítes de integração MongoDB)
+- **LGPD Art. 18, Orçamento xAI e Segurança de Sessão (`auth_session.rs`, `security.rs`, `ai_tutor.rs`, `classification.rs`):**
+  - Alinhamento do plano de exclusão LGPD em `question_review_events` para casar com `actor_user_id` / `principal_id` e ações pessoais (`COMPATIBILITY_*`, `EVALUATION_*`), preservando eventos editoriais do acervo compartilhado e mantendo `sessions` e `usuarios` nas duas últimas etapas.
+  - Liquidação efetiva de cota (`quota_guard.commit()`) quando chamadas pagas reais à xAI são consumidas e bloqueadas por `detect_pre_answer_spoiler` (prevenindo dreno infinito de orçamento via repetição de spoiler), mantendo estorno automático em falhas HTTP/timeout do provedor; postergação de `commit()` em `classification.rs` até confirmação de persistência.
+  - Rejeição imediata (`401`) de cabeçalhos `Authorization` inválidos/expirados também em `POST /api/v1/auth/register` (evitando criação silenciosa de conta vazia e perda do histórico convidado mobile), reutilização de cookie convidado ativo em `POST /api/v1/auth/guest` (`student_web`), execução de `dummy_password_hash` estritamente sob `spawn_blocking` + guarda pré-semáforo `1024` bytes e consolidação sem perda de múltiplos cabeçalhos `Vary` em `security::authenticate`.
+- **Omissões Estratégicas, Motores `v5`, Missões e Índices (`missions.rs`, `selection_v2.rs`, `scheduler.rs`, `attempts.rs`, `study_loop.rs`, `knowledge.rs`, `question_storage.rs`):**
+  - Isolamento completo de `is_blank = true` em `compute_demonstrated_mastery`, `fetch_related_human_questions`, `fetch_user_history_buckets`, `scheduler` diário e `calculate_monthly_study_frequency`.
+  - Retenção espaçada calculada também no nível do tópico/conceito (`>= 24h` entre acertos verificados em questões distintas) e ordenação cronológica determinística de observações em `study_loop.rs`; validação simétrica de `selected_evidence_id` em `submit-batch` e `attach_evidence`; conformidade RFC 9110 §13.1.5 em `If-Range` (rejeitando weak ETag `W/`); suporte a overrides `mission_definitions` em `resolve_media_asset_fast` e `/api/v1/admin/missions`; e correção do índice `idx_questions_schema_outbox` para `schema_outbox._id`.
+
+### 2. Aplicativo Nativo Android (`android-app/` — `125` testes JVM + Paparazzi + API 35 E2E)
+- **Concorrência, Projeção Offline, Missões e Segurança OTA (`ConcursoApp.kt`, `Learning.kt`, `ConcursoRepository.kt`, `AppUpdateManager.kt`, `MainActivity.kt`, `AuthStore.kt`, `MarkdownParser.kt`, `QuestionImportDraft.kt`):**
+  - Cancelamento síncrono de `OfflineSyncWorker.UNIQUE_WORK_NAME` (`"ConcursoPrepOfflineSyncWork"`) e `"CognivaImmediateSync"` antes da troca ou exclusão física do SQLite por conta; preservação de `practiceAvailable = false` em `LearningProjection.projectHistory`.
+  - Eliminação da contagem dupla (`2x`) de omissões estratégicas em `buildLocalDecisionTelemetry`; sincronização ordenada por cena e em 2 etapas (`firstSelectedOptionId` → `latestSelectedOptionId`) em `flushDirtyMissionRecord` preservando `first_attempt_correct = false` e `scenePositionsMs`.
+  - Bloqueio de path traversal percent-encoded (`%2e`, `%2f`, `%5c`) e fragmentos `#` em `AppUpdateManager.resolveDownloadUrl`, rastreamento explícito de coletores visíveis (`STARTED`) para disparo garantido do diálogo do `PackageInstaller` em background/rotação e remoção do método legado `ConcursoRepository.downloadApkUpdate`.
+  - Filtro `ownerUserId` em `updateAttemptEvidence`, limpeza transacional completa das tabelas de concursos em `deleteAccount`, suporte a URLs HTTPS UTF-8 (Wikipédia PT) + cercas de 4+ crases em `MarkdownParser` e exigência de `source_reference` para `confirmOrigin = true`.
+
+### 3. Portais Web (`/missoes/` e `/admin/`) e Ferramental Python/Deploy (`web-missions/`, `web-admin/`, `deploy/`, `scripts/`)
+- **Portal `/missoes/` (`97,49%` Lines) e Painel `/admin/` (`91,16%` Lines):**
+  - Correção crítica do envio de `QuestionDto.question_revision` e tratamento explícito de `SubmitBatchResponse.rejected` em `/missoes/`; parada garantida de `<video>` (incluindo preload oculto) e trava `busy` em transições, `logout` e `401`; rótulos dinâmicos de *Duration* no SVG.
+  - Leitura de `proposed_links` e filtros reais (`ALL`, `PENDING`, `ACCEPTED`, `REJECTED`, `STALE`) na Classificação IA do `/admin/`; invalidação de `preview` e bloqueio de `"Confirmar edição"` sob `editorialError`; correção de `classification.state = "PARTIAL"`; validação estrita de rubrica `OPEN_ENDED` e auditoria WCAG 2.1 AA extraída diretamente de `web-admin/style.css`.
+- **Infraestrutura, Promoção Atômica e CLI (`100` testes Python, `76,26%` cobertura nos scripts rastreados):**
+  - Reload garantido do Nginx ao restaurar `/etc/nginx/cogniva-gate.conf` em falha pré-mutação (`if not runtime_mutated:`) e gravação de `previous_image` por digest imutável (`@sha256:`) em [`deploy/promote.py`](deploy/promote.py); rollback atômico de `sites-available/cogniva` + `conf.d/cogniva-rate-limits.conf` em [`deploy/sync_nginx_site.py`](deploy/sync_nginx_site.py) e [`deploy/bootstrap-ip-tls.sh`](deploy/bootstrap-ip-tls.sh); logout garantido em `try ... finally` para `--mint-admin-token` em [`scripts/cogniva_import.py`](scripts/cogniva_import.py); suporte a `--report-out` em [`scripts/migrate_questions_v2_1.py`](scripts/migrate_questions_v2_1.py) e preservação de validade `SEMANTIC` V2.1 em [`scripts/migrate_cnu_to_cogniva.py`](scripts/migrate_cnu_to_cogniva.py).
+
+---
+
 ## [2.4.1] - 2026-11-22 (build 31)
 
 Auditoria global ponta a ponta nos 268 arquivos versionados do repositório (`shared/`, `scripts/`, `deploy/`, `.github/workflows/`, `web-missions/`, `web-admin/`, `backend-rust/`, `android-app/` e `docs/`), consolidando endurecimento de segurança, controle de concorrência, proteção contra exaustão de memória (`192 MB`), conformidade LGPD Art. 18, paridade matemática multi-runtime (`contract_version: 5`) e resiliência *offline-first*.

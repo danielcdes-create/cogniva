@@ -350,7 +350,11 @@ mod owner_summary_tests {
         };
         let _diff = crate::services::exam_engine::apply_publish(&mut previous, &rewritten);
         assert_eq!(
-            previous.edital_diff_summary.as_ref().unwrap().published_at_iso,
+            previous
+                .edital_diff_summary
+                .as_ref()
+                .unwrap()
+                .published_at_iso,
             "2026-11-05T03:00:00Z"
         );
         incoming.keep_summary_captured_before_publish(captured);

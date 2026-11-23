@@ -193,7 +193,8 @@ impl AppConfig {
             || parsed_origin.password().is_some()
         {
             return Err(AppError::Internal(
-                "COGNIVA_PUBLIC_ORIGIN deve usar esquema http:// ou https:// sem credenciais".into(),
+                "COGNIVA_PUBLIC_ORIGIN deve usar esquema http:// ou https:// sem credenciais"
+                    .into(),
             ));
         }
         Ok(())
@@ -208,9 +209,7 @@ impl AppConfig {
             return Err(AppError::ExternalAiError("xAI não configurada".into()));
         }
         self.xai_model.as_deref().ok_or_else(|| {
-            AppError::ExternalAiError(
-                "XAI_MODEL não configurado no ambiente do servidor".into(),
-            )
+            AppError::ExternalAiError("XAI_MODEL não configurado no ambiente do servidor".into())
         })
     }
 
@@ -257,6 +256,9 @@ mod tests {
         assert!(cfg.validate_server().is_err());
         cfg.xai_model = Some("grok-4-fast-non-reasoning".into());
         assert!(cfg.validate_server().is_ok());
-        assert_eq!(cfg.require_xai_model().unwrap(), "grok-4-fast-non-reasoning");
+        assert_eq!(
+            cfg.require_xai_model().unwrap(),
+            "grok-4-fast-non-reasoning"
+        );
     }
 }

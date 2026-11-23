@@ -89,9 +89,10 @@ def _valid_links(links, topics):
         topic = topics.get(link.get("topic_id"))
         if topic is None or topic["subject_id"] != link.get("subject_id"):
             return None
-        if link.get("topic_id") in seen:
+        dedup_key = (link["topic_id"], link.get("concept_id"))
+        if dedup_key in seen:
             return None
-        seen.add(link["topic_id"])
+        seen.add(dedup_key)
         if link.get("role") == "PRIMARY":
             if link.get("coverage") != "DIRECT" or not _human(link.get("provenance")):
                 return None
@@ -165,12 +166,12 @@ def inventory(documents, catalog):
     }
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--dry-run", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if not args.dry_run:
         raise SystemExit("inventory_questions.py só executa com --dry-run e nunca altera documentos.")
     documents = json.loads(args.input.read_text(encoding="utf-8"))
@@ -180,7 +181,8 @@ def main():
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(json.dumps(report, indent=2))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

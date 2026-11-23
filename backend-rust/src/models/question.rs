@@ -337,7 +337,9 @@ impl QuestionDocument {
             .into_iter()
             .filter(|ns| {
                 ns["status"].as_str() == Some("ACTIVE")
-                    && ns["source_id"].as_str().is_some_and(|id| wanted.contains(id))
+                    && ns["source_id"]
+                        .as_str()
+                        .is_some_and(|id| wanted.contains(id))
             })
             .filter_map(|ns| {
                 let sid = ns["source_id"].as_str()?.to_string();
@@ -382,47 +384,46 @@ impl QuestionDocument {
             }
         }
 
-        let official_source_excerpt = sources
-            .first()
-            .map(|(_, title, locator, excerpt)| {
-                if let Some(loc) = locator.as_deref().filter(|l| !l.is_empty()) {
-                    truncate_chars(&format!("{title} [{loc}]: {excerpt}"), 420)
-                } else {
-                    truncate_chars(&format!("{title}: {excerpt}"), 420)
-                }
-            });
+        let official_source_excerpt = sources.first().map(|(_, title, locator, excerpt)| {
+            if let Some(loc) = locator.as_deref().filter(|l| !l.is_empty()) {
+                truncate_chars(&format!("{title} [{loc}]: {excerpt}"), 420)
+            } else {
+                truncate_chars(&format!("{title}: {excerpt}"), 420)
+            }
+        });
 
-        let tested_rule = if let Some(exp) = self.explanation.as_deref().filter(|s| !s.trim().is_empty()) {
-            let clean = exp.replace("✅:", "").replace("❌:", "");
-            let first_para = clean
-                .split('\n')
-                .map(str::trim)
-                .find(|line| line.chars().count() >= 20)
-                .unwrap_or(clean.trim());
-            truncate_chars(first_para, 360)
-        } else if let Some((_, _, _, excerpt)) = sources.first() {
-            truncate_chars(excerpt, 360)
-        } else if let Ok(indices) = self.answer_indices() {
-            let gabarito = self
-                .answers
-                .get(indices[0])
-                .map(String::as_str)
-                .unwrap_or("Gabarito oficial");
-            truncate_chars(
-                &format!(
-                    "Aplicação direta do critério cobrado em {} (gabarito oficial: {}).",
-                    if self.disciplina.trim().is_empty() {
-                        "disciplina do edital"
-                    } else {
-                        self.disciplina.trim()
-                    },
-                    gabarito
-                ),
-                320,
-            )
-        } else {
-            return None;
-        };
+        let tested_rule =
+            if let Some(exp) = self.explanation.as_deref().filter(|s| !s.trim().is_empty()) {
+                let clean = exp.replace("✅:", "").replace("❌:", "");
+                let first_para = clean
+                    .split('\n')
+                    .map(str::trim)
+                    .find(|line| line.chars().count() >= 20)
+                    .unwrap_or(clean.trim());
+                truncate_chars(first_para, 360)
+            } else if let Some((_, _, _, excerpt)) = sources.first() {
+                truncate_chars(excerpt, 360)
+            } else if let Ok(indices) = self.answer_indices() {
+                let gabarito = self
+                    .answers
+                    .get(indices[0])
+                    .map(String::as_str)
+                    .unwrap_or("Gabarito oficial");
+                truncate_chars(
+                    &format!(
+                        "Aplicação direta do critério cobrado em {} (gabarito oficial: {}).",
+                        if self.disciplina.trim().is_empty() {
+                            "disciplina do edital"
+                        } else {
+                            self.disciplina.trim()
+                        },
+                        gabarito
+                    ),
+                    320,
+                )
+            } else {
+                return None;
+            };
 
         let exception_clause = extract_exception_sentence(&combined_text);
         let decisive_stem_excerpt = pick_decisive_stem_fragment(&self.question);
@@ -510,7 +511,10 @@ impl QuestionDocument {
 
         let alt_misconception = if let Some(first_err) = card.plausible_conceptual_errors.first() {
             truncate_chars(
-                &format!("Premissa divergente: {} — {}", first_err.label, first_err.description),
+                &format!(
+                    "Premissa divergente: {} — {}",
+                    first_err.label, first_err.description
+                ),
                 280,
             )
         } else {
@@ -518,7 +522,8 @@ impl QuestionDocument {
         };
 
         Some(EvidenceChallengeDto {
-            prompt: "Opcional — aponte qual fragmento determinou sua resposta (sem nova questão):".to_string(),
+            prompt: "Opcional — aponte qual fragmento determinou sua resposta (sem nova questão):"
+                .to_string(),
             options: vec![
                 EvidenceOptionDto {
                     evidence_id: "EV_DECISIVE".to_string(),
@@ -608,8 +613,14 @@ impl QuestionDocument {
             canonical_topic_id: self.canonical_topic_id.clone(),
             is_borrowed_analogous: false,
             explanation: self.explanation.clone(),
-            has_dr_sincero: self.dr_sincero.as_ref().is_some_and(|s| !s.trim().is_empty()),
-            has_mnemonic: self.mnemonico.as_ref().is_some_and(|s| !s.trim().is_empty()),
+            has_dr_sincero: self
+                .dr_sincero
+                .as_ref()
+                .is_some_and(|s| !s.trim().is_empty()),
+            has_mnemonic: self
+                .mnemonico
+                .as_ref()
+                .is_some_and(|s| !s.trim().is_empty()),
             has_plausibility: self
                 .plausibility_markdown
                 .as_ref()
@@ -659,7 +670,11 @@ impl QuestionDocument {
         let indices = if self.correct_answer_indices.is_empty() {
             from_text
         } else {
-            if self.correct_answer_indices.iter().any(|&i| i >= self.answers.len()) {
+            if self
+                .correct_answer_indices
+                .iter()
+                .any(|&i| i >= self.answers.len())
+            {
                 return Err(AppError::Conflict(
                     "Índice de resposta correta fora das alternativas".into(),
                 ));

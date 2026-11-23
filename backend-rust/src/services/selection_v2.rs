@@ -30,10 +30,36 @@ pub const INVALID_REPORTS: [&str; 9] = [
 ];
 
 #[derive(Default)]
-struct UserHistoryBuckets {
-    mastered_ids: HashSet<ObjectId>,
-    all_attempted_ids: HashSet<ObjectId>,
-    recent_attempted_ids: HashSet<ObjectId>,
+pub(crate) struct UserHistoryBuckets {
+    pub(crate) mastered_ids: HashSet<ObjectId>,
+    pub(crate) all_attempted_ids: HashSet<ObjectId>,
+    pub(crate) recent_attempted_ids: HashSet<ObjectId>,
+}
+
+pub(crate) fn accumulate_history_bucket_doc(
+    buckets: &mut UserHistoryBuckets,
+    doc: &Document,
+    recent_window: usize,
+    idx: &mut usize,
+) {
+    let practices = doc
+        .get_i32("quantidade_praticas")
+        .map(i64::from)
+        .or_else(|_| doc.get_i64("quantidade_praticas"))
+        .unwrap_or(0);
+    if practices <= 0 {
+        return;
+    }
+    if let Ok(qid) = doc.get_object_id("question_id") {
+        buckets.all_attempted_ids.insert(qid);
+        if *idx < recent_window {
+            buckets.recent_attempted_ids.insert(qid);
+        }
+        if doc.get_bool("dominada").unwrap_or(false) {
+            buckets.mastered_ids.insert(qid);
+        }
+        *idx += 1;
+    }
 }
 
 async fn fetch_user_history_buckets(
@@ -44,23 +70,14 @@ async fn fetch_user_history_buckets(
     let mut buckets = UserHistoryBuckets::default();
     let mut cursor = db
         .collection::<Document>("userActivityLog")
-        .find(doc! { "user_id": user_id })
-        .projection(doc! { "question_id": 1, "dominada": 1 })
+        .find(doc! { "user_id": user_id, "quantidade_praticas": { "$gt": 0 } })
+        .projection(doc! { "question_id": 1, "dominada": 1, "quantidade_praticas": 1 })
         .sort(doc! { "datas.ultima_sessao": -1 })
         .await?;
 
     let mut idx = 0usize;
     while let Some(doc) = cursor.try_next().await? {
-        if let Ok(qid) = doc.get_object_id("question_id") {
-            buckets.all_attempted_ids.insert(qid);
-            if idx < recent_window {
-                buckets.recent_attempted_ids.insert(qid);
-            }
-            if doc.get_bool("dominada").unwrap_or(false) {
-                buckets.mastered_ids.insert(qid);
-            }
-            idx += 1;
-        }
+        accumulate_history_bucket_doc(&mut buckets, &doc, recent_window, &mut idx);
     }
     Ok(buckets)
 }
@@ -399,7 +416,11 @@ pub async fn generate(
     {
         filter.insert("source", source);
     }
-    if let Some(topic) = req.syllabus_topic_id.as_ref().filter(|s| !s.trim().is_empty()) {
+    if let Some(topic) = req
+        .syllabus_topic_id
+        .as_ref()
+        .filter(|s| !s.trim().is_empty())
+    {
         filter.insert("canonical_topic_id", topic.trim());
     }
 
@@ -421,8 +442,8 @@ pub async fn generate(
             )
         }
         QuizMode::Simulado => {
-            let exam = exam
-                .ok_or_else(|| AppError::BadRequest("Selecione a grade do simulado".into()))?;
+            let exam =
+                exam.ok_or_else(|| AppError::BadRequest("Selecione a grade do simulado".into()))?;
             let mut selected = Vec::new();
             for subject in &exam.subjects {
                 let topics: Vec<_> = subject
@@ -550,7 +571,11 @@ pub async fn generate(
             for q in candidates {
                 let hex = q.id.to_hex();
                 if let Some(act) = acts_by_id.get(&q.id) {
-                    if act.error_notebook() || act.high_confidence_error_flag {
+                    let has_answered = act.quantidade_praticas > 0
+                        || act.past_sessions.iter().any(|s| !s.is_blank);
+                    if !has_answered {
+                        new_items.push((hex, q));
+                    } else if act.error_notebook() || act.high_confidence_error_flag {
                         persistent_gaps.push((hex, q));
                     } else if act.review_due(now)
                         || (act.memory_stability_days > 0.0
@@ -611,13 +636,16 @@ pub async fn generate(
             let mut pending_retention_topics = HashSet::new();
             let mut recent_qids = HashSet::new();
             while let Some(act) = act_cursor.try_next().await? {
+                let has_answered =
+                    act.quantidade_praticas > 0 || act.past_sessions.iter().any(|s| !s.is_blank);
+                if !has_answered {
+                    continue;
+                }
                 if (now - act.datas.ultima_sessao).num_hours() < 18 {
                     recent_qids.insert(act.question_id);
                 }
                 if let Some(tid) = act.canonical_topic_id.as_deref() {
-                    if act.quantidade_praticas > 0 {
-                        familiar_topics.insert(tid.to_string());
-                    }
+                    familiar_topics.insert(tid.to_string());
                     let elapsed_days =
                         (now - act.datas.ultima_sessao).num_hours().max(0) as f64 / 24.0;
                     if act.review_due(now)
@@ -752,16 +780,15 @@ pub async fn generate(
                         })
                         .cloned()
                         .collect();
-                    let (filtered, borrowed) =
-                        crate::services::practice_context::filter_with_mode(
-                            state,
-                            req.user_id,
-                            exam,
-                            None,
-                            scoped,
-                            true,
-                        )
-                        .await?;
+                    let (filtered, borrowed) = crate::services::practice_context::filter_with_mode(
+                        state,
+                        req.user_id,
+                        exam,
+                        None,
+                        scoped,
+                        true,
+                    )
+                    .await?;
                     analogous_ids.extend(borrowed);
                     for q in filtered {
                         allowed.insert(q.id);
@@ -998,8 +1025,8 @@ mod tests {
             spaced_repetition_score: 0.0,
             streak_atual: 2,
             streak_max: 2,
-            points: 50.0,
-            points_with_decay: 50.0,
+            points: 0.5,
+            points_with_decay: 0.5,
             dominada: false,
             nivel_confianca_med_rec: Some(2),
             revisao_necessaria: false,
@@ -1016,6 +1043,8 @@ mod tests {
         act.in_error_notebook = true;
         act.streak_atual = 0;
         assert!(act.error_notebook());
+        act.points = 1.0;
+        act.points_with_decay = 1.0;
         act.dominada = true;
         assert!(!act.error_notebook());
     }
@@ -1091,5 +1120,34 @@ mod tests {
         assert!(!act.error_notebook());
         act.past_sessions[0].nivel_confianca = 0;
         assert!(act.error_notebook());
+    }
+
+    #[test]
+    fn accumulate_history_bucket_doc_ignores_blank_only_omissions_keeping_tier1_inedita() {
+        let q_blank_oid = ObjectId::new();
+        let q_answered_oid = ObjectId::new();
+
+        let mut buckets = UserHistoryBuckets::default();
+        let mut idx = 0_usize;
+
+        let blank_doc = doc! {
+            "question_id": q_blank_oid,
+            "quantidade_praticas": 0_i32,
+            "dominada": false,
+        };
+        let answered_doc = doc! {
+            "question_id": q_answered_oid,
+            "quantidade_praticas": 1_i32,
+            "dominada": false,
+        };
+
+        accumulate_history_bucket_doc(&mut buckets, &blank_doc, 40, &mut idx);
+        accumulate_history_bucket_doc(&mut buckets, &answered_doc, 40, &mut idx);
+
+        assert!(!buckets.all_attempted_ids.contains(&q_blank_oid));
+        assert!(!buckets.recent_attempted_ids.contains(&q_blank_oid));
+        assert!(buckets.all_attempted_ids.contains(&q_answered_oid));
+        assert!(buckets.recent_attempted_ids.contains(&q_answered_oid));
+        assert_eq!(idx, 1, "Blank omission must not consume recent_window slot");
     }
 }

@@ -241,10 +241,34 @@ pub fn build_exam_moment_scenarios(
     let calibrated = lambda_i.is_some();
 
     [
-        ("OPENING_35M", "Início de prova · 35 min (ritmo base)", 35, (target * 0.18).round(), 98usize),
-        ("MIDPOINT_165M", "Meio de prova · 165 min (maximização de VE)", 165, (target * 0.58).round(), 52usize),
-        ("PROTECT_275M", "Reta final · 275 min (protegendo margem acima do corte)", 275, target + 1.5, 4usize),
-        ("RECOVERY_285M", "Reta final · 285 min (1 ponto abaixo da meta)", 285, target - 1.0, 3usize),
+        (
+            "OPENING_35M",
+            "Início de prova · 35 min (ritmo base)",
+            35,
+            (target * 0.18).round(),
+            98usize,
+        ),
+        (
+            "MIDPOINT_165M",
+            "Meio de prova · 165 min (maximização de VE)",
+            165,
+            (target * 0.58).round(),
+            52usize,
+        ),
+        (
+            "PROTECT_275M",
+            "Reta final · 275 min (protegendo margem acima do corte)",
+            275,
+            target + 1.5,
+            4usize,
+        ),
+        (
+            "RECOVERY_285M",
+            "Reta final · 285 min (1 ponto abaixo da meta)",
+            285,
+            target - 1.0,
+            3usize,
+        ),
     ]
     .into_iter()
     .map(|(sid, label, mins, cur_score, rem)| ExamMomentScenarioDto {
@@ -256,19 +280,21 @@ pub fn build_exam_moment_scenarios(
         target_score: target,
         minimum_score: min_floor,
         calibrated_longitudinal: calibrated,
-        decision_at_medium_confidence: simulate_decision_under_uncertainty(&UncertaintyDecisionInputs {
-            p_base: medium_p,
-            uncertainty_sd: medium_sd,
-            penalty,
-            item_difficulty: 0.50,
-            lambda_i: lam,
-            elapsed_minutes: mins as f64,
-            current_net_score: cur_score,
-            remaining_items: rem,
-            target_score: target,
-            minimum_score: min_floor,
-            baseline_future_p: 0.72,
-        }),
+        decision_at_medium_confidence: simulate_decision_under_uncertainty(
+            &UncertaintyDecisionInputs {
+                p_base: medium_p,
+                uncertainty_sd: medium_sd,
+                penalty,
+                item_difficulty: 0.50,
+                lambda_i: lam,
+                elapsed_minutes: mins as f64,
+                current_net_score: cur_score,
+                remaining_items: rem,
+                target_score: target,
+                minimum_score: min_floor,
+                baseline_future_p: 0.72,
+            },
+        ),
     })
     .collect()
 }
@@ -300,25 +326,24 @@ pub fn evaluate_strategy(
     }
 
     let p_star = round9(lam / (1.0 + lam));
-    let (eff, posture) =
-        if cutoff > 0.0 && rem_frac > 0.0 && rem_frac <= 0.35 {
-            let margin = proj - cutoff;
-            if margin >= 6.0 {
-                (
-                    round9((p_star + 0.05).min(0.95)),
-                    StrategyPosture::ProtectMargin,
-                )
-            } else if margin <= -6.0 {
-                (
-                    round9((p_star - 0.04).max(0.25)),
-                    StrategyPosture::CalculatedRisk,
-                )
-            } else {
-                (p_star, StrategyPosture::MaximizeEv)
-            }
+    let (eff, posture) = if cutoff > 0.0 && rem_frac > 0.0 && rem_frac <= 0.35 {
+        let margin = proj - cutoff;
+        if margin >= 6.0 {
+            (
+                round9((p_star + 0.05).min(0.95)),
+                StrategyPosture::ProtectMargin,
+            )
+        } else if margin <= -6.0 {
+            (
+                round9((p_star - 0.04).max(0.25)),
+                StrategyPosture::CalculatedRisk,
+            )
         } else {
             (p_star, StrategyPosture::MaximizeEv)
-        };
+        }
+    } else {
+        (p_star, StrategyPosture::MaximizeEv)
+    };
 
     let recommended_action = if p > eff + 1e-9 {
         StrategyAction::Answer

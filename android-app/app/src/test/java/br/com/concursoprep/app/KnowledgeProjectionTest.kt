@@ -54,4 +54,48 @@ class KnowledgeProjectionTest {
         assertTrue(QuestionCacheMapping.withinReviewDate(q,LocalDate.of(2026,10,31)))
         assertFalse(QuestionCacheMapping.withinReviewDate(q,LocalDate.of(2026,11,1)))
     }
+
+    @Test fun projectHistoryPreservesServerPracticeAvailableFalseAcrossPendingAttemptsAndBlanks() {
+        val q = question()
+        val unavailableFullBase = LearningRecord(
+            questionId = q.id,
+            disciplina = q.disciplina,
+            canonicalSubjectId = q.canonicalSubjectId,
+            canonicalTopicId = q.canonicalTopicId,
+            attempts = 1,
+            correct = 0,
+            accuracyPct = 0.0,
+            isMastered = false,
+            inErrorNotebook = true,
+            highConfidenceError = false,
+            points = 0.0,
+            nextReviewAt = "2026-10-02T12:00:00Z",
+            events = listOf(event("confirmed-1")),
+            practiceAvailable = false
+        )
+        // 1. Full-history branch with non-blank pending attempt
+        val projectedNonBlank = LearningProjection.project(
+            unavailableFullBase,
+            q,
+            listOf(LearningEvent("pending-2", "2026-10-03T12:00:00Z", true, 3, 20, q.questionRevision))
+        )
+        assertEquals(false, projectedNonBlank.practiceAvailable)
+
+        // 2. Full-history branch with blank omission (isBlank = true)
+        val projectedBlank = LearningProjection.project(
+            unavailableFullBase,
+            q,
+            listOf(LearningEvent("pending-blank", "2026-10-03T13:00:00Z", false, 0, 8, q.questionRevision, isBlank = true))
+        )
+        assertEquals(false, projectedBlank.practiceAvailable)
+
+        // 3. Partial-pull branch (base.events.count { !it.isBlank } < base.attempts)
+        val unavailablePartialBase = unavailableFullBase.copy(attempts = 5)
+        val projectedPartial = LearningProjection.project(
+            unavailablePartialBase,
+            q,
+            listOf(LearningEvent("pending-3", "2026-10-04T12:00:00Z", false, 2, 15, q.questionRevision))
+        )
+        assertEquals(false, projectedPartial.practiceAvailable)
+    }
 }

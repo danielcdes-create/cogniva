@@ -11,6 +11,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -152,56 +154,44 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
         }
     }
 
-    // Ouve eventos de instalação OTA de APK (PackageInstaller.Session + Unknown Sources)
-    LaunchedEffect(Unit) {
-        viewModel.apkInstallEvents.collectLatest { event ->
-            when (event) {
-                is ApkInstallEvent.NeedsUnknownSourcesPermission -> {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        val intent = Intent(
-                            Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                            Uri.parse("package:${context.packageName}")
-                        ).apply {
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    // Ouve eventos de instalação OTA de APK apenas enquanto a Activity está visível (STARTED),
+    // garantindo que ApkInstallStatusReceiver acione confirmIntent diretamente se em background/rotação.
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner, viewModel) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            br.com.concursoprep.app.data.update.AppUpdateManager.onUiCollectorStarted()
+            try {
+                viewModel.apkInstallEvents.collect { event ->
+                    when (event) {
+                        is ApkInstallEvent.NeedsUnknownSourcesPermission -> {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                val intent = Intent(
+                                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                                    Uri.parse("package:${context.packageName}")
+                                ).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                context.startActivity(intent)
+                            }
                         }
-                        context.startActivity(intent)
+                        is ApkInstallEvent.ConfirmSessionInstall -> {
+                            try {
+                                val confirmIntent = Intent(event.confirmationIntent).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                context.startActivity(confirmIntent)
+                            } catch (e: Exception) {
+                                Toast.makeText(
+                                    context,
+                                    "Erro ao abrir confirmação do instalador: ${e.message}",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
                     }
                 }
-                is ApkInstallEvent.ConfirmSessionInstall -> {
-                    try {
-                        val confirmIntent = Intent(event.confirmationIntent).apply {
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        }
-                        context.startActivity(confirmIntent)
-                    } catch (e: Exception) {
-                        Toast.makeText(
-                            context,
-                            "Erro ao abrir confirmação do instalador: ${e.message}",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-                }
-                is ApkInstallEvent.ReadyToInstall -> {
-                    try {
-                        val apkUri = FileProvider.getUriForFile(
-                            context,
-                            "${context.packageName}.fileprovider",
-                            event.apkFile
-                        )
-                        val installIntent = Intent(Intent.ACTION_VIEW).apply {
-                            setDataAndType(apkUri, "application/vnd.android.package-archive")
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        }
-                        context.startActivity(installIntent)
-                    } catch (e: Exception) {
-                        Toast.makeText(
-                            context,
-                            "Erro ao abrir instalador: ${e.message}",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-                }
+            } finally {
+                br.com.concursoprep.app.data.update.AppUpdateManager.onUiCollectorStopped()
             }
         }
     }

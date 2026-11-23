@@ -1,7 +1,7 @@
+#[cfg(test)]
+use crate::services::exam_engine::canonical_subjects;
 use crate::{
-    error::AppError,
-    models::exam_hierarchy::*,
-    services::exam_engine::system_exam_blueprints,
+    error::AppError, models::exam_hierarchy::*, services::exam_engine::system_exam_blueprints,
     AppState,
 };
 use bson::{doc, Document};
@@ -12,8 +12,6 @@ use mongodb::{
 };
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
-#[cfg(test)]
-use crate::services::exam_engine::canonical_subjects;
 
 fn user_collection(state: &AppState) -> mongodb::Collection<Document> {
     state.db.collection_with_options(
@@ -46,9 +44,7 @@ fn decode(mut raw: Document) -> Result<ExamBlueprint, AppError> {
     let id = raw
         .get_str("exam_id")
         .or_else(|_| raw.get_str("_id"))
-        .map_err(|_| {
-            AppError::Conflict("Concurso sem identificador verificável".into())
-        })?
+        .map_err(|_| AppError::Conflict("Concurso sem identificador verificável".into()))?
         .to_string();
     raw.insert("_id", id);
     bson::from_document(raw)
@@ -67,12 +63,9 @@ pub async fn seed_templates(db: &Database) -> Result<(), AppError> {
             .map_err(|_| AppError::Internal("Template global não serializável".into()))?;
         raw.insert("_id", &template.id);
         raw.insert("exam_id", &template.id);
-        coll.update_one(
-            doc! { "_id": &template.id },
-            doc! { "$setOnInsert": raw },
-        )
-        .upsert(true)
-        .await?;
+        coll.update_one(doc! { "_id": &template.id }, doc! { "$setOnInsert": raw })
+            .upsert(true)
+            .await?;
     }
     Ok(())
 }
@@ -98,7 +91,11 @@ pub async fn list_templates(state: &AppState) -> Result<Vec<ExamBlueprint>, AppE
         .into_values()
         .filter(|e| e.status != ExamLifecycleStatus::Excluido)
         .collect();
-    result.sort_by(|a, b| a.ladder_priority.cmp(&b.ladder_priority).then(a.id.cmp(&b.id)));
+    result.sort_by(|a, b| {
+        a.ladder_priority
+            .cmp(&b.ladder_priority)
+            .then(a.id.cmp(&b.id))
+    });
     Ok(result)
 }
 
@@ -138,7 +135,10 @@ pub async fn save_template(
     }
     if let Some(current) = &prior {
         let current_rev = current.revision.max(1);
-        if !create && template.revision != current_rev && !(existing.is_none() && template.revision == 0) {
+        if !create
+            && template.revision != current_rev
+            && !(existing.is_none() && template.revision == 0)
+        {
             return Err(AppError::Conflict(
                 "O template global mudou em outra aba; recarregue antes de salvar".into(),
             ));
@@ -400,11 +400,10 @@ fn validate_active_links(
                     && s.canonical_subject_id == subject.canonical_subject_id
             })
         });
-        let active = knowledge["subjects"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|s| s["subject_id"] == subject.canonical_subject_id && s["status"] == "ACTIVE");
+        let active =
+            knowledge["subjects"].as_array().unwrap().iter().any(|s| {
+                s["subject_id"] == subject.canonical_subject_id && s["status"] == "ACTIVE"
+            });
         if !active && !subject.canonical_subject_id.starts_with("custom-") && prior.is_none() {
             return Err(AppError::BadRequest(
                 "Disciplina desativada só pode permanecer nos componentes existentes".into(),
@@ -553,11 +552,7 @@ pub async fn save_command(
     validate_active_links(&exam, previous.as_ref())?;
 
     let expected = exam.revision;
-    exam.revision = if existing.is_none() {
-        1
-    } else {
-        expected + 1
-    };
+    exam.revision = if existing.is_none() { 1 } else { expected + 1 };
     if exam.base_template_revision.is_none() {
         exam.base_template_revision = match &existing {
             Some(raw) => decode(raw.clone())?.base_template_revision,
@@ -730,7 +725,11 @@ mod validation_tests {
             let mut tombstone = exam.clone();
             tombstone.status = ExamLifecycleStatus::Excluido;
             tombstone.is_active_in_ladder = false;
-            assert!(validate(&tombstone).is_ok(), "exclusão de {} inválida", exam.id);
+            assert!(
+                validate(&tombstone).is_ok(),
+                "exclusão de {} inválida",
+                exam.id
+            );
         }
     }
     #[test]
@@ -756,10 +755,7 @@ mod validation_tests {
         };
         assert!(validate(&e).is_err());
         assert_eq!(
-            crate::services::exam_engine::days_until(
-                "2026-01-1ç",
-                chrono::Utc::now().date_naive()
-            ),
+            crate::services::exam_engine::days_until("2026-01-1ç", chrono::Utc::now().date_naive()),
             None
         );
     }

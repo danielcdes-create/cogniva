@@ -44,9 +44,11 @@ object AppUpdateManager {
     internal const val ACTION_INSTALL_STATUS = "br.com.concursoprep.app.action.APK_INSTALL_STATUS"
 
     private val SHA256_HEX_REGEX = Regex("^[0-9a-fA-F]{64}$")
+    private val ENCODED_TRAVERSAL_REGEX = Regex("(?i)%(?:2e|2f|5c|00)")
 
     private val _statusEvents = MutableSharedFlow<InstallSessionEvent>(extraBufferCapacity = 4)
     val statusEvents: SharedFlow<InstallSessionEvent> = _statusEvents.asSharedFlow()
+    private val activeUiCollectorCount = java.util.concurrent.atomic.AtomicInteger(0)
 
     sealed interface InstallSessionEvent {
         data class PendingUserConfirmation(val confirmationIntent: Intent) : InstallSessionEvent
@@ -54,8 +56,21 @@ object AppUpdateManager {
         data class Failed(val message: String) : InstallSessionEvent
     }
 
+    fun onUiCollectorStarted() {
+        activeUiCollectorCount.incrementAndGet()
+    }
+
+    fun onUiCollectorStopped() {
+        activeUiCollectorCount.updateAndGet { cur -> if (cur > 0) cur - 1 else 0 }
+    }
+
+    internal fun resetUiCollectorsForTest() {
+        activeUiCollectorCount.set(0)
+    }
+
     internal fun emitStatusEvent(event: InstallSessionEvent): Boolean = _statusEvents.tryEmit(event)
-    internal fun hasActiveSubscribers(): Boolean = _statusEvents.subscriptionCount.value > 0
+    internal fun hasActiveUiCollectors(): Boolean =
+        activeUiCollectorCount.get() > 0 && _statusEvents.subscriptionCount.value > 0
 
     fun validateMetadata(
         info: ApkInfoDto,
@@ -94,14 +109,22 @@ object AppUpdateManager {
             baseUri != null &&
                 baseUri.scheme.equals("https", ignoreCase = true) &&
                 !baseUri.host.isNullOrBlank() &&
-                baseUri.userInfo == null
+                baseUri.userInfo == null &&
+                baseUri.rawUserInfo == null &&
+                baseUri.rawFragment == null
         ) {
             "Atualização exige conexão HTTPS."
         }
         val basePort = if (baseUri.port == 443) -1 else baseUri.port
         val cleanBase = apiBaseUrl.trim().trimEnd('/')
         val cleanPath = downloadPath.trim()
-        require(!cleanPath.startsWith("//") && !cleanPath.contains('\\') && !cleanPath.contains("..")) {
+        require(
+            !cleanPath.startsWith("//") &&
+                !cleanPath.contains('\\') &&
+                !cleanPath.contains("..") &&
+                !cleanPath.contains('#') &&
+                !ENCODED_TRAVERSAL_REGEX.containsMatchIn(cleanPath)
+        ) {
             "Origem de download da atualização não autorizada."
         }
         val resolved = when {
@@ -110,23 +133,48 @@ object AppUpdateManager {
                 val origin = cleanBase.removeSuffix("/api/v1")
                 origin + cleanPath
             }
+            cleanPath.startsWith("/api/") -> {
+                val origin = cleanBase.removeSuffix("/api/v1").removeSuffix("/api")
+                origin + cleanPath
+            }
             else -> {
                 val relative = cleanPath.trimStart('/')
                 "$cleanBase/${relative.ifBlank { "apk/download" }}"
             }
         }
         val parsedUri = runCatching { java.net.URI(resolved) }.getOrNull()
-        require(parsedUri != null && !(parsedUri.rawPath ?: "").contains("..")) {
+        val rawPath = parsedUri?.rawPath.orEmpty()
+        val decodedPath = parsedUri?.path.orEmpty()
+        require(
+            parsedUri != null &&
+                parsedUri.rawFragment == null &&
+                parsedUri.fragment == null &&
+                parsedUri.userInfo == null &&
+                parsedUri.rawUserInfo == null &&
+                !ENCODED_TRAVERSAL_REGEX.containsMatchIn(rawPath) &&
+                !rawPath.contains("..") &&
+                !decodedPath.contains("..") &&
+                !decodedPath.contains('\\') &&
+                rawPath.split('/').none { it == "." || it == ".." } &&
+                decodedPath.split('/').none { it == "." || it == ".." }
+        ) {
             "Origem de download da atualização não autorizada."
         }
         val targetUri = parsedUri.normalize()
         val targetPort = if (targetUri.port == 443) -1 else targetUri.port
+        val normRawPath = targetUri.rawPath.orEmpty()
+        val normDecodedPath = targetUri.path.orEmpty()
         require(
             targetUri.scheme.equals("https", ignoreCase = true) &&
                 targetUri.userInfo == null &&
+                targetUri.rawUserInfo == null &&
+                targetUri.rawFragment == null &&
                 targetUri.host.equals(baseUri.host, ignoreCase = true) &&
                 targetPort == basePort &&
-                (targetUri.rawPath ?: "").startsWith("/api/")
+                normRawPath.startsWith("/api/") &&
+                normDecodedPath.startsWith("/api/") &&
+                !normRawPath.contains("..") &&
+                !normDecodedPath.contains("..")
         ) {
             "Origem de download da atualização não autorizada."
         }
@@ -374,33 +422,58 @@ object AppUpdateManager {
 class ApkInstallStatusReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != AppUpdateManager.ACTION_INSTALL_STATUS) return
-        when (val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
-            PackageInstaller.STATUS_PENDING_USER_ACTION -> {
-                val confirmIntent = IntentCompat.getParcelableExtra(
-                    intent,
-                    Intent.EXTRA_INTENT,
-                    Intent::class.java
-                ) ?: return
-                confirmIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                val deliveredToUi = AppUpdateManager.hasActiveSubscribers() &&
-                    AppUpdateManager.emitStatusEvent(
-                        AppUpdateManager.InstallSessionEvent.PendingUserConfirmation(confirmIntent)
-                    )
-                if (!deliveredToUi) {
-                    runCatching { context.startActivity(confirmIntent) }
-                }
+        val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
+        val confirmIntent = if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
+            IntentCompat.getParcelableExtra(
+                intent,
+                Intent.EXTRA_INTENT,
+                Intent::class.java
+            )
+        } else {
+            null
+        }
+        val detail = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
+        handleInstallStatus(
+            status = status,
+            confirmIntent = confirmIntent,
+            statusMessage = detail,
+            startConfirmActivity = { target ->
+                target.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                runCatching { context.startActivity(target) }
             }
-            PackageInstaller.STATUS_SUCCESS -> {
-                AppUpdateManager.emitStatusEvent(AppUpdateManager.InstallSessionEvent.Succeeded)
-            }
-            else -> {
-                val detail = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
-                val msg = if (!detail.isNullOrBlank()) {
-                    "Instalação não concluída ($status): $detail"
-                } else {
-                    "Instalação cancelada ou recusada pelo sistema."
+        )
+    }
+
+    companion object {
+        internal fun handleInstallStatus(
+            status: Int,
+            confirmIntent: Intent?,
+            statusMessage: String?,
+            startConfirmActivity: (Intent) -> Unit
+        ) {
+            when (status) {
+                PackageInstaller.STATUS_PENDING_USER_ACTION -> {
+                    val target = confirmIntent ?: return
+                    target.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    val deliveredToUi = AppUpdateManager.hasActiveUiCollectors() &&
+                        AppUpdateManager.emitStatusEvent(
+                            AppUpdateManager.InstallSessionEvent.PendingUserConfirmation(target)
+                        )
+                    if (!deliveredToUi) {
+                        startConfirmActivity(target)
+                    }
                 }
-                AppUpdateManager.emitStatusEvent(AppUpdateManager.InstallSessionEvent.Failed(msg))
+                PackageInstaller.STATUS_SUCCESS -> {
+                    AppUpdateManager.emitStatusEvent(AppUpdateManager.InstallSessionEvent.Succeeded)
+                }
+                else -> {
+                    val msg = if (!statusMessage.isNullOrBlank()) {
+                        "Instalação não concluída ($status): $statusMessage"
+                    } else {
+                        "Instalação cancelada ou recusada pelo sistema."
+                    }
+                    AppUpdateManager.emitStatusEvent(AppUpdateManager.InstallSessionEvent.Failed(msg))
+                }
             }
         }
     }

@@ -192,9 +192,7 @@ pub async fn publish_edital(
                 .map_err(|_| AppError::BadRequest("Publicação inválida".into()))?
         )
     );
-    if let Some(confirmed) =
-        exam_store::replay(&state, user.user_id, &id, &command_hash).await?
-    {
+    if let Some(confirmed) = exam_store::replay(&state, user.user_id, &id, &command_hash).await? {
         return Ok(Json(confirmed));
     }
     let mut exam = exam_store::get(&state, user.user_id, &id).await?;

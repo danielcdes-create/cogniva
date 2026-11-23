@@ -26,9 +26,17 @@ pub fn calibrated_probability(
 ) -> CalibrationCellDto {
     let is_tf = question_type.eq_ignore_ascii_case("TRUE_FALSE");
     let mu0 = if confidence_band <= 1 {
-        if is_tf { 0.50 } else { 0.20 }
+        if is_tf {
+            0.50
+        } else {
+            0.20
+        }
     } else if confidence_band == 2 {
-        if is_tf { 0.65 } else { 0.45 }
+        if is_tf {
+            0.65
+        } else {
+            0.45
+        }
     } else {
         0.85
     };

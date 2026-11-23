@@ -52,16 +52,30 @@ async fn global_catalog_activation_preserves_history_and_is_restartable() {
     .await
     .unwrap();
 
+    let q_created = db
+        .collection::<Document>("todasQuestoes")
+        .find_one(doc! { "_id": qid })
+        .await
+        .unwrap()
+        .unwrap();
     let mut decision: Value = serde_json::from_str(include_str!(
         "../../shared/examples/question-contracts/compatibility-direct.json"
     ))
     .unwrap();
     decision["owner_user_id"] = json!(123);
     decision["question_id"] = json!(qid.to_hex());
+    decision["question_content_revision"] = json!(q_created.get_str("content_revision").unwrap());
+    decision["question_semantic_revision"] = json!(q_created.get_str("semantic_revision").unwrap());
     decision["relation"] = json!("EXCLUDED");
     decision["matched_topic_ids"] = json!([]);
     db.collection::<Document>("question_exam_compatibility")
-        .insert_one(Bson::try_from(decision).unwrap().as_document().unwrap().clone())
+        .insert_one(
+            Bson::try_from(decision)
+                .unwrap()
+                .as_document()
+                .unwrap()
+                .clone(),
+        )
         .await
         .unwrap();
 
@@ -551,9 +565,11 @@ async fn competing_catalog_activations_have_one_committed_winner() {
     assert_eq!(current.version, 3);
     assert_eq!(current.committed.len(), 1);
     let loser = if a.is_ok() { 1 } else { 0 };
-    assert!(catalog_runtime::activate(&state, 123, commands[loser].clone())
-        .await
-        .is_err());
+    assert!(
+        catalog_runtime::activate(&state, 123, commands[loser].clone())
+            .await
+            .is_err()
+    );
     let history = catalog_runtime::history(&state, None).await.unwrap();
     assert_eq!(history["versions"].as_array().unwrap().len(), 1);
     assert_eq!(
@@ -702,7 +718,10 @@ async fn validator_migration_upgrades_v2_0_0_receipts_without_rewriting_document
     let first_prepare = question_storage::prepare(&db).await.unwrap();
     assert_eq!(first_prepare["validators_migrated"], json!(4));
     assert_eq!(first_prepare["question_documents_rewritten"], json!(0));
-    assert_eq!(first_prepare["legacy_sub5_multiple_choice_purged"], json!(1));
+    assert_eq!(
+        first_prepare["legacy_sub5_multiple_choice_purged"],
+        json!(1)
+    );
 
     let after_doc = db
         .collection::<Document>("todasQuestoes")
@@ -835,7 +854,10 @@ async fn validator_migration_rejects_unknown_hash_and_incompatible_existing_docu
         .await
         .unwrap();
 
-    let unknown_err = question_storage::prepare(&db).await.unwrap_err().to_string();
+    let unknown_err = question_storage::prepare(&db)
+        .await
+        .unwrap_err()
+        .to_string();
     assert!(
         unknown_err.contains("migração versionada explícita"),
         "unexpected error: {unknown_err}"
@@ -868,7 +890,10 @@ async fn validator_migration_rejects_unknown_hash_and_incompatible_existing_docu
         .await
         .unwrap();
 
-    let incompat_err = question_storage::prepare(&db).await.unwrap_err().to_string();
+    let incompat_err = question_storage::prepare(&db)
+        .await
+        .unwrap_err()
+        .to_string();
     assert!(
         incompat_err.contains("Documentos existentes incompatíveis"),
         "unexpected error: {incompat_err}"

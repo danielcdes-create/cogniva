@@ -30,6 +30,10 @@ pub struct QuotaReservation {
 pub struct QuotaGuard {
     db: Database,
     reservation: Option<QuotaReservation>,
+    #[cfg(test)]
+    committed_counter: Option<std::sync::Arc<std::sync::atomic::AtomicUsize>>,
+    #[cfg(test)]
+    released_counter: Option<std::sync::Arc<std::sync::atomic::AtomicUsize>>,
 }
 
 impl QuotaGuard {
@@ -37,15 +41,43 @@ impl QuotaGuard {
         Self {
             db,
             reservation: Some(reservation),
+            #[cfg(test)]
+            committed_counter: None,
+            #[cfg(test)]
+            released_counter: None,
+        }
+    }
+
+    #[cfg(test)]
+    pub fn with_test_counters(
+        db: Database,
+        reservation: QuotaReservation,
+        committed_counter: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+        released_counter: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    ) -> Self {
+        Self {
+            db,
+            reservation: Some(reservation),
+            committed_counter: Some(committed_counter),
+            released_counter: Some(released_counter),
         }
     }
 
     pub fn commit(mut self) {
-        self.reservation = None;
+        if self.reservation.take().is_some() {
+            #[cfg(test)]
+            if let Some(c) = &self.committed_counter {
+                c.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            }
+        }
     }
 
     pub async fn release_now(mut self) {
         if let Some(res) = self.reservation.take() {
+            #[cfg(test)]
+            if let Some(r) = &self.released_counter {
+                r.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            }
             release_xai_quota(&self.db, &res).await;
         }
     }
@@ -54,6 +86,10 @@ impl QuotaGuard {
 impl Drop for QuotaGuard {
     fn drop(&mut self) {
         if let Some(res) = self.reservation.take() {
+            #[cfg(test)]
+            if let Some(r) = &self.released_counter {
+                r.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            }
             if let Ok(handle) = tokio::runtime::Handle::try_current() {
                 let db = self.db.clone();
                 handle.spawn(async move {
@@ -67,7 +103,10 @@ impl Drop for QuotaGuard {
 /// Dia de referência do orçamento diário no fuso `America/Sao_Paulo` (`UTC-3`).
 pub fn tutor_budget_day(at: DateTime<Utc>) -> String {
     let sp_tz = FixedOffset::west_opt(3 * 3600).expect("UTC-3 válido");
-    at.with_timezone(&sp_tz).date_naive().format("%Y-%m-%d").to_string()
+    at.with_timezone(&sp_tz)
+        .date_naive()
+        .format("%Y-%m-%d")
+        .to_string()
 }
 
 pub fn effective_user_daily_limit(configured_limit: i64, is_guest: bool) -> i64 {
@@ -323,23 +362,6 @@ pub async fn release_xai_quota(db: &Database, reservation: &QuotaReservation) {
     }
 }
 
-pub async fn reserve_tutor(db: &Database, user_id: i64) -> Result<QuotaReservation, AppError> {
-    reserve_xai_quota_at(
-        db,
-        Some(user_id),
-        DEFAULT_USER_DAILY_LIMIT,
-        DEFAULT_GLOBAL_DAILY_LIMIT,
-        Utc::now(),
-    )
-    .await
-}
-
-pub async fn release_tutor(db: &Database, user_id: i64) {
-    let day = tutor_budget_day(Utc::now());
-    release_bucket(db, Bson::Int64(user_id), &day).await;
-    release_bucket(db, Bson::String("global".to_string()), &day).await;
-}
-
 pub fn hash_rate_limit_subject(subject_key: &str) -> String {
     format!("{:x}", Sha256::digest(subject_key.trim().as_bytes()))
 }
@@ -406,7 +428,10 @@ mod tests {
 
     #[test]
     fn guest_daily_limit_is_capped_lower_than_verified_accounts() {
-        assert_eq!(effective_user_daily_limit(120, true), GUEST_USER_DAILY_LIMIT);
+        assert_eq!(
+            effective_user_daily_limit(120, true),
+            GUEST_USER_DAILY_LIMIT
+        );
         assert_eq!(effective_user_daily_limit(120, false), 120);
         assert_eq!(effective_user_daily_limit(2, true), 2);
     }
