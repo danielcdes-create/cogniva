@@ -38,7 +38,7 @@ class QuestionPracticeTest {
     @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
 
     @Test
-    fun shuffleOpensALegacyQuestionAndSubmitsAnswerThroughComposeUi() = runBlocking {
+    fun shuffleOpensALegacyQuestionAndSubmitsAnswerThroughComposeUi(): Unit = runBlocking {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val name = "practice_fixture_${UUID.randomUUID()}.db"
         val db = Room.databaseBuilder(context, AppDatabase::class.java, name)
@@ -194,8 +194,11 @@ class QuestionPracticeTest {
             rule.onNodeWithText("Rastreabilidade da Resposta · 3 Sinais (Opcional)").assertDoesNotExist()
             rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Você acertou com segurança."))
             rule.onNodeWithText("Você acertou com segurança.").assertIsDisplayed()
+            rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Ver detalhes da avaliação"))
             rule.onNodeWithTag("metacognitive_details_toggle").performClick()
+            rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Sustentação diagnóstica: Sustentação moderada"))
             rule.onNodeWithText("Sustentação diagnóstica: Sustentação moderada").assertIsDisplayed()
+            Unit
         } finally {
             rule.runOnUiThread { store.clear() }
             repo?.awaitIdleForClose()
