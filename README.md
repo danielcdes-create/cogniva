@@ -1,10 +1,10 @@
 # Cogniva
 
-Plataforma inteligente de preparação de alta performance para concursos públicos, composta por aplicativo nativo Android (**Kotlin / Jetpack Compose / Room v7**), portal web interativo de **Missões** (**`/missoes/`**), painel administrativo web incorporado (**`/admin/`**) e API **Rust / Axum** (`cogniva-api`). O ecossistema transforma evidências auditáveis de aprendizagem em decisões de estudo e estratégia de prova em arquitetura *offline-first* sobre **MongoDB (`cogniva`)**, com conformidade integral **LGPD (Lei 13.709/2018)** e promoção atômica conteinerizada.
+Plataforma inteligente de preparação de alta performance para concursos públicos, composta por aplicativo nativo Android (**Kotlin / Jetpack Compose / Room v8**), portal web interativo de **Missões** (**`/missoes/`**), painel administrativo web incorporado (**`/admin/`**) e API **Rust / Axum** (`cogniva-api`). O ecossistema transforma evidências auditáveis de aprendizagem em decisões de estudo e estratégia de prova em arquitetura *offline-first* sobre **MongoDB (`cogniva`)**, com conformidade integral **LGPD (Lei 13.709/2018)** e promoção atômica conteinerizada.
 
 ---
 
-## 🚀 Versão Atual: `2.4.3` (`build 33`)
+## 🚀 Versão Atual: `2.4.4` (`build 34`)
 
 - **Arquitetura Disruptiva em 3 Camadas (`contract_version: 5`):**
   1. **Escassez — Diagnóstico por Evidências, Não por Geração:** Ficha Editorial Rastreável (`editorial_card` com dispositivos legais, regra cobrada, exceção, trecho decisivo e erros conceituais plausíveis), diagnóstico cruzando **3 sinais** (*resposta × confiança × evidência selecionada*, detectando inclusive `ILLUSORY_COMPETENCE`), restrição explícita **`< 15` questões humanas** (`MIN_QUESTIONS_FOR_MASTERY = 15`) e conjunto separado de **Transferência Cross-Banca (`TRANSFER_PROBE`)** com registro explícito de `TRANSFER_UNMEASURED` quando não há item válido de outra banca.
@@ -46,7 +46,7 @@ Toda a documentação técnica e operacional ativa está centralizada em [`docs/
    - Todas as questões em `cogniva.todasQuestoes` obedecem ao `schema_version = 2` com `content_revision` JCS SHA-256 idêntico entre Python, Rust e Kotlin e validação estrita de URIs `^https?://`.
    - Tentativas e comandos administrativos usam `write_concern: majority` com `journal: true`, recibos idempotentes e replay cronológico de respostas offline fora de ordem.
 3. **Offline-First, Simulados Duráveis e Conformidade LGPD:**
-   - O cliente Android isola dados em bancos Room v7 separados por conta (`cogniva-<userId>.db`), persiste simulados, omissões estratégicas (`isBlank`) e telemetria de sessão contra morte de processo e permite exclusão física imediata dos dados pessoais do titular sem afetar o acervo público de questões.
+   - O cliente Android isola dados em bancos Room v8 separados por conta (`cogniva-<userId>.db`), persiste simulados, omissões estratégicas (`isBlank`), ciclo de vida CTV (`LocalCtvLedger`) e telemetria de sessão contra morte de processo e permite exclusão física imediata dos dados pessoais do titular sem afetar o acervo público de questões.
 4. **Simetria Matemática (`v5`), Honestidade Epistemológica e Acessibilidade WCAG 2.1 AA:**
    - Pontuação líquida ponderada, decisão sob incerteza maximizando $P(S_{\text{final}} \ge S_{\text{meta}})$ sob $VE = (1+\lambda)p(t) - \lambda$, curva contínua $R(t,S)$, restrição estrita de escassez (`< 15` questões humanas distintas nunca afirmam domínio pleno; `TRANSFER_UNMEASURED` quando não há questão de outra banca), curva logística de 300 minutos controlada por dificuldade, calendário/cotas em `America/Sao_Paulo` (`UTC-3`) e contraste mínimo `>= 4.5:1` auditado automaticamente no Android e no Web Admin.
 

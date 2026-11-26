@@ -236,11 +236,23 @@ class RepositoryContractTest {
             importCapabilities:()->JsonObject={buildJsonObject{put("ai_available",true)}},
             previewImport:(JsonObject)->JsonObject={throw IOException("Synthetic offline preview")},
             commitImport:(JsonObject)->JsonObject={throw IOException("Synthetic offline commit")},
-            assistImport:(JsonObject)->JsonObject={throw IOException("Synthetic offline assist")}
+            assistImport:(JsonObject)->JsonObject={throw IOException("Synthetic offline assist")},
+            learningAnalytics:()->StudentLearningAnalyticsDto={throw IOException("Synthetic offline learning analytics")},
+            evaluateCtv:(CtvEvaluateRequestDto)->CtvEvaluateResponseDto={throw IOException("Synthetic offline ctv evaluate")},
+            submitCtv:(CtvSubmitRequestDto)->CtvSubmitResponseDto={throw IOException("Synthetic offline ctv submit")},
+            recordCtvEvent:(CtvLifecycleEventRequestDto)->CtvLifecycleEventResponseDto={throw IOException("Synthetic offline ctv event")},
+            getCtvState:()->CtvUserStateResponseDto={throw IOException("Synthetic offline ctv state")},
+            recordRecommendationFeedback:(RecommendationFeedbackRequestDto)->RecommendationFeedbackResponseDto={throw IOException("Synthetic offline rec feedback")}
         ):ConcursoRepository {
             val api=fake<ConcursoApiService>{method,args->when(method){
                 "submitAttemptsBatch"->submit(args[0] as SubmitBatchPayload)
                 "attachAttemptEvidence"->attachEvidence(args[0] as AttachAttemptEvidencePayload)
+                "getLearningAnalytics"->learningAnalytics()
+                "evaluateCtv"->evaluateCtv(args[0] as CtvEvaluateRequestDto)
+                "submitCtvAttempt"->submitCtv(args[0] as CtvSubmitRequestDto)
+                "recordCtvEvent"->recordCtvEvent(args[0] as CtvLifecycleEventRequestDto)
+                "getCtvState"->getCtvState()
+                "recordRecommendationFeedback"->recordRecommendationFeedback(args[0] as RecommendationFeedbackRequestDto)
                 "listExams"->remoteExams
                 "updateExam"->updateExam(args[1] as ExamBlueprintPayload)
                 "catalog"->Json.parseToJsonElement(checkNotNull(javaClass.getResourceAsStream("/exam-templates.json")).bufferedReader().readText()).jsonObject
@@ -1457,5 +1469,1048 @@ class RepositoryContractTest {
         } finally {
             tempRoot.deleteRecursively()
         }
+    }
+
+    @Test
+    fun metacognitiveSignalsBehavioralTelemetryAndOfflineCtvDatabaseFirstSyncCleanly() = runBlocking {
+        val store = Store()
+        val qSource = QuestionCacheMapping.withRevision(
+            QuestionDto(
+                id = "000000000000000000000101",
+                question = "Segundo a Lei 9.784/1999, o direito da Administração de anular atos ilegais decai em cinco anos, salvo comprovada má-fé.",
+                answers = listOf("Certo", "Errado"),
+                correctAnswerIndices = listOf(0),
+                disciplina = "Direito Administrativo",
+                source = "Cebraspe",
+                level = "Médio",
+                canonicalSubjectId = "DIR_ADM",
+                canonicalTopicId = "DIR_ADM_01_001"
+            )
+        )
+        // Paraphrase of qSource -> must be blocked by Jaccard trigram filter (< 0.45)
+        val qParaphrase = QuestionCacheMapping.withRevision(
+            QuestionDto(
+                id = "000000000000000000000102",
+                question = "Pela Lei 9.784/1999, o direito da Administração de anular os atos ilegais decai em cinco anos, salvo comprovada má-fé.",
+                answers = listOf("Certo", "Errado"),
+                correctAnswerIndices = listOf(0),
+                disciplina = "Direito Administrativo",
+                source = "Cebraspe",
+                level = "Médio",
+                canonicalSubjectId = "DIR_ADM",
+                canonicalTopicId = "DIR_ADM_01_001"
+            )
+        )
+        // Distinct transfer scenario on the same canonical topic -> eligible offline Database First CTV candidate!
+        val qDistinctTransfer = QuestionCacheMapping.withRevision(
+            QuestionDto(
+                id = "000000000000000000000103",
+                question = "Servidor municipal obteve vantagem pecuniária mediante fraude documental comprovada há sete anos. A autotutela administrativa:",
+                answers = listOf(
+                    "Permanece cabível, pois a má-fé comprovada afasta a decadência quinquenal.",
+                    "Está fulminada pela prescrição trienal absoluta."
+                ),
+                correctAnswerIndices = listOf(0),
+                disciplina = "Direito Administrativo",
+                source = "FGV",
+                level = "Médio",
+                canonicalSubjectId = "DIR_ADM",
+                canonicalTopicId = "DIR_ADM_01_001",
+                explanation = "A má-fé comprovada impede a consumação do prazo decadencial de cinco anos."
+            )
+        )
+        store.questions[qSource.id] = QuestionCacheMapping.toEntity(qSource, json)
+        store.questions[qParaphrase.id] = QuestionCacheMapping.toEntity(qParaphrase, json)
+        store.questions[qDistinctTransfer.id] = QuestionCacheMapping.toEntity(qDistinctTransfer, json)
+
+        val offlineRepo = store.repository()
+
+        // 1. SIMULADO mode must never trigger inline CTV
+        val simuladoEval = offlineRepo.evaluateAndSupplyCtv(
+            userId = 123L,
+            request = CtvEvaluateRequestDto(
+                parentAttemptId = "att-sim",
+                sourceQuestionId = qSource.id,
+                sessionUuid = "sess-sim",
+                quizMode = "SIMULADO",
+                isCorrect = true,
+                declaredConfidence = DeclaredConfidence.GUESS,
+                cognitiveStrategy = CognitiveStrategy.RANDOM_GUESS,
+                confidenceLevel = 1
+            ),
+            sourceQuestion = qSource
+        )
+        assertFalse(simuladoEval.triggered)
+
+        // 2. Fragile hit (GUESS + RANDOM_GUESS) in STANDARD mode triggers offline Database First reuse,
+        //    skipping qParaphrase and selecting qDistinctTransfer!
+        val ctvEval = offlineRepo.evaluateAndSupplyCtv(
+            userId = 123L,
+            request = CtvEvaluateRequestDto(
+                parentAttemptId = "att-1",
+                sourceQuestionId = qSource.id,
+                sessionUuid = "sess-1",
+                quizMode = "STANDARD",
+                isCorrect = true,
+                declaredConfidence = DeclaredConfidence.GUESS,
+                cognitiveStrategy = CognitiveStrategy.RANDOM_GUESS,
+                confidenceLevel = 1
+            ),
+            sourceQuestion = qSource
+        )
+        assertTrue(ctvEval.triggered)
+        assertEquals("REUSED_LOCAL_CACHE", ctvEval.deliverySource)
+        assertEquals("PRE_FEEDBACK", ctvEval.verificationTiming)
+        assertEquals(qDistinctTransfer.id, ctvEval.complementaryQuestion?.id)
+
+        // 3. Submit CTV attempt offline -> returns honest local feedback and queues for sync
+        val ctvReq = CtvSubmitRequestDto(
+            ctvAttemptId = "ctv-att-1",
+            parentAttemptId = "att-1",
+            sourceQuestionId = qSource.id,
+            complementaryQuestionId = qDistinctTransfer.id,
+            sessionUuid = "sess-1",
+            verificationTiming = "PRE_FEEDBACK",
+            chosenIndex = 0,
+            chosenText = qDistinctTransfer.answers[0],
+            declaredConfidence = DeclaredConfidence.HIGH,
+            activeSeconds = 18,
+            wasPreviouslyExposed = false
+        )
+        val offlineCtvResp = offlineRepo.submitCtvAttemptOfflineResilient(
+            userId = 123L,
+            request = ctvReq,
+            complementaryQuestion = qDistinctTransfer,
+            parentWasCorrect = true
+        )
+        assertTrue(offlineCtvResp.isCorrect)
+        assertTrue(offlineCtvResp.countsAsIndependentTransfer)
+        assertEquals(1, offlineRepo.getLocalStorageStats().second)
+
+        // 4. Record original attempt with full pre-gabarito metacognitive & behavioral signals and sync online
+        val metaAttempt = PendingAttemptEntity(
+            questionId = qSource.id,
+            chosenIndex = 0,
+            chosenText = "Certo",
+            isCorrect = true,
+            timeSpentSeconds = 25,
+            confidenceLevel = 1,
+            sessionUuid = "sess-1",
+            quizMode = "STANDARD",
+            examBlock = null,
+            contestId = null,
+            userNote = null,
+            canonicalSubjectId = "DIR_ADM",
+            canonicalTopicId = "DIR_ADM_01_001",
+            ownerUserId = 123L,
+            attemptId = "att-1",
+            questionRevision = qSource.questionRevision,
+            confidenceExplicit = true,
+            declaredConfidence = "GUESS",
+            cognitiveStrategy = "RANDOM_GUESS",
+            strategySkipped = false,
+            activeSeconds = 19,
+            answerChangeCount = 2,
+            initialChosenIndex = 1,
+            consultedResourcesCsv = "contextual-hint,contextual-lookup",
+            focusLossCount = 1
+        )
+        offlineRepo.recordAttemptOfflineFirst(123L, metaAttempt)
+
+        val capturedBatches = mutableListOf<SubmitBatchPayload>()
+        val capturedCtv = mutableListOf<CtvSubmitRequestDto>()
+        val onlineRepo = store.repository(
+            submit = { batch ->
+                capturedBatches += batch
+                SubmitBatchResponseDto(1, listOf(ack(metaAttempt)))
+            },
+            submitCtv = { req ->
+                capturedCtv += req
+                offlineCtvResp
+            }
+        )
+        onlineRepo.syncPendingAttempts(123L)
+
+        assertEquals(1, capturedBatches.size)
+        val sentItem = capturedBatches.single().attempts.single()
+        assertEquals(DeclaredConfidence.GUESS, sentItem.declaredConfidence)
+        assertEquals(CognitiveStrategy.RANDOM_GUESS, sentItem.cognitiveStrategy)
+        assertFalse(sentItem.strategySkipped)
+        assertEquals(19, sentItem.activeSeconds)
+        assertEquals(2, sentItem.answerChangeCount)
+        assertEquals(1, sentItem.initialChosenIndex)
+        assertEquals(listOf("contextual-hint", "contextual-lookup"), sentItem.consultedResources)
+        assertEquals(1, sentItem.focusLossCount)
+
+        assertEquals(1, capturedCtv.size)
+        assertEquals("ctv-att-1", capturedCtv.single().ctvAttemptId)
+        assertEquals(0, onlineRepo.getLocalStorageStats().second)
+    }
+
+    @Test
+    fun a01AndA02DurationApplicationBeatsConvexityAndTopicPracticeLeavesTransferUnmeasured() = runBlocking {
+        val store = Store()
+        val qDurationDef = QuestionCacheMapping.withRevision(
+            QuestionDto(
+                id = "000000000000000000000201",
+                question = "Qual é o significado econômico da duration modificada de um título prefixado?",
+                answers = listOf(
+                    "Mede a sensibilidade percentual aproximada do preço a pequenas variações na taxa de juros.",
+                    "Expressa exclusivamente o prazo nominal até o vencimento."
+                ),
+                correctAnswerIndices = listOf(0),
+                disciplina = "Matemática Financeira",
+                source = "BCB",
+                level = "Difícil",
+                canonicalSubjectId = "MFIN",
+                canonicalTopicId = "MFIN_01_004"
+            )
+        )
+        val qParaphrase = QuestionCacheMapping.withRevision(
+            QuestionDto(
+                id = "000000000000000000000202",
+                question = "Qual é o significado econômico da duration modificada em um título prefixado de renda fixa?",
+                answers = listOf(
+                    "Mede a sensibilidade percentual aproximada do preço a pequenas variações na taxa de juros.",
+                    "Indica somente a taxa interna de retorno na emissão."
+                ),
+                correctAnswerIndices = listOf(0),
+                disciplina = "Matemática Financeira",
+                source = "BCB",
+                level = "Difícil",
+                canonicalSubjectId = "MFIN",
+                canonicalTopicId = "MFIN_01_004"
+            )
+        )
+        val qConvexity = QuestionCacheMapping.withRevision(
+            QuestionDto(
+                id = "000000000000000000000203",
+                question = "Qual é a definição de convexidade na análise de risco de uma carteira de renda fixa?",
+                answers = listOf(
+                    "Medida de segunda ordem que captura a curvatura da relação preço-taxa.",
+                    "Taxa linear de cupom semestral."
+                ),
+                correctAnswerIndices = listOf(0),
+                disciplina = "Matemática Financeira",
+                source = "FGV",
+                level = "Difícil",
+                canonicalSubjectId = "MFIN",
+                canonicalTopicId = "MFIN_01_004"
+            )
+        )
+        val qDurationApplication = QuestionCacheMapping.withRevision(
+            QuestionDto(
+                id = "000000000000000000000204",
+                question = "Considere dois títulos prefixados com durations modificadas de 2,5 e 4,8 submetidos ao mesmo pequeno choque paralelo de 0,50% na taxa de juros. Qual apresenta maior variação percentual aproximada de preço?",
+                answers = listOf(
+                    "O segundo título, pois sua duration modificada de 4,8 implica variação percentual aproximada maior.",
+                    "O primeiro título, pois menor duration amplia o choque percentual."
+                ),
+                correctAnswerIndices = listOf(0),
+                disciplina = "Matemática Financeira",
+                source = "Cebraspe",
+                level = "Difícil",
+                canonicalSubjectId = "MFIN",
+                canonicalTopicId = "MFIN_01_004"
+            )
+        )
+        listOf(qDurationDef, qParaphrase, qConvexity, qDurationApplication).forEach { q ->
+            store.questions[q.id] = QuestionCacheMapping.toEntity(q, json)
+        }
+        val repo = store.repository()
+
+        // A01a: Com todos os itens disponíveis, escolhe a aplicação de duration modificada (rejeitando paráfrase e batendo convexidade)
+        val evalFull = repo.evaluateAndSupplyCtv(
+            userId = 123L,
+            request = CtvEvaluateRequestDto(
+                parentAttemptId = "att-dur-1",
+                sourceQuestionId = qDurationDef.id,
+                sessionUuid = "sess-dur",
+                quizMode = "STANDARD",
+                isCorrect = true,
+                declaredConfidence = DeclaredConfidence.GUESS,
+                cognitiveStrategy = CognitiveStrategy.RANDOM_GUESS,
+                confidenceLevel = 1
+            ),
+            sourceQuestion = qDurationDef
+        )
+        assertTrue(evalFull.triggered)
+        assertEquals(qDurationApplication.id, evalFull.complementaryQuestion?.id)
+        assertEquals("CONCEPTUAL_TRANSFER", evalFull.verificationMode)
+        assertEquals("CON_MFIN_DURATION_MODIFICADA", evalFull.targetConceptId)
+        assertEquals("SAME_CONCEPT_AND_RULE_NEW_CONTEXT", evalFull.framingReasonCode)
+
+        // A01b: Quando apenas convexidade e paráfrase estão no acervo, rejeita a paráfrase e enquadra convexidade como TOPIC_PRACTICE
+        store.questions.remove(qDurationApplication.id)
+        val evalTopicOnly = repo.evaluateAndSupplyCtv(
+            userId = 123L,
+            request = CtvEvaluateRequestDto(
+                parentAttemptId = "att-dur-2",
+                sourceQuestionId = qDurationDef.id,
+                sessionUuid = "sess-dur",
+                quizMode = "STANDARD",
+                isCorrect = true,
+                declaredConfidence = DeclaredConfidence.GUESS,
+                cognitiveStrategy = CognitiveStrategy.RANDOM_GUESS,
+                confidenceLevel = 1
+            ),
+            sourceQuestion = qDurationDef
+        )
+        assertTrue(evalTopicOnly.triggered)
+        assertEquals(qConvexity.id, evalTopicOnly.complementaryQuestion?.id)
+        assertEquals("TOPIC_PRACTICE", evalTopicOnly.verificationMode)
+        assertEquals("TOPIC_PRACTICE", evalTopicOnly.diagnosticPurpose)
+        assertEquals("TOPIC_ONLY_CONCEPT_DIVERGENT", evalTopicOnly.framingReasonCode)
+
+        // Responder corretamente uma TOPIC_PRACTICE registra a atividade mas NÃO concede transferência independente (denominador continua 0)
+        val subTopic = repo.submitCtvAttemptOfflineResilient(
+            userId = 123L,
+            request = CtvSubmitRequestDto(
+                ctvAttemptId = "ctv-topic-1",
+                offerId = evalTopicOnly.offerId,
+                parentAttemptId = "att-dur-2",
+                sourceQuestionId = qDurationDef.id,
+                complementaryQuestionId = qConvexity.id,
+                sessionUuid = "sess-dur",
+                verificationTiming = "PRE_FEEDBACK",
+                verificationMode = evalTopicOnly.verificationMode,
+                chosenIndex = 0,
+                chosenText = qConvexity.answers[0],
+                declaredConfidence = DeclaredConfidence.HIGH
+            ),
+            complementaryQuestion = qConvexity,
+            parentWasCorrect = true
+        )
+        assertTrue(subTopic.isCorrect)
+        assertFalse(subTopic.countsAsIndependentTransfer)
+        assertEquals("TOPIC_PRACTICE_RECORDED", subTopic.classificationCode)
+        val kpi = repo.getProgressAnalytics(123L).studentLearningAnalytics!!.learningKpis.first { it.kpiId == "INDEPENDENT_TRANSFER_SUCCESS_RATE" }
+        assertEquals(0.0, kpi.denominator, 1e-9)
+    }
+
+    @Test
+    fun a03OnlineOfflineAndRepeatedSyncGiveIdenticalOneOfTwoIndependentTransferDenominator() = runBlocking {
+        fun seedQuestions(target: Store): Triple<QuestionDto, QuestionDto, QuestionDto> {
+            val qSrc = QuestionCacheMapping.withRevision(
+                QuestionDto(
+                    id = "000000000000000000000301",
+                    question = "Qual é o significado econômico da duration modificada de um título prefixado?",
+                    answers = listOf("Sensibilidade percentual aproximada a juros.", "Apenas valor nominal."),
+                    correctAnswerIndices = listOf(0),
+                    disciplina = "Matemática Financeira",
+                    source = "BCB",
+                    level = "Difícil",
+                    canonicalSubjectId = "MFIN",
+                    canonicalTopicId = "MFIN_01_004"
+                )
+            )
+            val qComp1 = QuestionCacheMapping.withRevision(
+                QuestionDto(
+                    id = "000000000000000000000302",
+                    question = "Dois títulos prefixados com durations modificadas de 2,0 e 4,5 sofrem choque paralelo de 0,40% nos juros. Qual tem maior variação percentual aproximada?",
+                    answers = listOf("O título com duration modificada de 4,5.", "O título com duration de 2,0."),
+                    correctAnswerIndices = listOf(0),
+                    disciplina = "Matemática Financeira",
+                    source = "FGV",
+                    level = "Médio",
+                    canonicalSubjectId = "MFIN",
+                    canonicalTopicId = "MFIN_01_004"
+                )
+            )
+            val qComp2 = QuestionCacheMapping.withRevision(
+                QuestionDto(
+                    id = "000000000000000000000303",
+                    question = "Uma carteira prefixada tem duration modificada igual a 3,2 e sofre alta de 0,50% na taxa de juros. O módulo aproximado da queda percentual é:",
+                    answers = listOf("Aproximadamente 1,60%.", "Aproximadamente 6,40%."),
+                    correctAnswerIndices = listOf(0),
+                    disciplina = "Matemática Financeira",
+                    source = "Cebraspe",
+                    level = "Médio",
+                    canonicalSubjectId = "MFIN",
+                    canonicalTopicId = "MFIN_01_004"
+                )
+            )
+            listOf(qSrc, qComp1, qComp2).forEach { target.questions[it.id] = QuestionCacheMapping.toEntity(it, json) }
+            return Triple(qSrc, qComp1, qComp2)
+        }
+
+        // 1. Caminho ONLINE: 1 acerto + 1 erro em complementares inéditas pré-feedback -> 1/2 (50.0%)
+        val onlineStore = Store()
+        val (srcOn, c1On, c2On) = seedQuestions(onlineStore)
+        val serverAttempts = mutableListOf<CtvReconciledAttemptDto>()
+        val onlineRepo = onlineStore.repository(
+            submitCtv = { req ->
+                val ok = req.chosenIndex == 0
+                serverAttempts += CtvReconciledAttemptDto(
+                    ctvAttemptId = req.ctvAttemptId,
+                    offerId = req.offerId.orEmpty(),
+                    parentAttemptId = req.parentAttemptId,
+                    sourceQuestionId = req.sourceQuestionId,
+                    complementaryQuestionId = req.complementaryQuestionId,
+                    verificationMode = "CONCEPTUAL_TRANSFER",
+                    verificationTiming = "PRE_FEEDBACK",
+                    isCorrect = ok,
+                    wasPreviouslyExposed = false,
+                    countsAsIndependentTransfer = true,
+                    classificationCode = if (ok) "INDEPENDENT_CORRECT" else "INDEPENDENT_ERROR",
+                    occurredAt = req.occurredAt ?: "2026-11-25T12:00:00Z"
+                )
+                CtvSubmitResponseDto(
+                    ctvAttemptId = req.ctvAttemptId,
+                    offerId = req.offerId.orEmpty(),
+                    parentAttemptId = req.parentAttemptId,
+                    complementaryQuestionId = req.complementaryQuestionId,
+                    isCorrect = ok,
+                    correctIndex = 0,
+                    verificationTiming = "PRE_FEEDBACK",
+                    verificationMode = "CONCEPTUAL_TRANSFER",
+                    countsAsIndependentTransfer = true,
+                    classificationCode = if (ok) "INDEPENDENT_CORRECT" else "INDEPENDENT_ERROR",
+                    consolidatedDiagnosticTitlePt = "Registrado",
+                    consolidatedDiagnosticMessagePt = "Registrado"
+                )
+            },
+            learningAnalytics = { throw IOException("Use local/reconciled projection for direct comparison") }
+        )
+        onlineRepo.submitCtvAttemptOfflineResilient(
+            123L,
+            CtvSubmitRequestDto("on-1", "off-1", "p-1", srcOn.id, c1On.id, "s-on", chosenIndex = 0, occurredAt = "2026-11-25T12:01:00Z"),
+            c1On,
+            parentWasCorrect = true
+        )
+        val wrongOnline = onlineRepo.submitCtvAttemptOfflineResilient(
+            123L,
+            CtvSubmitRequestDto("on-2", "off-2", "p-2", srcOn.id, c2On.id, "s-on", chosenIndex = 1, occurredAt = "2026-11-25T12:02:00Z"),
+            c2On,
+            parentWasCorrect = true
+        )
+        assertFalse(wrongOnline.isCorrect)
+        assertTrue(wrongOnline.countsAsIndependentTransfer)
+        val onlineKpi = onlineRepo.getProgressAnalytics(123L).studentLearningAnalytics!!.learningKpis.first { it.kpiId == "INDEPENDENT_TRANSFER_SUCCESS_RATE" }
+        assertEquals(1.0, onlineKpi.numerator, 1e-9)
+        assertEquals(2.0, onlineKpi.denominator, 1e-9)
+        assertEquals(50.0, onlineKpi.value!!, 1e-9)
+
+        // 2. Caminho MODO AVIÃO (offline): mesmas 2 tentativas (1 certa, 1 errada) -> 1/2 (50.0%, NUNCA 1/1!)
+        val offlineStore = Store()
+        val (srcOff, c1Off, c2Off) = seedQuestions(offlineStore)
+        val offlineRepo = offlineStore.repository()
+        val okOffline = offlineRepo.submitCtvAttemptOfflineResilient(
+            123L,
+            CtvSubmitRequestDto("af-1", "off-af-1", "p-af-1", srcOff.id, c1Off.id, "s-af", chosenIndex = 0, occurredAt = "2026-11-25T13:01:00Z"),
+            c1Off,
+            parentWasCorrect = true
+        )
+        val wrongOffline = offlineRepo.submitCtvAttemptOfflineResilient(
+            123L,
+            CtvSubmitRequestDto("af-2", "off-af-2", "p-af-2", srcOff.id, c2Off.id, "s-af", chosenIndex = 1, occurredAt = "2026-11-25T13:02:00Z"),
+            c2Off,
+            parentWasCorrect = true
+        )
+        assertTrue(okOffline.countsAsIndependentTransfer)
+        assertFalse(wrongOffline.isCorrect)
+        assertTrue("Offline wrong pre-feedback unseen CTV must count in denominator!", wrongOffline.countsAsIndependentTransfer)
+        assertEquals("INDEPENDENT_ERROR", wrongOffline.classificationCode)
+
+        val offlineKpi = offlineRepo.getProgressAnalytics(123L).studentLearningAnalytics!!.learningKpis.first { it.kpiId == "INDEPENDENT_TRANSFER_SUCCESS_RATE" }
+        assertEquals(1.0, offlineKpi.numerator, 1e-9)
+        assertEquals(2.0, offlineKpi.denominator, 1e-9)
+        assertEquals(50.0, offlineKpi.value!!, 1e-9)
+
+        // 3. Reconectar e sincronizar + repetir sincronização -> permanece 1/2 (50.0%) de forma idempotente
+        val syncedAttempts = mutableMapOf<String, CtvReconciledAttemptDto>()
+        val reconRepo = offlineStore.repository(
+            recordCtvEvent = { ev -> CtvLifecycleEventResponseDto(ev.offerId, ev.eventKind) },
+            submitCtv = { req ->
+                val ok = req.chosenIndex == 0
+                val dto = CtvReconciledAttemptDto(
+                    ctvAttemptId = req.ctvAttemptId,
+                    offerId = req.offerId.orEmpty(),
+                    parentAttemptId = req.parentAttemptId,
+                    sourceQuestionId = req.sourceQuestionId,
+                    complementaryQuestionId = req.complementaryQuestionId,
+                    verificationMode = "CONCEPTUAL_TRANSFER",
+                    verificationTiming = "PRE_FEEDBACK",
+                    isCorrect = ok,
+                    wasPreviouslyExposed = false,
+                    countsAsIndependentTransfer = true,
+                    classificationCode = if (ok) "INDEPENDENT_CORRECT" else "INDEPENDENT_ERROR",
+                    occurredAt = req.occurredAt.orEmpty()
+                )
+                syncedAttempts[req.ctvAttemptId] = dto
+                CtvSubmitResponseDto(
+                    ctvAttemptId = req.ctvAttemptId,
+                    offerId = req.offerId.orEmpty(),
+                    parentAttemptId = req.parentAttemptId,
+                    complementaryQuestionId = req.complementaryQuestionId,
+                    isCorrect = ok,
+                    correctIndex = 0,
+                    verificationTiming = "PRE_FEEDBACK",
+                    verificationMode = "CONCEPTUAL_TRANSFER",
+                    countsAsIndependentTransfer = true,
+                    classificationCode = dto.classificationCode,
+                    consolidatedDiagnosticTitlePt = "Sincronizado",
+                    consolidatedDiagnosticMessagePt = "Sincronizado"
+                )
+            },
+            getCtvState = { CtvUserStateResponseDto(attempts = syncedAttempts.values.toList()) },
+            learningAnalytics = { throw IOException("Verify reconciled local ledger") }
+        )
+        reconRepo.syncPendingAttempts(123L)
+        reconRepo.syncPendingAttempts(123L) // Replay idempotente
+        assertEquals(2, syncedAttempts.size)
+        val postSyncKpi = reconRepo.getProgressAnalytics(123L).studentLearningAnalytics!!.learningKpis.first { it.kpiId == "INDEPENDENT_TRANSFER_SUCCESS_RATE" }
+        assertEquals(1.0, postSyncKpi.numerator, 1e-9)
+        assertEquals(2.0, postSyncKpi.denominator, 1e-9)
+        assertEquals(50.0, postSyncKpi.value!!, 1e-9)
+    }
+
+    @Test
+    fun a04PreloadIsZeroExposuresWhileDismissedOfferPersistsAcrossRestartAndMarksReencounterSeen() = runBlocking {
+        val store = Store()
+        val qSrc = QuestionCacheMapping.withRevision(
+            QuestionDto(
+                id = "000000000000000000000401",
+                question = "Qual é o significado econômico da duration modificada de um título prefixado?",
+                answers = listOf("Sensibilidade percentual aproximada a juros.", "Prazo nominal."),
+                correctAnswerIndices = listOf(0),
+                disciplina = "Matemática Financeira",
+                source = "BCB",
+                level = "Difícil",
+                canonicalSubjectId = "MFIN",
+                canonicalTopicId = "MFIN_01_004"
+            )
+        )
+        val qComp = QuestionCacheMapping.withRevision(
+            QuestionDto(
+                id = "000000000000000000000402",
+                question = "Dois títulos prefixados com durations modificadas de 2,2 e 5,1 sofrem o mesmo choque paralelo de 0,30% nos juros. Qual tem maior variação percentual aproximada?",
+                answers = listOf("O de duration modificada 5,1.", "O de duration modificada 2,2."),
+                correctAnswerIndices = listOf(0),
+                disciplina = "Matemática Financeira",
+                source = "FGV",
+                level = "Médio",
+                canonicalSubjectId = "MFIN",
+                canonicalTopicId = "MFIN_01_004"
+            )
+        )
+        store.questions[qSrc.id] = QuestionCacheMapping.toEntity(qSrc, json)
+        store.questions[qComp.id] = QuestionCacheMapping.toEntity(qComp, json)
+
+        // 1. Apenas pré-carregar / fornecer (`evaluateAndSupplyCtv` sem `recordCtvDisplayed`) = 0 exposições!
+        val repo1 = store.repository()
+        val suppliedOnly = repo1.evaluateAndSupplyCtv(
+            123L,
+            CtvEvaluateRequestDto(
+                parentAttemptId = "att-preload",
+                sourceQuestionId = qSrc.id,
+                sessionUuid = "sess-4",
+                quizMode = "STANDARD",
+                isCorrect = true,
+                declaredConfidence = DeclaredConfidence.GUESS,
+                cognitiveStrategy = CognitiveStrategy.RANDOM_GUESS,
+                confidenceLevel = 1
+            ),
+            qSrc
+        )
+        assertTrue(suppliedOnly.triggered)
+        assertFalse(suppliedOnly.wasPreviouslyExposed)
+
+        // Fechar e reabrir o app antes da exibição: em nova tentativa-mãe, o item continua inédito!
+        val repoAfterPreloadRestart = store.repository()
+        val secondEvalStillUnseen = repoAfterPreloadRestart.evaluateAndSupplyCtv(
+            123L,
+            CtvEvaluateRequestDto(
+                parentAttemptId = "att-display-dismiss",
+                sourceQuestionId = qSrc.id,
+                sessionUuid = "sess-4b",
+                quizMode = "STANDARD",
+                isCorrect = true,
+                declaredConfidence = DeclaredConfidence.GUESS,
+                cognitiveStrategy = CognitiveStrategy.RANDOM_GUESS,
+                confidenceLevel = 1
+            ),
+            qSrc
+        )
+        assertFalse("Preloaded-only item must still be unseen on actual presentation!", secondEvalStillUnseen.wasPreviouslyExposed)
+
+        // 2. Exibir o enunciado (mesma rotação de tela/repetição idempotente) e tocar em "Ver gabarito agora" (DISMISSED)
+        val firstTs = repoAfterPreloadRestart.recordCtvDisplayed(
+            123L,
+            secondEvalStillUnseen,
+            qSrc.id,
+            "att-display-dismiss",
+            "2026-11-25T14:00:00Z"
+        )
+        val rotatedTs = repoAfterPreloadRestart.recordCtvDisplayed(
+            123L,
+            secondEvalStillUnseen,
+            qSrc.id,
+            "att-display-dismiss",
+            "2026-11-25T14:00:09Z"
+        )
+        assertEquals("Screen rotation must preserve original firstDisplayedAt!", firstTs, rotatedTs)
+        repoAfterPreloadRestart.recordCtvDismissed(
+            123L,
+            secondEvalStillUnseen,
+            qSrc.id,
+            "att-display-dismiss",
+            "2026-11-25T14:00:15Z"
+        )
+
+        // 3. Fechar o app sem conexão e reabrir: fila e exposição persistem em local_metadata (`ctv_ledger_v2:123`)
+        val repoAfterDismissRestart = store.repository()
+        val analyticsAfterDismiss = repoAfterDismissRestart.getProgressAnalytics(123L).studentLearningAnalytics!!
+        val indepKpi = analyticsAfterDismiss.learningKpis.first { it.kpiId == "INDEPENDENT_TRANSFER_SUCCESS_RATE" }
+        assertEquals(0.0, indepKpi.denominator, 1e-9) // 0 tentativas independentes!
+        assertEquals(1, analyticsAfterDismiss.ctvAdaptiveSelection.difficultyTriggered.dismissalsCount)
+
+        // Num reencontro posterior (ou cópia com mesmo contentRevision), o item já consta como visto!
+        val reencounterEval = repoAfterDismissRestart.evaluateAndSupplyCtv(
+            123L,
+            CtvEvaluateRequestDto(
+                parentAttemptId = "att-reencounter",
+                sourceQuestionId = qSrc.id,
+                sessionUuid = "sess-4c",
+                quizMode = "STANDARD",
+                isCorrect = true,
+                declaredConfidence = DeclaredConfidence.GUESS,
+                cognitiveStrategy = CognitiveStrategy.RANDOM_GUESS,
+                confidenceLevel = 1
+            ),
+            qSrc
+        )
+        assertTrue("Re-encounter after 'Ver gabarito agora' must mark item as previously exposed!", reencounterEval.wasPreviouslyExposed)
+        assertEquals("INTENTIONAL_REVIEW", reencounterEval.verificationMode)
+
+        // Sincronizar envia DISPLAYED antes de DISMISSED em ordem lógica
+        val flushedEvents = mutableListOf<CtvLifecycleEventRequestDto>()
+        val syncRepo = store.repository(
+            recordCtvEvent = { ev ->
+                flushedEvents += ev
+                CtvLifecycleEventResponseDto(ev.offerId, ev.eventKind)
+            },
+            getCtvState = { CtvUserStateResponseDto() }
+        )
+        syncRepo.syncPendingAttempts(123L)
+        assertEquals(listOf("DISPLAYED", "DISMISSED"), flushedEvents.map { it.eventKind })
+    }
+
+    @Test
+    fun a05DecisiveHelpYieldsFixationGenericLookupKeepsIndependenceAndServerReconciliationUpdatesProvisional() = runBlocking {
+        val store = Store()
+        val qSrc = QuestionCacheMapping.withRevision(
+            QuestionDto(
+                id = "000000000000000000000501",
+                question = "Qual é o significado econômico da duration modificada de um título prefixado?",
+                answers = listOf("Sensibilidade percentual aproximada a juros.", "Prazo nominal."),
+                correctAnswerIndices = listOf(0),
+                disciplina = "Matemática Financeira",
+                source = "BCB",
+                level = "Difícil",
+                canonicalSubjectId = "MFIN",
+                canonicalTopicId = "MFIN_01_004"
+            )
+        )
+        val qCompA = QuestionCacheMapping.withRevision(
+            QuestionDto(
+                id = "000000000000000000000502",
+                question = "Dois títulos prefixados com durations modificadas de 1,9 e 4,4 sofrem choque paralelo de 0,50%. Qual tem maior variação percentual aproximada?",
+                answers = listOf("O de duration 4,4.", "O de duration 1,9."),
+                correctAnswerIndices = listOf(0),
+                disciplina = "Matemática Financeira",
+                source = "FGV",
+                level = "Médio",
+                canonicalSubjectId = "MFIN",
+                canonicalTopicId = "MFIN_01_004"
+            )
+        )
+        val qCompB = QuestionCacheMapping.withRevision(
+            QuestionDto(
+                id = "000000000000000000000503",
+                question = "Carteira prefixada com duration modificada de 3,0 sofre choque paralelo de 0,40%. Qual a magnitude percentual aproximada?",
+                answers = listOf("1,20%.", "7,50%."),
+                correctAnswerIndices = listOf(0),
+                disciplina = "Matemática Financeira",
+                source = "Cebraspe",
+                level = "Médio",
+                canonicalSubjectId = "MFIN",
+                canonicalTopicId = "MFIN_01_004"
+            )
+        )
+        listOf(qSrc, qCompA, qCompB).forEach { store.questions[it.id] = QuestionCacheMapping.toEntity(it, json) }
+        val offlineRepo = store.repository()
+
+        // 1. Consulta genérica ("contextual-lookup") + perda de foco (focusLossCount = 2) NÃO retiram independência
+        val genericLookupResp = offlineRepo.submitCtvAttemptOfflineResilient(
+            123L,
+            CtvSubmitRequestDto(
+                ctvAttemptId = "ctv-generic-lookup",
+                offerId = "off-5a",
+                parentAttemptId = "p-5a",
+                sourceQuestionId = qSrc.id,
+                complementaryQuestionId = qCompA.id,
+                sessionUuid = "sess-5",
+                verificationTiming = "PRE_FEEDBACK",
+                chosenIndex = 0,
+                consultedResources = listOf("contextual-lookup"),
+                focusLossCount = 2,
+                occurredAt = "2026-11-25T15:10:00Z"
+            ),
+            qCompA,
+            parentWasCorrect = true
+        )
+        assertTrue(genericLookupResp.countsAsIndependentTransfer)
+        assertEquals("INDEPENDENT_CORRECT", genericLookupResp.classificationCode)
+
+        // 2. Consulta que revela a regra ("explanation") -> POST_INSTRUCTION_FIXATION (0 tentativas independentes)
+        val postHelpResp = offlineRepo.submitCtvAttemptOfflineResilient(
+            123L,
+            CtvSubmitRequestDto(
+                ctvAttemptId = "ctv-after-explanation",
+                offerId = "off-5b",
+                parentAttemptId = "p-5b",
+                sourceQuestionId = qSrc.id,
+                complementaryQuestionId = qCompB.id,
+                sessionUuid = "sess-5",
+                verificationTiming = "PRE_FEEDBACK",
+                chosenIndex = 0,
+                consultedResources = listOf("explanation"),
+                occurredAt = "2026-11-25T15:12:00Z"
+            ),
+            qCompB,
+            parentWasCorrect = false
+        )
+        assertFalse(postHelpResp.countsAsIndependentTransfer)
+        assertEquals("POST_INSTRUCTION_FIXATION", postHelpResp.classificationCode)
+
+        // Antes da sincronização, o aparelho B tem 1 tentativa provisória independente (`ctv-generic-lookup`)
+        val preSyncKpi = offlineRepo.getProgressAnalytics(123L).studentLearningAnalytics!!.learningKpis.first { it.kpiId == "INDEPENDENT_TRANSFER_SUCCESS_RATE" }
+        assertEquals(1.0, preSyncKpi.denominator, 1e-9)
+
+        // 3. Outro dispositivo sincronizou antes uma exposição anterior (15:00Z) para `qCompA`:
+        // o servidor reconcilia `ctv-generic-lookup` para `PRIOR_EXPOSURE_REVIEW` e o Android atualiza seu resultado provisório!
+        val serverReconciledRepo = store.repository(
+            recordCtvEvent = { ev -> CtvLifecycleEventResponseDto(ev.offerId, ev.eventKind) },
+            submitCtv = { req ->
+                CtvSubmitResponseDto(
+                    ctvAttemptId = req.ctvAttemptId,
+                    offerId = req.offerId.orEmpty(),
+                    parentAttemptId = req.parentAttemptId,
+                    complementaryQuestionId = req.complementaryQuestionId,
+                    isCorrect = true,
+                    correctIndex = 0,
+                    verificationTiming = req.verificationTiming,
+                    verificationMode = "CONCEPTUAL_TRANSFER",
+                    countsAsIndependentTransfer = false,
+                    classificationCode = if (req.ctvAttemptId == "ctv-generic-lookup") "PRIOR_EXPOSURE_REVIEW" else "POST_INSTRUCTION_FIXATION",
+                    consolidatedDiagnosticTitlePt = "Reconciliado",
+                    consolidatedDiagnosticMessagePt = "Reconciliado"
+                )
+            },
+            getCtvState = {
+                CtvUserStateResponseDto(
+                    attempts = listOf(
+                        CtvReconciledAttemptDto(
+                            ctvAttemptId = "ctv-generic-lookup",
+                            offerId = "off-5a",
+                            parentAttemptId = "p-5a",
+                            sourceQuestionId = qSrc.id,
+                            complementaryQuestionId = qCompA.id,
+                            contentRevision = qCompA.questionRevision,
+                            verificationMode = "CONCEPTUAL_TRANSFER",
+                            verificationTiming = "PRE_FEEDBACK",
+                            isCorrect = true,
+                            wasPreviouslyExposed = true,
+                            countsAsIndependentTransfer = false,
+                            classificationCode = "PRIOR_EXPOSURE_REVIEW",
+                            occurredAt = "2026-11-25T15:10:00Z"
+                        ),
+                        CtvReconciledAttemptDto(
+                            ctvAttemptId = "ctv-after-explanation",
+                            offerId = "off-5b",
+                            parentAttemptId = "p-5b",
+                            sourceQuestionId = qSrc.id,
+                            complementaryQuestionId = qCompB.id,
+                            contentRevision = qCompB.questionRevision,
+                            verificationMode = "CONCEPTUAL_TRANSFER",
+                            verificationTiming = "PRE_FEEDBACK",
+                            isCorrect = true,
+                            wasPreviouslyExposed = false,
+                            countsAsIndependentTransfer = false,
+                            classificationCode = "POST_INSTRUCTION_FIXATION",
+                            occurredAt = "2026-11-25T15:12:00Z"
+                        )
+                    )
+                )
+            },
+            learningAnalytics = { throw IOException("Read reconciled local projection") }
+        )
+        serverReconciledRepo.syncPendingAttempts(123L)
+        serverReconciledRepo.syncPendingAttempts(123L) // segunda chamada não altera de novo
+        val postReconcileKpi = serverReconciledRepo.getProgressAnalytics(123L).studentLearningAnalytics!!.learningKpis.first { it.kpiId == "INDEPENDENT_TRANSFER_SUCCESS_RATE" }
+        assertEquals("Provisional independent attempt must be reconciled to 0 once Device A's earlier exposure arrives!", 0.0, postReconcileKpi.denominator, 1e-9)
+    }
+
+    @Test
+    fun a06ThroughA09AndA14GroundingWalkforwardCohortsPrioritizationAndLegacyCompatibility() = runBlocking {
+        val store = Store()
+        val template = ExamCatalog.systemExams().first()
+        val baseSubj = template.subjects.first()
+        val baseTopic = baseSubj.topics.first()
+        val topicA = baseTopic.copy(
+            localTopicId = "t-dur",
+            canonicalTopicId = "MFIN_01_004",
+            canonicalSubjectId = "MFIN",
+            displayTitle = "Duration modificada",
+            diffStatus = "OFICIAL_CONFIRMADO"
+        )
+        val topicB = baseTopic.copy(
+            localTopicId = "t-juros",
+            canonicalTopicId = "MFIN_01_001",
+            canonicalSubjectId = "MFIN",
+            displayTitle = "Juros simples",
+            diffStatus = "OFICIAL_CONFIRMADO"
+        )
+        val customExam = template.copy(
+            examId = "BCB_TEST",
+            shortName = "BCB",
+            isActiveInLadder = true,
+            ladderPriority = 1,
+            subjects = listOf(
+                baseSubj.copy(
+                    localSubjectId = "s-mfin",
+                    canonicalSubjectId = "MFIN",
+                    displayName = "Matemática Financeira",
+                    weight = 1.0,
+                    topics = listOf(topicB, topicA)
+                )
+            )
+        )
+        store.putExam(customExam)
+
+        val qLegacyTf = QuestionCacheMapping.withRevision(
+            QuestionDto(
+                id = "000000000000000000000601",
+                question = "No regime de juros simples, os juros crescem linearmente ao longo dos períodos.",
+                answers = listOf("Certo", "Errado"),
+                correctAnswerIndices = listOf(0),
+                disciplina = "Matemática Financeira",
+                source = "Cebraspe",
+                level = "Fácil",
+                canonicalSubjectId = "MFIN",
+                canonicalTopicId = "MFIN_01_001"
+            )
+        )
+        val qDeductionMc = QuestionCacheMapping.withRevision(
+            QuestionDto(
+                id = "000000000000000000000602",
+                question = "Capital aplicado a juros simples de 2% a.m. por 5 meses rende qual percentual total?",
+                answers = listOf("10%", "12%", "15%", "20%", "25%"),
+                correctAnswerIndices = listOf(0),
+                disciplina = "Matemática Financeira",
+                source = "FGV",
+                level = "Fácil",
+                canonicalSubjectId = "MFIN",
+                canonicalTopicId = "MFIN_01_001"
+            )
+        )
+        val qDur1 = QuestionCacheMapping.withRevision(
+            QuestionDto(
+                id = "000000000000000000000603",
+                question = "A duration modificada expressa apenas o prazo nominal bruto até o vencimento, sem relação com choques de juros.",
+                questionType = QuestionType.TRUE_FALSE,
+                answers = listOf("Certo", "Errado"),
+                correctAnswerIndices = listOf(1),
+                disciplina = "Matemática Financeira",
+                source = "Cebraspe",
+                level = "Difícil",
+                canonicalSubjectId = "MFIN",
+                canonicalTopicId = "MFIN_01_004"
+            )
+        )
+        val qDur2 = QuestionCacheMapping.withRevision(
+            QuestionDto(
+                id = "000000000000000000000604",
+                question = "Um título prefixado com duration modificada de 5,0 submetido a alta paralela de 0,50% nos juros sofre variação aproximada de -2,50% no preço.",
+                questionType = QuestionType.TRUE_FALSE,
+                answers = listOf("Certo", "Errado"),
+                correctAnswerIndices = listOf(0),
+                disciplina = "Matemática Financeira",
+                source = "Cebraspe",
+                level = "Difícil",
+                canonicalSubjectId = "MFIN",
+                canonicalTopicId = "MFIN_01_004"
+            )
+        )
+        listOf(qLegacyTf, qDeductionMc, qDur1, qDur2).forEach { store.questions[it.id] = QuestionCacheMapping.toEntity(it, json) }
+
+        val repo = store.repository()
+
+        // A09 baseline: sem sinais metacognitivos, a ordem base preserva o primeiro tópico empatado (`MFIN_01_001`)
+        val baseAction = repo.fetchNextAction(123L, "BCB_TEST")
+        assertEquals("MFIN_01_001", baseAction.priorityTopicId)
+        assertEquals("BASELINE_REFERENCE", baseAction.decisionRuleCode)
+
+        // A14 + A06: Registro legado correto SEM confiança explícita e SEM estratégia -> fundamento desconhecido (UNKNOWN_GROUNDING), nunca fundamentado por omissão!
+        val legacyRec = LearningRecord(
+            questionId = qLegacyTf.id,
+            disciplina = qLegacyTf.disciplina,
+            canonicalSubjectId = "MFIN",
+            canonicalTopicId = "MFIN_01_001",
+            attempts = 1,
+            correct = 1,
+            accuracyPct = 100.0,
+            isMastered = false,
+            inErrorNotebook = false,
+            highConfidenceError = false,
+            points = 0.2,
+            nextReviewAt = "2026-12-02T10:00:00Z",
+            events = listOf(
+                LearningEvent(
+                    attemptId = "leg-1",
+                    occurredAt = "2026-11-25T10:00:00Z",
+                    isCorrect = true,
+                    confidenceLevel = 0,
+                    timeSpentSeconds = 20,
+                    declaredConfidence = null,
+                    cognitiveStrategy = null,
+                    selectedEvidenceId = null
+                )
+            )
+        )
+        // A06 + A07: Dedução lógica com confiança alta em múltipla escolha -> estratégia funcional válida
+        val deductionRec = LearningRecord(
+            questionId = qDeductionMc.id,
+            disciplina = qDeductionMc.disciplina,
+            canonicalSubjectId = "MFIN",
+            canonicalTopicId = "MFIN_01_001",
+            attempts = 1,
+            correct = 1,
+            accuracyPct = 100.0,
+            isMastered = false,
+            inErrorNotebook = false,
+            highConfidenceError = false,
+            points = 0.2,
+            nextReviewAt = "2026-12-02T10:05:00Z",
+            events = listOf(
+                LearningEvent(
+                    attemptId = "ded-1",
+                    occurredAt = "2026-11-25T10:05:00Z",
+                    isCorrect = true,
+                    confidenceLevel = 3,
+                    timeSpentSeconds = 30,
+                    declaredConfidence = DeclaredConfidence.HIGH,
+                    cognitiveStrategy = CognitiveStrategy.LOGICAL_DEDUCTION
+                )
+            )
+        )
+        // A09 + A07: 2 erros com confiança alta em `MFIN_01_004` (Certo/Errado) -> deve romper o empate em favor de `MFIN_01_004`!
+        val hceRec1 = LearningRecord(
+            questionId = qDur1.id,
+            disciplina = qDur1.disciplina,
+            canonicalSubjectId = "MFIN",
+            canonicalTopicId = "MFIN_01_004",
+            attempts = 1,
+            correct = 0,
+            accuracyPct = 0.0,
+            isMastered = false,
+            inErrorNotebook = true,
+            highConfidenceError = true,
+            points = 0.0,
+            nextReviewAt = "2026-11-26T10:10:00Z",
+            events = listOf(
+                LearningEvent(
+                    attemptId = "hce-1",
+                    occurredAt = "2026-11-25T10:10:00Z",
+                    isCorrect = false,
+                    confidenceLevel = 3,
+                    timeSpentSeconds = 25,
+                    declaredConfidence = DeclaredConfidence.HIGH,
+                    cognitiveStrategy = CognitiveStrategy.CONCEPTUAL_KNOWLEDGE
+                )
+            )
+        )
+        val hceRec2 = LearningRecord(
+            questionId = qDur2.id,
+            disciplina = qDur2.disciplina,
+            canonicalSubjectId = "MFIN",
+            canonicalTopicId = "MFIN_01_004",
+            attempts = 1,
+            correct = 0,
+            accuracyPct = 0.0,
+            isMastered = false,
+            inErrorNotebook = true,
+            highConfidenceError = true,
+            points = 0.0,
+            nextReviewAt = "2026-11-26T10:15:00Z",
+            events = listOf(
+                LearningEvent(
+                    attemptId = "hce-2",
+                    occurredAt = "2026-11-25T10:15:00Z",
+                    isCorrect = false,
+                    confidenceLevel = 3,
+                    timeSpentSeconds = 28,
+                    declaredConfidence = DeclaredConfidence.HIGH,
+                    cognitiveStrategy = CognitiveStrategy.CONCEPTUAL_KNOWLEDGE
+                )
+            )
+        )
+        store.durable.putLearning(
+            listOf(legacyRec, deductionRec, hceRec1, hceRec2).map {
+                LearningRecordEntity(it.questionId, it.revision, json.encodeToString(it))
+            }
+        )
+
+        val analytics = repo.getProgressAnalytics(123L).studentLearningAnalytics!!
+        // A06 + A14 assertions
+        assertEquals(2, analytics.groundingSummary.rawCorrectHits)
+        assertEquals(1, analytics.groundingSummary.unknownGroundingHits)
+        assertEquals(1, analytics.groundingSummary.evaluableGroundingHits)
+        assertEquals(1, analytics.groundingSummary.validFunctionalStrategyHits)
+        assertEquals(0, analytics.groundingSummary.validConceptualHits)
+        assertTrue(analytics.groundingSummary.coverageSentencePt.contains("1 permanecem com fundamento não declarado"))
+
+        // A07 assertions: política walk-forward v2.0 separada por formato (TRUE_FALSE vs MULTIPLE_CHOICE)
+        assertEquals("calibration-walkforward-v2.0", analytics.calibrationPolicyVersion)
+        assertNotNull(analytics.trueFalseBrierScore)
+        assertNotNull(analytics.multipleChoiceBrierScore)
+        assertNotEquals(analytics.trueFalseBrierScore!!, analytics.multipleChoiceBrierScore!!, 1e-6)
+        val highTfCell = analytics.confidenceCalibrationByFormat.first {
+            it.questionType == "TRUE_FALSE" && it.declaredConfidence == DeclaredConfidence.HIGH
+        }
+        assertTrue(highTfCell.coverageSentencePt.contains("Você acertou 0 de 2 questões de Certo/Errado em que declarou confiança alta"))
+
+        // A09 assertions: `MFIN_01_004` vence o desempate com justificativa explícita em português
+        val updatedAction = repo.fetchNextAction(123L, "BCB_TEST")
+        assertEquals("MFIN_01_004", updatedAction.priorityTopicId)
+        assertEquals("RECURRENT_HIGH_CONF_MISCONCEPTION", updatedAction.decisionRuleCode)
+        assertTrue(updatedAction.entryReason.contains("Duration modificada"))
+        assertTrue(updatedAction.entryReason.contains("confiança alta"))
+
+        val adaptiveQuiz = repo.fetchOrGetOfflineQuiz(123L, QuizMode.ADAPTIVE_LOOP, 2, contestId = "BCB_TEST")
+        assertEquals("MFIN_01_004", adaptiveQuiz.first().canonicalTopicId)
+
+        // Feedback de aceitação da recomendação persiste offline e sincroniza quando online
+        repo.recordRecommendationFeedback(
+            123L,
+            RecommendationFeedbackRequestDto(
+                recommendationId = updatedAction.recommendationId ?: "rec-1",
+                outcome = "ACCEPTED",
+                priorityTopicId = updatedAction.priorityTopicId,
+                decisionRuleCode = updatedAction.decisionRuleCode,
+                additionalSeconds = 45
+            )
+        )
+        val flushedFeedback = mutableListOf<RecommendationFeedbackRequestDto>()
+        val onlineSyncRepo = store.repository(
+            recordRecommendationFeedback = { fb ->
+                flushedFeedback += fb
+                RecommendationFeedbackResponseDto("recorded", fb.recommendationId)
+            }
+        )
+        onlineSyncRepo.syncPendingAttempts(123L)
+        assertEquals(1, flushedFeedback.size)
+        assertEquals("ACCEPTED", flushedFeedback.single().outcome)
     }
 }

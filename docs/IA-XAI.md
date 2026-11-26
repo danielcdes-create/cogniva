@@ -1,6 +1,6 @@
 # Integração com IA (xAI) — Tutores, Consulta Contextual em Camada, Blindagem e Governança de Cotas
 
-O **Cogniva `2.4.3`** integra a API da **xAI** de forma estritamente governada no backend Rust (`cogniva-api`), atendendo aos **tutores pedagógicos por questão** (incluindo `term-lookup` e `term-lookup-post` para consulta contextual em camada), à **assistência de importação de questões** e à **geração de propostas de classificação V2**, além da rota gratuita de consulta normativa/enciclopédica `POST /api/v1/questions/:id/lookup`.
+O **Cogniva `2.4.4`** integra a API da **xAI** de forma estritamente governada no backend Rust (`cogniva-api`), atendendo aos **tutores pedagógicos por questão** (incluindo `term-lookup` e `term-lookup-post` para consulta contextual em camada), à **geração sob demanda de questões complementares de verificação conceitual (`CTV — ctv-generator/2`)**, à **assistência de importação de questões** e à **geração de propostas de classificação V2**, além da rota gratuita de consulta normativa/enciclopédica `POST /api/v1/questions/:id/lookup`.
 
 ---
 
@@ -59,7 +59,11 @@ Como o estudante já submeteu sua resposta, o payload inclui explicitamente `cor
 
 ---
 
-## 4. Curadoria Assistida no `/admin/`
+## 4. Curadoria Assistida no `/admin/` e Motor CTV (`Database First, AI on Demand`)
 
 - **Propostas de Classificação V2 (`/api/v1/admin/classification/proposals`):** Gera sugestões estruturadas sobre o catálogo ativo `knowledge-catalog.json`, sempre como `PENDING` até revisão humana na aba **Classificação IA** (com rotação automática de `operation_id` no cliente em caso de falha transitória).
 - **Estruturação e Geração de Rascunhos (`/api/v1/admin/questions/import/assist`):** Converte texto bruto delimitado em `<untrusted_raw_source>` para rascunhos JSON com proveniência `AI`, exigindo revisão e confirmação humana antes de inserir no acervo.
+- **Verificação Adaptativa de Domínio Conceitual (`POST /api/v1/quiz/ctv/evaluate`, `ctv-generator/1`):**
+  - Opera sob a diretriz **Database First, AI on Demand**: consulta prioritariamente `cogniva.todasQuestoes` por questões elegíveis no mesmo conceito/tópico inéditas para o estudante (com filtro antiparáfrase Jaccard `< 0,45`).
+  - Somente quando não há questão elegível no acervo, aciona a xAI com cerca XML (`<source_question_do_not_paraphrase>`), zero envio de dados pessoais do estudante, trava assíncrona por `(unidade, propósito)` contra geração duplicada concorrente e `QuotaGuard` RAII.
+  - Submete o candidato a validação multi-etapa (schema V2.4, coerência de gabarito, ausência de pistas assimétricas ou spoilers, antiparáfrase `< 0,45` e deduplicação JCS + quase-duplicata `< 0,65`), persistindo permanentemente o ativo aprovado em `todasQuestoes` (`diagnostic_meta`) com auto-suspensão (`SUSPENDED`) mediante reportes abertos ou anomalia estatística pós-uso.

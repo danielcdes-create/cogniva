@@ -388,6 +388,330 @@ class CognivaImportRemoteRunnerTest(unittest.TestCase):
         self.assertIn("SRC_IMPORT_TEST", result["added_catalog_ids"])
         self.assertNotIn("/api/v1/auth/logout", paths_called)
 
+    def test_remote_runner_disambiguates_component_id_and_replaces_custom_placeholders(self):
+        catalog = kc.read(kc.ROOT / "shared/knowledge-catalog.json")
+        estat_leaf = next(
+            t["topic_id"]
+            for t in catalog["topics"]
+            if t["subject_id"] == "ESTAT" and t["kind"] == "SUBTOPIC" and t["status"] == "ACTIVE"
+        )
+        exam_tpl = {
+            "_id": "BCB2027_TEST",
+            "revision": 3,
+            "subjects": [
+                {
+                    "local_subject_id": "bcb2027-ef-RLM_EST",
+                    "canonical_subject_id": "ESTAT",
+                    "display_name": "Noções de lógica e estatística",
+                    "topics": [
+                        {
+                            "local_topic_id": "rlm-custom-1",
+                            "canonical_topic_id": "custom-rlm-1",
+                            "canonical_subject_id": "ESTAT",
+                            "display_title": "Lógica",
+                            "diff_status": "PRE_EDITAL_BASE",
+                        }
+                    ],
+                },
+                {
+                    "local_subject_id": "bcb2027-ef-ECONM",
+                    "canonical_subject_id": "ESTAT",
+                    "display_name": "Estatística e Econometria",
+                    "topics": [
+                        {
+                            "local_topic_id": "econm-custom-1",
+                            "canonical_topic_id": "custom-econm-1",
+                            "canonical_subject_id": "ESTAT",
+                            "display_title": "Placeholder antigo",
+                            "diff_status": "PRE_EDITAL_BASE",
+                        }
+                    ],
+                },
+            ],
+        }
+        item = {
+            "question_type": "TRUE_FALSE",
+            "question": "Julgue o item de teste sobre econometria e desambiguação por component_id.",
+            "answers": ["Certo", "Errado"],
+            "correct_answer_indices": [0],
+            "subject_id": "ESTAT",
+            "topic_id": estat_leaf,
+            "confirm_classification": True,
+            "explanation": "Explicação válida com mais de vinte caracteres para teste.",
+        }
+        bundle = {
+            "operation_ns": "test-comp-disambig",
+            "dry_run": False,
+            "replace_custom_placeholders": True,
+            "verify_quiz": False,
+            "admin_user_id": 1,
+            "admin_sid": "sid-explicit-456",
+            "exam_id": "BCB2027_TEST",
+            "taxonomy": {},
+            "packages": [
+                {
+                    "package_key": "pkg-econm",
+                    "component_id": "bcb2027-ef-ECONM",
+                    "count": 1,
+                    "chunks": [[item]],
+                }
+            ],
+        }
+        script = self._encode_bundle(bundle)
+        saved_templates: list[dict] = []
+        committed_payloads: list[dict] = []
+        compat_payloads: list[dict] = []
+
+        class FakeConn:
+            def __init__(self, host, port, timeout=120):
+                self._path = ""
+                self._method = ""
+                self._body = None
+
+            def connect(self):
+                pass
+
+            def request(self, method, path, body=None, headers=None):
+                self._method = method
+                self._path = path
+                self._body = json.loads(body.decode("utf-8")) if body else None
+
+            def getresponse(self):
+                if self._path == "/api/v1/admin/summary":
+                    return _FakeHttpConnResponse(200, {"questions": 11})
+                if self._path == "/api/v1/admin/catalog/base":
+                    return _FakeHttpConnResponse(200, {"catalog": catalog, "sha256": "b" * 64})
+                if self._path == "/api/v1/admin/exam-templates" and self._method == "GET":
+                    return _FakeHttpConnResponse(200, [copy.deepcopy(exam_tpl)])
+                if self._path == "/api/v1/admin/exam-templates/BCB2027_TEST" and self._method == "PUT":
+                    saved_templates.append(copy.deepcopy(self._body))
+                    return _FakeHttpConnResponse(200, self._body)
+                if self._path == "/api/v1/exams/BCB2027_TEST/adopt-template":
+                    return _FakeHttpConnResponse(200, {"_id": "BCB2027_TEST", "revision": 4})
+                if self._path == "/api/v1/admin/questions/import/preview":
+                    return _FakeHttpConnResponse(
+                        200,
+                        {
+                            "ready": True,
+                            "idempotency_key": "idem-1",
+                            "duplicate_warnings": [],
+                            "items": [
+                                {
+                                    "ok": True,
+                                    "command": {
+                                        "operation_id": "op-1",
+                                        "document": {
+                                            "_id": {"$oid": "65f000000000000000000001"},
+                                            "content_revision": "crev-1",
+                                            "semantic_revision": "srev-1",
+                                            "classification": {
+                                                "revision": 1,
+                                                "links": [{"subject_id": "ESTAT", "topic_id": estat_leaf}],
+                                            },
+                                        },
+                                    },
+                                }
+                            ],
+                        },
+                    )
+                if self._path == "/api/v1/admin/questions/import/commit":
+                    committed_payloads.append(copy.deepcopy(self._body))
+                    status_str = "created" if len(committed_payloads) == 1 else "already_applied"
+                    return _FakeHttpConnResponse(
+                        200,
+                        {
+                            "complete": True,
+                            "items": [{"saved": True, "receipt": {"status": status_str}}],
+                        },
+                    )
+                if self._path == "/api/v1/exams/BCB2027_TEST/compatibility":
+                    compat_payloads.append(copy.deepcopy(self._body))
+                    return _FakeHttpConnResponse(
+                        200,
+                        {
+                            "_id": "compat-1",
+                            "question_id": "65f000000000000000000001",
+                            "status": "CONFIRMED",
+                            "relation": "DIRECT",
+                        },
+                    )
+                raise AssertionError(f"Unexpected request: {self._method} {self._path}")
+
+            def close(self):
+                pass
+
+        def fake_check_output(cmd, text=False):
+            return json.dumps([{"Config": {"Env": ["JWT_SECRET=supersecretkey"]}}]).encode("utf-8")
+
+        out = io.StringIO()
+        with mock.patch("subprocess.check_output", side_effect=fake_check_output), mock.patch(
+            "http.client.HTTPConnection", FakeConn
+        ), mock.patch("sys.stdout", out):
+            exec(compile(script, "<remote_runner>", "exec"), {})
+
+        self.assertEqual(len(saved_templates), 1)
+        rlm_subj = saved_templates[0]["subjects"][0]
+        econm_subj = saved_templates[0]["subjects"][1]
+        # RLM_EST was NOT touched; ECONM had custom-* stripped and leaf topic added
+        self.assertEqual([t["canonical_topic_id"] for t in rlm_subj["topics"]], ["custom-rlm-1"])
+        self.assertEqual([t["canonical_topic_id"] for t in econm_subj["topics"]], [estat_leaf])
+        # Committed question got ECONM's display_name and DIRECT compatibility got ECONM's component_id
+        doc = committed_payloads[0]["commands"][0]["document"]
+        self.assertEqual(doc["disciplina"], "Estatística e Econometria")
+        self.assertEqual(compat_payloads[0]["component_id"], "bcb2027-ef-ECONM")
+
+    def test_remote_runner_reuses_synced_user_exam_revision_when_template_unmodified(self):
+        catalog = kc.read(kc.ROOT / "shared/knowledge-catalog.json")
+        estat_leaf = next(
+            t["topic_id"]
+            for t in catalog["topics"]
+            if t["subject_id"] == "ESTAT" and t["kind"] == "SUBTOPIC" and t["status"] == "ACTIVE"
+        )
+        exam_tpl = {
+            "_id": "BCB2027_SYNCED",
+            "revision": 14,
+            "subjects": [
+                {
+                    "local_subject_id": "bcb2027-ef-ECONM",
+                    "canonical_subject_id": "ESTAT",
+                    "display_name": "Estatística e Econometria",
+                    "topics": [
+                        {
+                            "local_topic_id": "econm-1",
+                            "canonical_topic_id": estat_leaf,
+                            "canonical_subject_id": "ESTAT",
+                            "display_title": "Tópico já sincronizado",
+                            "diff_status": "PRE_EDITAL_BASE",
+                        }
+                    ],
+                }
+            ],
+        }
+        item = {
+            "question_type": "TRUE_FALSE",
+            "question": "Julgue o item de teste quando a grade já está sincronizada na revisão vigente.",
+            "answers": ["Certo", "Errado"],
+            "correct_answer_indices": [0],
+            "subject_id": "ESTAT",
+            "topic_id": estat_leaf,
+            "confirm_classification": True,
+            "explanation": "Explicação válida com mais de vinte caracteres para teste.",
+        }
+        bundle = {
+            "operation_ns": "test-synced-no-bump",
+            "dry_run": False,
+            "replace_custom_placeholders": False,
+            "verify_quiz": False,
+            "admin_user_id": 1,
+            "admin_sid": "sid-explicit-789",
+            "exam_id": "BCB2027_SYNCED",
+            "taxonomy": {},
+            "packages": [
+                {
+                    "package_key": "pkg-synced",
+                    "component_id": "bcb2027-ef-ECONM",
+                    "count": 1,
+                    "chunks": [[item]],
+                }
+            ],
+        }
+        script = self._encode_bundle(bundle)
+        adopt_calls = {"count": 0}
+        commit_calls = {"count": 0}
+
+        class FakeConn:
+            def __init__(self, host, port, timeout=120):
+                self._path = ""
+
+            def connect(self):
+                pass
+
+            def request(self, method, path, body=None, headers=None):
+                self._path = path
+
+            def getresponse(self):
+                if self._path == "/api/v1/admin/summary":
+                    return _FakeHttpConnResponse(200, {"questions": 11})
+                if self._path == "/api/v1/admin/catalog/base":
+                    return _FakeHttpConnResponse(200, {"catalog": catalog, "sha256": "c" * 64})
+                if self._path == "/api/v1/admin/exam-templates":
+                    return _FakeHttpConnResponse(200, [copy.deepcopy(exam_tpl)])
+                if self._path == "/api/v1/exams":
+                    return _FakeHttpConnResponse(
+                        200,
+                        [
+                            {
+                                "_id": "BCB2027_SYNCED",
+                                "revision": 7,
+                                "sync_status": "SYNCED",
+                                "base_template_revision": 14,
+                            }
+                        ],
+                    )
+                if self._path == "/api/v1/exams/BCB2027_SYNCED/adopt-template":
+                    adopt_calls["count"] += 1
+                    return _FakeHttpConnResponse(200, {"_id": "BCB2027_SYNCED", "revision": 8})
+                if self._path == "/api/v1/admin/questions/import/preview":
+                    return _FakeHttpConnResponse(
+                        200,
+                        {
+                            "ready": True,
+                            "idempotency_key": "idem-2",
+                            "duplicate_warnings": [],
+                            "items": [
+                                {
+                                    "ok": True,
+                                    "command": {
+                                        "operation_id": "op-2",
+                                        "document": {
+                                            "_id": {"$oid": "65f000000000000000000002"},
+                                            "content_revision": "crev-2",
+                                            "semantic_revision": "srev-2",
+                                            "classification": {
+                                                "revision": 1,
+                                                "links": [{"subject_id": "ESTAT", "topic_id": estat_leaf}],
+                                            },
+                                        },
+                                    },
+                                }
+                            ],
+                        },
+                    )
+                if self._path == "/api/v1/admin/questions/import/commit":
+                    commit_calls["count"] += 1
+                    st = "created" if commit_calls["count"] == 1 else "already_applied"
+                    return _FakeHttpConnResponse(
+                        200,
+                        {"complete": True, "items": [{"saved": True, "receipt": {"status": st}}]},
+                    )
+                if self._path == "/api/v1/exams/BCB2027_SYNCED/compatibility":
+                    return _FakeHttpConnResponse(
+                        200,
+                        {
+                            "_id": "compat-2",
+                            "question_id": "65f000000000000000000002",
+                            "status": "CONFIRMED",
+                            "relation": "DIRECT",
+                        },
+                    )
+                raise AssertionError(f"Unexpected path: {self._path}")
+
+            def close(self):
+                pass
+
+        def fake_check_output(cmd, text=False):
+            return json.dumps([{"Config": {"Env": ["JWT_SECRET=supersecretkey"]}}]).encode("utf-8")
+
+        out = io.StringIO()
+        with mock.patch("subprocess.check_output", side_effect=fake_check_output), mock.patch(
+            "http.client.HTTPConnection", FakeConn
+        ), mock.patch("sys.stdout", out):
+            exec(compile(script, "<remote_runner>", "exec"), {})
+
+        res = json.loads(out.getvalue())
+        self.assertEqual(adopt_calls["count"], 0)
+        self.assertEqual(res["user_exam_revision"], 7)
+
 
 if __name__ == "__main__":
     unittest.main()

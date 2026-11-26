@@ -1153,6 +1153,73 @@ pub fn validate_with_catalog(
         }
     }
 
+    if let Some(dmeta) = q.get("diagnostic_meta").filter(|v| !v.is_null()) {
+        if let Some(usage) = dmeta.get("usage_count") {
+            ensure(
+                is_strict_json_int(usage),
+                "INVALID_INTEGER",
+                Some("diagnostic_meta.usage_count"),
+                "Campo diagnostic_meta.usage_count exige inteiro estrito",
+            )?;
+        }
+        if let Some(qm) = dmeta.get("quality_metrics").filter(|v| !v.is_null()) {
+            for int_field in ["attempts_count", "correct_count", "open_reports_count"] {
+                if let Some(val) = qm.get(int_field) {
+                    let path = format!("diagnostic_meta.quality_metrics.{int_field}");
+                    ensure(
+                        is_strict_json_int(val),
+                        "INVALID_INTEGER",
+                        Some(&path),
+                        format!("Campo {path} exige inteiro estrito"),
+                    )?;
+                }
+            }
+        }
+        let subj = dmeta
+            .get("subject_id")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        let top = dmeta.get("topic_id").and_then(Value::as_str).unwrap_or("");
+        if let Err((code, msg)) = topic_valid_in_catalog(catalog_override, catalog_ver, subj, top) {
+            return Err(bad_code(code, Some("diagnostic_meta.topic_id"), msg));
+        }
+        if let Some(cids) = dmeta.get("concept_ids").and_then(Value::as_array) {
+            let active_cat = catalog_override.cloned().unwrap_or_else(catalog);
+            let concepts = super::catalog_runtime::effective_concepts(&active_cat);
+            let mut seen_cids = HashSet::new();
+            for cid_val in cids {
+                let cid = cid_val.as_str().unwrap_or("");
+                ensure(
+                    !cid.trim().is_empty() && seen_cids.insert(cid),
+                    "DUPLICATE_TAXONOMY_LINK",
+                    Some("diagnostic_meta.concept_ids"),
+                    "Identificador de conceito vazio ou repetido em diagnostic_meta",
+                )?;
+                if !concepts.is_empty() {
+                    let Some(found) = concepts
+                        .iter()
+                        .find(|c| c["concept_id"].as_str() == Some(cid))
+                    else {
+                        return Err(bad_code(
+                            "INVALID_TAXONOMY_LINK",
+                            Some("diagnostic_meta.concept_ids"),
+                            "Conceito inexistente no catálogo em diagnostic_meta",
+                        ));
+                    };
+                    if found["subject_id"].as_str() != Some(subj)
+                        || found["topic_id"].as_str() != Some(top)
+                    {
+                        return Err(bad_code(
+                            "INVALID_TAXONOMY_LINK",
+                            Some("diagnostic_meta.concept_ids"),
+                            "Conceito em diagnostic_meta não pertence à disciplina/subassunto",
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
     let v = &q["validity"];
     let val_rev = v["revision"].as_u64().ok_or_else(|| {
         bad_code(
@@ -1489,6 +1556,31 @@ pub fn check_bson_question_integers_and_oid(
                         Some("grading.rubric.revision"),
                         "Campo BSON grading.rubric.revision deve ser Int32/Int64",
                     ));
+                }
+            }
+        }
+    }
+    if let Some(bson::Bson::Document(dmeta)) = doc.get("diagnostic_meta") {
+        if let Some(v) = dmeta.get("usage_count") {
+            if !is_strict_bson_int(v) {
+                return Err(bad_code(
+                    "INVALID_INTEGER",
+                    Some("diagnostic_meta.usage_count"),
+                    "Campo BSON diagnostic_meta.usage_count deve ser Int32/Int64",
+                ));
+            }
+        }
+        if let Some(bson::Bson::Document(qm)) = dmeta.get("quality_metrics") {
+            for int_field in ["attempts_count", "correct_count", "open_reports_count"] {
+                if let Some(v) = qm.get(int_field) {
+                    if !is_strict_bson_int(v) {
+                        let path = format!("diagnostic_meta.quality_metrics.{int_field}");
+                        return Err(bad_code(
+                            "INVALID_INTEGER",
+                            Some(&path),
+                            format!("Campo BSON {path} deve ser Int32/Int64"),
+                        ));
+                    }
                 }
             }
         }

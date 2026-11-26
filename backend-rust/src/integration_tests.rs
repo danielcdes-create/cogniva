@@ -3406,3 +3406,689 @@ async fn missions_end_to_end_flow_range_streaming_isolation_and_epistemology() {
     assert!(name.starts_with("cogniva_test_"));
     db.drop().await.unwrap();
 }
+
+#[tokio::test]
+#[ignore = "Requires dedicated loopback Mongo 27048"]
+async fn metacognitive_signals_ctv_database_first_persistence_auto_suspension_and_lgpd() {
+    let uri = std::env::var("COGNIVA_TEST_MONGODB_URI").unwrap();
+    assert!(uri.starts_with("mongodb://127.0.0.1:27048/"));
+    let client = Client::with_uri_str(&uri).await.unwrap();
+    let name = format!("cogniva_test_{}", uuid::Uuid::new_v4().simple());
+    let db = client.database(&name);
+    let cfg = config(&uri);
+    let secret = cfg.jwt_secret.clone();
+    let state = Arc::new(AppState::new(db.clone(), cfg));
+    let app = build_router(state.clone());
+
+    // 1. Prepare MongoDB schema (validates question-v2-validator-2.4.0 / validator_revision = 7)
+    services::question_storage::prepare(&db).await.unwrap();
+    let validator_version_doc = db
+        .collection::<Document>("cogniva_schema_versions")
+        .find_one(doc! { "_id": "question-v2-validator-2.4.0" })
+        .await
+        .unwrap();
+    assert!(
+        validator_version_doc.is_some(),
+        "question-v2-validator-2.4.0 must be registered in cogniva_schema_versions"
+    );
+
+    seed_user_and_session(&db, 901, false).await;
+    seed_user_and_session(&db, 999, true).await;
+
+    // 2. Seed human source question + permanent AUTO_APPROVED AI CTV complementary question in todasQuestoes
+    let source_oid = ObjectId::new();
+    let ctv_ai_oid = ObjectId::new();
+
+    let source_doc = v2_question_doc(
+        source_oid,
+        "Segundo a Lei 9.784/1999, o direito da Administração de anular os atos administrativos de que decorram efeitos favoráveis para os destinatários decai em cinco anos, salvo comprovada má-fé.",
+        &["Certo", "Errado"],
+        0,
+        "Direito Administrativo",
+        Some(("DIR_ADM", "DIR_ADM_01_001")),
+    );
+    let source_rev = source_doc
+        .get_str("content_revision")
+        .unwrap()
+        .to_string();
+
+    let mut ctv_json: Value = serde_json::from_str(include_str!(
+        "../../shared/examples/question-contracts/question-multiple-choice.json"
+    ))
+    .unwrap();
+    ctv_json["_id"] = json!({ "$oid": ctv_ai_oid.to_hex() });
+    ctv_json["revision"] = json!(1);
+    ctv_json["question_type"] = json!("MULTIPLE_CHOICE");
+    ctv_json["question"] = json!(
+        "Servidor público federal obteve incorporação remuneratória ilegal mediante adulteração documental comprovada há oito anos. À luz do regime jurídico de autotutela administrativa, assinale a opção correta:"
+    );
+    ctv_json["answers"] = json!([
+        "A anulação permanece cabível, pois a má-fé comprovada impede a decadência quinquenal.",
+        "A pretensão anulatória está extinta pelo decurso ininterrupto de cinco anos.",
+        "Apenas o Poder Judiciário pode desconstituir o ato após o triênio probatório.",
+        "O ato convalida-se tacitamente por segurança jurídica independentemente de dolo.",
+        "A revisão depende exclusivamente de anuência expressa do servidor beneficiado."
+    ]);
+    ctv_json["correct_answers"] =
+        json!(["A anulação permanece cabível, pois a má-fé comprovada impede a decadência quinquenal."]);
+    ctv_json["correct_answer_indices"] = json!([0]);
+    ctv_json["disciplina"] = json!("Direito Administrativo");
+    ctv_json["source"] = json!("Cogniva CTV");
+    ctv_json["level"] = json!("Médio");
+    ctv_json["explanation"] = json!(
+        "Nos termos do art. 54 da Lei 9.784/1999, a decadência quinquenal para anulação de atos favoráveis afasta-se diante de comprovada má-fé."
+    );
+    ctv_json["origins"] = json!([
+        {
+            "origin_id": format!("ctv-{}", ctv_ai_oid.to_hex()),
+            "kind": "AI_GENERATED",
+            "verification": "UNVERIFIED",
+            "provenance": {
+                "actor": { "type": "AI", "id": "grok-4" },
+                "method": "AI_GENERATION",
+                "recorded_at": "2026-11-25T12:00:00Z",
+                "rationale": "Questão complementar CTV validada para transferência conceitual."
+            }
+        }
+    ]);
+    ctv_json["classification"] = json!({
+        "revision": 0,
+        "catalog_version": 2,
+        "state": "UNCLASSIFIED",
+        "links": []
+    });
+    ctv_json["validity"] = json!({
+        "revision": 0,
+        "status": "UNDER_REVIEW",
+        "basis": "LEGAL",
+        "reference_date": null,
+        "review_due_on": null,
+        "reason_codes": ["REVIEW_REQUESTED"],
+        "evaluated_content_revision": null,
+        "evaluated_semantic_revision": null,
+        "evaluation_mode": null,
+        "decision": null,
+        "scope": "CURRENT_KNOWLEDGE",
+        "context_date": null
+    });
+    ctv_json["canonical_subject_id"] = json!("DIR_ADM");
+    ctv_json["canonical_topic_id"] = json!("DIR_ADM_01_001");
+    services::question_contracts::populate_v2_1_hashes(&mut ctv_json).unwrap();
+    let ctv_content_rev = ctv_json["content_revision"].as_str().unwrap().to_string();
+    ctv_json["diagnostic_meta"] = json!({
+        "source_question_id": source_oid.to_hex(),
+        "subject_id": "DIR_ADM",
+        "topic_id": "DIR_ADM_01_001",
+        "concept_ids": [],
+        "diagnostic_purpose": "CONCEPTUAL_TRANSFER",
+        "generation_origin": "AI_ON_DEMAND",
+        "model_identifier": "grok-4",
+        "prompt_id": "ctv-generator",
+        "prompt_version": "ctv-generator/1",
+        "generated_at": "2026-11-25T12:00:00Z",
+        "validation_status": "VALIDATED",
+        "estimated_difficulty": "Médio",
+        "content_hash": ctv_content_rev,
+        "usage_count": 0,
+        "quality_status": "AUTO_APPROVED",
+        "quality_metrics": {
+            "attempts_count": 0,
+            "correct_count": 0,
+            "avg_active_seconds": 0.0,
+            "discrimination_index": null,
+            "open_reports_count": 0
+        }
+    });
+    services::question_contracts::validate(&ctv_json).unwrap();
+    let ctv_doc = Bson::try_from(ctv_json).unwrap().as_document().unwrap().clone();
+
+    db.collection::<Document>("todasQuestoes")
+        .insert_many(vec![source_doc, ctv_doc])
+        .await
+        .unwrap();
+
+    // 3. StandardObjective practice MUST NOT leak unconfirmed AI CTV items into regular/simulado quizzes
+    let (gen_st, gen_res) = request(
+        &app,
+        &secret,
+        Some(901),
+        "POST",
+        "/api/v1/quiz/generate",
+        json!({
+            "user_id": 901,
+            "mode": "SHUFFLE",
+            "quantity": 10
+        }),
+    )
+    .await;
+    assert_eq!(gen_st, StatusCode::OK);
+    let generated_ids: Vec<&str> = gen_res
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|q| q["id"].as_str())
+        .collect();
+    assert_eq!(
+        generated_ids,
+        vec![source_oid.to_hex().as_str()],
+        "Unconfirmed AI CTV item must be excluded from StandardObjective practice"
+    );
+
+    // 4. Submit original attempt with pre-gabarito metacognitive & behavioral telemetry
+    let parent_attempt_id = "11111111-2222-4333-8444-555555555555";
+    let (sub_st, sub_res) = request(
+        &app,
+        &secret,
+        Some(901),
+        "POST",
+        "/api/v1/quiz/submit-batch",
+        json!({
+            "user_id": 901,
+            "attempts": [{
+                "attempt_id": parent_attempt_id,
+                "occurred_at": "2026-11-25T15:00:00Z",
+                "question_revision": source_rev,
+                "question_id": source_oid.to_hex(),
+                "chosen_index": 0,
+                "chosen_text": "Certo",
+                "is_correct": true,
+                "time_spent_seconds": 28,
+                "confidence_level": 1,
+                "confidence_explicit": true,
+                "declared_confidence": "GUESS",
+                "cognitive_strategy": "RANDOM_GUESS",
+                "strategy_skipped": false,
+                "active_seconds": 19,
+                "answer_change_count": 2,
+                "initial_chosen_index": 1,
+                "consulted_resources": ["contextual-hint"],
+                "focus_loss_count": 1,
+                "session_uuid": "sess-meta-901",
+                "quiz_mode": "STANDARD",
+                "canonical_subject_id": "DIR_ADM",
+                "canonical_topic_id": "DIR_ADM_01_001"
+            }]
+        }),
+    )
+    .await;
+    assert_eq!(sub_st, StatusCode::OK);
+    assert_eq!(sub_res["processed_count"], 1);
+    assert_eq!(
+        sub_res["results"][0]["metacognitive_assessment"]["preliminary_diagnosis"],
+        "POSSIBLE_CASUAL_HIT"
+    );
+    let inf_msg = sub_res["results"][0]["metacognitive_assessment"]["system_inference_message"]
+        .as_str()
+        .unwrap();
+    assert!(!inf_msg.contains("Competência ilusória detectada"));
+
+    // Verify GET /api/v1/learning/state projects pre-gabarito metacognitive & behavioral fields
+    let (ls_st, ls_res) = request(
+        &app,
+        &secret,
+        Some(901),
+        "GET",
+        "/api/v1/learning/state",
+        Value::Null,
+    )
+    .await;
+    assert_eq!(ls_st, StatusCode::OK);
+    let ev0 = &ls_res["records"][0]["events"][0];
+    assert_eq!(ev0["declared_confidence"], "GUESS");
+    assert_eq!(ev0["cognitive_strategy"], "RANDOM_GUESS");
+    assert_eq!(ev0["active_seconds"], 19);
+    assert_eq!(ev0["answer_change_count"], 2);
+    assert_eq!(ev0["initial_chosen_index"], 1);
+    assert_eq!(ev0["consulted_resources"], json!(["contextual-hint"]));
+    assert_eq!(ev0["focus_loss_count"], 1);
+
+    // 5. CTV is suppressed during SIMULADO
+    let (sim_ctv_st, sim_ctv_res) = request(
+        &app,
+        &secret,
+        Some(901),
+        "POST",
+        "/api/v1/quiz/ctv/evaluate",
+        json!({
+            "parent_attempt_id": parent_attempt_id,
+            "source_question_id": source_oid.to_hex(),
+            "session_uuid": "sess-meta-901",
+            "quiz_mode": "SIMULADO",
+            "is_correct": true,
+            "declared_confidence": "GUESS",
+            "cognitive_strategy": "RANDOM_GUESS",
+            "confidence_level": 1
+        }),
+    )
+    .await;
+    assert_eq!(sim_ctv_st, StatusCode::OK);
+    assert_eq!(sim_ctv_res["triggered"], false);
+    assert_eq!(sim_ctv_res["status"], "deferred_post_simulado");
+
+    // 6. CTV Database First in STANDARD mode reuses permanent AI CTV item from todasQuestoes (0 external xAI calls!)
+    let (ctv_eval_st, ctv_eval_res) = request(
+        &app,
+        &secret,
+        Some(901),
+        "POST",
+        "/api/v1/quiz/ctv/evaluate",
+        json!({
+            "parent_attempt_id": parent_attempt_id,
+            "source_question_id": source_oid.to_hex(),
+            "session_uuid": "sess-meta-901",
+            "quiz_mode": "STANDARD",
+            "is_correct": true,
+            "declared_confidence": "GUESS",
+            "cognitive_strategy": "RANDOM_GUESS",
+            "confidence_level": 1,
+            "session_ctv_count": 0,
+            "attempts_since_last_ctv": 3
+        }),
+    )
+    .await;
+    assert_eq!(ctv_eval_st, StatusCode::OK);
+    assert_eq!(ctv_eval_res["triggered"], true);
+    assert_eq!(ctv_eval_res["delivery_source"], "REUSED_FROM_DB");
+    assert_eq!(ctv_eval_res["verification_timing"], "PRE_FEEDBACK");
+    assert_eq!(
+        ctv_eval_res["complementary_question"]["id"],
+        ctv_ai_oid.to_hex()
+    );
+
+    // 7. Submit CTV attempt (idempotent) without overwriting original question stats
+    let ctv_attempt_id = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+    let ctv_submit_payload = json!({
+        "ctv_attempt_id": ctv_attempt_id,
+        "parent_attempt_id": parent_attempt_id,
+        "source_question_id": source_oid.to_hex(),
+        "complementary_question_id": ctv_ai_oid.to_hex(),
+        "session_uuid": "sess-meta-901",
+        "verification_timing": "PRE_FEEDBACK",
+        "chosen_index": 0,
+        "chosen_text": "A anulação permanece cabível, pois a má-fé comprovada impede a decadência quinquenal.",
+        "declared_confidence": "HIGH",
+        "active_seconds": 16,
+        "was_previously_exposed": false
+    });
+    let (ctv_sub_st, ctv_sub_res) = request(
+        &app,
+        &secret,
+        Some(901),
+        "POST",
+        "/api/v1/quiz/ctv/submit",
+        ctv_submit_payload.clone(),
+    )
+    .await;
+    assert_eq!(ctv_sub_st, StatusCode::OK);
+    assert_eq!(ctv_sub_res["is_correct"], true);
+    assert_eq!(ctv_sub_res["counts_as_independent_transfer"], true);
+
+    // Idempotent replay does not double-increment quality_metrics.attempts_count
+    let (ctv_sub_st2, _) = request(
+        &app,
+        &secret,
+        Some(901),
+        "POST",
+        "/api/v1/quiz/ctv/submit",
+        ctv_submit_payload,
+    )
+    .await;
+    assert_eq!(ctv_sub_st2, StatusCode::OK);
+
+    let updated_ctv_doc = db
+        .collection::<Document>("todasQuestoes")
+        .find_one(doc! { "_id": ctv_ai_oid })
+        .await
+        .unwrap()
+        .unwrap();
+    let dmeta = updated_ctv_doc.get_document("diagnostic_meta").unwrap();
+    assert_eq!(dmeta.get_i64("usage_count").unwrap_or(dmeta.get_i32("usage_count").unwrap_or(0) as i64), 1);
+    let qmetrics = dmeta.get_document("quality_metrics").unwrap();
+    assert_eq!(
+        qmetrics
+            .get_i64("attempts_count")
+            .unwrap_or(qmetrics.get_i32("attempts_count").unwrap_or(0) as i64),
+        1
+    );
+
+    // Original question activity log stays at attempts = 1 (never inflated by CTV!)
+    let orig_act = db
+        .collection::<Document>("userActivityLog")
+        .find_one(doc! { "user_id": 901_i64, "question_id": source_oid.to_hex() })
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(orig_act.get_i32("total_attempts").unwrap(), 1);
+
+    // 8. Student Learning Analytics returns 10 formal KPIs + 5-level calibration + 8-state mastery
+    let (an_st, an_res) = request(
+        &app,
+        &secret,
+        Some(901),
+        "GET",
+        "/api/v1/learning/analytics",
+        Value::Null,
+    )
+    .await;
+    assert_eq!(an_st, StatusCode::OK);
+    assert_eq!(an_res["learning_kpis"].as_array().unwrap().len(), 10);
+    assert_eq!(an_res["confidence_calibration"].as_array().unwrap().len(), 5);
+
+    // 9. Reporting a problem on an AUTO_APPROVED AI CTV item immediately auto-suspends it
+    let (rep_st, _) = request(
+        &app,
+        &secret,
+        Some(901),
+        "POST",
+        &format!("/api/v1/questions/{}/report", ctv_ai_oid.to_hex()),
+        json!({
+            "user_id": 901,
+            "problem_category": "Questão com Erros de Conteúdo"
+        }),
+    )
+    .await;
+    assert_eq!(rep_st, StatusCode::OK);
+    let suspended_doc = db
+        .collection::<Document>("todasQuestoes")
+        .find_one(doc! { "_id": ctv_ai_oid })
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        suspended_doc
+            .get_document("diagnostic_meta")
+            .unwrap()
+            .get_str("quality_status")
+            .unwrap(),
+        "SUSPENDED"
+    );
+
+    // Suspended CTV item is no longer supplied by CTV evaluate
+    let (_, post_susp_eval) = request(
+        &app,
+        &secret,
+        Some(901),
+        "POST",
+        "/api/v1/quiz/ctv/evaluate",
+        json!({
+            "parent_attempt_id": "22222222-3333-4444-8555-666666666666",
+            "source_question_id": source_oid.to_hex(),
+            "session_uuid": "sess-meta-901",
+            "quiz_mode": "STANDARD",
+            "is_correct": true,
+            "declared_confidence": "GUESS",
+            "cognitive_strategy": "RANDOM_GUESS",
+            "confidence_level": 1
+        }),
+    )
+    .await;
+    assert_eq!(post_susp_eval["triggered"], false);
+
+    // 10. Admin AI/CTV operational metrics & Reuse Economy Simulator
+    let admin_web_sid = "test-web-admin-999";
+    db.collection::<Document>("sessions")
+        .insert_one(doc! {
+            "_id": admin_web_sid,
+            "user_id": 999_i64,
+            "purpose": "web",
+            "revoked": false,
+            "created_at": bson::DateTime::now(),
+            "expires_at": bson::DateTime::from_chrono(chrono::Utc::now() + chrono::Duration::hours(4)),
+        })
+        .await
+        .unwrap();
+    let admin_cookie = format!(
+        "cogniva_web_session={}",
+        security::sign_session_token(&secret, 999, admin_web_sid, "web", 3600).unwrap()
+    );
+    let admin_metrics_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/admin/ai-ctv/metrics")
+                .header("host", "127.0.0.1:8876")
+                .header("cookie", &admin_cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(admin_metrics_resp.status(), StatusCode::OK);
+    let admin_metrics: Value = serde_json::from_slice(
+        &axum::body::to_bytes(admin_metrics_resp.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(admin_metrics["operational_kpis"].as_array().unwrap().len(), 8);
+    assert_eq!(admin_metrics["ctv_bank_summary"]["suspended"], 1);
+
+    // 11. LGPD Art. 18 deletion purges conceptual_transfer_attempts while keeping todasQuestoes & impersonal audit
+    let (lgpd_st, _) = request(
+        &app,
+        &secret,
+        Some(901),
+        "DELETE",
+        "/api/v1/auth/account",
+        json!({ "confirm": "EXCLUIR" }),
+    )
+    .await;
+    assert_eq!(lgpd_st, StatusCode::OK);
+    assert_eq!(
+        db.collection::<Document>("conceptual_transfer_attempts")
+            .count_documents(doc! { "user_id": 901_i64 })
+            .await
+            .unwrap(),
+        0,
+        "LGPD deletion must purge conceptual_transfer_attempts for deleted user"
+    );
+    assert_eq!(
+        db.collection::<Document>("todasQuestoes")
+            .count_documents(doc! {})
+            .await
+            .unwrap(),
+        2,
+        "LGPD deletion must preserve shared permanent questions in todasQuestoes"
+    );
+    assert!(
+        db.collection::<Document>("ai_generation_audit")
+            .count_documents(doc! {})
+            .await
+            .unwrap()
+            >= 1,
+        "Impersonal operational audit events must remain intact"
+    );
+
+    assert!(name.starts_with("cogniva_test_"));
+    db.drop().await.unwrap();
+}
+
+#[tokio::test]
+#[ignore = "Requires dedicated loopback Mongo 27048"]
+async fn acceptance_a01_through_a14_end_to_end() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let uri = std::env::var("COGNIVA_TEST_MONGODB_URI").unwrap();
+    assert!(uri.starts_with("mongodb://127.0.0.1:27048/"));
+    let client = Client::with_uri_str(&uri).await.unwrap();
+    let name = format!("cogniva_test_a01_a14_{}", uuid::Uuid::new_v4().simple());
+    let db = client.database(&name);
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let ai_calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let ai_calls_srv = ai_calls.clone();
+    tokio::spawn(async move {
+        while let Ok((mut socket, _)) = listener.accept().await {
+            let calls = ai_calls_srv.clone();
+            tokio::spawn(async move {
+                let mut buf = vec![0u8; 16384];
+                let _ = socket.read(&mut buf).await;
+                let n = calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+                let gen_obj = json!({
+                    "question": format!("Em carteira institucional #{n}, dois títulos prefixados com durations modificadas de 2,4 e 5,6 sofrem o mesmo pequeno choque paralelo na taxa de juros de 0,30%. Qual apresenta maior variação percentual aproximada de preço?"),
+                    "answers": [
+                        "O título com duration modificada de 5,6 apresenta maior variação percentual aproximada.",
+                        "O título com duration modificada de 2,4 apresenta maior variação percentual aproximada.",
+                        "Ambos os títulos sofrem variação percentual idêntica.",
+                        "Apenas o valor nominal define a oscilação percentual.",
+                        "Títulos prefixados não variam antes do vencimento."
+                    ],
+                    "correct_index": 0,
+                    "explanation": "A variação percentual aproximada de preço é proporcional à duration modificada multiplicada pelo choque na taxa de juros.",
+                    "tested_rule": "Sensibilidade percentual aproximada do preço de um título prefixado via duration modificada.",
+                    "decisive_stem_excerpt": "submetidos ao mesmo pequeno choque paralelo na taxa de juros",
+                    "estimated_difficulty": "MEDIUM",
+                    "normative_certainty": "HIGH",
+                    "concept_adherence": "CONFIRMED"
+                });
+                let body = json!({
+                    "choices": [{ "message": { "content": gen_obj.to_string() } }]
+                })
+                .to_string();
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = socket.write_all(resp.as_bytes()).await;
+            });
+        }
+    });
+
+    let mut cfg = config(&uri);
+    cfg.xai_api_key = Some("test-xai-key".to_string());
+    cfg.xai_model = Some("grok-4".to_string());
+    cfg.xai_base_url = format!("http://{addr}/v1");
+    let secret = cfg.jwt_secret.clone();
+    let state = Arc::new(AppState::new(db.clone(), cfg));
+    let app = build_router(state.clone());
+
+    services::question_storage::prepare(&db).await.unwrap();
+    seed_user_and_session(&db, 701, false).await;
+    seed_user_and_session(&db, 702, false).await;
+
+    let src_oid = ObjectId::new();
+    let mut src_doc = v2_question_doc(
+        src_oid,
+        "Qual é o significado econômico da duration modificada de um título prefixado?",
+        &[
+            "Mede a sensibilidade percentual aproximada do preço a pequenas variações na taxa de juros.",
+            "Mede apenas o prazo médio contábil.",
+            "Mede o cupom cambial.",
+            "Mede a alíquota tributária.",
+            "Mede o risco de crédito soberano.",
+        ],
+        0,
+        "Matemática Financeira",
+        Some(("MFIN", "MFIN_01_004")),
+    );
+    src_doc
+        .get_document_mut("classification")
+        .unwrap()
+        .get_array_mut("links")
+        .unwrap()[0]
+        .as_document_mut()
+        .unwrap()
+        .insert("concept_id", "CON_MFIN_DURATION_MODIFICADA");
+    db.collection::<Document>("todasQuestoes")
+        .insert_one(src_doc)
+        .await
+        .unwrap();
+
+    let parent_701 = "70100000-0000-4000-8000-000000000001";
+    let parent_702 = "70200000-0000-4000-8000-000000000001";
+    let ctv_att_701 = "70100000-0000-4000-8000-000000000099";
+
+    // A11: Empty bank -> 1st user generates & persists before delivery; 2nd user reuses same _id with 1 AI call total
+    let (_, eval_701) = request(
+        &app,
+        &secret,
+        Some(701),
+        "POST",
+        "/api/v1/quiz/ctv/evaluate",
+        json!({
+            "parent_attempt_id": parent_701,
+            "source_question_id": src_oid.to_hex(),
+            "session_uuid": "sess-701",
+            "quiz_mode": "STANDARD",
+            "is_correct": true,
+            "declared_confidence": "GUESS",
+            "cognitive_strategy": "RANDOM_GUESS",
+            "confidence_level": 1
+        }),
+    )
+    .await;
+    assert_eq!(eval_701["triggered"], true, "{eval_701}");
+    assert_eq!(eval_701["delivery_source"], "AI_GENERATED_PERMANENT");
+    let gen_qid = eval_701["complementary_question"]["id"].as_str().unwrap().to_string();
+    assert_eq!(ai_calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+    let (_, eval_702) = request(
+        &app,
+        &secret,
+        Some(702),
+        "POST",
+        "/api/v1/quiz/ctv/evaluate",
+        json!({
+            "parent_attempt_id": parent_702,
+            "source_question_id": src_oid.to_hex(),
+            "session_uuid": "sess-702",
+            "quiz_mode": "STANDARD",
+            "is_correct": true,
+            "declared_confidence": "GUESS",
+            "cognitive_strategy": "RANDOM_GUESS",
+            "confidence_level": 1
+        }),
+    )
+    .await;
+    assert_eq!(eval_702["triggered"], true);
+    assert_eq!(eval_702["delivery_source"], "REUSED_FROM_DB");
+    assert_eq!(eval_702["complementary_question"]["id"], gen_qid);
+    assert_eq!(ai_calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+    // A04: Dismissing ("Ver gabarito agora") records exposure and 0 independent attempts
+    let (ev_st, _) = request(
+        &app,
+        &secret,
+        Some(702),
+        "POST",
+        "/api/v1/quiz/ctv/events",
+        json!({
+            "offer_id": eval_702["offer_id"],
+            "parent_attempt_id": parent_702,
+            "source_question_id": src_oid.to_hex(),
+            "complementary_question_id": gen_qid,
+            "event_kind": "DISMISSED",
+            "occurred_at": "2026-11-25T12:00:00Z"
+        }),
+    )
+    .await;
+    assert_eq!(ev_st, StatusCode::OK);
+
+    // A03: Wrong answer on unseen pre-feedback CTV counts in independent denominator (0/1)
+    let (_, sub_wrong) = request(
+        &app,
+        &secret,
+        Some(701),
+        "POST",
+        "/api/v1/quiz/ctv/submit",
+        json!({
+            "ctv_attempt_id": ctv_att_701,
+            "offer_id": eval_701["offer_id"],
+            "parent_attempt_id": parent_701,
+            "source_question_id": src_oid.to_hex(),
+            "complementary_question_id": gen_qid,
+            "session_uuid": "sess-701",
+            "verification_timing": "PRE_FEEDBACK",
+            "chosen_index": 1,
+            "occurred_at": "2026-11-25T12:05:00Z"
+        }),
+    )
+    .await;
+    assert_eq!(sub_wrong["is_correct"], false);
+    assert_eq!(sub_wrong["counts_as_independent_transfer"], true);
+
+    db.drop().await.unwrap();
+}

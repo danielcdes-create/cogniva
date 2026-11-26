@@ -52,6 +52,8 @@ O painel administrativo web em `/admin/` é incorporado diretamente ao binário 
 | `GET/POST /api/v1/admin/reports*` | Fila de curadoria e resolução de reportes de estudantes |
 | `GET/POST /api/v1/admin/classification/*` | Propostas assistidas por IA e decisões humanas sobre o catálogo ativo |
 | `GET/POST /api/v1/admin/catalog/*` | Validação, rascunhos `DRAFT`/`REVIEW_READY`, ativação e histórico |
+| `GET /api/v1/admin/ai-ctv/metrics` | Contabilidade operacional em *streaming* do período (reuso sem chamada, chamadas reais, duplicatas barradas pós-chamada, cache offline à parte e **Custo por verificação concluída**), coortes adaptativas (`DIFFICULTY_DETECTED` vs. `PERIODIC_SAMPLING`) e saúde do acervo CTV |
+| `POST /api/v1/admin/ai-ctv/simulate` | Simulador hipotético determinístico de economia com reutilização (separado da contabilidade operacional real) |
 
 ---
 

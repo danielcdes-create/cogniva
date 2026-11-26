@@ -22,7 +22,8 @@ import {
   isQuestionDraftDirty,
   reconcileQuestionDraft,
   isExamDraftDirty,
-  reconcileExamDrafts
+  reconcileExamDrafts,
+  simulateAiReuseEconomy
 } from '../domain.js';
 
 test('existing question metadata survives workspace restore and preview payload',()=>{
@@ -308,4 +309,28 @@ test('reconcileExamDrafts refreshes clean drafts, marks server conflicts on dirt
   assert.equal(ws.exams.RFB_2026.conflict, true);
   assert.equal(ws.exams.RFB_2026.server.revision, 3);
   assert.equal('BROKEN' in ws.exams, false);
+});
+
+test('simulateAiReuseEconomy matches shared domain contract vectors and bounds extreme inputs',()=>{
+  const s1 = simulateAiReuseEconomy(10000, 75, 0.04);
+  assert.equal(s1.cost_without_reuse, 400);
+  assert.equal(s1.cost_with_reuse, 100);
+  assert.equal(s1.monthly_savings, 300);
+  assert.equal(s1.avoided_generations_monthly, 7500);
+  assert.equal(s1.generated_questions_monthly, 2500);
+  assert.equal(s1.annual_savings, 3600);
+  assert.equal(s1.cost_reduction_pct, 75);
+  assert.match(s1.disclaimer_pt, /hipotética/);
+
+  const s2 = simulateAiReuseEconomy(50000, 85, 0.02);
+  assert.equal(s2.cost_without_reuse, 1000);
+  assert.equal(s2.cost_with_reuse, 150);
+  assert.equal(s2.monthly_savings, 850);
+  assert.equal(s2.avoided_generations_monthly, 42500);
+  assert.equal(s2.annual_savings, 10200);
+  assert.equal(s2.cost_reduction_pct, 85);
+
+  const zero = simulateAiReuseEconomy(-50, Number.NaN, 0.05);
+  assert.equal(zero.monthly_verifications, 0);
+  assert.equal(zero.cost_reduction_pct, 0);
 });

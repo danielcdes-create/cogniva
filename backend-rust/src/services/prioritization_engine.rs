@@ -83,6 +83,179 @@ pub fn priority_utility(input: &PrioritizationInputs) -> f64 {
     }
 }
 
+/// Extensão adaptativa metacognitiva para priorização longitudinal (Seção 4 / A09):
+/// incorpora erros recorrentes com alta confiança / fundamento incompatível, avanço após
+/// raciocínio funcional + transferência independente, espaçamento pós-explicação, evidência
+/// escassa/conflitante e penalização de repetição consecutiva, preservando exatamente a
+/// recomendação de referência (`priority_utility`) quando não há sinais metacognitivos novos.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct MetacognitivePrioritySignals {
+    #[serde(default)]
+    pub high_confidence_error_rate: f64,
+    #[serde(default)]
+    pub high_confidence_error_count: usize,
+    #[serde(default)]
+    pub incompatible_rationale_count: usize,
+    #[serde(default)]
+    pub fragile_correct_rate: f64,
+    #[serde(default)]
+    pub failed_transfer: bool,
+    #[serde(default)]
+    pub functional_elimination_transfer_verified: bool,
+    #[serde(default)]
+    pub post_explanation_fixation_pending_spacing: bool,
+    #[serde(default)]
+    pub post_explanation_spaced_due: bool,
+    #[serde(default)]
+    pub scarce_or_conflicting_evidence: bool,
+    #[serde(default)]
+    pub recent_consecutive_exposures: usize,
+}
+
+impl MetacognitivePrioritySignals {
+    pub fn has_active_signals(&self) -> bool {
+        self.high_confidence_error_rate > 0.0
+            || self.high_confidence_error_count > 0
+            || self.incompatible_rationale_count > 0
+            || self.fragile_correct_rate > 0.0
+            || self.failed_transfer
+            || self.functional_elimination_transfer_verified
+            || self.post_explanation_fixation_pending_spacing
+            || self.post_explanation_spaced_due
+            || self.scarce_or_conflicting_evidence
+            || self.recent_consecutive_exposures >= 3
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UnitRecommendationDecision {
+    pub utility: f64,
+    pub decision_rule_code: &'static str,
+    pub reason_pt: String,
+    pub recommended_mode: &'static str,
+}
+
+pub fn priority_utility_metacognitive(
+    base: &PrioritizationInputs,
+    signals: &MetacognitivePrioritySignals,
+) -> f64 {
+    let base_u = priority_utility(base);
+    if !signals.has_active_signals() {
+        return base_u;
+    }
+
+    // Penaliza apenas a descalibração metacognitiva / fundamento incompatível recorrente,
+    // sem somar duas vezes o erro bruto já considerado em `retrievability` e `verified_competence`.
+    let recurrent_misconception_bonus = if signals.high_confidence_error_count >= 2
+        && signals.incompatible_rationale_count >= 2
+    {
+        0.25
+    } else if signals.high_confidence_error_count >= 2 {
+        0.12
+    } else {
+        0.0
+    };
+    let hce_boost =
+        1.0 + 0.45 * signals.high_confidence_error_rate.clamp(0.0, 1.0) + recurrent_misconception_bonus;
+    let fragile_boost = 1.0 + 0.25 * signals.fragile_correct_rate.clamp(0.0, 1.0);
+    let transfer_boost = if signals.failed_transfer { 1.30 } else { 1.0 };
+    let conflict_boost = if signals.scarce_or_conflicting_evidence {
+        1.18
+    } else {
+        1.0
+    };
+    let spaced_post_exp_boost = if signals.post_explanation_spaced_due {
+        1.22
+    } else {
+        1.0
+    };
+    // Acerto por eliminação/dedução seguido de transferência independente correta permite avançar para outro conceito
+    let functional_advance_mult = if signals.functional_elimination_transfer_verified {
+        0.42
+    } else {
+        1.0
+    };
+    // Fixação imediata pós-explicação posterga repetição imediata para outra sessão espaçada
+    let post_exp_defer_mult = if signals.post_explanation_fixation_pending_spacing {
+        0.48
+    } else {
+        1.0
+    };
+    let anti_trapping = if signals.recent_consecutive_exposures >= 3 {
+        0.55_f64.powi((signals.recent_consecutive_exposures - 2).min(3) as i32)
+    } else {
+        1.0
+    };
+
+    let adjusted = base_u
+        * hce_boost
+        * fragile_boost
+        * transfer_boost
+        * conflict_boost
+        * spaced_post_exp_boost
+        * functional_advance_mult
+        * post_exp_defer_mult
+        * anti_trapping;
+    (adjusted * 1_000_000_000.0).round() / 1_000_000_000.0
+}
+
+pub fn build_metacognitive_decision_reason(
+    signals: &MetacognitivePrioritySignals,
+    unit_title: &str,
+    fallback_reason_pt: &str,
+    advanced_after_functional_transfer: bool,
+) -> (&'static str, String, &'static str) {
+    if signals.high_confidence_error_count >= 2
+        || (signals.high_confidence_error_count >= 1 && signals.incompatible_rationale_count >= 1)
+    {
+        let n = signals
+            .high_confidence_error_count
+            .max(signals.incompatible_rationale_count)
+            .max(2);
+        let msg = if signals.incompatible_rationale_count >= 2 {
+            format!(
+                "Revisar {unit_title}. Em {n} questões houve erro com confiança alta e fundamento incompatível."
+            )
+        } else {
+            format!(
+                "Revisar {unit_title}. Em {n} questões houve erro recorrente com confiança alta."
+            )
+        };
+        return ("RECURRENT_HIGH_CONF_MISCONCEPTION", msg, "ADAPTIVE_LOOP");
+    }
+
+    if signals.post_explanation_spaced_due || signals.post_explanation_fixation_pending_spacing {
+        return (
+            "POST_EXPLANATION_SPACED_FOLLOWUP",
+            format!(
+                "Você acertou após a explicação. Vamos retomar {unit_title} em outra sessão."
+            ),
+            "TRANSFER_PROBE",
+        );
+    }
+
+    if signals.failed_transfer || signals.scarce_or_conflicting_evidence || signals.fragile_correct_rate >= 0.40
+    {
+        return (
+            "SCARCE_OR_CONFLICTING_EVIDENCE",
+            format!("Falta observar como você aplica esta regra em outro exemplo: {unit_title}."),
+            "TRANSFER_PROBE",
+        );
+    }
+
+    if advanced_after_functional_transfer {
+        return (
+            "ADVANCE_AFTER_FUNCTIONAL_TRANSFER",
+            format!(
+                "Você aplicou a regra em outro contexto. Sua próxima atividade avança para {unit_title}."
+            ),
+            "ADAPTIVE_LOOP",
+        );
+    }
+
+    ("BASELINE_REFERENCE", fallback_reason_pt.to_string(), "ENTRY_60S")
+}
+
 /// Pontua candidatas para o Protocolo de Entrada de 60 Segundos (`8–40 s`):
 /// prioriza questão humana curta (`<= 380` caracteres), preferencialmente em formato
 /// binário direto (`Certo · Errado · Branco`) e de assunto familiar com retenção pendente.
@@ -209,5 +382,61 @@ mod tests {
         let only_new = interleave_buckets::<&str, _>(&[], &[], &["N1", "N1", "N2", "N3"], 5, |s| s);
         assert_eq!(only_new, vec!["N1", "N2", "N3"]);
         assert!(interleave_buckets::<&str, _>(&ret, &gap, &new_hi, 0, |s| s).is_empty());
+    }
+
+    #[test]
+    fn a09_metacognitive_priority_breaks_ties_on_recurrent_hce_advances_after_functional_transfer_and_preserves_baseline() {
+        let tied_base = PrioritizationInputs {
+            edital_weight: 0.25,
+            incidence_weight: 1.0,
+            retrievability: 0.72,
+            verified_competence: false,
+            distinct_questions: 4,
+            avg_seconds: 48.0,
+            unmet_prerequisites_count: 0,
+            dependent_count: 0,
+        };
+
+        // 1. Sem sinais novos -> preserva exatamente a referência!
+        let empty_signals = MetacognitivePrioritySignals::default();
+        assert_eq!(
+            priority_utility_metacognitive(&tied_base, &empty_signals),
+            priority_utility(&tied_base)
+        );
+
+        // 2. Empate exato em peso/retenção/questões: unidade com erros recorrentes de alta confiança vence!
+        let hce_signals = MetacognitivePrioritySignals {
+            high_confidence_error_rate: 0.50,
+            high_confidence_error_count: 2,
+            incompatible_rationale_count: 2,
+            ..Default::default()
+        };
+        let u_ref = priority_utility_metacognitive(&tied_base, &empty_signals);
+        let u_hce = priority_utility_metacognitive(&tied_base, &hce_signals);
+        assert!(u_hce > u_ref);
+        let (rule_code, reason_pt, _) = build_metacognitive_decision_reason(
+            &hce_signals,
+            "sensibilidade a juros",
+            "Assunto familiar",
+            false,
+        );
+        assert_eq!(rule_code, "RECURRENT_HIGH_CONF_MISCONCEPTION");
+        assert!(reason_pt.contains("Revisar sensibilidade a juros"));
+
+        // 3. Acerto por eliminação seguido de transferência independente reduz urgência e avança para outro conceito!
+        let functional_verified = MetacognitivePrioritySignals {
+            functional_elimination_transfer_verified: true,
+            ..Default::default()
+        };
+        let u_func = priority_utility_metacognitive(&tied_base, &functional_verified);
+        assert!(u_func < u_ref);
+        let (adv_code, adv_reason, _) = build_metacognitive_decision_reason(
+            &empty_signals,
+            "Convexidade em renda fixa",
+            "Assunto do edital",
+            true,
+        );
+        assert_eq!(adv_code, "ADVANCE_AFTER_FUNCTIONAL_TRANSFER");
+        assert!(adv_reason.contains("Você aplicou a regra em outro contexto"));
     }
 }

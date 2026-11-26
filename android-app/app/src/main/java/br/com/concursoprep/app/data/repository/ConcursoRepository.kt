@@ -36,6 +36,67 @@ private data class PendingEvidencePatch(
 )
 
 @Serializable
+private data class PendingCtvSubmission(
+    val ownerUserId: Long,
+    val request: CtvSubmitRequestDto
+)
+
+@Serializable
+private data class LocalCtvOfferEntry(
+    val offerId: String,
+    val parentAttemptId: String,
+    val sourceQuestionId: String,
+    val complementaryQuestionId: String,
+    val contentRevision: String = "",
+    val canonicalTopicId: String? = null,
+    val targetConceptId: String? = null,
+    val targetTestedRule: String? = null,
+    val framingReasonCode: String? = null,
+    val verificationMode: String = "CONCEPTUAL_TRANSFER",
+    val triggerReason: String? = null,
+    val triggerCohort: String = "DIFFICULTY_DETECTED",
+    val deliverySource: String? = null,
+    val state: String = "SUPPLIED",
+    val suppliedAt: String = "",
+    val firstDisplayedAt: String? = null,
+    val dismissedAt: String? = null
+)
+
+@Serializable
+private data class LocalCtvAttemptEntry(
+    val ctvAttemptId: String,
+    val offerId: String = "",
+    val parentAttemptId: String,
+    val sourceQuestionId: String,
+    val complementaryQuestionId: String,
+    val contentRevision: String = "",
+    val canonicalTopicId: String? = null,
+    val targetConceptId: String? = null,
+    val targetTestedRule: String? = null,
+    val verificationMode: String = "CONCEPTUAL_TRANSFER",
+    val verificationTiming: String = "PRE_FEEDBACK",
+    val isCorrect: Boolean,
+    val wasPreviouslyExposed: Boolean = false,
+    val hadDecisiveHelp: Boolean = false,
+    val countsAsIndependentAttempt: Boolean = false,
+    val countsAsIndependentCorrect: Boolean = false,
+    val classificationCode: String = "",
+    val triggerReason: String? = null,
+    val triggerCohort: String = "DIFFICULTY_DETECTED",
+    val occurredAt: String = "",
+    val provisional: Boolean = true
+)
+
+@Serializable
+private data class LocalCtvLedger(
+    val ownerUserId: Long = 0L,
+    val offers: Map<String, LocalCtvOfferEntry> = emptyMap(),
+    val attempts: Map<String, LocalCtvAttemptEntry> = emptyMap(),
+    val pendingEvents: List<CtvLifecycleEventRequestDto> = emptyList(),
+    val pendingRecommendationFeedback: List<RecommendationFeedbackRequestDto> = emptyList()
+)
+
+@Serializable
 private data class LocalEntryTelemetry(
     val impressionsCount: Int = 0,
     val lastImpressionDateIso: String? = null,
@@ -61,6 +122,13 @@ class ConcursoRepository(
 
         fun deterministicAttemptId(sessionUuid: String, questionId: String): String =
             UUID.nameUUIDFromBytes("$sessionUuid:$questionId".toByteArray(Charsets.UTF_8)).toString()
+
+        fun deterministicOfferId(userId: Long, parentAttemptId: String, complementaryQuestionId: String): String {
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
+                .digest("ctv-offer-v1:$userId:$parentAttemptId:$complementaryQuestionId".toByteArray(Charsets.UTF_8))
+            val hex = digest.take(16).joinToString("") { "%02x".format(it) }
+            return "ctvo_$hex"
+        }
     }
 
     suspend fun questionImportCapabilities(): JsonObject { auth?.ensureSession(api, ownerUserId); return api.questionImportCapabilities() }
@@ -322,6 +390,15 @@ class ConcursoRepository(
         return base
     }
 
+    private fun parseDeclaredConfidence(raw: String?): DeclaredConfidence? =
+        raw?.trim()?.takeIf { it.isNotEmpty() }?.let { runCatching { DeclaredConfidence.valueOf(it) }.getOrNull() }
+
+    private fun parseCognitiveStrategy(raw: String?): CognitiveStrategy? =
+        raw?.trim()?.takeIf { it.isNotEmpty() }?.let { runCatching { CognitiveStrategy.valueOf(it) }.getOrNull() }
+
+    private fun parseConsultedResources(csv: String?): List<String> =
+        csv?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
+
     private fun PendingAttemptEntity.event() = LearningEvent(
         attemptId = attemptId,
         occurredAt = Instant.ofEpochMilli(createdAtEpochMs).toString(),
@@ -334,7 +411,15 @@ class ConcursoRepository(
         quizMode = quizMode,
         sessionUuid = sessionUuid,
         elapsedSessionSeconds = elapsedSessionSeconds,
-        sessionInterrupted = sessionInterrupted
+        sessionInterrupted = sessionInterrupted,
+        declaredConfidence = parseDeclaredConfidence(declaredConfidence),
+        cognitiveStrategy = parseCognitiveStrategy(cognitiveStrategy),
+        strategySkipped = strategySkipped,
+        activeSeconds = activeSeconds,
+        answerChangeCount = answerChangeCount,
+        initialChosenIndex = initialChosenIndex,
+        consultedResources = parseConsultedResources(consultedResourcesCsv),
+        focusLossCount = focusLossCount
     )
 
     suspend fun projectedLearning(): List<LearningRecord> {
@@ -502,6 +587,223 @@ class ConcursoRepository(
         }
     }
 
+    private suspend fun loadCtvLedger(userId: Long): LocalCtvLedger {
+        val raw = metadata("ctv_ledger_v2:$userId")?.takeIf { it.isNotBlank() }
+            ?: return LocalCtvLedger(ownerUserId = userId)
+        val parsed = runCatching { json.decodeFromString<LocalCtvLedger>(raw) }.getOrNull()
+        return if (parsed != null && (parsed.ownerUserId == userId || parsed.ownerUserId == 0L)) {
+            parsed.copy(ownerUserId = userId)
+        } else {
+            LocalCtvLedger(ownerUserId = userId)
+        }
+    }
+
+    private suspend fun saveCtvLedger(userId: Long, ledger: LocalCtvLedger) {
+        metadata("ctv_ledger_v2:$userId", json.encodeToString(ledger.copy(ownerUserId = userId)))
+    }
+
+    private fun resolveAlignmentProfile(q: QuestionDto): QuestionAlignmentProfile {
+        val card = q.effectiveEditorialCard()
+        val distinctConcepts = q.conceptIds.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        val ownRuleContext = q.editorialCard?.testedRule?.takeIf { it.isNotBlank() } ?: q.explanation
+        val inferred = ExamCatalog.inferSingleConceptForTopic(q.canonicalTopicId, q.question, ownRuleContext)
+        val (targetConceptId, ambiguous) = when (distinctConcepts.size) {
+            0 -> inferred to false
+            1 -> distinctConcepts.first() to false
+            else -> {
+                if (inferred != null && inferred in distinctConcepts) inferred to false else null to true
+            }
+        }
+        val allConcepts = (distinctConcepts + listOfNotNull(targetConceptId)).distinct()
+        val correctText = q.correctAnswerIndices.firstOrNull()?.let { q.answers.getOrNull(it) }
+        val rev = QuestionCacheMapping.withRevision(q).questionRevision
+        val isAiUnconfirmed = !q.knowledgeBindingVerified && q.source.contains("IA", ignoreCase = true)
+        return QuestionAlignmentProfile(
+            questionId = q.id,
+            subjectId = q.canonicalSubjectId,
+            topicId = q.canonicalTopicId,
+            targetConceptId = targetConceptId,
+            allConceptIds = allConcepts,
+            targetConceptAmbiguous = ambiguous,
+            testedRule = card.testedRule,
+            decisiveExcerpt = card.decisiveStemExcerpt,
+            legalProvisions = card.legalProvisions,
+            questionType = q.questionType.name,
+            stem = q.question,
+            correctAnswerText = correctText,
+            contentRevision = rev,
+            semanticRevision = "",
+            anchoredSourceQuestionId = null,
+            isAiUnconfirmedBinding = isAiUnconfirmed,
+            isEditorialPendingOrDubious = false
+        )
+    }
+
+    private fun hasPriorExposureExcludingOffer(
+        questionId: String,
+        questionRevision: String,
+        excludeOfferId: String?,
+        excludeAttemptId: String?,
+        learningById: Map<String, LearningRecord>,
+        ledger: LocalCtvLedger,
+        evaluatedAtMs: Long? = null
+    ): Boolean {
+        val rec = learningById[questionId]
+        if (rec != null) {
+            if (evaluatedAtMs == null) {
+                if (rec.attempts > 0) return true
+            } else if (rec.events.any { !it.isBlank && safeInstant(it.occurredAt).toEpochMilli() < evaluatedAtMs }) {
+                return true
+            }
+        }
+        if (questionRevision.isNotBlank()) {
+            val sameRevInRegular = learningById.values.any { r ->
+                r.events.any { ev ->
+                    !ev.isBlank &&
+                        ev.questionRevision == questionRevision &&
+                        (evaluatedAtMs == null || safeInstant(ev.occurredAt).toEpochMilli() < evaluatedAtMs)
+                }
+            }
+            if (sameRevInRegular) return true
+        }
+        for (off in ledger.offers.values) {
+            if (excludeOfferId != null && off.offerId == excludeOfferId) continue
+            val dispIso = off.firstDisplayedAt ?: off.dismissedAt ?: continue
+            if (evaluatedAtMs != null && safeInstant(dispIso).toEpochMilli() > evaluatedAtMs) continue
+            if (off.complementaryQuestionId == questionId ||
+                (questionRevision.isNotBlank() && off.contentRevision == questionRevision)
+            ) {
+                return true
+            }
+        }
+        for (att in ledger.attempts.values) {
+            if (excludeAttemptId != null && att.ctvAttemptId == excludeAttemptId) continue
+            if (excludeOfferId != null && att.offerId.isNotBlank() && att.offerId == excludeOfferId) continue
+            if (evaluatedAtMs != null && att.occurredAt.isNotBlank() && safeInstant(att.occurredAt).toEpochMilli() > evaluatedAtMs) continue
+            if (att.complementaryQuestionId == questionId ||
+                (questionRevision.isNotBlank() && att.contentRevision == questionRevision)
+            ) {
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun computeMetacognitiveSignalsByTopic(
+        rows: List<LearningRecord>,
+        cachedById: Map<String, QuestionDto>,
+        ledger: LocalCtvLedger,
+        nowMs: Long
+    ): Pair<Map<String, MetacognitivePrioritySignals>, Boolean> {
+        data class TopicAcc(
+            var attempts: Int = 0,
+            var corrects: Int = 0,
+            var hceCount: Int = 0,
+            var incompatibleCount: Int = 0,
+            var fragileCorrects: Int = 0,
+            var functionalCorrects: Int = 0,
+            var indepTransferOk: Boolean = false,
+            var indepTransferFail: Boolean = false,
+            var latestPostExpOkMs: Long? = null,
+            var latestRegularAfterPostExpMs: Long? = null
+        )
+
+        val accByTopic = HashMap<String, TopicAcc>()
+        val chronoSeq = ArrayList<Pair<Long, String>>()
+
+        for (row in rows) {
+            val tid = row.canonicalTopicId?.takeIf { it.isNotBlank() } ?: continue
+            val acc = accByTopic.getOrPut(tid) { TopicAcc() }
+            val q = cachedById[row.questionId]
+            val customCh = q?.hasCustomEvidenceChallenge() == true
+            val correctEvId = q?.effectiveEvidenceChallenge()?.correctEvidenceId
+            for (ev in row.events) {
+                if (ev.isBlank) continue
+                val ts = safeInstant(ev.occurredAt).toEpochMilli()
+                chronoSeq += (ts to tid)
+                acc.attempts++
+                val dc = ev.declaredConfidence ?: DeclaredConfidence.fromLegacyBand(ev.confidenceLevel, ev.confidenceLevel > 0)
+                val normSel = normalizeEvidenceOptionId(ev.selectedEvidenceId, customCh)
+                val evCompat = if (correctEvId != null && normSel != null) normSel == correctEvId else null
+                if (evCompat == false) acc.incompatibleCount++
+                if (ev.isCorrect) {
+                    acc.corrects++
+                    val g = MetacognitiveEngine.classifyHitGrounding(true, dc, ev.cognitiveStrategy, evCompat)
+                    when (g) {
+                        HitGroundingCategory.FRAGILE_OR_GUESS, HitGroundingCategory.DIVERGENT_RATIONALE -> acc.fragileCorrects++
+                        HitGroundingCategory.VALID_FUNCTIONAL_STRATEGY -> acc.functionalCorrects++
+                        else -> Unit
+                    }
+                } else if (dc?.isHigh == true || ev.confidenceLevel >= 3) {
+                    acc.hceCount++
+                }
+            }
+        }
+
+        for (ctv in ledger.attempts.values) {
+            val tid = ctv.canonicalTopicId
+                ?: cachedById[ctv.complementaryQuestionId]?.canonicalTopicId
+                ?: cachedById[ctv.sourceQuestionId]?.canonicalTopicId
+                ?: continue
+            if (tid.isBlank()) continue
+            val acc = accByTopic.getOrPut(tid) { TopicAcc() }
+            if (ctv.countsAsIndependentAttempt && ctv.verificationMode == "CONCEPTUAL_TRANSFER") {
+                if (ctv.isCorrect) acc.indepTransferOk = true else acc.indepTransferFail = true
+            } else if (ctv.isCorrect && (ctv.classificationCode == "POST_INSTRUCTION_FIXATION" || ctv.verificationTiming == "POST_INSTRUCTION")) {
+                val ms = safeInstant(ctv.occurredAt).toEpochMilli()
+                acc.latestPostExpOkMs = maxOf(acc.latestPostExpOkMs ?: ms, ms)
+            }
+        }
+
+        for ((tid, acc) in accByTopic) {
+            val postMs = acc.latestPostExpOkMs ?: continue
+            val after = chronoSeq.filter { it.second == tid && it.first > postMs }.maxOfOrNull { it.first }
+            acc.latestRegularAfterPostExpMs = after
+        }
+
+        chronoSeq.sortBy { it.first }
+        val consecutiveByTopic = HashMap<String, Int>()
+        val lastTid = chronoSeq.lastOrNull()?.second
+        if (lastTid != null) {
+            consecutiveByTopic[lastTid] = chronoSeq.asReversed().takeWhile { it.second == lastTid }.size
+        }
+
+        val anyFunctionalTransferCleared = accByTopic.values.any {
+            it.functionalCorrects > 0 && it.indepTransferOk && it.hceCount == 0
+        }
+
+        val out = HashMap<String, MetacognitivePrioritySignals>()
+        for ((tid, m) in accByTopic) {
+            val hceRate = if (m.attempts > 0) m.hceCount.toDouble() / m.attempts.toDouble() else 0.0
+            val fragileRate = if (m.corrects > 0) m.fragileCorrects.toDouble() / m.corrects.toDouble() else 0.0
+            val functionalVerified = m.functionalCorrects > 0 && m.indepTransferOk && m.hceCount == 0
+            val (pendingSpacing, spacedDue) = m.latestPostExpOkMs?.let { postMs ->
+                if (m.latestRegularAfterPostExpMs != null) {
+                    false to false
+                } else {
+                    val elapsedH = (nowMs - postMs).coerceAtLeast(0L).toDouble() / 3_600_000.0
+                    if (elapsedH < 18.0) true to false else false to true
+                }
+            } ?: (false to false)
+            val scarceOrConflict = (m.attempts in 1..2 && (m.fragileCorrects > 0 || m.incompatibleCount > 0)) ||
+                (m.corrects > 0 && m.hceCount > 0) ||
+                m.indepTransferFail
+            out[tid] = MetacognitivePrioritySignals(
+                highConfidenceErrorRate = hceRate,
+                highConfidenceErrorCount = m.hceCount,
+                incompatibleRationaleCount = m.incompatibleCount,
+                fragileCorrectRate = fragileRate,
+                failedTransfer = m.indepTransferFail,
+                functionalEliminationTransferVerified = functionalVerified,
+                postExplanationFixationPendingSpacing = pendingSpacing,
+                postExplanationSpacedDue = spacedDue,
+                scarceOrConflictingEvidence = scarceOrConflict,
+                recentConsecutiveExposures = consecutiveByTopic[tid] ?: 0
+            )
+        }
+        return out to anyFunctionalTransferCleared
+    }
+
     private suspend fun buildLocalDecisionTelemetry(
         userId: Long,
         rows: List<LearningRecord>,
@@ -522,6 +824,8 @@ class ConcursoRepository(
         val allCached = dao.getCachedQuestions(null, 10000).map { QuestionCacheMapping.toDto(it, json) }
         val cachedById = allCached.associateBy { it.id }
         val cachedByTopic = allCached.filter { !it.canonicalTopicId.isNullOrBlank() }.groupBy { it.canonicalTopicId!! }
+        val ledger = loadCtvLedger(userId)
+        val (signalsByTopic, anyFunctionalCleared) = computeMetacognitiveSignalsByTopic(rows, cachedById, ledger, nowMs)
         val targetBoardKeys = activeExam?.examBoards.orEmpty()
             .filter { it.isNotBlank() && it != "A definir" }
             .map { normalizeBoardKey(it) }
@@ -537,6 +841,8 @@ class ConcursoRepository(
         var transferUnmeasuredUnits = 0
         var bestTopicId: String? = null
         var bestReason = "Assunto familiar com retenção pendente."
+        var bestRuleCode = "BASELINE_REFERENCE"
+        var bestMode = "ENTRY_60S"
         var bestUtility = -1.0
 
         if (activeExam != null) {
@@ -595,6 +901,14 @@ class ConcursoRepository(
                             }
                         }
                     }
+                    val ctvIndepTopic = ledger.attempts.values.filter {
+                        it.canonicalTopicId == top.canonicalTopicId &&
+                            it.countsAsIndependentAttempt &&
+                            it.verificationMode == "CONCEPTUAL_TRANSFER"
+                    }
+                    transferAttempts += ctvIndepTopic.size
+                    transferGrounded += ctvIndepTopic.count { it.countsAsIndependentCorrect }
+
                     val transferStatus = DiagnosticEngine.evaluateTransferStatus(
                         TransferInputs(
                             distinctQuestions = distinctQuestions,
@@ -619,7 +933,8 @@ class ConcursoRepository(
                             hadPriorVerifiedCorrect = hadPriorCorrect,
                             hasSpacedRetention = hasSpaced,
                             evidenceChallengePassed = evChallengePassed,
-                            hasIndependentTransfer = transferStatus == TransferStatus.TRANSFER_VERIFIED
+                            hasIndependentTransfer = transferStatus == TransferStatus.TRANSFER_VERIFIED ||
+                                ctvIndepTopic.any { it.countsAsIndependentCorrect }
                         )
                     )
                     when {
@@ -651,7 +966,8 @@ class ConcursoRepository(
                     } else {
                         1.0
                     }
-                    val u = PrioritizationEngine.priorityUtility(
+                    val signals = signalsByTopic[top.canonicalTopicId] ?: MetacognitivePrioritySignals()
+                    val u = PrioritizationEngine.priorityUtilityMetacognitive(
                         PrioritizationInputs(
                             editalWeight = normW,
                             incidenceWeight = 1.0,
@@ -661,12 +977,13 @@ class ConcursoRepository(
                             avgSeconds = avgSec,
                             unmetPrerequisitesCount = 0,
                             dependentCount = 0
-                        )
+                        ),
+                        signals
                     ) * entryBoost
                     if (u > bestUtility) {
                         bestUtility = u
                         bestTopicId = top.canonicalTopicId
-                        bestReason = when (diag) {
+                        val fallbackReason = when (diag) {
                             DiagnosticStatus.OVERCONFIDENCE_ERROR -> "Indício de erro c/ alta confiança em ${top.displayTitle}"
                             DiagnosticStatus.CONCEPTUAL_ERROR -> "Regra/exceção pendente em ${top.displayTitle}"
                             DiagnosticStatus.RETRIEVAL_FAILURE -> "Assunto familiar c/ retenção pendente: ${top.displayTitle}"
@@ -676,6 +993,16 @@ class ConcursoRepository(
                             DiagnosticStatus.VERIFIED_COMPETENCE -> "Manutenção leve em ${top.displayTitle}"
                             DiagnosticStatus.INSUFFICIENT_EVIDENCE -> "Assunto prioritário: ${top.displayTitle}"
                         }
+                        val advAfterFunctional = anyFunctionalCleared && !signals.functionalEliminationTransferVerified && distinctQuestions == 0
+                        val dec = PrioritizationEngine.buildMetacognitiveDecisionReason(
+                            signals = signals,
+                            unitTitle = top.displayTitle,
+                            fallbackReasonPt = fallbackReason,
+                            advancedAfterFunctionalTransfer = advAfterFunctional
+                        )
+                        bestReason = dec.reasonPt
+                        bestRuleCode = dec.decisionRuleCode
+                        bestMode = dec.recommendedMode
                     }
                 }
             }
@@ -687,6 +1014,7 @@ class ConcursoRepository(
         var groundedHits = 0
         var illusoryHits = 0
         var hesitantHits = 0
+        var unknownGroundingHits = 0
         var overconfErrors = 0
         var conceptualErrors = 0
         var retrievalFailures = 0
@@ -712,18 +1040,23 @@ class ConcursoRepository(
                 cellCounts[key] = (cur.first + if (ev.isCorrect) 1 else 0) to (cur.second + 1)
 
                 val normSel = normalizeEvidenceOptionId(ev.selectedEvidenceId, customCh)
-                val evWrong = correctEvId != null && normSel != null && normSel != correctEvId
+                val evCompat = if (correctEvId != null && normSel != null) normSel == correctEvId else null
+                val evWrong = evCompat == false
+                val dc = ev.declaredConfidence ?: DeclaredConfidence.fromLegacyBand(ev.confidenceLevel, ev.confidenceLevel > 0)
                 if (ev.isCorrect) {
-                    if (evWrong) {
-                        illusoryHits++
-                    } else if (ev.confidenceLevel >= 2) {
-                        groundedHits++
-                        seenCorrectBefore = true
-                    } else {
-                        hesitantHits++
+                    when (MetacognitiveEngine.classifyHitGrounding(true, dc, ev.cognitiveStrategy, evCompat)) {
+                        HitGroundingCategory.DIVERGENT_RATIONALE -> illusoryHits++
+                        HitGroundingCategory.FRAGILE_OR_GUESS -> hesitantHits++
+                        HitGroundingCategory.VALID_CONCEPTUAL_GROUNDING,
+                        HitGroundingCategory.VALID_FUNCTIONAL_STRATEGY -> {
+                            groundedHits++
+                            seenCorrectBefore = true
+                        }
+                        HitGroundingCategory.UNKNOWN_GROUNDING,
+                        HitGroundingCategory.NOT_APPLICABLE_ERROR -> unknownGroundingHits++
                     }
                 } else {
-                    if (ev.confidenceLevel >= 3 || (ev.confidenceLevel >= 2 && evWrong)) {
+                    if (ev.confidenceLevel >= 3 || dc?.isHigh == true || (ev.confidenceLevel >= 2 && evWrong)) {
                         overconfErrors++
                     } else if (evWrong || !seenCorrectBefore) {
                         conceptualErrors++
@@ -849,27 +1182,39 @@ class ConcursoRepository(
         val recentIds = rows.filter { r ->
             r.events.any { (nowMs - safeInstant(it.occurredAt).toEpochMilli()) in 0..(18L * 3600_000L) }
         }.map { it.questionId }.toSet()
-        val localEntryCandidate = objectivePracticeQuestions(allCached)
+        val validEntryPool = objectivePracticeQuestions(allCached)
             .filter {
                 it.correctAnswerIndices.size == 1 &&
                     it.correctAnswerIndices[0] in it.answers.indices &&
                     QuestionCacheMapping.withinReviewDate(it, today)
             }
-            .maxByOrNull { q ->
-                PrioritizationEngine.entry60sQuestionScore(
-                    stemCharLen = q.question.length,
-                    isTrueFalse = q.questionType == QuestionType.TRUE_FALSE,
-                    isFamiliarTopic = q.canonicalTopicId in familiarTopics,
-                    hasPendingRetention = q.canonicalTopicId in pendingRetTopics,
-                    recentlyAnswered = q.id in recentIds
-                )
-            }
+        val priorityPool = if (bestTopicId != null) {
+            validEntryPool.filter { it.canonicalTopicId == bestTopicId }.ifEmpty { validEntryPool }
+        } else {
+            validEntryPool
+        }
+        val localEntryCandidate = priorityPool.maxByOrNull { q ->
+            val bonus = if (bestTopicId != null && q.canonicalTopicId == bestTopicId) 120.0 else 0.0
+            bonus + PrioritizationEngine.entry60sQuestionScore(
+                stemCharLen = q.question.length,
+                isTrueFalse = q.questionType == QuestionType.TRUE_FALSE,
+                isFamiliarTopic = q.canonicalTopicId in familiarTopics,
+                hasPendingRetention = q.canonicalTopicId in pendingRetTopics,
+                recentlyAnswered = q.id in recentIds
+            )
+        }
+        val recId = UUID.nameUUIDFromBytes(
+            "rec:$userId:$today:${bestTopicId.orEmpty()}:$bestRuleCode".toByteArray(Charsets.UTF_8)
+        ).toString()
 
         return NextActionResponseDto(
             scheduleHeader = scheduleHeader,
             entryQuestion = localEntryCandidate,
             entryReason = bestReason,
             priorityTopicId = bestTopicId,
+            recommendationId = recId,
+            decisionRuleCode = bestRuleCode,
+            recommendedQuizMode = bestMode,
             examGapSummary = ExamGapSummaryDto(
                 examId = activeExam?.examId,
                 examName = activeExam?.shortName,
@@ -891,6 +1236,7 @@ class ConcursoRepository(
                 groundedHits = groundedHits,
                 illusoryCompetenceHits = illusoryHits,
                 hesitantHits = hesitantHits,
+                unknownGroundingHits = unknownGroundingHits,
                 overconfidenceErrors = overconfErrors,
                 conceptualErrors = conceptualErrors,
                 retrievalFailures = retrievalFailures,
@@ -945,6 +1291,467 @@ class ConcursoRepository(
         )
     }
 
+    private fun buildCohortSummaryDto(
+        cohortId: String,
+        labelPt: String,
+        eligibilityScopePt: String,
+        offers: Int,
+        dismissals: Int,
+        responses: Int,
+        indepEligible: Int,
+        indepCorrect: Int
+    ): CtvAdaptiveCohortDto {
+        val rate = if (indepEligible > 0) {
+            kotlin.math.round(indepCorrect * 10000.0 / indepEligible) / 100.0
+        } else {
+            null
+        }
+        val summary = when {
+            indepEligible == 0 && dismissals > 0 ->
+                "Sem respostas independentes elegíveis ($dismissals dispensa(s) fora do denominador)."
+            indepEligible == 0 ->
+                "Sem respostas independentes elegíveis no período."
+            else -> {
+                val base = "%d/%d verificações independentes corretas (%.1f%%)".format(
+                    java.util.Locale.US,
+                    indepCorrect,
+                    indepEligible,
+                    100.0 * indepCorrect.toDouble() / indepEligible.toDouble()
+                )
+                if (dismissals > 0) "$base · $dismissals oferta(s) dispensada(s)" else base
+            }
+        }
+        return CtvAdaptiveCohortDto(
+            cohortId = cohortId,
+            labelPt = labelPt,
+            eligibilityScopePt = eligibilityScopePt,
+            offersCount = offers,
+            dismissalsCount = dismissals,
+            responsesCount = responses,
+            independentEligibleResponses = indepEligible,
+            independentCorrectCount = indepCorrect,
+            independentSuccessRatePct = rate,
+            summaryPt = summary
+        )
+    }
+
+    private suspend fun buildLocalStudentLearningAnalytics(
+        userId: Long,
+        rows: List<LearningRecord>,
+        exams: List<StoredExam>
+    ): StudentLearningAnalyticsDto {
+        val nowMs = System.currentTimeMillis()
+        val cachedById = cachedQuestionsMap(rows.map { it.questionId })
+        val ledger = loadCtvLedger(userId)
+
+        var rawCorrectHits = 0
+        var evaluableGroundingHits = 0
+        var unknownGroundingHits = 0
+        var validConceptualHits = 0
+        var validFunctionalHits = 0
+        var divergentRationaleHits = 0
+        var fragileHits = 0
+        var totalAttempts = 0
+        var highConfTotal = 0
+        var highConfErrors = 0
+        val wfInputs = ArrayList<WalkforwardCalibrationInput>()
+
+        for (row in rows) {
+            val q = cachedById[row.questionId]
+            val qt = if (q?.questionType == QuestionType.TRUE_FALSE) "TRUE_FALSE" else "MULTIPLE_CHOICE"
+            val customCh = q?.hasCustomEvidenceChallenge() == true
+            val correctEvId = q?.effectiveEvidenceChallenge()?.correctEvidenceId
+            for (ev in row.events) {
+                if (ev.isBlank) continue
+                totalAttempts++
+                val dc = ev.declaredConfidence ?: DeclaredConfidence.fromLegacyBand(ev.confidenceLevel, ev.confidenceLevel > 0)
+                if (dc?.isHigh == true) {
+                    highConfTotal++
+                    if (!ev.isCorrect) highConfErrors++
+                }
+                val normSel = normalizeEvidenceOptionId(ev.selectedEvidenceId, customCh)
+                val evCompat = if (correctEvId != null && normSel != null) normSel == correctEvId else null
+                if (ev.isCorrect) {
+                    rawCorrectHits++
+                    when (MetacognitiveEngine.classifyHitGrounding(true, dc, ev.cognitiveStrategy, evCompat)) {
+                        HitGroundingCategory.VALID_CONCEPTUAL_GROUNDING -> {
+                            evaluableGroundingHits++; validConceptualHits++
+                        }
+                        HitGroundingCategory.VALID_FUNCTIONAL_STRATEGY -> {
+                            evaluableGroundingHits++; validFunctionalHits++
+                        }
+                        HitGroundingCategory.DIVERGENT_RATIONALE -> {
+                            evaluableGroundingHits++; divergentRationaleHits++
+                        }
+                        HitGroundingCategory.FRAGILE_OR_GUESS -> {
+                            evaluableGroundingHits++; fragileHits++
+                        }
+                        HitGroundingCategory.UNKNOWN_GROUNDING,
+                        HitGroundingCategory.NOT_APPLICABLE_ERROR -> {
+                            unknownGroundingHits++
+                        }
+                    }
+                }
+                if (dc != null) {
+                    wfInputs += WalkforwardCalibrationInput(
+                        attemptId = ev.attemptId,
+                        occurredAtMs = safeInstant(ev.occurredAt).toEpochMilli(),
+                        questionType = qt,
+                        declaredConfidence = dc,
+                        isCorrect = ev.isCorrect
+                    )
+                }
+            }
+        }
+
+        val wfReport = CalibrationEngine.evaluateWalkforwardCalibration(wfInputs)
+        val dominantQt = if (wfInputs.count { it.questionType == "TRUE_FALSE" } > wfInputs.size / 2) {
+            "TRUE_FALSE"
+        } else {
+            "MULTIPLE_CHOICE"
+        }
+        val calList = DeclaredConfidence.entries.map { level ->
+            val matching = wfInputs.filter { it.declaredConfidence == level }
+            val att = matching.size
+            val corr = matching.count { it.isCorrect }
+            val (postMean, sd) = CalibrationEngine.calibratedLevelPosterior(dominantQt, level, corr, att)
+            ConfidenceLevelCalibrationDto(
+                declaredConfidence = level,
+                labelPt = level.labelPt,
+                attempts = att,
+                correct = corr,
+                observedAccuracyPct = if (att > 0) kotlin.math.round(corr * 10000.0 / att) / 100.0 else null,
+                calibratedPosteriorMean = kotlin.math.round(postMean * 10000.0) / 10000.0,
+                credibleSd = kotlin.math.round(sd * 10000.0) / 10000.0,
+                sufficiencyStatus = CalibrationEngine.sufficiencyStatusForSample(att, 5),
+                coverageSentencePt = CalibrationEngine.formatConfidenceCoverageSentence(level, null, corr, att)
+            )
+        }
+
+        // Estatísticas CTV locais/reconciliadas (Seções 2 e 3.5 — A03, A04, A08)
+        var diffOffers = 0
+        var diffDismissals = 0
+        var perOffers = 0
+        var perDismissals = 0
+        val seenOfferIds = HashSet<String>()
+        for (off in ledger.offers.values) {
+            if (off.firstDisplayedAt == null && off.dismissedAt == null && off.state == "SUPPLIED") continue
+            seenOfferIds += off.offerId
+            val isPeriodic = off.triggerCohort == "PERIODIC_SAMPLING"
+            if (isPeriodic) {
+                perOffers++
+                if (off.state == "DISMISSED" || (off.dismissedAt != null && ledger.attempts.values.none { it.offerId == off.offerId })) {
+                    perDismissals++
+                }
+            } else {
+                diffOffers++
+                if (off.state == "DISMISSED" || (off.dismissedAt != null && ledger.attempts.values.none { it.offerId == off.offerId })) {
+                    diffDismissals++
+                }
+            }
+        }
+        var diffResp = 0
+        var diffIndep = 0
+        var diffIndepOk = 0
+        var perResp = 0
+        var perIndep = 0
+        var perIndepOk = 0
+        var unknownCondCount = 0
+        for (att in ledger.attempts.values) {
+            if (att.classificationCode == "UNKNOWN_CONDITION" || att.verificationTiming == "UNKNOWN_CONDITION") {
+                unknownCondCount++
+            }
+            val isPeriodic = att.triggerCohort == "PERIODIC_SAMPLING" ||
+                CtvAlignmentEngine.triggerCohortForReason(att.triggerReason) == "PERIODIC_SAMPLING"
+            if (att.offerId.isBlank() || att.offerId !in seenOfferIds) {
+                if (isPeriodic) perOffers++ else diffOffers++
+            }
+            if (isPeriodic) {
+                perResp++
+                if (att.countsAsIndependentAttempt) {
+                    perIndep++
+                    if (att.countsAsIndependentCorrect) perIndepOk++
+                }
+            } else {
+                diffResp++
+                if (att.countsAsIndependentAttempt) {
+                    diffIndep++
+                    if (att.countsAsIndependentCorrect) diffIndepOk++
+                }
+            }
+        }
+        val totalIndepAtt = diffIndep + perIndep
+        val totalIndepOk = diffIndepOk + perIndepOk
+        val adaptiveReport = CtvAdaptiveSelectionReportDto(
+            difficultyTriggered = buildCohortSummaryDto(
+                cohortId = "DIFFICULTY_DETECTED",
+                labelPt = "Disparo adaptativo por dificuldade ou fragilidade",
+                eligibilityScopePt = "Tentativas com sinal de chute, baixa confiança, equívoco com confiança alta ou transferência pendente.",
+                offers = diffOffers,
+                dismissals = diffDismissals,
+                responses = diffResp,
+                indepEligible = diffIndep,
+                indepCorrect = diffIndepOk
+            ),
+            periodicSampling = buildCohortSummaryDto(
+                cohortId = "PERIODIC_SAMPLING",
+                labelPt = "Amostragem periódica de acompanhamento",
+                eligibilityScopePt = "Amostra determinística restrita a tentativas elegíveis em conceitos com histórico consistente.",
+                offers = perOffers,
+                dismissals = perDismissals,
+                responses = perResp,
+                indepEligible = perIndep,
+                indepCorrect = perIndepOk
+            ),
+            unknownConditionCount = unknownCondCount
+        )
+
+        val activeExam = exams.filter { it.isActiveInLadder && it.lifecycleStatus !in setOf("ARQUIVADO", "EXCLUIDO") }
+            .minByOrNull { it.ladderPriority }
+        val byTopic = rows.filter { !it.canonicalTopicId.isNullOrBlank() }.groupBy { it.canonicalTopicId!! }
+        val targetTopics = activeExam?.subjects.orEmpty()
+            .flatMap { s -> s.topics.filter { it.diffStatus != "ARQUIVADO" }.map { s.canonicalSubjectId to it.canonicalTopicId } }
+            .distinctBy { it.second }
+            .ifEmpty {
+                byTopic.keys.map { tid ->
+                    (byTopic[tid]?.firstOrNull()?.canonicalSubjectId ?: "") to tid
+                }
+            }
+
+        var notEval = 0
+        var insuff = 0
+        var emerging = 0
+        var unstable = 0
+        var developing = 0
+        var demonstrated = 0
+        var consolidated = 0
+        var atRisk = 0
+        val unitMasteries = mutableListOf<UnitConceptMasteryDto>()
+
+        for ((subjId, topicId) in targetTopics) {
+            val unitRows = byTopic[topicId].orEmpty()
+            val uEventsWithQ = unitRows.flatMap { r -> r.events.filter { !it.isBlank }.map { r.questionId to it } }
+            val uEvents = uEventsWithQ.map { it.second }
+            val att = uEvents.size
+            val distinctQ = unitRows.count { it.attempts > 0 }
+            val corr = uEvents.count { it.isCorrect }
+            val acc = if (att > 0) corr.toDouble() / att.toDouble() else 0.0
+            val grounded = uEventsWithQ.count { (qid, ev) ->
+                val q = cachedById[qid]
+                val customCh = q?.hasCustomEvidenceChallenge() == true
+                val correctEvId = q?.effectiveEvidenceChallenge()?.correctEvidenceId
+                val normSel = normalizeEvidenceOptionId(ev.selectedEvidenceId, customCh)
+                val evCompat = if (correctEvId != null && normSel != null) normSel == correctEvId else null
+                val dc = ev.declaredConfidence ?: DeclaredConfidence.fromLegacyBand(ev.confidenceLevel, ev.confidenceLevel > 0)
+                MetacognitiveEngine.classifyHitGrounding(ev.isCorrect, dc, ev.cognitiveStrategy, evCompat).creditsComprehension
+            }
+            val groundedRate = if (att > 0) grounded.toDouble() / att.toDouble() else 0.0
+            val hce = uEvents.count { ev ->
+                val dc = ev.declaredConfidence ?: DeclaredConfidence.fromLegacyBand(ev.confidenceLevel, ev.confidenceLevel > 0)
+                !ev.isCorrect && dc?.isHigh == true
+            }
+            val hceRate = if (att > 0) hce.toDouble() / att.toDouble() else 0.0
+            val transferProbeEvs = uEvents.filter { it.quizMode.equals("TRANSFER_PROBE", ignoreCase = true) }
+            val topicCtvIndep = ledger.attempts.values.filter {
+                it.canonicalTopicId == topicId && it.countsAsIndependentAttempt && it.verificationMode == "CONCEPTUAL_TRANSFER"
+            }
+            val tAtt = transferProbeEvs.size + topicCtvIndep.size
+            val tOk = transferProbeEvs.count { it.isCorrect } + topicCtvIndep.count { it.countsAsIndependentCorrect }
+            val tSucc = if (tAtt > 0) tOk.toDouble() / tAtt.toDouble() else 0.0
+            val hasSpaced = unitRows.any { r ->
+                val ts = r.events.filter { !it.isBlank && it.isCorrect }.map { safeInstant(it.occurredAt).toEpochMilli() }.sorted()
+                ts.size >= 2 && (ts.last() - ts.first()) >= 86_400_000L
+            } || unitRows.any { it.isMastered }
+            val lastMs = uEvents.maxOfOrNull { safeInstant(it.occurredAt).toEpochMilli() } ?: 0L
+            val elapsedDays = if (lastMs > 0L) ((nowMs - lastMs).coerceAtLeast(0L).toDouble() / 86_400_000.0) else 0.0
+            val stab = when {
+                unitRows.any { it.isMastered } -> 14.0
+                corr > 0 -> 4.0
+                else -> 0.0
+            }
+            val retr = if (att > 0) RetentionEngine.retrievability(elapsedDays, stab) else 0.0
+            val perQAcc = unitRows.filter { it.attempts > 0 }.map { it.accuracyPct / 100.0 }
+            val cons = if (perQAcc.size >= 2) {
+                val mean = perQAcc.average()
+                val sd = kotlin.math.sqrt(perQAcc.sumOf { (it - mean) * (it - mean) } / perQAcc.size)
+                (1.0 - sd * 1.5).coerceIn(0.0, 1.0)
+            } else if (att > 0) {
+                acc
+            } else {
+                0.0
+            }
+            val avgAct = uEvents.map { (it.activeSeconds ?: it.timeSpentSeconds).toDouble() }.takeIf { it.isNotEmpty() }?.average()
+            val eval = ConceptMasteryEngine.classifyConceptMastery(
+                ConceptMasteryInputs(
+                    attempts = att,
+                    distinctQuestions = distinctQ,
+                    accuracy = acc,
+                    groundedRate = groundedRate,
+                    highConfErrorRate = hceRate,
+                    transferAttempts = tAtt,
+                    transferSuccessRate = tSucc,
+                    hasSpacedRetention = hasSpaced,
+                    retrievability = retr,
+                    consistency = cons,
+                    avgActiveSeconds = avgAct,
+                    referenceSeconds = 60.0
+                )
+            )
+            when (eval.state) {
+                ConceptMasteryState.NOT_EVALUATED -> notEval++
+                ConceptMasteryState.INSUFFICIENT_EVIDENCE -> insuff++
+                ConceptMasteryState.EMERGING_KNOWLEDGE -> emerging++
+                ConceptMasteryState.UNSTABLE_KNOWLEDGE -> unstable++
+                ConceptMasteryState.DEVELOPING_MASTERY -> developing++
+                ConceptMasteryState.DEMONSTRATED_MASTERY -> demonstrated++
+                ConceptMasteryState.CONSOLIDATED_MASTERY -> consolidated++
+                ConceptMasteryState.MASTERY_AT_RISK -> atRisk++
+            }
+            unitMasteries += UnitConceptMasteryDto(
+                unitId = topicId,
+                canonicalSubjectId = subjId,
+                canonicalTopicId = topicId,
+                attempts = att,
+                distinctQuestions = distinctQ,
+                transferAttempts = tAtt,
+                evaluation = eval
+            )
+        }
+
+        val evaluatedUnits = unitMasteries.count { it.evaluation.state != ConceptMasteryState.NOT_EVALUATED }
+        val confirmedUnits = demonstrated + consolidated
+        fun pct(n: Int, d: Int): Double? = if (d > 0) kotlin.math.round(n * 10000.0 / d) / 100.0 else null
+
+        val groundingSentence = if (rawCorrectHits == 0) {
+            "Ainda não há acertos objetivos para avaliar a força do fundamento."
+        } else {
+            "Dos $rawCorrectHits acertos brutos, $evaluableGroundingHits têm evidência avaliável de fundamento e $unknownGroundingHits permanecem com fundamento não declarado."
+        }
+
+        val localKpis = listOf(
+            FormalKpiDto(
+                kpiId = "CONFIRMED_CONCEPTUAL_MASTERY_RATE",
+                labelPt = "Taxa de Domínio Conceitual Confirmado",
+                value = pct(confirmedUnits, evaluatedUnits),
+                unit = "%",
+                numerator = confirmedUnits.toDouble(),
+                denominator = evaluatedUnits.toDouble(),
+                sampleSizeN = evaluatedUnits,
+                formalDefinition = "Proporção de unidades avaliadas nos estados DEMONSTRATED_MASTERY ou CONSOLIDATED_MASTERY.",
+                interpretiveLimitation = "Exige evidência mínima em múltiplas questões, fundamento observável e transferência independente."
+            ),
+            FormalKpiDto(
+                kpiId = "INDEPENDENT_TRANSFER_SUCCESS_RATE",
+                labelPt = "Taxa de Transferência Independente",
+                value = pct(totalIndepOk, totalIndepAtt),
+                unit = "%",
+                numerator = totalIndepOk.toDouble(),
+                denominator = totalIndepAtt.toDouble(),
+                sampleSizeN = totalIndepAtt,
+                formalDefinition = "Proporção de verificações CTV inéditas, alinhadas ao conceito-alvo e respondidas antes do feedback em que o aluno acertou.",
+                interpretiveLimitation = "Respostas erradas inéditas pré-feedback permanecem no denominador; dispensas e itens já vistos ficam fora."
+            ),
+            FormalKpiDto(
+                kpiId = "FRAGILE_HIT_RATE",
+                labelPt = "Taxa de Acerto Frágil",
+                value = pct(fragileHits, evaluableGroundingHits),
+                unit = "%",
+                numerator = fragileHits.toDouble(),
+                denominator = evaluableGroundingHits.toDouble(),
+                sampleSizeN = evaluableGroundingHits,
+                formalDefinition = "Proporção de acertos com evidência avaliável obtidos com baixa confiança, chute ou reconhecimento superficial.",
+                missingDataRule = "Acertos sem estratégia/evidência ($unknownGroundingHits) são preservados como fundamento desconhecido.",
+                interpretiveLimitation = "Indica oportunidade de consolidação, não ausência absoluta de conhecimento."
+            ),
+            FormalKpiDto(
+                kpiId = "OVERCONFIDENCE_ERROR_RATE",
+                labelPt = "Taxa de Superconfiança",
+                value = pct(highConfErrors, highConfTotal),
+                unit = "%",
+                numerator = highConfErrors.toDouble(),
+                denominator = highConfTotal.toDouble(),
+                sampleSizeN = highConfTotal,
+                formalDefinition = "Proporção de erros dentre as respostas registradas com confiança alta ou praticamente certa.",
+                interpretiveLimitation = "Sensível a pequenas amostras iniciais (n < 10)."
+            )
+        )
+
+        return StudentLearningAnalyticsDto(
+            generatedAt = Instant.now().toString(),
+            calibrationPolicyVersion = wfReport.policyVersion,
+            learningKpis = localKpis,
+            empiricalBrierScore = wfReport.overallBrierScore,
+            trueFalseBrierScore = wfReport.trueFalseBrierScore,
+            multipleChoiceBrierScore = wfReport.multipleChoiceBrierScore,
+            coldStartPredictionsCount = wfReport.coldStartPredictionsCount,
+            confidenceCalibration = calList,
+            confidenceCalibrationByFormat = wfReport.cellsByFormat,
+            groundingSummary = GroundingEvidenceSummaryDto(
+                rawCorrectHits = rawCorrectHits,
+                evaluableGroundingHits = evaluableGroundingHits,
+                unknownGroundingHits = unknownGroundingHits,
+                validConceptualHits = validConceptualHits,
+                validFunctionalStrategyHits = validFunctionalHits,
+                divergentRationaleHits = divergentRationaleHits,
+                fragileOrGuessHits = fragileHits,
+                coverageSentencePt = groundingSentence
+            ),
+            ctvAdaptiveSelection = adaptiveReport,
+            conceptMasterySummary = ConceptMasterySummaryDto(
+                notEvaluated = notEval,
+                insufficientEvidence = insuff,
+                emergingKnowledge = emerging,
+                unstableKnowledge = unstable,
+                developingMastery = developing,
+                demonstratedMastery = demonstrated,
+                consolidatedMastery = consolidated,
+                masteryAtRisk = atRisk
+            ),
+            unitMastery = unitMasteries
+        )
+    }
+
+    private suspend fun hasUnsyncedLocalLearningOrCtv(userId: Long): Boolean {
+        val hasPendingRegular = dao.getAllPendingAttempts().any { it.ownerUserId == userId && it.syncError == null }
+        if (hasPendingRegular) return true
+        val hasPendingCtvSub = metadata("pending_ctv_submissions")
+            ?.takeIf { it.isNotBlank() }
+            ?.let { runCatching { json.decodeFromString<List<PendingCtvSubmission>>(it) }.getOrDefault(emptyList()) }
+            .orEmpty()
+            .any { it.ownerUserId == userId }
+        if (hasPendingCtvSub) return true
+        val ledger = loadCtvLedger(userId)
+        return ledger.pendingEvents.isNotEmpty() || ledger.attempts.values.any { it.provisional }
+    }
+
+    private suspend fun fetchOrBuildStudentLearningAnalytics(
+        userId: Long,
+        rows: List<LearningRecord>,
+        exams: List<StoredExam>
+    ): StudentLearningAnalyticsDto {
+        val cacheKey = "cached_learning_analytics:$userId"
+        return try {
+            if (hasUnsyncedLocalLearningOrCtv(userId)) {
+                return buildLocalStudentLearningAnalytics(userId, rows, exams)
+            }
+            auth?.ensureSession(api, ownerUserId)
+            val remote = api.getLearningAnalytics()
+            metadata(cacheKey, json.encodeToString(remote))
+            remote
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            if (hasUnsyncedLocalLearningOrCtv(userId)) {
+                buildLocalStudentLearningAnalytics(userId, rows, exams)
+            } else {
+                metadata(cacheKey)
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { runCatching { json.decodeFromString<StudentLearningAnalyticsDto>(it) }.getOrNull() }
+                    ?: buildLocalStudentLearningAnalytics(userId, rows, exams)
+            }
+        }
+    }
+
     suspend fun getProgressAnalytics(userId: Long): ProgressAnalyticsDto {
         owner(userId); val rows = projectedLearning(); val attempts = rows.sumOf { it.attempts }; val correct = rows.sumOf { it.correct }
         val stored = loadStoredExams()
@@ -953,6 +1760,7 @@ class ConcursoRepository(
         val penalty = primaryExam?.wrongAnswerPenalty ?: 0.0
         val telemetry = buildLocalDecisionTelemetry(userId, rows, stored, primaryExam?.examId)
         val entryMetrics = buildEntryProtocolMetrics(userId, rows)
+        val studentLearning = fetchOrBuildStudentLearningAnalytics(userId, rows, stored)
         val since = LocalDate.now(LearningProjection.studyZone).minusDays(89)
         val events = rows.flatMap { it.events }.filter { !it.isBlank && safeInstant(it.occurredAt).atOffset(LearningProjection.studyZone).toLocalDate() >= since }
         val days = events.groupBy { safeInstant(it.occurredAt).atOffset(LearningProjection.studyZone).toLocalDate() }
@@ -980,7 +1788,8 @@ class ConcursoRepository(
             examGapSummary = telemetry.examGapSummary,
             threeSignalSummary = telemetry.threeSignalSummary,
             examScenarios = telemetry.examScenarios,
-            entryMetrics = entryMetrics
+            entryMetrics = entryMetrics,
+            studentLearningAnalytics = studentLearning
         )
     }
 
@@ -1055,9 +1864,50 @@ class ConcursoRepository(
                 val nonHoldout = pool.filterNot { StrategyEngine.isHoldoutReserved(userId, it.id, pool.size) }
                 val candidatePool = if (nonHoldout.size >= count) nonHoldout else pool
                 val nowInst = Instant.now()
-                val due = candidatePool.filter { rows[it.id]?.let { r -> r.reviewRequired || safeInstant(r.nextReviewAt) <= nowInst } == true }.sortedBy { rows[it.id]?.nextReviewAt }
-                val gaps = candidatePool.filter { rows[it.id]?.let { r -> r.inErrorNotebook || (!r.isMastered && r.attempts > 0) } == true }.sortedBy { rows[it.id]?.accuracyPct }
-                val fresh = candidatePool.filter { rows[it.id] == null || rows[it.id]?.attempts == 0 }.shuffled() + candidatePool.shuffled()
+                val nowMs = nowInst.toEpochMilli()
+                val ledger = loadCtvLedger(userId)
+                val cachedMap = candidatePool.associateBy { it.id }
+                val (signalsByTopic, _) = computeMetacognitiveSignalsByTopic(rows.values.toList(), cachedMap, ledger, nowMs)
+                val totalExamWeight = exam?.subjects?.filter { it.weight > 0.0 }?.sumOf { it.weight }?.coerceAtLeast(1.0) ?: 1.0
+                val topicWeightMap = HashMap<String, Double>()
+                exam?.subjects?.forEach { s ->
+                    val nw = (s.weight / totalExamWeight).coerceAtLeast(0.05)
+                    s.topics.filter { it.diffStatus != "ARQUIVADO" }.forEach { t ->
+                        topicWeightMap[t.canonicalTopicId] = maxOf(topicWeightMap[t.canonicalTopicId] ?: 0.05, nw)
+                    }
+                }
+                val rowsByTopic = rows.values.filter { !it.canonicalTopicId.isNullOrBlank() }.groupBy { it.canonicalTopicId!! }
+                fun topicPriority(tid: String?): Double {
+                    if (tid.isNullOrBlank()) return 0.05
+                    val uRows = rowsByTopic[tid].orEmpty()
+                    val dq = uRows.count { it.attempts > 0 }
+                    val corr = uRows.sumOf { it.correct }
+                    val lastMs = uRows.flatMap { it.events }.filter { !it.isBlank }.maxOfOrNull { safeInstant(it.occurredAt).toEpochMilli() } ?: 0L
+                    val elDays = if (lastMs > 0L) ((nowMs - lastMs).coerceAtLeast(0L).toDouble() / 86_400_000.0) else 0.0
+                    val stab = if (uRows.any { it.isMastered }) 14.0 else if (corr > 0) 4.0 else 0.0
+                    val retr = if (dq > 0) RetentionEngine.retrievability(elDays, stab) else 0.0
+                    val sig = signalsByTopic[tid] ?: MetacognitivePrioritySignals()
+                    return PrioritizationEngine.priorityUtilityMetacognitive(
+                        PrioritizationInputs(
+                            editalWeight = topicWeightMap[tid] ?: 0.10,
+                            incidenceWeight = 1.0,
+                            retrievability = retr,
+                            verifiedCompetence = dq >= DiagnosticEngine.MIN_QUESTIONS_FOR_MASTERY && uRows.all { it.isMastered },
+                            distinctQuestions = dq,
+                            avgSeconds = 60.0,
+                            unmetPrerequisitesCount = 0,
+                            dependentCount = 0
+                        ),
+                        sig
+                    )
+                }
+                val due = candidatePool.filter { rows[it.id]?.let { r -> r.reviewRequired || safeInstant(r.nextReviewAt) <= nowInst } == true }
+                    .sortedWith(compareByDescending<QuestionDto> { topicPriority(it.canonicalTopicId) }.thenBy { rows[it.id]?.nextReviewAt })
+                val gaps = candidatePool.filter { rows[it.id]?.let { r -> r.inErrorNotebook || (!r.isMastered && r.attempts > 0) } == true }
+                    .sortedWith(compareByDescending<QuestionDto> { topicPriority(it.canonicalTopicId) }.thenBy { rows[it.id]?.accuracyPct ?: 0.0 })
+                val unseenByPriority = candidatePool.filter { rows[it.id] == null || rows[it.id]?.attempts == 0 }
+                    .sortedByDescending { topicPriority(it.canonicalTopicId) }
+                val fresh = unseenByPriority + candidatePool.sortedByDescending { topicPriority(it.canonicalTopicId) }
                 PrioritizationEngine.interleaveBuckets(due, gaps, fresh, count) { it.id }
             }
             QuizMode.STRATEGY_BATTERY -> {
@@ -1139,6 +1989,691 @@ class ConcursoRepository(
     }
 
     suspend fun <T> withMutationLock(block: suspend () -> T): T = mutationMutex.withLock { block() }
+
+    suspend fun evaluateAndSupplyCtv(
+        userId: Long,
+        request: CtvEvaluateRequestDto,
+        sourceQuestion: QuestionDto
+    ): CtvEvaluateResponseDto {
+        owner(userId)
+        if (request.isBlank || (request.quizMode.equals("SIMULADO", ignoreCase = true) && !request.forcePostInstruction)) {
+            return CtvEvaluateResponseDto(triggered = false, status = "not_triggered")
+        }
+        try {
+            auth?.ensureSession(api, ownerUserId)
+            val remote = api.evaluateCtv(request)
+            val normalizedComp = remote.complementaryQuestion?.let(QuestionCacheMapping::withRevision)
+            val resolvedOfferId = remote.offerId?.takeIf { it.isNotBlank() }
+                ?: normalizedComp?.let { deterministicOfferId(userId, request.parentAttemptId, it.id) }
+            if (remote.triggered && normalizedComp != null && resolvedOfferId != null) {
+                mutationMutex.withLock {
+                    val ledger = loadCtvLedger(userId)
+                    val prevOffer = ledger.offers[resolvedOfferId]
+                    val entry = LocalCtvOfferEntry(
+                        offerId = resolvedOfferId,
+                        parentAttemptId = request.parentAttemptId,
+                        sourceQuestionId = request.sourceQuestionId,
+                        complementaryQuestionId = normalizedComp.id,
+                        contentRevision = normalizedComp.questionRevision,
+                        canonicalTopicId = normalizedComp.canonicalTopicId ?: sourceQuestion.canonicalTopicId,
+                        targetConceptId = remote.targetConceptId,
+                        targetTestedRule = remote.targetTestedRule,
+                        framingReasonCode = remote.framingReasonCode,
+                        verificationMode = remote.verificationMode,
+                        triggerReason = remote.triggerReason,
+                        triggerCohort = remote.triggerCohort.ifBlank {
+                            CtvAlignmentEngine.triggerCohortForReason(remote.triggerReason)
+                        },
+                        deliverySource = remote.deliverySource,
+                        state = prevOffer?.state ?: "SUPPLIED",
+                        suppliedAt = prevOffer?.suppliedAt?.takeIf { it.isNotBlank() } ?: Instant.now().toString(),
+                        firstDisplayedAt = prevOffer?.firstDisplayedAt,
+                        dismissedAt = prevOffer?.dismissedAt
+                    )
+                    saveCtvLedger(userId, ledger.copy(offers = ledger.offers + (resolvedOfferId to entry)))
+                }
+            }
+            if (normalizedComp != null && normalizedComp.questionType != QuestionType.OPEN_ENDED) {
+                dao.insertQuestions(listOf(QuestionCacheMapping.toEntity(normalizedComp, json)))
+                val decorated = decorateQuestions(listOf(normalizedComp)).firstOrNull() ?: normalizedComp
+                return remote.copy(offerId = resolvedOfferId ?: remote.offerId, complementaryQuestion = decorated)
+            }
+            return remote.copy(offerId = resolvedOfferId ?: remote.offerId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Fallback offline Database First: consulta o cache local com alinhamento conceitual e sem registrar exibição prematura
+            if (request.sessionCtvCount >= 3) {
+                return CtvEvaluateResponseDto(triggered = false, status = "cooldown_suppressed")
+            }
+            val dc = request.declaredConfidence
+                ?: DeclaredConfidence.fromLegacyBand(request.confidenceLevel, true)
+            val highPriority = (request.isCorrect && (dc == DeclaredConfidence.GUESS || request.cognitiveStrategy == CognitiveStrategy.RANDOM_GUESS)) ||
+                (!request.isCorrect && dc?.isHigh == true)
+            val mediumPriority = request.isCorrect && (
+                dc == DeclaredConfidence.LOW ||
+                    request.cognitiveStrategy == CognitiveStrategy.PATTERN_RECOGNITION ||
+                    request.cognitiveStrategy == CognitiveStrategy.INTUITION
+                )
+            val periodicBucket = run {
+                val dig = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest("periodic:${request.parentAttemptId}:${request.sourceQuestionId}".toByteArray(Charsets.UTF_8))
+                (dig[0].toInt() and 0xFF) % 100
+            }
+            val periodicTriggered = request.isCorrect && dc?.isHigh == true && periodicBucket < 15
+            if (!highPriority &&
+                !(mediumPriority && (request.sessionCtvCount == 0 || request.attemptsSinceLastCtv >= 2)) &&
+                !(periodicTriggered && (request.sessionCtvCount == 0 || request.attemptsSinceLastCtv >= 2))
+            ) {
+                return CtvEvaluateResponseDto(triggered = false, status = "not_triggered")
+            }
+            val topicId = sourceQuestion.canonicalTopicId?.takeIf { it.isNotBlank() }
+                ?: return CtvEvaluateResponseDto(triggered = false, status = "offline_unavailable")
+
+            val sourceProfile = resolveAlignmentProfile(sourceQuestion)
+            val cachedDtos = dao.getCachedQuestions(null, 5000).map { QuestionCacheMapping.withRevision(QuestionCacheMapping.toDto(it, json)) }
+            val sameTopic = objectivePracticeQuestions(cachedDtos).filter { cand ->
+                cand.id != sourceQuestion.id &&
+                    cand.canonicalTopicId == topicId &&
+                    cand.correctAnswerIndices.size == 1 &&
+                    cand.correctAnswerIndices[0] in cand.answers.indices &&
+                    QuestionCacheMapping.withinReviewDate(cand, LocalDate.now(LearningProjection.studyZone))
+            }
+            if (sameTopic.isEmpty()) {
+                return CtvEvaluateResponseDto(triggered = false, status = "offline_unavailable")
+            }
+            val learningById = projectedLearningForQuestions(sameTopic.map { it.id } + sourceQuestion.id)
+            val ledger = loadCtvLedger(userId)
+
+            // Idempotência da mesma tentativa-mãe caso já tenha oferta fornecida localmente
+            val existingSameParent = ledger.offers.values.firstOrNull { it.parentAttemptId == request.parentAttemptId }
+            if (existingSameParent != null) {
+                val existingQ = sameTopic.firstOrNull { it.id == existingSameParent.complementaryQuestionId }
+                if (existingQ != null) {
+                    val priorExp = hasPriorExposureExcludingOffer(
+                        questionId = existingQ.id,
+                        questionRevision = existingQ.questionRevision,
+                        excludeOfferId = existingSameParent.offerId,
+                        excludeAttemptId = null,
+                        learningById = learningById,
+                        ledger = ledger
+                    )
+                    return CtvEvaluateResponseDto(
+                        triggered = true,
+                        status = "supplied",
+                        offerId = existingSameParent.offerId,
+                        triggerReason = existingSameParent.triggerReason,
+                        triggerCohort = existingSameParent.triggerCohort,
+                        diagnosticPurpose = if (priorExp) "LONGITUDINAL_RETENTION" else existingSameParent.verificationMode,
+                        verificationMode = existingSameParent.verificationMode,
+                        framingReasonCode = existingSameParent.framingReasonCode,
+                        targetConceptId = existingSameParent.targetConceptId,
+                        targetTestedRule = existingSameParent.targetTestedRule,
+                        deliverySource = "REUSED_LOCAL_CACHE",
+                        verificationTiming = if (request.forcePostInstruction) "POST_INSTRUCTION" else "PRE_FEEDBACK",
+                        wasPreviouslyExposed = priorExp,
+                        complementaryQuestion = existingQ,
+                        studentFramingPt = if (existingSameParent.verificationMode == "TOPIC_PRACTICE") {
+                            "Prática complementar do tópico relacionada ao tema estudado."
+                        } else if (priorExp) {
+                            "Verificação rápida de retenção em outra questão deste tópico antes do gabarito."
+                        } else {
+                            "Vamos verificar este conceito em outro contexto antes de abrir o gabarito comentado."
+                        }
+                    )
+                }
+            }
+
+            data class ScoredLocalCandidate(
+                val question: QuestionDto,
+                val mode: VerificationMode,
+                val framingReasonCode: String,
+                val framingReasonPt: String,
+                val wasExposed: Boolean,
+                val score: Int
+            )
+
+            val evaluated = sameTopic.mapNotNull { cand ->
+                val candProfile = resolveAlignmentProfile(cand)
+                val tentativeOfferId = deterministicOfferId(userId, request.parentAttemptId, cand.id)
+                val wasExposed = hasPriorExposureExcludingOffer(
+                    questionId = cand.id,
+                    questionRevision = cand.questionRevision,
+                    excludeOfferId = tentativeOfferId,
+                    excludeAttemptId = null,
+                    learningById = learningById,
+                    ledger = ledger
+                )
+                when (val dec = CtvAlignmentEngine.evaluateCandidateAlignment(sourceProfile, candProfile, allowSeenReview = false)) {
+                    is CandidateAlignmentDecision.Rejected -> null
+                    is CandidateAlignmentDecision.Accepted -> {
+                        val baseModeScore = when {
+                            dec.mode == VerificationMode.CONCEPTUAL_TRANSFER && !wasExposed -> 300
+                            dec.mode == VerificationMode.TOPIC_PRACTICE && !wasExposed -> 140
+                            dec.mode == VerificationMode.CONCEPTUAL_TRANSFER && wasExposed -> 70
+                            else -> 30
+                        }
+                        val crossBoardBonus = if (cand.source.isNotBlank() && cand.source != sourceQuestion.source) 15 else 0
+                        ScoredLocalCandidate(
+                            question = cand,
+                            mode = if (wasExposed && dec.mode == VerificationMode.CONCEPTUAL_TRANSFER) {
+                                VerificationMode.INTENTIONAL_REVIEW
+                            } else {
+                                dec.mode
+                            },
+                            framingReasonCode = if (wasExposed && dec.mode == VerificationMode.CONCEPTUAL_TRANSFER) {
+                                "PRIOR_EXPOSURE_REVIEW"
+                            } else {
+                                dec.framingReasonCode
+                            },
+                            framingReasonPt = dec.framingReasonPt,
+                            wasExposed = wasExposed,
+                            score = baseModeScore + dec.applicationBonus + crossBoardBonus
+                        )
+                    }
+                }
+            }.sortedWith(compareByDescending<ScoredLocalCandidate> { it.score }.thenBy { it.question.id })
+
+            val picked = evaluated.firstOrNull()
+                ?: return CtvEvaluateResponseDto(triggered = false, status = "offline_unavailable")
+
+            val triggerReason = when {
+                periodicTriggered && !highPriority && !mediumPriority -> "PERIODIC_MASTERY_SAMPLING"
+                highPriority && !request.isCorrect -> "HIGH_CONFIDENCE_MISCONCEPTION"
+                highPriority -> "GUESS_HIT"
+                else -> "LOW_CONFIDENCE_HIT"
+            }
+            val triggerCohort = CtvAlignmentEngine.triggerCohortForReason(triggerReason)
+            val offerId = deterministicOfferId(userId, request.parentAttemptId, picked.question.id)
+            // Importante (A04): `evaluateAndSupplyCtv` registra apenas `SUPPLIED` (`firstDisplayedAt = null`).
+            // Transferência/pré-carregamento sem exibição na tela NÃO conta como exposição!
+            mutationMutex.withLock {
+                val curLedger = loadCtvLedger(userId)
+                val prevOffer = curLedger.offers[offerId]
+                val entry = LocalCtvOfferEntry(
+                    offerId = offerId,
+                    parentAttemptId = request.parentAttemptId,
+                    sourceQuestionId = request.sourceQuestionId,
+                    complementaryQuestionId = picked.question.id,
+                    contentRevision = picked.question.questionRevision,
+                    canonicalTopicId = picked.question.canonicalTopicId ?: topicId,
+                    targetConceptId = sourceProfile.targetConceptId,
+                    targetTestedRule = sourceProfile.testedRule,
+                    framingReasonCode = picked.framingReasonCode,
+                    verificationMode = picked.mode.code,
+                    triggerReason = triggerReason,
+                    triggerCohort = triggerCohort,
+                    deliverySource = "REUSED_LOCAL_CACHE",
+                    state = prevOffer?.state ?: "SUPPLIED",
+                    suppliedAt = prevOffer?.suppliedAt?.takeIf { it.isNotBlank() } ?: Instant.now().toString(),
+                    firstDisplayedAt = prevOffer?.firstDisplayedAt,
+                    dismissedAt = prevOffer?.dismissedAt
+                )
+                saveCtvLedger(userId, curLedger.copy(offers = curLedger.offers + (offerId to entry)))
+            }
+
+            val studentFraming = when (picked.mode) {
+                VerificationMode.TOPIC_PRACTICE ->
+                    "Prática complementar do tópico antes do gabarito comentado (conceito original permanece sem transferência medida)."
+                VerificationMode.INTENTIONAL_REVIEW ->
+                    "Verificação rápida de retenção em questão já conhecida deste tópico antes do gabarito."
+                VerificationMode.CONCEPTUAL_TRANSFER ->
+                    "Vamos verificar este conceito em outro contexto antes de abrir o gabarito comentado."
+            }
+            return CtvEvaluateResponseDto(
+                triggered = true,
+                status = "supplied",
+                offerId = offerId,
+                triggerReason = triggerReason,
+                triggerCohort = triggerCohort,
+                diagnosticPurpose = when {
+                    picked.mode == VerificationMode.TOPIC_PRACTICE -> "TOPIC_PRACTICE"
+                    picked.wasExposed -> "LONGITUDINAL_RETENTION"
+                    else -> "CONCEPTUAL_TRANSFER"
+                },
+                verificationMode = picked.mode.code,
+                framingReasonCode = picked.framingReasonCode,
+                framingReasonPt = picked.framingReasonPt,
+                targetConceptId = sourceProfile.targetConceptId,
+                targetTestedRule = sourceProfile.testedRule,
+                deliverySource = "REUSED_LOCAL_CACHE",
+                verificationTiming = if (request.forcePostInstruction) "POST_INSTRUCTION" else "PRE_FEEDBACK",
+                wasPreviouslyExposed = picked.wasExposed,
+                complementaryQuestion = picked.question,
+                studentFramingPt = studentFraming
+            )
+        }
+    }
+
+    suspend fun recordCtvDisplayed(
+        userId: Long,
+        evaluation: CtvEvaluateResponseDto,
+        sourceQuestionId: String,
+        parentAttemptId: String,
+        occurredAtIso: String = Instant.now().toString()
+    ): String {
+        owner(userId)
+        val compQ = evaluation.complementaryQuestion ?: return occurredAtIso
+        val normalizedComp = QuestionCacheMapping.withRevision(compQ)
+        val offerId = evaluation.offerId?.takeIf { it.isNotBlank() }
+            ?: deterministicOfferId(userId, parentAttemptId, normalizedComp.id)
+        var effectiveFirstDisplayed = occurredAtIso
+        var eventToSend: CtvLifecycleEventRequestDto? = null
+
+        mutationMutex.withLock {
+            val ledger = loadCtvLedger(userId)
+            val prev = ledger.offers[offerId]
+            val firstDisp = prev?.firstDisplayedAt ?: occurredAtIso
+            effectiveFirstDisplayed = firstDisp
+            val nextState = when (prev?.state) {
+                "ANSWERED", "DISMISSED" -> prev.state
+                else -> "DISPLAYED"
+            }
+            val updatedOffer = LocalCtvOfferEntry(
+                offerId = offerId,
+                parentAttemptId = parentAttemptId,
+                sourceQuestionId = sourceQuestionId,
+                complementaryQuestionId = normalizedComp.id,
+                contentRevision = normalizedComp.questionRevision,
+                canonicalTopicId = normalizedComp.canonicalTopicId ?: prev?.canonicalTopicId,
+                targetConceptId = evaluation.targetConceptId ?: prev?.targetConceptId,
+                targetTestedRule = evaluation.targetTestedRule ?: prev?.targetTestedRule,
+                framingReasonCode = evaluation.framingReasonCode ?: prev?.framingReasonCode,
+                verificationMode = evaluation.verificationMode.ifBlank { prev?.verificationMode ?: "CONCEPTUAL_TRANSFER" },
+                triggerReason = evaluation.triggerReason ?: prev?.triggerReason,
+                triggerCohort = evaluation.triggerCohort.ifBlank {
+                    CtvAlignmentEngine.triggerCohortForReason(evaluation.triggerReason ?: prev?.triggerReason)
+                },
+                deliverySource = evaluation.deliverySource ?: prev?.deliverySource,
+                state = nextState,
+                suppliedAt = prev?.suppliedAt?.takeIf { it.isNotBlank() } ?: firstDisp,
+                firstDisplayedAt = firstDisp,
+                dismissedAt = prev?.dismissedAt
+            )
+            val eventId = UUID.nameUUIDFromBytes("ctv-ev:$offerId:DISPLAYED".toByteArray(Charsets.UTF_8)).toString()
+            val req = CtvLifecycleEventRequestDto(
+                eventId = eventId,
+                offerId = offerId,
+                parentAttemptId = parentAttemptId,
+                sourceQuestionId = sourceQuestionId,
+                complementaryQuestionId = normalizedComp.id,
+                questionRevision = normalizedComp.questionRevision,
+                eventKind = "DISPLAYED",
+                occurredAt = firstDisp,
+                triggerReason = updatedOffer.triggerReason,
+                verificationMode = updatedOffer.verificationMode,
+                deliverySource = updatedOffer.deliverySource,
+                targetConceptId = updatedOffer.targetConceptId,
+                targetTestedRule = updatedOffer.targetTestedRule,
+                framingReasonCode = updatedOffer.framingReasonCode
+            )
+            eventToSend = req
+            val alreadyQueued = ledger.pendingEvents.any { it.offerId == offerId && it.eventKind == "DISPLAYED" }
+            val nextPending = if (alreadyQueued || prev?.firstDisplayedAt != null) {
+                ledger.pendingEvents
+            } else {
+                ledger.pendingEvents + req
+            }
+            saveCtvLedger(userId, ledger.copy(offers = ledger.offers + (offerId to updatedOffer), pendingEvents = nextPending))
+        }
+
+        eventToSend?.let { req ->
+            val sent = runCatching {
+                auth?.ensureSession(api, ownerUserId)
+                api.recordCtvEvent(req)
+                true
+            }.getOrDefault(false)
+            if (sent) {
+                mutationMutex.withLock {
+                    val cur = loadCtvLedger(userId)
+                    saveCtvLedger(
+                        userId,
+                        cur.copy(pendingEvents = cur.pendingEvents.filterNot { it.offerId == offerId && it.eventKind == "DISPLAYED" })
+                    )
+                }
+            }
+        }
+        return effectiveFirstDisplayed
+    }
+
+    suspend fun recordCtvDismissed(
+        userId: Long,
+        evaluation: CtvEvaluateResponseDto,
+        sourceQuestionId: String,
+        parentAttemptId: String,
+        occurredAtIso: String = Instant.now().toString()
+    ) {
+        owner(userId)
+        val compQ = evaluation.complementaryQuestion ?: return
+        val normalizedComp = QuestionCacheMapping.withRevision(compQ)
+        val offerId = evaluation.offerId?.takeIf { it.isNotBlank() }
+            ?: deterministicOfferId(userId, parentAttemptId, normalizedComp.id)
+        var eventToSend: CtvLifecycleEventRequestDto? = null
+
+        mutationMutex.withLock {
+            val ledger = loadCtvLedger(userId)
+            val prev = ledger.offers[offerId]
+            val firstDisp = prev?.firstDisplayedAt ?: occurredAtIso
+            val dismissedAt = prev?.dismissedAt ?: occurredAtIso
+            val nextState = if (prev?.state == "ANSWERED") "ANSWERED" else "DISMISSED"
+            val updatedOffer = LocalCtvOfferEntry(
+                offerId = offerId,
+                parentAttemptId = parentAttemptId,
+                sourceQuestionId = sourceQuestionId,
+                complementaryQuestionId = normalizedComp.id,
+                contentRevision = normalizedComp.questionRevision,
+                canonicalTopicId = normalizedComp.canonicalTopicId ?: prev?.canonicalTopicId,
+                targetConceptId = evaluation.targetConceptId ?: prev?.targetConceptId,
+                targetTestedRule = evaluation.targetTestedRule ?: prev?.targetTestedRule,
+                framingReasonCode = evaluation.framingReasonCode ?: prev?.framingReasonCode,
+                verificationMode = evaluation.verificationMode.ifBlank { prev?.verificationMode ?: "CONCEPTUAL_TRANSFER" },
+                triggerReason = evaluation.triggerReason ?: prev?.triggerReason,
+                triggerCohort = evaluation.triggerCohort.ifBlank {
+                    CtvAlignmentEngine.triggerCohortForReason(evaluation.triggerReason ?: prev?.triggerReason)
+                },
+                deliverySource = evaluation.deliverySource ?: prev?.deliverySource,
+                state = nextState,
+                suppliedAt = prev?.suppliedAt?.takeIf { it.isNotBlank() } ?: firstDisp,
+                firstDisplayedAt = firstDisp,
+                dismissedAt = dismissedAt
+            )
+            val eventId = UUID.nameUUIDFromBytes("ctv-ev:$offerId:DISMISSED".toByteArray(Charsets.UTF_8)).toString()
+            val req = CtvLifecycleEventRequestDto(
+                eventId = eventId,
+                offerId = offerId,
+                parentAttemptId = parentAttemptId,
+                sourceQuestionId = sourceQuestionId,
+                complementaryQuestionId = normalizedComp.id,
+                questionRevision = normalizedComp.questionRevision,
+                eventKind = "DISMISSED",
+                occurredAt = dismissedAt,
+                triggerReason = updatedOffer.triggerReason,
+                verificationMode = updatedOffer.verificationMode,
+                deliverySource = updatedOffer.deliverySource,
+                targetConceptId = updatedOffer.targetConceptId,
+                targetTestedRule = updatedOffer.targetTestedRule,
+                framingReasonCode = updatedOffer.framingReasonCode
+            )
+            eventToSend = req
+            val nextPending = ledger.pendingEvents.filterNot { it.offerId == offerId && it.eventKind == "DISMISSED" } + req
+            saveCtvLedger(userId, ledger.copy(offers = ledger.offers + (offerId to updatedOffer), pendingEvents = nextPending))
+        }
+
+        eventToSend?.let { req ->
+            val sent = runCatching {
+                auth?.ensureSession(api, ownerUserId)
+                api.recordCtvEvent(req)
+                true
+            }.getOrDefault(false)
+            if (sent) {
+                mutationMutex.withLock {
+                    val cur = loadCtvLedger(userId)
+                    saveCtvLedger(
+                        userId,
+                        cur.copy(pendingEvents = cur.pendingEvents.filterNot { it.offerId == offerId && it.eventKind == "DISMISSED" })
+                    )
+                }
+            }
+        }
+    }
+
+    suspend fun recordRecommendationFeedback(
+        userId: Long,
+        request: RecommendationFeedbackRequestDto
+    ) {
+        owner(userId)
+        val stamped = if (request.occurredAt.isNullOrBlank()) {
+            request.copy(occurredAt = Instant.now().toString())
+        } else {
+            request
+        }
+        val sent = runCatching {
+            auth?.ensureSession(api, ownerUserId)
+            api.recordRecommendationFeedback(stamped)
+            true
+        }.getOrDefault(false)
+        if (!sent) {
+            mutationMutex.withLock {
+                val ledger = loadCtvLedger(userId)
+                val deduped = ledger.pendingRecommendationFeedback.filterNot {
+                    it.recommendationId == stamped.recommendationId && it.outcome == stamped.outcome
+                } + stamped
+                saveCtvLedger(userId, ledger.copy(pendingRecommendationFeedback = deduped))
+            }
+        }
+    }
+
+    suspend fun submitCtvAttemptOfflineResilient(
+        userId: Long,
+        request: CtvSubmitRequestDto,
+        complementaryQuestion: QuestionDto,
+        parentWasCorrect: Boolean
+    ): CtvSubmitResponseDto {
+        owner(userId)
+        val normalizedComp = QuestionCacheMapping.withRevision(complementaryQuestion)
+        val resolvedOfferId = request.offerId?.takeIf { it.isNotBlank() }
+            ?: deterministicOfferId(userId, request.parentAttemptId, normalizedComp.id)
+        val occurredIso = request.occurredAt?.takeIf { it.isNotBlank() } ?: Instant.now().toString()
+        val occurredMs = safeInstant(occurredIso).toEpochMilli()
+        val hadDecisiveHelp = request.hadDecisiveHelp ||
+            request.consultedResources.any(CtvAlignmentEngine::isRuleRevealingHelp)
+
+        val learningById = projectedLearningForQuestions(listOf(normalizedComp.id, request.sourceQuestionId))
+        val preLedger = loadCtvLedger(userId)
+        val existingOffer = preLedger.offers[resolvedOfferId]
+        val localPriorExposed = request.wasPreviouslyExposed || hasPriorExposureExcludingOffer(
+            questionId = normalizedComp.id,
+            questionRevision = normalizedComp.questionRevision,
+            excludeOfferId = resolvedOfferId,
+            excludeAttemptId = request.ctvAttemptId,
+            learningById = learningById,
+            ledger = preLedger,
+            evaluatedAtMs = if (occurredMs > 0L) occurredMs else null
+        )
+        val resolvedMode = VerificationMode.fromCode(
+            request.verificationMode ?: existingOffer?.verificationMode ?: "CONCEPTUAL_TRANSFER"
+        )
+        val resolvedTriggerReason = request.triggerReason ?: existingOffer?.triggerReason
+        val resolvedCohort = existingOffer?.triggerCohort
+            ?: CtvAlignmentEngine.triggerCohortForReason(resolvedTriggerReason)
+        val displayedIso = request.displayedAt ?: existingOffer?.firstDisplayedAt ?: occurredIso
+        val enrichedRequest = request.copy(
+            offerId = resolvedOfferId,
+            occurredAt = occurredIso,
+            displayedAt = displayedIso,
+            wasPreviouslyExposed = localPriorExposed,
+            hadDecisiveHelp = hadDecisiveHelp,
+            triggerReason = resolvedTriggerReason,
+            deliverySource = request.deliverySource ?: existingOffer?.deliverySource,
+            verificationMode = resolvedMode.code
+        )
+
+        try {
+            auth?.ensureSession(api, ownerUserId)
+            val remote = api.submitCtvAttempt(enrichedRequest)
+            val verdict = CtvAlignmentEngine.evaluateCtvIndependence(
+                CtvIndependenceInput(
+                    verificationMode = VerificationMode.fromCode(remote.verificationMode),
+                    action = "ANSWERED",
+                    verificationTiming = remote.verificationTiming,
+                    wasPreviouslyExposed = localPriorExposed && !remote.countsAsIndependentTransfer,
+                    exposureHistoryKnown = remote.verificationTiming.uppercase() != "UNKNOWN_CONDITION",
+                    hadDecisiveHelp = hadDecisiveHelp,
+                    isCorrect = remote.isCorrect
+                )
+            )
+            mutationMutex.withLock {
+                val ledger = loadCtvLedger(userId)
+                val prevOff = ledger.offers[resolvedOfferId]
+                val nextOff = LocalCtvOfferEntry(
+                    offerId = resolvedOfferId,
+                    parentAttemptId = enrichedRequest.parentAttemptId,
+                    sourceQuestionId = enrichedRequest.sourceQuestionId,
+                    complementaryQuestionId = normalizedComp.id,
+                    contentRevision = normalizedComp.questionRevision,
+                    canonicalTopicId = normalizedComp.canonicalTopicId ?: prevOff?.canonicalTopicId,
+                    targetConceptId = remote.targetConceptId ?: prevOff?.targetConceptId,
+                    targetTestedRule = remote.targetTestedRule ?: prevOff?.targetTestedRule,
+                    framingReasonCode = prevOff?.framingReasonCode,
+                    verificationMode = remote.verificationMode,
+                    triggerReason = resolvedTriggerReason,
+                    triggerCohort = resolvedCohort,
+                    deliverySource = enrichedRequest.deliverySource,
+                    state = "ANSWERED",
+                    suppliedAt = prevOff?.suppliedAt?.takeIf { it.isNotBlank() } ?: displayedIso,
+                    firstDisplayedAt = prevOff?.firstDisplayedAt ?: displayedIso,
+                    dismissedAt = prevOff?.dismissedAt
+                )
+                val attEntry = LocalCtvAttemptEntry(
+                    ctvAttemptId = remote.ctvAttemptId,
+                    offerId = remote.offerId.ifBlank { resolvedOfferId },
+                    parentAttemptId = remote.parentAttemptId,
+                    sourceQuestionId = enrichedRequest.sourceQuestionId,
+                    complementaryQuestionId = remote.complementaryQuestionId,
+                    contentRevision = normalizedComp.questionRevision,
+                    canonicalTopicId = normalizedComp.canonicalTopicId ?: prevOff?.canonicalTopicId,
+                    targetConceptId = remote.targetConceptId ?: prevOff?.targetConceptId,
+                    targetTestedRule = remote.targetTestedRule ?: prevOff?.targetTestedRule,
+                    verificationMode = remote.verificationMode,
+                    verificationTiming = remote.verificationTiming,
+                    isCorrect = remote.isCorrect,
+                    wasPreviouslyExposed = !remote.countsAsIndependentTransfer && localPriorExposed,
+                    hadDecisiveHelp = hadDecisiveHelp,
+                    countsAsIndependentAttempt = remote.countsAsIndependentTransfer,
+                    countsAsIndependentCorrect = remote.countsAsIndependentTransfer && remote.isCorrect,
+                    classificationCode = remote.classificationCode.ifBlank { verdict.classificationCode },
+                    triggerReason = resolvedTriggerReason,
+                    triggerCohort = resolvedCohort,
+                    occurredAt = occurredIso,
+                    provisional = false
+                )
+                saveCtvLedger(
+                    userId,
+                    ledger.copy(
+                        offers = ledger.offers + (resolvedOfferId to nextOff),
+                        attempts = ledger.attempts + (remote.ctvAttemptId to attEntry),
+                        pendingEvents = ledger.pendingEvents.filterNot { it.offerId == resolvedOfferId && it.eventKind == "DISPLAYED" }
+                    )
+                )
+                metadata("cached_learning_analytics:$userId", "")
+            }
+            return remote
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            val correctIdx = normalizedComp.correctAnswerIndices.firstOrNull() ?: 0
+            val isCorrect = enrichedRequest.chosenIndex == correctIdx
+            // Semântica idêntica ao servidor (Seção 2 / A03): `isCorrect` entra EXCLUSIVAMENTE no numerador!
+            val verdict = CtvAlignmentEngine.evaluateCtvIndependence(
+                CtvIndependenceInput(
+                    verificationMode = resolvedMode,
+                    action = "ANSWERED",
+                    verificationTiming = enrichedRequest.verificationTiming,
+                    wasPreviouslyExposed = localPriorExposed,
+                    exposureHistoryKnown = enrichedRequest.verificationTiming.uppercase() != "UNKNOWN_CONDITION",
+                    hadDecisiveHelp = hadDecisiveHelp,
+                    isCorrect = isCorrect
+                )
+            )
+            val independentAttempt = verdict.countsAsIndependentAttempt
+            mutationMutex.withLock {
+                val prior = metadata("pending_ctv_submissions")
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { runCatching { json.decodeFromString<List<PendingCtvSubmission>>(it) }.getOrDefault(emptyList()) }
+                    .orEmpty()
+                val next = prior.filterNot {
+                    it.ownerUserId == userId && it.request.ctvAttemptId == enrichedRequest.ctvAttemptId
+                } + PendingCtvSubmission(userId, enrichedRequest)
+                metadata("pending_ctv_submissions", json.encodeToString(next))
+
+                val ledger = loadCtvLedger(userId)
+                val prevOff = ledger.offers[resolvedOfferId]
+                val nextOff = LocalCtvOfferEntry(
+                    offerId = resolvedOfferId,
+                    parentAttemptId = enrichedRequest.parentAttemptId,
+                    sourceQuestionId = enrichedRequest.sourceQuestionId,
+                    complementaryQuestionId = normalizedComp.id,
+                    contentRevision = normalizedComp.questionRevision,
+                    canonicalTopicId = normalizedComp.canonicalTopicId ?: prevOff?.canonicalTopicId,
+                    targetConceptId = prevOff?.targetConceptId,
+                    targetTestedRule = prevOff?.targetTestedRule,
+                    framingReasonCode = prevOff?.framingReasonCode,
+                    verificationMode = resolvedMode.code,
+                    triggerReason = resolvedTriggerReason,
+                    triggerCohort = resolvedCohort,
+                    deliverySource = enrichedRequest.deliverySource,
+                    state = "ANSWERED",
+                    suppliedAt = prevOff?.suppliedAt?.takeIf { it.isNotBlank() } ?: displayedIso,
+                    firstDisplayedAt = prevOff?.firstDisplayedAt ?: displayedIso,
+                    dismissedAt = prevOff?.dismissedAt
+                )
+                val attEntry = LocalCtvAttemptEntry(
+                    ctvAttemptId = enrichedRequest.ctvAttemptId,
+                    offerId = resolvedOfferId,
+                    parentAttemptId = enrichedRequest.parentAttemptId,
+                    sourceQuestionId = enrichedRequest.sourceQuestionId,
+                    complementaryQuestionId = normalizedComp.id,
+                    contentRevision = normalizedComp.questionRevision,
+                    canonicalTopicId = normalizedComp.canonicalTopicId ?: prevOff?.canonicalTopicId,
+                    targetConceptId = prevOff?.targetConceptId,
+                    targetTestedRule = prevOff?.targetTestedRule,
+                    verificationMode = resolvedMode.code,
+                    verificationTiming = enrichedRequest.verificationTiming,
+                    isCorrect = isCorrect,
+                    wasPreviouslyExposed = localPriorExposed,
+                    hadDecisiveHelp = hadDecisiveHelp,
+                    countsAsIndependentAttempt = verdict.countsAsIndependentAttempt,
+                    countsAsIndependentCorrect = verdict.countsAsIndependentCorrect,
+                    classificationCode = verdict.classificationCode,
+                    triggerReason = resolvedTriggerReason,
+                    triggerCohort = resolvedCohort,
+                    occurredAt = occurredIso,
+                    provisional = true
+                )
+                saveCtvLedger(
+                    userId,
+                    ledger.copy(
+                        offers = ledger.offers + (resolvedOfferId to nextOff),
+                        attempts = ledger.attempts + (enrichedRequest.ctvAttemptId to attEntry)
+                    )
+                )
+                metadata("cached_learning_analytics:$userId", "")
+            }
+            val (title, msg) = when {
+                resolvedMode == VerificationMode.TOPIC_PRACTICE ->
+                    "Prática complementar do tópico registrada" to "Atividade registrada no nível do tópico. O conceito da questão original permanece com transferência não mensurada."
+                verdict.classificationCode == "POST_INSTRUCTION_FIXATION" ->
+                    "Fixação pós-instrução registrada" to "Resposta registrada após consulta de explicação/regra; uma questão inédita retomará este conceito em outra sessão."
+                parentWasCorrect && isCorrect && independentAttempt ->
+                    "Transferência conceitual demonstrada" to "Você acertou a questão original e aplicou o mesmo conceito em contexto inédito antes do gabarito."
+                parentWasCorrect && isCorrect ->
+                    "Compreensão reforçada no conceito" to "Ambas as questões foram respondidas corretamente. Uma verificação inédita futura confirmará a transferência."
+                parentWasCorrect && !isCorrect ->
+                    "Domínio conceitual ainda não confirmado" to "A questão original foi respondida corretamente, mas houve divergência no novo contexto. Vale revisar a regra e suas exceções abaixo."
+                !parentWasCorrect && isCorrect ->
+                    "Recuperação conceitual observada" to "Apesar do erro na questão original, você aplicou o conceito corretamente na verificação complementar."
+                else ->
+                    "Lacuna conceitual identificada para revisão" to "As duas questões indicam oportunidade de revisão direcionada da regra central abaixo."
+            }
+            return CtvSubmitResponseDto(
+                ctvAttemptId = enrichedRequest.ctvAttemptId,
+                offerId = resolvedOfferId,
+                parentAttemptId = enrichedRequest.parentAttemptId,
+                complementaryQuestionId = enrichedRequest.complementaryQuestionId,
+                isCorrect = isCorrect,
+                correctIndex = correctIdx,
+                explanation = normalizedComp.explanation,
+                verificationTiming = enrichedRequest.verificationTiming,
+                verificationMode = resolvedMode.code,
+                countsAsIndependentTransfer = independentAttempt,
+                classificationCode = verdict.classificationCode,
+                targetConceptId = existingOffer?.targetConceptId,
+                targetTestedRule = existingOffer?.targetTestedRule,
+                consolidatedDiagnosticTitlePt = title,
+                consolidatedDiagnosticMessagePt = msg
+            )
+        }
+    }
 
     suspend fun recordEvidenceSelection(userId: Long, sessionUuid: String, questionId: String, evidenceId: String) {
         owner(userId)
@@ -1425,6 +2960,189 @@ class ConcursoRepository(
                 }
             }
 
+            // Sincroniza eventos de ciclo de vida CTV (`DISPLAYED` / `DISMISSED`), submissões CTV e reconcilia estado
+            val initialLedger = loadCtvLedger(userId)
+            var hadAnyCtvSyncActivity = initialLedger.offers.isNotEmpty() || initialLedger.attempts.isNotEmpty()
+            if (initialLedger.pendingEvents.isNotEmpty()) {
+                val orderedEvents = initialLedger.pendingEvents.sortedWith(
+                    compareBy<CtvLifecycleEventRequestDto> { safeInstant(it.occurredAt.orEmpty()).toEpochMilli() }
+                        .thenBy { if (it.eventKind == "DISPLAYED") 0 else 1 }
+                )
+                val remainingEvents = mutableListOf<CtvLifecycleEventRequestDto>()
+                for ((idx, evReq) in orderedEvents.withIndex()) {
+                    try {
+                        api.recordCtvEvent(evReq)
+                        synced++
+                        hadAnyCtvSyncActivity = true
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: retrofit2.HttpException) {
+                        if (e.code() == 401) {
+                            val preserved = remainingEvents + orderedEvents.subList(idx, orderedEvents.size)
+                            mutationMutex.withLock {
+                                val cur = loadCtvLedger(userId)
+                                saveCtvLedger(userId, cur.copy(pendingEvents = preserved))
+                            }
+                            throw e
+                        }
+                        if (e.code() !in listOf(400, 404, 422)) {
+                            remainingEvents += evReq
+                            transient = true
+                        }
+                    } catch (_: Exception) {
+                        remainingEvents += evReq
+                        transient = true
+                    }
+                }
+                mutationMutex.withLock {
+                    val cur = loadCtvLedger(userId)
+                    saveCtvLedger(userId, cur.copy(pendingEvents = remainingEvents))
+                }
+            }
+
+            // Sincroniza submissões CTV registradas offline (`POST /api/v1/quiz/ctv/submit`)
+            val rawCtv = metadata("pending_ctv_submissions")
+                ?.takeIf { it.isNotBlank() }
+                ?.let { runCatching { json.decodeFromString<List<PendingCtvSubmission>>(it) }.getOrDefault(emptyList()) }
+                .orEmpty()
+            if (rawCtv.isNotEmpty()) {
+                val orderedCtv = rawCtv.sortedBy { safeInstant(it.request.occurredAt.orEmpty()).toEpochMilli() }
+                val remainingCtv = mutableListOf<PendingCtvSubmission>()
+                for ((idx, item) in orderedCtv.withIndex()) {
+                    if (item.ownerUserId != userId) {
+                        remainingCtv += item
+                        continue
+                    }
+                    try {
+                        val serverResp = api.submitCtvAttempt(item.request)
+                        synced++
+                        hadAnyCtvSyncActivity = true
+                        mutationMutex.withLock {
+                            val cur = loadCtvLedger(userId)
+                            val prevAtt = cur.attempts[serverResp.ctvAttemptId]
+                            if (prevAtt != null) {
+                                val updatedAtt = prevAtt.copy(
+                                    verificationMode = serverResp.verificationMode.ifBlank { prevAtt.verificationMode },
+                                    verificationTiming = serverResp.verificationTiming.ifBlank { prevAtt.verificationTiming },
+                                    isCorrect = serverResp.isCorrect,
+                                    countsAsIndependentAttempt = serverResp.countsAsIndependentTransfer,
+                                    countsAsIndependentCorrect = serverResp.countsAsIndependentTransfer && serverResp.isCorrect,
+                                    classificationCode = serverResp.classificationCode.ifBlank { prevAtt.classificationCode },
+                                    targetConceptId = serverResp.targetConceptId ?: prevAtt.targetConceptId,
+                                    targetTestedRule = serverResp.targetTestedRule ?: prevAtt.targetTestedRule,
+                                    provisional = false
+                                )
+                                saveCtvLedger(userId, cur.copy(attempts = cur.attempts + (serverResp.ctvAttemptId to updatedAtt)))
+                            }
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: retrofit2.HttpException) {
+                        if (e.code() == 401) {
+                            val preserved = remainingCtv + orderedCtv.subList(idx, orderedCtv.size)
+                            mutationMutex.withLock {
+                                metadata("pending_ctv_submissions", json.encodeToString(preserved))
+                            }
+                            throw e
+                        }
+                        if (e.code() !in listOf(400, 404, 422)) {
+                            remainingCtv += item
+                            transient = true
+                        }
+                    } catch (_: Exception) {
+                        remainingCtv += item
+                        transient = true
+                    }
+                }
+                mutationMutex.withLock {
+                    metadata("pending_ctv_submissions", if (remainingCtv.isEmpty()) "" else json.encodeToString(remainingCtv))
+                }
+            }
+
+            // Sincroniza feedback de recomendação registrado offline (`POST /api/v1/study/recommendation-feedback`)
+            val curForRec = loadCtvLedger(userId)
+            if (curForRec.pendingRecommendationFeedback.isNotEmpty()) {
+                val remainingFeedback = mutableListOf<RecommendationFeedbackRequestDto>()
+                for (fb in curForRec.pendingRecommendationFeedback) {
+                    val ok = runCatching {
+                        api.recordRecommendationFeedback(fb)
+                        true
+                    }.getOrElse { err ->
+                        if (err is CancellationException) throw err
+                        if (err is retrofit2.HttpException && err.code() in listOf(400, 404, 422)) true else false
+                    }
+                    if (ok) synced++ else remainingFeedback += fb
+                }
+                mutationMutex.withLock {
+                    val cur = loadCtvLedger(userId)
+                    saveCtvLedger(userId, cur.copy(pendingRecommendationFeedback = remainingFeedback))
+                }
+            }
+
+            // Reconcilia resultados CTV provisórios com o estado consolidado do servidor (A03, A05)
+            if (hadAnyCtvSyncActivity) {
+                runCatching { api.getCtvState() }
+                    .onFailure { if (it is CancellationException) throw it }
+                    .getOrNull()
+                    ?.let { remoteState ->
+                        mutationMutex.withLock {
+                            val cur = loadCtvLedger(userId)
+                            val mergedOffers = cur.offers.toMutableMap()
+                            for (ro in remoteState.offers) {
+                                val prev = mergedOffers[ro.offerId]
+                                mergedOffers[ro.offerId] = LocalCtvOfferEntry(
+                                    offerId = ro.offerId,
+                                    parentAttemptId = ro.parentAttemptId.ifBlank { prev?.parentAttemptId.orEmpty() },
+                                    sourceQuestionId = ro.sourceQuestionId.ifBlank { prev?.sourceQuestionId.orEmpty() },
+                                    complementaryQuestionId = ro.complementaryQuestionId,
+                                    contentRevision = ro.contentRevision.ifBlank { prev?.contentRevision.orEmpty() },
+                                    canonicalTopicId = prev?.canonicalTopicId,
+                                    targetConceptId = prev?.targetConceptId,
+                                    targetTestedRule = prev?.targetTestedRule,
+                                    framingReasonCode = prev?.framingReasonCode,
+                                    verificationMode = ro.verificationMode.ifBlank { prev?.verificationMode ?: "CONCEPTUAL_TRANSFER" },
+                                    triggerReason = ro.triggerReason ?: prev?.triggerReason,
+                                    triggerCohort = ro.triggerCohort.ifBlank { prev?.triggerCohort ?: "DIFFICULTY_DETECTED" },
+                                    deliverySource = prev?.deliverySource,
+                                    state = ro.state.ifBlank { prev?.state ?: "SUPPLIED" },
+                                    suppliedAt = prev?.suppliedAt.orEmpty(),
+                                    firstDisplayedAt = ro.firstDisplayedAt ?: prev?.firstDisplayedAt,
+                                    dismissedAt = ro.dismissedAt ?: prev?.dismissedAt
+                                )
+                            }
+                            val mergedAttempts = cur.attempts.toMutableMap()
+                            for (ra in remoteState.attempts) {
+                                val prev = mergedAttempts[ra.ctvAttemptId]
+                                mergedAttempts[ra.ctvAttemptId] = LocalCtvAttemptEntry(
+                                    ctvAttemptId = ra.ctvAttemptId,
+                                    offerId = ra.offerId.ifBlank { prev?.offerId.orEmpty() },
+                                    parentAttemptId = ra.parentAttemptId.ifBlank { prev?.parentAttemptId.orEmpty() },
+                                    sourceQuestionId = ra.sourceQuestionId.ifBlank { prev?.sourceQuestionId.orEmpty() },
+                                    complementaryQuestionId = ra.complementaryQuestionId,
+                                    contentRevision = ra.contentRevision.ifBlank { prev?.contentRevision.orEmpty() },
+                                    canonicalTopicId = prev?.canonicalTopicId,
+                                    targetConceptId = ra.targetConceptId ?: prev?.targetConceptId,
+                                    targetTestedRule = ra.targetTestedRule ?: prev?.targetTestedRule,
+                                    verificationMode = ra.verificationMode.ifBlank { prev?.verificationMode ?: "CONCEPTUAL_TRANSFER" },
+                                    verificationTiming = ra.verificationTiming,
+                                    isCorrect = ra.isCorrect,
+                                    wasPreviouslyExposed = ra.wasPreviouslyExposed,
+                                    hadDecisiveHelp = prev?.hadDecisiveHelp ?: false,
+                                    countsAsIndependentAttempt = ra.countsAsIndependentTransfer,
+                                    countsAsIndependentCorrect = ra.countsAsIndependentTransfer && ra.isCorrect,
+                                    classificationCode = ra.classificationCode,
+                                    triggerReason = ra.triggerReason ?: prev?.triggerReason,
+                                    triggerCohort = ra.triggerCohort.ifBlank { prev?.triggerCohort ?: "DIFFICULTY_DETECTED" },
+                                    occurredAt = ra.occurredAt.ifBlank { prev?.occurredAt.orEmpty() },
+                                    provisional = false
+                                )
+                            }
+                            saveCtvLedger(userId, cur.copy(offers = mergedOffers, attempts = mergedAttempts))
+                            metadata("cached_learning_analytics:$userId", "")
+                        }
+                    }
+            }
+
             durable?.reports(userId)?.forEach { report ->
                 if (metadata("report_error:${report.eventId}").isNullOrBlank()) {
                     try {
@@ -1512,7 +3230,15 @@ class ConcursoRepository(
         selectedEvidenceId = selectedEvidenceId,
         positionInSession = positionInSession,
         elapsedSessionSeconds = elapsedSessionSeconds,
-        sessionInterrupted = sessionInterrupted
+        sessionInterrupted = sessionInterrupted,
+        declaredConfidence = parseDeclaredConfidence(declaredConfidence),
+        cognitiveStrategy = parseCognitiveStrategy(cognitiveStrategy),
+        strategySkipped = strategySkipped,
+        activeSeconds = activeSeconds,
+        answerChangeCount = answerChangeCount,
+        initialChosenIndex = initialChosenIndex,
+        consultedResources = parseConsultedResources(consultedResourcesCsv),
+        focusLossCount = focusLossCount
     )
 
     private suspend fun refreshQuestionCache() {
@@ -1793,8 +3519,15 @@ class ConcursoRepository(
             ?.let { runCatching { json.decodeFromString<List<PendingEvidencePatch>>(it) }.getOrDefault(emptyList()) }
             .orEmpty()
             .count { it.ownerUserId == ownerUserId }
+        val pendingCtvCount = metadata("pending_ctv_submissions")
+            ?.takeIf { it.isNotBlank() }
+            ?.let { runCatching { json.decodeFromString<List<PendingCtvSubmission>>(it) }.getOrDefault(emptyList()) }
+            .orEmpty()
+            .count { it.ownerUserId == ownerUserId }
+        val ledger = loadCtvLedger(ownerUserId)
+        val pendingCtvEventsCount = ledger.pendingEvents.size + ledger.pendingRecommendationFeedback.size
         val dirtyMissionsCount = loadLocalMissionsEnvelope().missions.values.count { it.dirty }
-        val totalPending = pendingAttemptsCount + pendingReportsCount + pendingExamsCount + pendingPatchesCount + dirtyMissionsCount
+        val totalPending = pendingAttemptsCount + pendingReportsCount + pendingExamsCount + pendingPatchesCount + pendingCtvCount + pendingCtvEventsCount + dirtyMissionsCount
         return dao.countCachedQuestions() to totalPending
     }
 

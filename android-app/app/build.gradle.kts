@@ -16,8 +16,8 @@ android {
         applicationId = "br.com.concursoprep.app"
         minSdk = 28
         targetSdk = 35
-        versionCode = 33
-        versionName = "2.4.3"
+        versionCode = 34
+        versionName = "2.4.4"
 
         val doApiBaseUrl = (project.findProperty("DO_API_BASE_URL") as? String)
             ?: "https://198.199.65.103/api/v1/"
@@ -55,6 +55,7 @@ android {
             all {
                 it.maxHeapSize = "4096m"
                 it.systemProperty("robolectric.pixelCopyRenderMode", "hardware")
+                it.systemProperty("net.bytebuddy.experimental", "true")
             }
         }
     }

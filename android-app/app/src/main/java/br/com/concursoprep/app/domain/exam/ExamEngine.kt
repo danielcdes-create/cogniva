@@ -623,6 +623,32 @@ object ExamCatalog {
         return (bundledConceptSeed["concepts"] as? JsonArray)?.map { it.jsonObject }.orEmpty()
     }
 
+    fun inferSingleConceptForTopic(
+        topicId: String?,
+        stem: String,
+        testedRule: String? = null
+    ): String? {
+        val cleanTopic = topicId?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val haystack = CtvAlignmentEngine.normalizeCompactText("$stem ${testedRule.orEmpty()}")
+        if (haystack.isEmpty()) return null
+        val matched = LinkedHashSet<String>()
+        for (c in effectiveConcepts()) {
+            if (c["status"]?.jsonPrimitive?.contentOrNull != "ACTIVE") continue
+            if (c["topic_id"]?.jsonPrimitive?.contentOrNull != cleanTopic) continue
+            val cid = c["concept_id"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() } ?: continue
+            val phrases = buildList {
+                c["label"]?.jsonPrimitive?.contentOrNull?.let(::add)
+                (c["aliases"] as? JsonArray)?.mapNotNull { it.jsonPrimitive.contentOrNull }?.forEach(::add)
+            }
+            val hit = phrases.any { p ->
+                val normP = CtvAlignmentEngine.normalizeCompactText(p)
+                normP.length >= 6 && haystack.contains(normP)
+            }
+            if (hit) matched += cid
+        }
+        return matched.singleOrNull()
+    }
+
     fun normativeSourcesForQuestion(
         canonicalTopicId: String?,
         conceptIds: List<String>

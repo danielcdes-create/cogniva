@@ -28,6 +28,18 @@ pub struct LearningEvent {
     pub session_uuid: String,
     pub elapsed_session_seconds: Option<i32>,
     pub session_interrupted: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub declared_confidence: Option<crate::services::metacognitive_engine::DeclaredConfidence>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cognitive_strategy: Option<crate::services::metacognitive_engine::CognitiveStrategy>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_seconds: Option<i32>,
+    #[serde(skip_serializing_if = "is_zero_u16")]
+    pub answer_change_count: u16,
+}
+
+fn is_zero_u16(v: &u16) -> bool {
+    *v == 0
 }
 #[derive(Serialize)]
 pub struct LearningRecord {
@@ -112,6 +124,10 @@ pub async fn get_state(
                 session_uuid: e.session_uuid.clone(),
                 elapsed_session_seconds: e.elapsed_session_seconds,
                 session_interrupted: e.session_interrupted,
+                declared_confidence: e.declared_confidence,
+                cognitive_strategy: e.cognitive_strategy,
+                active_seconds: e.active_seconds,
+                answer_change_count: e.answer_change_count,
             })
             .collect();
         let non_blank_count = activity
@@ -173,4 +189,17 @@ pub async fn get_state(
         next_cursor: if records.len() == 200 { last } else { None },
         records,
     }))
+}
+
+/// Endpoint `GET /api/v1/learning/analytics`:
+/// Retorna os 10 KPIs formais de aprendizagem, calibração empírica de 5 níveis, Brier Score
+/// e estados multidimensionais de domínio conceitual por unidade.
+pub async fn get_analytics(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<SessionUser>,
+) -> Result<Json<crate::services::learning_analytics::StudentLearningAnalyticsResponse>, AppError> {
+    let resp =
+        crate::services::learning_analytics::compute_student_analytics(&state, user.user_id)
+            .await?;
+    Ok(Json(resp))
 }

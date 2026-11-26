@@ -2,6 +2,8 @@ package br.com.concursoprep.app.domain.model
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerialName
+import br.com.concursoprep.app.domain.exam.CognitiveStrategy
+import br.com.concursoprep.app.domain.exam.DeclaredConfidence
 import br.com.concursoprep.app.domain.exam.ExamEngine
 import br.com.concursoprep.app.domain.exam.StoredExam
 import java.time.Instant
@@ -22,7 +24,15 @@ data class LearningEvent(
     @SerialName("quiz_mode") val quizMode: String? = null,
     @SerialName("session_uuid") val sessionUuid: String? = null,
     @SerialName("elapsed_session_seconds") val elapsedSessionSeconds: Int? = null,
-    @SerialName("session_interrupted") val sessionInterrupted: Boolean = false
+    @SerialName("session_interrupted") val sessionInterrupted: Boolean = false,
+    @SerialName("declared_confidence") val declaredConfidence: DeclaredConfidence? = null,
+    @SerialName("cognitive_strategy") val cognitiveStrategy: CognitiveStrategy? = null,
+    @SerialName("strategy_skipped") val strategySkipped: Boolean = false,
+    @SerialName("active_seconds") val activeSeconds: Int? = null,
+    @SerialName("answer_change_count") val answerChangeCount: Int = 0,
+    @SerialName("initial_chosen_index") val initialChosenIndex: Int? = null,
+    @SerialName("consulted_resources") val consultedResources: List<String> = emptyList(),
+    @SerialName("focus_loss_count") val focusLossCount: Int = 0
 )
 @Serializable data class KnowledgeEvidence(
     @SerialName("canonical_subject_id") val canonicalSubjectId:String,

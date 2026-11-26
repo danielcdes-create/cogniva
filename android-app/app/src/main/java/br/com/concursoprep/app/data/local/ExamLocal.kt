@@ -295,6 +295,18 @@ object ExamLocalMapping {
 }
 
 object ExamMigrations {
+    val MIGRATION_7_8 = object : Migration(7, 8) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE pending_attempts ADD COLUMN declaredConfidence TEXT")
+            db.execSQL("ALTER TABLE pending_attempts ADD COLUMN cognitiveStrategy TEXT")
+            db.execSQL("ALTER TABLE pending_attempts ADD COLUMN strategySkipped INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE pending_attempts ADD COLUMN activeSeconds INTEGER")
+            db.execSQL("ALTER TABLE pending_attempts ADD COLUMN answerChangeCount INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE pending_attempts ADD COLUMN initialChosenIndex INTEGER")
+            db.execSQL("ALTER TABLE pending_attempts ADD COLUMN consultedResourcesCsv TEXT")
+            db.execSQL("ALTER TABLE pending_attempts ADD COLUMN focusLossCount INTEGER NOT NULL DEFAULT 0")
+        }
+    }
     val MIGRATION_6_7 = object : Migration(6, 7) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE pending_attempts ADD COLUMN isBlank INTEGER NOT NULL DEFAULT 0")

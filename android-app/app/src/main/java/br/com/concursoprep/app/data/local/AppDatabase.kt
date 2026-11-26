@@ -64,7 +64,15 @@ data class PendingAttemptEntity(
     val selectedEvidenceId: String? = null,
     val positionInSession: Int? = null,
     val elapsedSessionSeconds: Int? = null,
-    @androidx.room.ColumnInfo(defaultValue = "0") val sessionInterrupted: Boolean = false
+    @androidx.room.ColumnInfo(defaultValue = "0") val sessionInterrupted: Boolean = false,
+    val declaredConfidence: String? = null,
+    val cognitiveStrategy: String? = null,
+    @androidx.room.ColumnInfo(defaultValue = "0") val strategySkipped: Boolean = false,
+    val activeSeconds: Int? = null,
+    @androidx.room.ColumnInfo(defaultValue = "0") val answerChangeCount: Int = 0,
+    val initialChosenIndex: Int? = null,
+    val consultedResourcesCsv: String? = null,
+    @androidx.room.ColumnInfo(defaultValue = "0") val focusLossCount: Int = 0
 )
 
 @Dao
@@ -140,7 +148,7 @@ interface ConcursoLocalDao {
         LearningRecordEntity::class, PendingReportEntity::class, QuizSessionEntity::class, LocalMetadataEntity::class,
         CanonicalMasteryEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {

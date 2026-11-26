@@ -48,6 +48,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import br.com.concursoprep.app.domain.exam.CognitiveStrategy
+import br.com.concursoprep.app.domain.exam.DeclaredConfidence
 import br.com.concursoprep.app.ui.theme.LocalExtendedColors
 
 /**
@@ -262,15 +264,33 @@ fun QuestionActionChips(
 }
 
 /**
- * Seletor de Nível de Confiança em Grade 2x2 simétrica com 100% da largura.
+ * Seletor Metacognitivo Pré-Gabarito:
+ * 1) Escala ordinal de 5 níveis de Confiança Declarada (`DeclaredConfidence`)
+ * 2) Estratégia Cognitiva neutra e opcional ("Como você chegou à sua resposta?") sem pré-seleção.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ConfidenceSelectorGrid(
     selectedConfidence: Int,
     onSelectConfidence: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    hasExplicitSelection: Boolean = true
+    hasExplicitSelection: Boolean = true,
+    selectedDeclaredConfidence: DeclaredConfidence? = null,
+    onSelectDeclaredConfidence: ((DeclaredConfidence) -> Unit)? = null,
+    showStrategySelector: Boolean = false,
+    selectedStrategy: CognitiveStrategy? = null,
+    strategySkipped: Boolean = false,
+    onSelectStrategy: ((CognitiveStrategy?) -> Unit)? = null,
+    onSkipStrategy: (() -> Unit)? = null
 ) {
+    val activeDeclared = selectedDeclaredConfidence
+        ?: if (hasExplicitSelection) DeclaredConfidence.fromLegacyBand(selectedConfidence, true) else null
+
+    fun selectLevel(level: DeclaredConfidence) {
+        onSelectDeclaredConfidence?.invoke(level)
+        onSelectConfidence(level.toLegacyBand())
+    }
+
     Card(
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
@@ -281,63 +301,163 @@ fun ConfidenceSelectorGrid(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .selectableGroup()
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(
-                text = if (hasExplicitSelection) {
-                    "Nível de confiança nesta resposta:"
-                } else {
-                    "Selecione sua confiança antes de confirmar:"
-                },
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-
-            val options = listOf(
-                0 to "Nenhuma Ideia",
-                1 to "Chutei",
-                2 to "Mais ou Menos",
-                3 to "Certeza Absoluta"
-            )
-
-            // Linha 1: Opções 0 e 1
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .selectableGroup(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                ConfidenceButton(
-                    label = options[0].second,
-                    selected = hasExplicitSelection && selectedConfidence == options[0].first,
-                    onClick = { onSelectConfidence(options[0].first) },
-                    modifier = Modifier.weight(1f)
+                Text(
+                    text = if (hasExplicitSelection) {
+                        "Grau de confiança nesta resposta:"
+                    } else {
+                        "Selecione sua confiança antes de confirmar:"
+                    },
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
-                ConfidenceButton(
-                    label = options[1].second,
-                    selected = hasExplicitSelection && selectedConfidence == options[1].first,
-                    onClick = { onSelectConfidence(options[1].first) },
-                    modifier = Modifier.weight(1f)
-                )
+
+                val stackFullWidth = LocalDensity.current.fontScale >= 1.25f
+                if (stackFullWidth) {
+                    DeclaredConfidence.entries.forEach { level ->
+                        ConfidenceButton(
+                            label = level.labelPt,
+                            selected = hasExplicitSelection && activeDeclared == level,
+                            onClick = { selectLevel(level) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                } else {
+                    // Linha 1: Chutei | Pouco confiante
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        ConfidenceButton(
+                            label = DeclaredConfidence.GUESS.labelPt,
+                            selected = hasExplicitSelection && activeDeclared == DeclaredConfidence.GUESS,
+                            onClick = { selectLevel(DeclaredConfidence.GUESS) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        ConfidenceButton(
+                            label = DeclaredConfidence.LOW.labelPt,
+                            selected = hasExplicitSelection && activeDeclared == DeclaredConfidence.LOW,
+                            onClick = { selectLevel(DeclaredConfidence.LOW) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    // Linha 2: Parcialmente confiante | Muito confiante
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        ConfidenceButton(
+                            label = DeclaredConfidence.MEDIUM.labelPt,
+                            selected = hasExplicitSelection && activeDeclared == DeclaredConfidence.MEDIUM,
+                            onClick = { selectLevel(DeclaredConfidence.MEDIUM) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        ConfidenceButton(
+                            label = DeclaredConfidence.HIGH.labelPt,
+                            selected = hasExplicitSelection && activeDeclared == DeclaredConfidence.HIGH,
+                            onClick = { selectLevel(DeclaredConfidence.HIGH) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    // Linha 3: Praticamente certo
+                    ConfidenceButton(
+                        label = DeclaredConfidence.VERY_HIGH.labelPt,
+                        selected = hasExplicitSelection && activeDeclared == DeclaredConfidence.VERY_HIGH,
+                        onClick = { selectLevel(DeclaredConfidence.VERY_HIGH) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
 
-            // Linha 2: Opções 2 e 3
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                ConfidenceButton(
-                    label = options[2].second,
-                    selected = hasExplicitSelection && selectedConfidence == options[2].first,
-                    onClick = { onSelectConfidence(options[2].first) },
-                    modifier = Modifier.weight(1f)
-                )
-                ConfidenceButton(
-                    label = options[3].second,
-                    selected = hasExplicitSelection && selectedConfidence == options[3].first,
-                    onClick = { onSelectConfidence(options[3].first) },
-                    modifier = Modifier.weight(1f)
-                )
+            if (showStrategySelector && onSelectStrategy != null) {
+                val cs = MaterialTheme.colorScheme
+                Spacer(modifier = Modifier.height(2.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Como você chegou à sua resposta?",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = cs.onSurface,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    OutlinedButton(
+                        onClick = {
+                            onSelectStrategy(null)
+                            onSkipStrategy?.invoke()
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = if (strategySkipped && selectedStrategy == null) cs.secondaryContainer else cs.surface,
+                            contentColor = if (strategySkipped && selectedStrategy == null) cs.onSecondaryContainer else cs.onSurfaceVariant
+                        ),
+                        border = BorderStroke(
+                            1.dp,
+                            if (strategySkipped && selectedStrategy == null) cs.primary else cs.outlineVariant
+                        ),
+                        modifier = Modifier.heightIn(min = 38.dp)
+                    ) {
+                        Text(
+                            text = if (strategySkipped && selectedStrategy == null) "Etapa pulada" else "Pular",
+                            style = MaterialTheme.typography.labelMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                if (!strategySkipped || selectedStrategy != null) {
+                    FlowRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectableGroup(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        CognitiveStrategy.entries.forEach { strat ->
+                            val isSel = selectedStrategy == strat
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (isSel) cs.secondaryContainer else cs.surface,
+                                contentColor = if (isSel) cs.onSecondaryContainer else cs.onSurface,
+                                border = BorderStroke(
+                                    width = if (isSel) 2.dp else 1.dp,
+                                    color = if (isSel) cs.primary else cs.outlineVariant
+                                ),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .selectable(
+                                        selected = isSel,
+                                        onClick = {
+                                            onSelectStrategy(if (isSel) null else strat)
+                                        },
+                                        role = Role.RadioButton
+                                    )
+                            ) {
+                                Text(
+                                    text = strat.labelPt,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = if (isSel) FontWeight.SemiBold else FontWeight.Normal,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }

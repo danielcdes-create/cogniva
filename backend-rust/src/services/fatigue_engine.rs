@@ -356,6 +356,14 @@ mod tests {
                     position_in_session: None,
                     elapsed_session_seconds: Some(elapsed),
                     session_interrupted: interrupted,
+                    declared_confidence: None,
+                    cognitive_strategy: None,
+                    strategy_skipped: false,
+                    active_seconds: None,
+                    answer_change_count: 0,
+                    initial_chosen_index: None,
+                    consulted_resources: Vec::new(),
+                    focus_loss_count: 0,
                 }
             };
 

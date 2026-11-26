@@ -30,6 +30,12 @@ private fun round6(value: Double): Double =
 private fun round9(value: Double): Double =
     rustRound(value * 1_000_000_000.0) / 1_000_000_000.0
 
+private fun round4(value: Double): Double =
+    rustRound(value * 10_000.0) / 10_000.0
+
+private fun round2(value: Double): Double =
+    rustRound(value * 100.0) / 100.0
+
 @Serializable
 enum class DiagnosticStatus {
     @SerialName("INSUFFICIENT_EVIDENCE") INSUFFICIENT_EVIDENCE,
@@ -226,6 +232,38 @@ data class PrioritizationInputs(
     val dependentCount: Int
 )
 
+@Serializable
+data class MetacognitivePrioritySignals(
+    @SerialName("high_confidence_error_rate") val highConfidenceErrorRate: Double = 0.0,
+    @SerialName("high_confidence_error_count") val highConfidenceErrorCount: Int = 0,
+    @SerialName("incompatible_rationale_count") val incompatibleRationaleCount: Int = 0,
+    @SerialName("fragile_correct_rate") val fragileCorrectRate: Double = 0.0,
+    @SerialName("failed_transfer") val failedTransfer: Boolean = false,
+    @SerialName("functional_elimination_transfer_verified") val functionalEliminationTransferVerified: Boolean = false,
+    @SerialName("post_explanation_fixation_pending_spacing") val postExplanationFixationPendingSpacing: Boolean = false,
+    @SerialName("post_explanation_spaced_due") val postExplanationSpacedDue: Boolean = false,
+    @SerialName("scarce_or_conflicting_evidence") val scarceOrConflictingEvidence: Boolean = false,
+    @SerialName("recent_consecutive_exposures") val recentConsecutiveExposures: Int = 0
+) {
+    fun hasActiveSignals(): Boolean =
+        highConfidenceErrorRate > 0.0 ||
+            highConfidenceErrorCount > 0 ||
+            incompatibleRationaleCount > 0 ||
+            fragileCorrectRate > 0.0 ||
+            failedTransfer ||
+            functionalEliminationTransferVerified ||
+            postExplanationFixationPendingSpacing ||
+            postExplanationSpacedDue ||
+            scarceOrConflictingEvidence ||
+            recentConsecutiveExposures >= 3
+}
+
+data class MetacognitiveDecisionReason(
+    val decisionRuleCode: String,
+    val reasonPt: String,
+    val recommendedMode: String
+)
+
 enum class AdaptiveSlotKind {
     RETENTION_REVIEW,
     PERSISTENT_GAP,
@@ -302,6 +340,83 @@ object PrioritizationEngine {
         return round9(raw)
     }
 
+    fun priorityUtilityMetacognitive(
+        base: PrioritizationInputs,
+        signals: MetacognitivePrioritySignals
+    ): Double {
+        val baseU = priorityUtility(base)
+        if (!signals.hasActiveSignals()) return baseU
+
+        val recurrentBonus = when {
+            signals.highConfidenceErrorCount >= 2 && signals.incompatibleRationaleCount >= 2 -> 0.25
+            signals.highConfidenceErrorCount >= 2 -> 0.12
+            else -> 0.0
+        }
+        val hceBoost = 1.0 + 0.45 * finiteOr(signals.highConfidenceErrorRate, 0.0).coerceIn(0.0, 1.0) + recurrentBonus
+        val fragileBoost = 1.0 + 0.25 * finiteOr(signals.fragileCorrectRate, 0.0).coerceIn(0.0, 1.0)
+        val transferBoost = if (signals.failedTransfer) 1.30 else 1.0
+        val conflictBoost = if (signals.scarceOrConflictingEvidence) 1.18 else 1.0
+        val spacedPostExpBoost = if (signals.postExplanationSpacedDue) 1.22 else 1.0
+        val functionalAdvanceMult = if (signals.functionalEliminationTransferVerified) 0.42 else 1.0
+        val postExpDeferMult = if (signals.postExplanationFixationPendingSpacing) 0.48 else 1.0
+        val antiTrapping = if (signals.recentConsecutiveExposures >= 3) {
+            0.55.pow(min(3, signals.recentConsecutiveExposures - 2))
+        } else {
+            1.0
+        }
+        val adjusted = baseU *
+            hceBoost *
+            fragileBoost *
+            transferBoost *
+            conflictBoost *
+            spacedPostExpBoost *
+            functionalAdvanceMult *
+            postExpDeferMult *
+            antiTrapping
+        return round9(adjusted)
+    }
+
+    fun buildMetacognitiveDecisionReason(
+        signals: MetacognitivePrioritySignals,
+        unitTitle: String,
+        fallbackReasonPt: String,
+        advancedAfterFunctionalTransfer: Boolean = false
+    ): MetacognitiveDecisionReason {
+        if (signals.highConfidenceErrorCount >= 2 ||
+            (signals.highConfidenceErrorCount >= 1 && signals.incompatibleRationaleCount >= 1)
+        ) {
+            val n = maxOf(signals.highConfidenceErrorCount, signals.incompatibleRationaleCount, 2)
+            val msg = if (signals.incompatibleRationaleCount >= 2) {
+                "Revisar $unitTitle. Em $n questões houve erro com confiança alta e fundamento incompatível."
+            } else {
+                "Revisar $unitTitle. Em $n questões houve erro recorrente com confiança alta."
+            }
+            return MetacognitiveDecisionReason("RECURRENT_HIGH_CONF_MISCONCEPTION", msg, "ADAPTIVE_LOOP")
+        }
+        if (signals.postExplanationSpacedDue || signals.postExplanationFixationPendingSpacing) {
+            return MetacognitiveDecisionReason(
+                "POST_EXPLANATION_SPACED_FOLLOWUP",
+                "Você acertou após a explicação. Vamos retomar $unitTitle em outra sessão.",
+                "TRANSFER_PROBE"
+            )
+        }
+        if (signals.failedTransfer || signals.scarceOrConflictingEvidence || signals.fragileCorrectRate >= 0.40) {
+            return MetacognitiveDecisionReason(
+                "SCARCE_OR_CONFLICTING_EVIDENCE",
+                "Falta observar como você aplica esta regra em outro exemplo: $unitTitle.",
+                "TRANSFER_PROBE"
+            )
+        }
+        if (advancedAfterFunctionalTransfer) {
+            return MetacognitiveDecisionReason(
+                "ADVANCE_AFTER_FUNCTIONAL_TRANSFER",
+                "Você aplicou a regra em outro contexto. Sua próxima atividade avança para $unitTitle.",
+                "ADAPTIVE_LOOP"
+            )
+        }
+        return MetacognitiveDecisionReason("BASELINE_REFERENCE", fallbackReasonPt, "ENTRY_60S")
+    }
+
     fun <T> interleaveBuckets(
         retentionDue: List<T>,
         persistentGaps: List<T>,
@@ -367,19 +482,87 @@ data class CalibrationCellDto(
     @SerialName("sufficient_sample") val sufficientSample: Boolean
 )
 
+@Serializable
+data class WalkforwardCalibrationInput(
+    @SerialName("attempt_id") val attemptId: String,
+    @SerialName("occurred_at_ms") val occurredAtMs: Long,
+    @SerialName("question_type") val questionType: String,
+    @SerialName("declared_confidence") val declaredConfidence: DeclaredConfidence,
+    @SerialName("is_correct") val isCorrect: Boolean
+)
+
+@Serializable
+data class WalkforwardStepTrace(
+    @SerialName("attempt_id") val attemptId: String,
+    @SerialName("occurred_at_ms") val occurredAtMs: Long,
+    @SerialName("question_type") val questionType: String,
+    @SerialName("declared_confidence") val declaredConfidence: DeclaredConfidence,
+    @SerialName("predicted_probability") val predictedProbability: Double,
+    @SerialName("is_correct") val isCorrect: Boolean,
+    @SerialName("squared_error") val squaredError: Double,
+    @SerialName("used_cold_start_prior") val usedColdStartPrior: Boolean
+)
+
+@Serializable
+data class FormatConfidenceCalibrationCellDto(
+    @SerialName("question_type") val questionType: String,
+    @SerialName("declared_confidence") val declaredConfidence: DeclaredConfidence,
+    @SerialName("label_pt") val labelPt: String,
+    val attempts: Int = 0,
+    val correct: Int = 0,
+    @SerialName("observed_accuracy_pct") val observedAccuracyPct: Double? = null,
+    @SerialName("model_predicted_mean") val modelPredictedMean: Double = 0.5,
+    @SerialName("credible_sd") val credibleSd: Double = 0.15,
+    @SerialName("sufficiency_status") val sufficiencyStatus: String = "EMPTY",
+    @SerialName("coverage_sentence_pt") val coverageSentencePt: String = ""
+)
+
+data class WalkforwardCalibrationReport(
+    val policyVersion: String,
+    val overallBrierScore: Double?,
+    val overallBrierRaw: Double?,
+    val trueFalseBrierScore: Double?,
+    val multipleChoiceBrierScore: Double?,
+    val eligibleAttemptsCount: Int,
+    val coldStartPredictionsCount: Int,
+    val sufficiencyStatus: String,
+    val legacyBandMapping: Map<String, String>,
+    val cellsByFormat: List<FormatConfidenceCalibrationCellDto>,
+    val traces: List<WalkforwardStepTrace>
+)
+
 object CalibrationEngine {
-    fun calibratedProbability(
+    const val CALIBRATION_POLICY_VERSION = "calibration-walkforward-v2.0"
+
+    fun normalizeCalibrationFormat(raw: String): String =
+        if (raw.trim().equals("TRUE_FALSE", ignoreCase = true)) "TRUE_FALSE" else "MULTIPLE_CHOICE"
+
+    fun legacyBandMappingTable(): Map<String, String> = mapOf(
+        "0_explicit" to "GUESS",
+        "1_explicit" to "GUESS",
+        "2_explicit" to "MEDIUM",
+        "3_explicit" to "HIGH",
+        "unconfirmed_default" to "UNDECLARED_EXCLUDED"
+    )
+
+    fun levelPriorMean(questionType: String, confidence: DeclaredConfidence): Double {
+        val isTf = normalizeCalibrationFormat(questionType) == "TRUE_FALSE"
+        return when (confidence) {
+            DeclaredConfidence.GUESS -> if (isTf) 0.50 else 0.20
+            DeclaredConfidence.LOW -> if (isTf) 0.56 else 0.32
+            DeclaredConfidence.MEDIUM -> if (isTf) 0.65 else 0.45
+            DeclaredConfidence.HIGH -> 0.85
+            DeclaredConfidence.VERY_HIGH -> 0.92
+        }
+    }
+
+    fun calibratedLevelPosterior(
         questionType: String,
-        confidenceBand: Int,
+        confidence: DeclaredConfidence,
         correct: Int,
         attempts: Int
-    ): CalibrationCellDto {
-        val isTf = questionType.equals("TRUE_FALSE", ignoreCase = true)
-        val mu0 = when {
-            confidenceBand <= 1 -> if (isTf) 0.50 else 0.20
-            confidenceBand == 2 -> if (isTf) 0.65 else 0.45
-            else -> 0.85
-        }
+    ): Pair<Double, Double> {
+        val mu0 = levelPriorMean(questionType, confidence)
         val n0 = 6.0
         val alpha0 = mu0 * n0
         val beta0 = (1.0 - mu0) * n0
@@ -390,14 +573,153 @@ object CalibrationEngine {
         val total = a + b
         val mean = round9(a / total)
         val sd = round9(sqrt((a * b) / ((total * total) * (total + 1.0))))
+        return mean to sd
+    }
+
+    fun calibratedProbability(
+        questionType: String,
+        confidenceBand: Int,
+        correct: Int,
+        attempts: Int
+    ): CalibrationCellDto {
+        val fmt = normalizeCalibrationFormat(questionType)
+        val mapped = when (confidenceBand.coerceIn(1, 3)) {
+            1 -> DeclaredConfidence.GUESS
+            2 -> DeclaredConfidence.MEDIUM
+            else -> DeclaredConfidence.HIGH
+        }
+        val safeAttempts = max(0, attempts)
+        val safeCorrect = correct.coerceIn(0, safeAttempts)
+        val (mean, sd) = calibratedLevelPosterior(fmt, mapped, safeCorrect, safeAttempts)
         return CalibrationCellDto(
-            questionType = if (isTf) "TRUE_FALSE" else "MULTIPLE_CHOICE",
+            questionType = fmt,
             confidenceBand = confidenceBand.coerceIn(1, 3),
             correct = safeCorrect,
             attempts = safeAttempts,
             calibratedMean = mean,
             credibleSd = sd,
             sufficientSample = safeAttempts >= 10
+        )
+    }
+
+    fun computeBrierScore(predictionsAndOutcomes: List<Pair<Double, Boolean>>): Double? {
+        if (predictionsAndOutcomes.isEmpty()) return null
+        val sumSq = predictionsAndOutcomes.sumOf { (p, ok) ->
+            val pClamped = finiteOr(p, 0.5).coerceIn(0.0, 1.0)
+            val y = if (ok) 1.0 else 0.0
+            val d = pClamped - y
+            d * d
+        }
+        return round9(sumSq / predictionsAndOutcomes.size.toDouble())
+    }
+
+    fun sufficiencyStatusForSample(n: Int, minSufficient: Int = 5): String = when {
+        n <= 0 -> "EMPTY"
+        n < minSufficient -> "INITIAL_EVIDENCE"
+        else -> "SUFFICIENT"
+    }
+
+    fun formatConfidenceCoverageSentence(
+        confidence: DeclaredConfidence,
+        questionType: String?,
+        correct: Int,
+        attempts: Int
+    ): String {
+        val confPhrase = when (confidence) {
+            DeclaredConfidence.GUESS -> "chute assumido"
+            DeclaredConfidence.LOW -> "confiança baixa"
+            DeclaredConfidence.MEDIUM -> "confiança média"
+            DeclaredConfidence.HIGH -> "confiança alta"
+            DeclaredConfidence.VERY_HIGH -> "certeza elevada"
+        }
+        val fmtPhrase = when (questionType) {
+            "TRUE_FALSE" -> " de Certo/Errado"
+            "MULTIPLE_CHOICE" -> " de múltipla escolha"
+            else -> ""
+        }
+        if (attempts <= 0) {
+            return "Ainda não há questões$fmtPhrase respondidas em que você declarou $confPhrase."
+        }
+        val suffix = if (attempts < 5) " (evidência inicial)" else ""
+        return "Você acertou $correct de $attempts questões$fmtPhrase em que declarou $confPhrase$suffix."
+    }
+
+    fun evaluateWalkforwardCalibration(
+        events: List<WalkforwardCalibrationInput>
+    ): WalkforwardCalibrationReport {
+        val sorted = events.sortedWith(
+            compareBy<WalkforwardCalibrationInput> { it.occurredAtMs }.thenBy { it.attemptId }
+        )
+        val runningCells = HashMap<Pair<String, DeclaredConfidence>, Pair<Int, Int>>()
+        val allPairs = ArrayList<Pair<Double, Boolean>>(sorted.size)
+        val tfPairs = ArrayList<Pair<Double, Boolean>>()
+        val mcPairs = ArrayList<Pair<Double, Boolean>>()
+        val traces = ArrayList<WalkforwardStepTrace>(sorted.size)
+        var coldStartCount = 0
+
+        for (ev in sorted) {
+            val fmt = normalizeCalibrationFormat(ev.questionType)
+            val (priorCorr, priorAtt) = runningCells[fmt to ev.declaredConfidence] ?: (0 to 0)
+            val isCold = priorAtt == 0
+            if (isCold) coldStartCount++
+            val (pPred, _) = calibratedLevelPosterior(fmt, ev.declaredConfidence, priorCorr, priorAtt)
+            val y = if (ev.isCorrect) 1.0 else 0.0
+            val sqErr = round9((pPred - y) * (pPred - y))
+
+            allPairs += (pPred to ev.isCorrect)
+            if (fmt == "TRUE_FALSE") {
+                tfPairs += (pPred to ev.isCorrect)
+            } else {
+                mcPairs += (pPred to ev.isCorrect)
+            }
+            traces += WalkforwardStepTrace(
+                attemptId = ev.attemptId,
+                occurredAtMs = ev.occurredAtMs,
+                questionType = fmt,
+                declaredConfidence = ev.declaredConfidence,
+                predictedProbability = pPred,
+                isCorrect = ev.isCorrect,
+                squaredError = sqErr,
+                usedColdStartPrior = isCold
+            )
+            runningCells[fmt to ev.declaredConfidence] =
+                (priorCorr + if (ev.isCorrect) 1 else 0) to (priorAtt + 1)
+        }
+
+        val cellsByFormat = ArrayList<FormatConfidenceCalibrationCellDto>(10)
+        for (fmt in listOf("TRUE_FALSE", "MULTIPLE_CHOICE")) {
+            for (dc in DeclaredConfidence.entries) {
+                val (corr, att) = runningCells[fmt to dc] ?: (0 to 0)
+                val (postMean, sd) = calibratedLevelPosterior(fmt, dc, corr, att)
+                val obsPct = if (att > 0) round2(100.0 * corr.toDouble() / att.toDouble()) else null
+                cellsByFormat += FormatConfidenceCalibrationCellDto(
+                    questionType = fmt,
+                    declaredConfidence = dc,
+                    labelPt = dc.labelPt,
+                    attempts = att,
+                    correct = corr,
+                    observedAccuracyPct = obsPct,
+                    modelPredictedMean = round4(postMean),
+                    credibleSd = round4(sd),
+                    sufficiencyStatus = sufficiencyStatusForSample(att, 5),
+                    coverageSentencePt = formatConfidenceCoverageSentence(dc, fmt, corr, att)
+                )
+            }
+        }
+
+        val rawBrier = computeBrierScore(allPairs)
+        return WalkforwardCalibrationReport(
+            policyVersion = CALIBRATION_POLICY_VERSION,
+            overallBrierScore = rawBrier?.let(::round4),
+            overallBrierRaw = rawBrier,
+            trueFalseBrierScore = computeBrierScore(tfPairs)?.let(::round4),
+            multipleChoiceBrierScore = computeBrierScore(mcPairs)?.let(::round4),
+            eligibleAttemptsCount = allPairs.size,
+            coldStartPredictionsCount = coldStartCount,
+            sufficiencyStatus = sufficiencyStatusForSample(allPairs.size, 5),
+            legacyBandMapping = legacyBandMappingTable(),
+            cellsByFormat = cellsByFormat,
+            traces = traces
         )
     }
 }
@@ -836,4 +1158,1006 @@ object FatigueEngine {
         earlyMeanMinutes = 30.0,
         lateMeanMinutes = 210.0
     )
+}
+
+@Serializable
+enum class DeclaredConfidence(
+    val ordinalLevel: Int,
+    val labelPt: String
+) {
+    @SerialName("GUESS") GUESS(1, "Chutei"),
+    @SerialName("LOW") LOW(2, "Pouco confiante"),
+    @SerialName("MEDIUM") MEDIUM(3, "Parcialmente confiante"),
+    @SerialName("HIGH") HIGH(4, "Muito confiante"),
+    @SerialName("VERY_HIGH") VERY_HIGH(5, "Praticamente certo");
+
+    fun toLegacyBand(): Int = when (this) {
+        GUESS -> 1
+        LOW -> 1
+        MEDIUM -> 2
+        HIGH -> 3
+        VERY_HIGH -> 3
+    }
+
+    val isHigh: Boolean
+        get() = this == HIGH || this == VERY_HIGH
+
+    val isLowOrGuess: Boolean
+        get() = this == GUESS || this == LOW
+
+    companion object {
+        fun fromLegacyBand(band: Int, explicit: Boolean): DeclaredConfidence? {
+            if (!explicit && band <= 0) return null
+            return when (band) {
+                0 -> GUESS
+                1 -> LOW
+                2 -> MEDIUM
+                else -> HIGH
+            }
+        }
+    }
+}
+
+@Serializable
+enum class CognitiveStrategy(
+    val labelPt: String,
+    val shortLabelPt: String
+) {
+    @SerialName("CONCEPTUAL_KNOWLEDGE")
+    CONCEPTUAL_KNOWLEDGE("Conhecia o conceito e consegui aplicá-lo.", "Conhecia o conceito"),
+    @SerialName("LOGICAL_DEDUCTION")
+    LOGICAL_DEDUCTION("Deduzi a resposta por raciocínio lógico.", "Dedução lógica"),
+    @SerialName("ELIMINATION")
+    ELIMINATION("Eliminei as alternativas incorretas.", "Eliminação"),
+    @SerialName("PATTERN_RECOGNITION")
+    PATTERN_RECOGNITION("Reconheci termos ou conceitos familiares.", "Termos familiares"),
+    @SerialName("INTUITION")
+    INTUITION("Respondi por intuição.", "Intuição"),
+    @SerialName("RANDOM_GUESS")
+    RANDOM_GUESS("Escolhi aleatoriamente.", "Escolha aleatória"),
+    @SerialName("UNSPECIFIED")
+    UNSPECIFIED("Não sei identificar como cheguei à resposta.", "Não sei identificar");
+
+    val isGroundedOrFunctional: Boolean
+        get() = this == CONCEPTUAL_KNOWLEDGE || this == LOGICAL_DEDUCTION || this == ELIMINATION
+
+    val isSurfaceOrFragile: Boolean
+        get() = this == PATTERN_RECOGNITION || this == INTUITION || this == RANDOM_GUESS
+}
+
+@Serializable
+enum class PreliminaryDiagnosis {
+    @SerialName("POSSIBLE_CONCEPTUAL_MASTERY") POSSIBLE_CONCEPTUAL_MASTERY,
+    @SerialName("INSECURE_KNOWLEDGE") INSECURE_KNOWLEDGE,
+    @SerialName("POSSIBLE_CASUAL_HIT") POSSIBLE_CASUAL_HIT,
+    @SerialName("UNCONFIRMED_MASTERY") UNCONFIRMED_MASTERY,
+    @SerialName("POSSIBLE_MASTERY_ILLUSION") POSSIBLE_MASTERY_ILLUSION,
+    @SerialName("FUNCTIONAL_REASONING") FUNCTIONAL_REASONING,
+    @SerialName("POSSIBLE_CONCEPTUAL_MISCONCEPTION") POSSIBLE_CONCEPTUAL_MISCONCEPTION,
+    @SerialName("POSSIBLE_KNOWLEDGE_GAP") POSSIBLE_KNOWLEDGE_GAP,
+    @SerialName("UNDEMONSTRATED_KNOWLEDGE") UNDEMONSTRATED_KNOWLEDGE,
+    @SerialName("STRATEGIC_OMISSION") STRATEGIC_OMISSION
+}
+
+@Serializable
+enum class SupportLevel(val labelPt: String) {
+    @SerialName("LOW") LOW("Sustentação inicial"),
+    @SerialName("MODERATE") MODERATE("Sustentação moderada"),
+    @SerialName("HIGH") HIGH("Sustentação consistente")
+}
+
+@Serializable
+enum class CtvTriggerPriority {
+    @SerialName("NONE") NONE,
+    @SerialName("PERIODIC_SAMPLE") PERIODIC_SAMPLE,
+    @SerialName("OPTIONAL") OPTIONAL,
+    @SerialName("RECOMMENDED") RECOMMENDED,
+    @SerialName("HIGH") HIGH
+}
+
+data class MetacognitiveMatrixInputs(
+    val isBlank: Boolean,
+    val isCorrect: Boolean,
+    val declaredConfidence: DeclaredConfidence?,
+    val cognitiveStrategy: CognitiveStrategy?,
+    val consistentHistory: Boolean,
+    val rationaleContradicted: Boolean
+)
+
+@Serializable
+data class BehavioralEvidenceDto(
+    @SerialName("active_seconds") val activeSeconds: Int? = null,
+    @SerialName("total_elapsed_seconds") val totalElapsedSeconds: Int = 0,
+    @SerialName("answer_change_count") val answerChangeCount: Int = 0,
+    @SerialName("initial_chosen_index") val initialChosenIndex: Int? = null,
+    @SerialName("final_chosen_index") val finalChosenIndex: Int? = null,
+    @SerialName("consulted_resources") val consultedResources: List<String> = emptyList(),
+    @SerialName("focus_loss_count") val focusLossCount: Int = 0,
+    @SerialName("session_interrupted") val sessionInterrupted: Boolean = false
+)
+
+@Serializable
+data class MetacognitiveAssessmentDto(
+    @SerialName("preliminary_diagnosis") val preliminaryDiagnosis: PreliminaryDiagnosis,
+    @SerialName("inference_support") val inferenceSupport: SupportLevel,
+    @SerialName("ctv_priority") val ctvPriority: CtvTriggerPriority,
+    @SerialName("self_perception_summary") val selfPerceptionSummary: String,
+    @SerialName("observed_evidence_summary") val observedEvidenceSummary: String,
+    @SerialName("system_inference_message") val systemInferenceMessage: String,
+    @SerialName("strategy_skipped") val strategySkipped: Boolean = false,
+    @SerialName("policy_version") val policyVersion: String = MetacognitiveEngine.METACOGNITIVE_POLICY_VERSION
+)
+
+@Serializable
+enum class HitGroundingCategory {
+    @SerialName("NOT_APPLICABLE_ERROR") NOT_APPLICABLE_ERROR,
+    @SerialName("VALID_CONCEPTUAL_GROUNDING") VALID_CONCEPTUAL_GROUNDING,
+    @SerialName("VALID_FUNCTIONAL_STRATEGY") VALID_FUNCTIONAL_STRATEGY,
+    @SerialName("DIVERGENT_RATIONALE") DIVERGENT_RATIONALE,
+    @SerialName("FRAGILE_OR_GUESS") FRAGILE_OR_GUESS,
+    @SerialName("UNKNOWN_GROUNDING") UNKNOWN_GROUNDING;
+
+    val creditsComprehension: Boolean
+        get() = this == VALID_CONCEPTUAL_GROUNDING || this == VALID_FUNCTIONAL_STRATEGY
+
+    val isEvaluable: Boolean
+        get() = this == VALID_CONCEPTUAL_GROUNDING ||
+            this == VALID_FUNCTIONAL_STRATEGY ||
+            this == DIVERGENT_RATIONALE ||
+            this == FRAGILE_OR_GUESS
+}
+
+object MetacognitiveEngine {
+    const val METACOGNITIVE_POLICY_VERSION = "metacog-v1.0"
+
+    fun classifyHitGrounding(
+        isCorrect: Boolean,
+        declaredConfidence: DeclaredConfidence?,
+        cognitiveStrategy: CognitiveStrategy?,
+        evidenceCompatible: Boolean?
+    ): HitGroundingCategory {
+        if (!isCorrect) return HitGroundingCategory.NOT_APPLICABLE_ERROR
+        if (evidenceCompatible == false) return HitGroundingCategory.DIVERGENT_RATIONALE
+        if (declaredConfidence?.isLowOrGuess == true || cognitiveStrategy?.isSurfaceOrFragile == true) {
+            return HitGroundingCategory.FRAGILE_OR_GUESS
+        }
+        if (cognitiveStrategy == CognitiveStrategy.LOGICAL_DEDUCTION ||
+            cognitiveStrategy == CognitiveStrategy.ELIMINATION
+        ) {
+            return HitGroundingCategory.VALID_FUNCTIONAL_STRATEGY
+        }
+        if (cognitiveStrategy == CognitiveStrategy.CONCEPTUAL_KNOWLEDGE || evidenceCompatible == true) {
+            return HitGroundingCategory.VALID_CONCEPTUAL_GROUNDING
+        }
+        return HitGroundingCategory.UNKNOWN_GROUNDING
+    }
+
+    fun classifyPreliminaryMatrix(
+        inputs: MetacognitiveMatrixInputs
+    ): Triple<PreliminaryDiagnosis, SupportLevel, CtvTriggerPriority> {
+        if (inputs.isBlank) {
+            return Triple(
+                PreliminaryDiagnosis.STRATEGIC_OMISSION,
+                SupportLevel.MODERATE,
+                CtvTriggerPriority.NONE
+            )
+        }
+        val isGuess = inputs.declaredConfidence == DeclaredConfidence.GUESS ||
+            inputs.cognitiveStrategy == CognitiveStrategy.RANDOM_GUESS
+
+        if (inputs.isCorrect) {
+            if (inputs.rationaleContradicted) {
+                return Triple(
+                    PreliminaryDiagnosis.POSSIBLE_MASTERY_ILLUSION,
+                    SupportLevel.HIGH,
+                    CtvTriggerPriority.HIGH
+                )
+            }
+            if (isGuess) {
+                return Triple(
+                    PreliminaryDiagnosis.POSSIBLE_CASUAL_HIT,
+                    SupportLevel.HIGH,
+                    CtvTriggerPriority.HIGH
+                )
+            }
+            if (inputs.declaredConfidence == DeclaredConfidence.LOW) {
+                return Triple(
+                    PreliminaryDiagnosis.INSECURE_KNOWLEDGE,
+                    SupportLevel.MODERATE,
+                    CtvTriggerPriority.RECOMMENDED
+                )
+            }
+            if (inputs.cognitiveStrategy == CognitiveStrategy.LOGICAL_DEDUCTION ||
+                inputs.cognitiveStrategy == CognitiveStrategy.ELIMINATION
+            ) {
+                return Triple(
+                    PreliminaryDiagnosis.FUNCTIONAL_REASONING,
+                    SupportLevel.MODERATE,
+                    CtvTriggerPriority.OPTIONAL
+                )
+            }
+            if (inputs.cognitiveStrategy == CognitiveStrategy.PATTERN_RECOGNITION ||
+                inputs.cognitiveStrategy == CognitiveStrategy.INTUITION
+            ) {
+                return Triple(
+                    PreliminaryDiagnosis.UNCONFIRMED_MASTERY,
+                    SupportLevel.MODERATE,
+                    CtvTriggerPriority.RECOMMENDED
+                )
+            }
+            if (inputs.declaredConfidence?.isHigh == true && inputs.consistentHistory) {
+                return Triple(
+                    PreliminaryDiagnosis.POSSIBLE_CONCEPTUAL_MASTERY,
+                    SupportLevel.HIGH,
+                    CtvTriggerPriority.PERIODIC_SAMPLE
+                )
+            }
+            return Triple(
+                PreliminaryDiagnosis.UNCONFIRMED_MASTERY,
+                if (inputs.declaredConfidence != null || inputs.cognitiveStrategy != null) {
+                    SupportLevel.MODERATE
+                } else {
+                    SupportLevel.LOW
+                },
+                CtvTriggerPriority.RECOMMENDED
+            )
+        } else {
+            if (isGuess) {
+                return Triple(
+                    PreliminaryDiagnosis.UNDEMONSTRATED_KNOWLEDGE,
+                    SupportLevel.MODERATE,
+                    CtvTriggerPriority.NONE
+                )
+            }
+            if (inputs.declaredConfidence?.isHigh == true) {
+                return Triple(
+                    PreliminaryDiagnosis.POSSIBLE_CONCEPTUAL_MISCONCEPTION,
+                    SupportLevel.HIGH,
+                    CtvTriggerPriority.HIGH
+                )
+            }
+            return Triple(
+                PreliminaryDiagnosis.POSSIBLE_KNOWLEDGE_GAP,
+                SupportLevel.MODERATE,
+                CtvTriggerPriority.OPTIONAL
+            )
+        }
+    }
+
+    fun inferenceMessagePt(diagnosis: PreliminaryDiagnosis, hasMultiAttemptEvidence: Boolean): String =
+        when (diagnosis) {
+            PreliminaryDiagnosis.POSSIBLE_CONCEPTUAL_MASTERY ->
+                "Acerto consistente com alta confiança. Evidência favorável à consolidação progressiva do conceito."
+            PreliminaryDiagnosis.INSECURE_KNOWLEDGE ->
+                "Acerto registrado com baixa confiança declarada. Conhecimento ainda inseguro; vale validar em outro contexto."
+            PreliminaryDiagnosis.POSSIBLE_CASUAL_HIT ->
+                "Acerto registrado com indicação de chute. O domínio conceitual ainda não foi confirmado."
+            PreliminaryDiagnosis.UNCONFIRMED_MASTERY ->
+                "Acerto registrado, mas o domínio conceitual ainda não foi confirmado."
+            PreliminaryDiagnosis.POSSIBLE_MASTERY_ILLUSION ->
+                if (hasMultiAttemptEvidence) {
+                    "Foram identificadas evidências de possível superestimação do domínio deste conceito."
+                } else {
+                    "Acerto registrado, porém o fundamento selecionado diverge da regra cobrada; o domínio conceitual ainda não foi confirmado."
+                }
+            PreliminaryDiagnosis.FUNCTIONAL_REASONING ->
+                "Acerto obtido por raciocínio funcional (dedução ou eliminação). Estratégia válida; recomenda-se consolidar também a regra direta."
+            PreliminaryDiagnosis.POSSIBLE_CONCEPTUAL_MISCONCEPTION ->
+                if (hasMultiAttemptEvidence) {
+                    "Foram identificadas evidências recorrentes de possível equívoco conceitual neste tema."
+                } else {
+                    "Resposta incorreta com confiança elevada: indício preliminar de possível equívoco na interpretação da regra ou exceção."
+                }
+            PreliminaryDiagnosis.POSSIBLE_KNOWLEDGE_GAP ->
+                "Resposta incorreta com baixa confiança: indício preliminar de lacuna neste conceito, útil para revisão direcionada."
+            PreliminaryDiagnosis.UNDEMONSTRATED_KNOWLEDGE ->
+                "Conhecimento ainda não demonstrado nesta tentativa (resposta incorreta por tentativa aleatória)."
+            PreliminaryDiagnosis.STRATEGIC_OMISSION ->
+                "Questão deixada em branco como decisão estratégica sob incerteza; conhecimento do item não avaliado."
+        }
+
+    fun buildAssessment(
+        inputs: MetacognitiveMatrixInputs,
+        behavioral: BehavioralEvidenceDto = BehavioralEvidenceDto(),
+        hasMultiAttemptEvidence: Boolean = false
+    ): MetacognitiveAssessmentDto {
+        val (diagnosis, support, priority) = classifyPreliminaryMatrix(inputs)
+        val confText = inputs.declaredConfidence?.labelPt ?: "Não informada"
+        val stratText = inputs.cognitiveStrategy?.labelPt ?: "Etapa pulada / não informada"
+        val selfPerception = "Confiança declarada: $confText · Estratégia: $stratText"
+
+        val secs = (behavioral.activeSeconds ?: behavioral.totalElapsedSeconds).coerceAtLeast(0)
+        val outcomeLabel = when {
+            inputs.isBlank -> "Omissão em branco"
+            inputs.isCorrect -> "Resposta correta"
+            else -> "Resposta incorreta"
+        }
+        val changesNote = if (behavioral.answerChangeCount > 0) {
+            ", ${behavioral.answerChangeCount} troca(s) de alternativa"
+        } else {
+            ""
+        }
+        val resourcesNote = if (behavioral.consultedResources.isNotEmpty()) {
+            ", ${behavioral.consultedResources.size} recurso(s) auxiliar(es) consultado(s)"
+        } else {
+            ""
+        }
+        val observed = "$outcomeLabel em ${secs}s ativos$changesNote$resourcesNote."
+        return MetacognitiveAssessmentDto(
+            preliminaryDiagnosis = diagnosis,
+            inferenceSupport = support,
+            ctvPriority = priority,
+            selfPerceptionSummary = selfPerception,
+            observedEvidenceSummary = observed,
+            systemInferenceMessage = inferenceMessagePt(diagnosis, hasMultiAttemptEvidence),
+            strategySkipped = inputs.cognitiveStrategy == null,
+            policyVersion = METACOGNITIVE_POLICY_VERSION
+        )
+    }
+
+    private fun normalizeTokensAndTrigrams(raw: String): Set<String> {
+        val cleaned = buildString(raw.length) {
+            for (ch in raw.lowercase()) {
+                append(if (ch.isLetterOrDigit()) ch else ' ')
+            }
+        }
+        val set = HashSet<String>()
+        val words = cleaned.split(Regex("\\s+")).filter { it.length >= 3 }
+        for (w in words) {
+            set += "w:$w"
+        }
+        val joined = words.joinToString(" ")
+        if (joined.length >= 4) {
+            for (i in 0..(joined.length - 4)) {
+                set += "g:${joined.substring(i, i + 4)}"
+            }
+        }
+        return set
+    }
+
+    fun jaccardTrigramSimilarity(a: String, b: String): Double {
+        val setA = normalizeTokensAndTrigrams(a)
+        val setB = normalizeTokensAndTrigrams(b)
+        if (setA.isEmpty() && setB.isEmpty()) return 1.0
+        if (setA.isEmpty() || setB.isEmpty()) return 0.0
+        val inter = setA.intersect(setB).size.toDouble()
+        val union = setA.union(setB).size.toDouble()
+        return inter / union
+    }
+}
+
+@Serializable
+enum class ConceptMasteryState(val labelPt: String) {
+    @SerialName("NOT_EVALUATED") NOT_EVALUATED("Não avaliado"),
+    @SerialName("INSUFFICIENT_EVIDENCE") INSUFFICIENT_EVIDENCE("Evidência insuficiente"),
+    @SerialName("EMERGING_KNOWLEDGE") EMERGING_KNOWLEDGE("Conhecimento inicial"),
+    @SerialName("UNSTABLE_KNOWLEDGE") UNSTABLE_KNOWLEDGE("Conhecimento instável"),
+    @SerialName("DEVELOPING_MASTERY") DEVELOPING_MASTERY("Domínio em desenvolvimento"),
+    @SerialName("DEMONSTRATED_MASTERY") DEMONSTRATED_MASTERY("Domínio demonstrado"),
+    @SerialName("CONSOLIDATED_MASTERY") CONSOLIDATED_MASTERY("Domínio consolidado"),
+    @SerialName("MASTERY_AT_RISK") MASTERY_AT_RISK("Domínio em risco");
+
+    val isMasteredOrConsolidated: Boolean
+        get() = this == DEMONSTRATED_MASTERY || this == CONSOLIDATED_MASTERY
+}
+
+@Serializable
+data class MasteryPolicyConfig(
+    @SerialName("min_attempts_for_classification") val minAttemptsForClassification: Int = 3,
+    @SerialName("min_distinct_questions_for_classification") val minDistinctQuestionsForClassification: Int = 3,
+    @SerialName("min_distinct_for_demonstrated") val minDistinctForDemonstrated: Int = 4,
+    @SerialName("min_distinct_for_consolidated") val minDistinctForConsolidated: Int = 5,
+    @SerialName("at_risk_retrievability_threshold") val atRiskRetrievabilityThreshold: Double = 0.70,
+    @SerialName("high_conf_error_instability_threshold") val highConfErrorInstabilityThreshold: Double = 0.25,
+    @SerialName("min_consistency_threshold") val minConsistencyThreshold: Double = 0.45
+)
+
+data class ConceptMasteryInputs(
+    val attempts: Int,
+    val distinctQuestions: Int,
+    val accuracy: Double,
+    val groundedRate: Double,
+    val highConfErrorRate: Double,
+    val transferAttempts: Int,
+    val transferSuccessRate: Double,
+    val hasSpacedRetention: Boolean,
+    val retrievability: Double,
+    val consistency: Double,
+    val avgActiveSeconds: Double? = null,
+    val referenceSeconds: Double = 60.0
+)
+
+@Serializable
+data class ConceptMasteryDimensions(
+    val performance: Double,
+    val comprehension: Double,
+    val transfer: Double? = null,
+    val retention: Double? = null,
+    val metacognition: Double,
+    val fluency: Double? = null,
+    val consistency: Double
+)
+
+@Serializable
+data class ConceptMasteryEvaluation(
+    val state: ConceptMasteryState,
+    @SerialName("state_label_pt") val stateLabelPt: String,
+    @SerialName("composite_score") val compositeScore: Double,
+    val dimensions: ConceptMasteryDimensions,
+    @SerialName("policy_version") val policyVersion: String = ConceptMasteryEngine.CONCEPT_MASTERY_POLICY_VERSION
+)
+
+object ConceptMasteryEngine {
+    const val CONCEPT_MASTERY_POLICY_VERSION = "mastery-v1.0"
+
+    private fun clamp01(v: Double): Double = if (v.isFinite()) v.coerceIn(0.0, 1.0) else 0.0
+
+    fun computeFluencyScore(avgActiveSeconds: Double?, referenceSeconds: Double): Double? {
+        val secs = avgActiveSeconds?.takeIf { it.isFinite() && it > 0.0 } ?: return null
+        val refS = if (referenceSeconds.isFinite() && referenceSeconds > 5.0) referenceSeconds else 60.0
+        if (secs < 3.0) return 0.25
+        val ratio = secs / refS
+        val score = if (ratio <= 1.0) {
+            1.0 - 0.15 * (1.0 - ratio).coerceIn(0.0, 1.0)
+        } else {
+            (1.0 / (1.0 + 0.6 * (ratio - 1.0))).coerceIn(0.1, 1.0)
+        }
+        return clamp01(score)
+    }
+
+    fun classifyConceptMasteryWithPolicy(
+        inputs: ConceptMasteryInputs,
+        policy: MasteryPolicyConfig = MasteryPolicyConfig()
+    ): ConceptMasteryEvaluation {
+        val perf = clamp01(inputs.accuracy)
+        val comp = clamp01(inputs.groundedRate)
+        val hce = clamp01(inputs.highConfErrorRate)
+        val metacog = clamp01(1.0 - hce)
+        val cons = clamp01(inputs.consistency)
+        val retr = clamp01(inputs.retrievability)
+        val transferDim = if (inputs.transferAttempts > 0) clamp01(inputs.transferSuccessRate) else null
+        val retentionDim = if (inputs.attempts > 0) retr else null
+        val fluencyDim = if (inputs.attempts > 0) computeFluencyScore(inputs.avgActiveSeconds, inputs.referenceSeconds) else null
+
+        val state = if (inputs.attempts <= 0 || inputs.distinctQuestions <= 0) {
+            ConceptMasteryState.NOT_EVALUATED
+        } else if (inputs.attempts < policy.minAttemptsForClassification ||
+            inputs.distinctQuestions < policy.minDistinctQuestionsForClassification
+        ) {
+            ConceptMasteryState.INSUFFICIENT_EVIDENCE
+        } else {
+            val hadStrongMasteryProfile = inputs.distinctQuestions >= policy.minDistinctForDemonstrated &&
+                perf >= 0.75 &&
+                comp >= 0.70 &&
+                hce <= 0.15 &&
+                inputs.transferAttempts >= 1 &&
+                clamp01(inputs.transferSuccessRate) >= 0.70 &&
+                cons >= 0.70
+
+            when {
+                hadStrongMasteryProfile && retr < policy.atRiskRetrievabilityThreshold ->
+                    ConceptMasteryState.MASTERY_AT_RISK
+                hce >= policy.highConfErrorInstabilityThreshold ||
+                    cons < policy.minConsistencyThreshold ||
+                    (inputs.transferAttempts >= 1 && clamp01(inputs.transferSuccessRate) < 0.50 && perf >= 0.55) ->
+                    ConceptMasteryState.UNSTABLE_KNOWLEDGE
+                inputs.distinctQuestions >= policy.minDistinctForConsolidated &&
+                    perf >= 0.80 &&
+                    comp >= 0.75 &&
+                    hce <= 0.10 &&
+                    inputs.transferAttempts >= 1 &&
+                    clamp01(inputs.transferSuccessRate) >= 0.75 &&
+                    inputs.hasSpacedRetention &&
+                    retr >= policy.atRiskRetrievabilityThreshold &&
+                    cons >= 0.75 ->
+                    ConceptMasteryState.CONSOLIDATED_MASTERY
+                hadStrongMasteryProfile && retr >= policy.atRiskRetrievabilityThreshold ->
+                    ConceptMasteryState.DEMONSTRATED_MASTERY
+                perf >= 0.70 && comp >= 0.60 && hce < policy.highConfErrorInstabilityThreshold && cons >= 0.60 ->
+                    ConceptMasteryState.DEVELOPING_MASTERY
+                else -> ConceptMasteryState.EMERGING_KNOWLEDGE
+            }
+        }
+
+        val compositeScore = if (inputs.attempts <= 0) {
+            0.0
+        } else {
+            val tVal = transferDim ?: (comp * 0.7)
+            val rVal = retentionDim ?: 0.5
+            val fVal = fluencyDim ?: 0.7
+            clamp01(
+                0.22 * perf +
+                    0.22 * comp +
+                    0.20 * tVal +
+                    0.14 * rVal +
+                    0.10 * metacog +
+                    0.05 * fVal +
+                    0.07 * cons
+            )
+        }
+
+        return ConceptMasteryEvaluation(
+            state = state,
+            stateLabelPt = state.labelPt,
+            compositeScore = compositeScore,
+            dimensions = ConceptMasteryDimensions(
+                performance = perf,
+                comprehension = comp,
+                transfer = transferDim,
+                retention = retentionDim,
+                metacognition = metacog,
+                fluency = fluencyDim,
+                consistency = cons
+            ),
+            policyVersion = CONCEPT_MASTERY_POLICY_VERSION
+        )
+    }
+
+    fun classifyConceptMastery(inputs: ConceptMasteryInputs): ConceptMasteryEvaluation =
+        classifyConceptMasteryWithPolicy(inputs, MasteryPolicyConfig())
+}
+
+@Serializable
+data class ReuseEconomySimulation(
+    @SerialName("monthly_verifications") val monthlyVerifications: Long,
+    @SerialName("reuse_rate_pct") val reuseRatePct: Double,
+    @SerialName("avg_cost_per_generation") val avgCostPerGeneration: Double,
+    @SerialName("cost_without_reuse") val costWithoutReuse: Double,
+    @SerialName("cost_with_reuse") val costWithReuse: Double,
+    @SerialName("monthly_savings") val monthlySavings: Double,
+    @SerialName("avoided_generations_monthly") val avoidedGenerationsMonthly: Long,
+    @SerialName("generated_questions_monthly") val generatedQuestionsMonthly: Long,
+    @SerialName("annual_savings") val annualSavings: Double,
+    @SerialName("cost_reduction_pct") val costReductionPct: Double,
+    @SerialName("disclaimer_pt") val disclaimerPt: String
+)
+
+object ReuseEconomySimulator {
+    private fun round2(v: Double): Double = rustRound(v * 100.0) / 100.0
+
+    fun simulateAiReuseEconomy(
+        monthlyVerifications: Long,
+        reuseRatePct: Double,
+        avgCostPerGeneration: Double
+    ): ReuseEconomySimulation {
+        val clampedVerifications = monthlyVerifications.coerceIn(0L, 10_000_000L)
+        val clampedReusePct = if (reuseRatePct.isFinite()) reuseRatePct.coerceIn(0.0, 100.0) else 0.0
+        val clampedCost = if (avgCostPerGeneration.isFinite()) avgCostPerGeneration.coerceIn(0.0, 100.0) else 0.0
+
+        val avoided = rustRound(clampedVerifications.toDouble() * (clampedReusePct / 100.0))
+            .toLong()
+            .coerceIn(0L, clampedVerifications)
+        val generated = (clampedVerifications - avoided).coerceAtLeast(0L)
+
+        val withoutReuse = clampedVerifications.toDouble() * clampedCost
+        val withReuse = generated.toDouble() * clampedCost
+        val monthlySavings = max(0.0, withoutReuse - withReuse)
+        val annualSavings = monthlySavings * 12.0
+        val reductionPct = if (withoutReuse > 0.0) (monthlySavings / withoutReuse) * 100.0 else 0.0
+
+        return ReuseEconomySimulation(
+            monthlyVerifications = clampedVerifications,
+            reuseRatePct = round2(clampedReusePct),
+            avgCostPerGeneration = rustRound(clampedCost * 10000.0) / 10000.0,
+            costWithoutReuse = round2(withoutReuse),
+            costWithReuse = round2(withReuse),
+            monthlySavings = round2(monthlySavings),
+            avoidedGenerationsMonthly = avoided,
+            generatedQuestionsMonthly = generated,
+            annualSavings = round2(annualSavings),
+            costReductionPct = round2(reductionPct),
+            disclaimerPt = "Estimativa operacional hipotética baseada no custo unitário de referência informado; não constitui comprovação contábil ou financeira auditada."
+        )
+    }
+}
+
+@Serializable
+enum class VerificationMode(val code: String) {
+    @SerialName("CONCEPTUAL_TRANSFER") CONCEPTUAL_TRANSFER("CONCEPTUAL_TRANSFER"),
+    @SerialName("TOPIC_PRACTICE") TOPIC_PRACTICE("TOPIC_PRACTICE"),
+    @SerialName("INTENTIONAL_REVIEW") INTENTIONAL_REVIEW("INTENTIONAL_REVIEW");
+
+    companion object {
+        fun fromCode(raw: String?): VerificationMode = when (raw?.trim()?.uppercase()) {
+            "TOPIC_PRACTICE" -> TOPIC_PRACTICE
+            "INTENTIONAL_REVIEW", "RETENTION_CHECK" -> INTENTIONAL_REVIEW
+            else -> CONCEPTUAL_TRANSFER
+        }
+    }
+}
+
+data class QuestionAlignmentProfile(
+    val questionId: String = "",
+    val subjectId: String? = null,
+    val topicId: String? = null,
+    val targetConceptId: String? = null,
+    val allConceptIds: List<String> = emptyList(),
+    val targetConceptAmbiguous: Boolean = false,
+    val testedRule: String? = null,
+    val decisiveExcerpt: String? = null,
+    val legalProvisions: List<String> = emptyList(),
+    val questionType: String = "MULTIPLE_CHOICE",
+    val stem: String = "",
+    val correctAnswerText: String? = null,
+    val contentRevision: String = "",
+    val semanticRevision: String = "",
+    val anchoredSourceQuestionId: String? = null,
+    val isAiUnconfirmedBinding: Boolean = false,
+    val isEditorialPendingOrDubious: Boolean = false
+)
+
+sealed interface CandidateAlignmentDecision {
+    data class Accepted(
+        val mode: VerificationMode,
+        val framingReasonCode: String,
+        val framingReasonPt: String,
+        val applicationBonus: Int
+    ) : CandidateAlignmentDecision
+
+    data class Rejected(
+        val reasonCode: String
+    ) : CandidateAlignmentDecision
+}
+
+data class CtvIndependenceInput(
+    val verificationMode: VerificationMode,
+    val action: String,
+    val verificationTiming: String,
+    val wasPreviouslyExposed: Boolean,
+    val exposureHistoryKnown: Boolean = true,
+    val hadDecisiveHelp: Boolean = false,
+    val isCorrect: Boolean
+)
+
+data class CtvIndependenceVerdict(
+    val countsAsIndependentAttempt: Boolean,
+    val countsAsIndependentCorrect: Boolean,
+    val independentAttemptsDelta: Int,
+    val independentCorrectDelta: Int,
+    val classificationCode: String,
+    val summaryPt: String
+)
+
+object CtvAlignmentEngine {
+    const val MAX_SOURCE_SIMILARITY_FOR_TRANSFER = 0.45
+    const val MAX_COMBINED_STEM_ANSWER_SIMILARITY = 0.50
+
+    private val STOPWORDS = setOf(
+        "para", "como", "sobre", "entre", "qual", "quais", "quando", "onde", "pelo", "pela",
+        "pelos", "pelas", "uma", "uns", "umas", "dos", "das", "nos", "nas", "com", "sem",
+        "mais", "menos", "maior", "menor", "assinale", "opcao", "opção", "correta", "correto",
+        "errado", "errada", "certo", "acerca", "relacao", "relação", "segundo", "conforme",
+        "pode", "deve", "sendo", "sera", "será", "item", "questao", "questão", "alternativa",
+        "aplicacao", "aplicação", "criterio", "critério", "cobrado", "oficial", "gabarito",
+        "significado", "definicao", "definição", "conceito", "apresenta", "informa", "pergunta"
+    )
+
+    fun triggerCohortForReason(reason: String?): String = when (reason?.trim()) {
+        "PERIODIC_MASTERY_SAMPLING", "BASELINE_SAMPLING", "PERIODIC_AUDIT" -> "PERIODIC_SAMPLING"
+        else -> "DIFFICULTY_DETECTED"
+    }
+
+    fun isRuleRevealingHelp(resource: String): Boolean = when (resource.trim().lowercase()) {
+        "explanation", "gabarito", "answer_key", "answer-key", "editorial_card", "editorial-card",
+        "dr_sincero", "dr-sincero", "plausibility", "ai_explanation", "ai-explanation",
+        "rule_hint", "rule-hint", "explicacao_infantil", "decisive_help" -> true
+        else -> false
+    }
+
+    fun evaluateCtvIndependence(input: CtvIndependenceInput): CtvIndependenceVerdict {
+        val actionNorm = input.action.trim().uppercase()
+        if (actionNorm == "PRELOADED_ONLY") {
+            return CtvIndependenceVerdict(
+                countsAsIndependentAttempt = false,
+                countsAsIndependentCorrect = false,
+                independentAttemptsDelta = 0,
+                independentCorrectDelta = 0,
+                classificationCode = "PRELOADED_NOT_DISPLAYED",
+                summaryPt = "Transferência de dados sem exibição do enunciado."
+            )
+        }
+        if (actionNorm == "DISMISSED") {
+            return CtvIndependenceVerdict(
+                countsAsIndependentAttempt = false,
+                countsAsIndependentCorrect = false,
+                independentAttemptsDelta = 0,
+                independentCorrectDelta = 0,
+                classificationCode = "EXPOSED_AND_DISMISSED",
+                summaryPt = "Questão complementar exibida e dispensada pelo estudante."
+            )
+        }
+        val timingNorm = input.verificationTiming.trim().uppercase()
+        if (!input.exposureHistoryKnown || timingNorm == "UNKNOWN_CONDITION" || timingNorm.isEmpty()) {
+            return CtvIndependenceVerdict(
+                countsAsIndependentAttempt = false,
+                countsAsIndependentCorrect = false,
+                independentAttemptsDelta = 0,
+                independentCorrectDelta = 0,
+                classificationCode = "UNKNOWN_CONDITION",
+                summaryPt = "Registro anterior sem informação suficiente de momento ou exposição."
+            )
+        }
+        if (input.verificationMode == VerificationMode.TOPIC_PRACTICE) {
+            return CtvIndependenceVerdict(
+                countsAsIndependentAttempt = false,
+                countsAsIndependentCorrect = false,
+                independentAttemptsDelta = 0,
+                independentCorrectDelta = 0,
+                classificationCode = "TOPIC_PRACTICE_RECORDED",
+                summaryPt = "Prática complementar do tópico registrada sem medir transferência do conceito original."
+            )
+        }
+        if (input.verificationMode == VerificationMode.INTENTIONAL_REVIEW || input.wasPreviouslyExposed) {
+            return CtvIndependenceVerdict(
+                countsAsIndependentAttempt = false,
+                countsAsIndependentCorrect = false,
+                independentAttemptsDelta = 0,
+                independentCorrectDelta = 0,
+                classificationCode = "PRIOR_EXPOSURE_REVIEW",
+                summaryPt = "Item já visto anteriormente pelo estudante; contabilizado como revisão."
+            )
+        }
+        if (timingNorm == "POST_INSTRUCTION" || input.hadDecisiveHelp) {
+            return CtvIndependenceVerdict(
+                countsAsIndependentAttempt = false,
+                countsAsIndependentCorrect = false,
+                independentAttemptsDelta = 0,
+                independentCorrectDelta = 0,
+                classificationCode = "POST_INSTRUCTION_FIXATION",
+                summaryPt = "Resposta realizada após explicação ou ajuda que revelou a regra decisiva."
+            )
+        }
+        if (timingNorm != "PRE_FEEDBACK") {
+            return CtvIndependenceVerdict(
+                countsAsIndependentAttempt = false,
+                countsAsIndependentCorrect = false,
+                independentAttemptsDelta = 0,
+                independentCorrectDelta = 0,
+                classificationCode = "DEFERRED_VERIFICATION",
+                summaryPt = "Verificação realizada fora da janela pré-feedback imediata."
+            )
+        }
+        return if (input.isCorrect) {
+            CtvIndependenceVerdict(
+                countsAsIndependentAttempt = true,
+                countsAsIndependentCorrect = true,
+                independentAttemptsDelta = 1,
+                independentCorrectDelta = 1,
+                classificationCode = "INDEPENDENT_CORRECT",
+                summaryPt = "Aplicação independente correta antes do feedback."
+            )
+        } else {
+            CtvIndependenceVerdict(
+                countsAsIndependentAttempt = true,
+                countsAsIndependentCorrect = false,
+                independentAttemptsDelta = 1,
+                independentCorrectDelta = 0,
+                classificationCode = "INDEPENDENT_ERROR",
+                summaryPt = "Falha de aplicação independente observada antes do feedback."
+            )
+        }
+    }
+
+    fun normalizeCompactText(raw: String): String =
+        buildString(raw.length) {
+            for (ch in raw.lowercase()) {
+                append(if (ch.isLetterOrDigit()) ch else ' ')
+            }
+        }.split(Regex("\\s+")).filter { it.isNotEmpty() }.joinToString(" ")
+
+    private fun domainContentTokens(raw: String): Set<String> =
+        normalizeCompactText(raw)
+            .split(' ')
+            .filter { it.length >= 4 && it !in STOPWORDS }
+            .toSet()
+
+    private fun isDefinitionPrompt(stem: String): Boolean {
+        val lower = stem.lowercase()
+        return lower.contains("significado ") ||
+            lower.contains("definição ") ||
+            lower.contains("definicao ") ||
+            lower.contains("o que mede") ||
+            lower.contains("o que é ") ||
+            lower.contains("o que expressa") ||
+            lower.contains("o que caracteriza") ||
+            lower.contains("conceito de ") ||
+            lower.contains("define-se como")
+    }
+
+    private fun isApplicationScenario(stem: String): Boolean {
+        val lower = stem.lowercase()
+        val hasNumbers = stem.any { it.isDigit() }
+        return hasNumbers ||
+            lower.contains("dois títulos") ||
+            lower.contains("duas carteiras") ||
+            lower.contains("choque") ||
+            lower.contains("caso ") ||
+            lower.contains("situação") ||
+            lower.contains("durante ") ||
+            lower.contains("suponha") ||
+            lower.contains("considere que um") ||
+            lower.contains("considere dois") ||
+            lower.contains("servidor ") ||
+            lower.contains("contribuinte ") ||
+            lower.contains("auditoria")
+    }
+
+    fun detectParaphraseOrPreservedCues(
+        source: QuestionAlignmentProfile,
+        candidate: QuestionAlignmentProfile
+    ): Boolean {
+        if (MetacognitiveEngine.jaccardTrigramSimilarity(source.stem, candidate.stem) >= MAX_SOURCE_SIMILARITY_FOR_TRANSFER) {
+            return true
+        }
+        if (source.questionType == "MULTIPLE_CHOICE" && candidate.questionType == "MULTIPLE_CHOICE") {
+            val sa = source.correctAnswerText
+            val ca = candidate.correctAnswerText
+            if (!sa.isNullOrBlank() && !ca.isNullOrBlank()) {
+                val normSa = normalizeCompactText(sa)
+                val normCa = normalizeCompactText(ca)
+                if (normSa.length >= 14 && normSa == normCa) {
+                    if (MetacognitiveEngine.jaccardTrigramSimilarity(source.stem, candidate.stem) >= 0.20) {
+                        return true
+                    }
+                }
+                if (MetacognitiveEngine.jaccardTrigramSimilarity("${source.stem} $sa", "${candidate.stem} $ca") >= MAX_COMBINED_STEM_ANSWER_SIMILARITY) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    private fun ruleOverlapRatio(
+        source: QuestionAlignmentProfile,
+        candidate: QuestionAlignmentProfile
+    ): Double {
+        if (source.legalProvisions.isNotEmpty() && candidate.legalProvisions.isNotEmpty()) {
+            val shared = source.legalProvisions.any { sp ->
+                candidate.legalProvisions.any { cp -> normalizeCompactText(sp) == normalizeCompactText(cp) }
+            }
+            if (shared) return 0.60
+        }
+        val srcTokens = domainContentTokens("${source.testedRule.orEmpty()} ${source.stem}")
+        val candTokens = domainContentTokens("${candidate.testedRule.orEmpty()} ${candidate.stem}")
+        if (srcTokens.isEmpty() || candTokens.isEmpty()) return 0.0
+        val inter = srcTokens.intersect(candTokens).size.toDouble()
+        val minLen = max(1, min(srcTokens.size, candTokens.size)).toDouble()
+        return inter / minLen
+    }
+
+    fun evaluateCandidateAlignment(
+        source: QuestionAlignmentProfile,
+        candidate: QuestionAlignmentProfile,
+        allowSeenReview: Boolean = false
+    ): CandidateAlignmentDecision {
+        if (source.questionId.isNotEmpty() && source.questionId == candidate.questionId) {
+            return CandidateAlignmentDecision.Rejected("SAME_QUESTION_ID")
+        }
+        val exactContentDup = source.contentRevision.isNotEmpty() && source.contentRevision == candidate.contentRevision
+        val exactSemanticDup = source.semanticRevision.isNotEmpty() && source.semanticRevision == candidate.semanticRevision
+        if (exactContentDup || exactSemanticDup) {
+            return if (allowSeenReview) {
+                CandidateAlignmentDecision.Accepted(
+                    mode = VerificationMode.INTENTIONAL_REVIEW,
+                    framingReasonCode = "INTENTIONAL_RETENTION_REVIEW",
+                    framingReasonPt = "Revisão intencional de retenção com material já conhecido pelo estudante.",
+                    applicationBonus = 0
+                )
+            } else {
+                CandidateAlignmentDecision.Rejected("DUPLICATE_CONTENT_OR_SEMANTIC_REVISION")
+            }
+        }
+        if (detectParaphraseOrPreservedCues(source, candidate)) {
+            return if (allowSeenReview) {
+                CandidateAlignmentDecision.Accepted(
+                    mode = VerificationMode.INTENTIONAL_REVIEW,
+                    framingReasonCode = "INTENTIONAL_RETENTION_REVIEW",
+                    framingReasonPt = "Revisão intencional aproveitando formulação próxima do item conhecido.",
+                    applicationBonus = 0
+                )
+            } else {
+                CandidateAlignmentDecision.Rejected("PARAPHRASE_OR_PRESERVED_ANSWER_CUE")
+            }
+        }
+        if (candidate.isEditorialPendingOrDubious) {
+            return CandidateAlignmentDecision.Rejected("CANDIDATE_EDITORIAL_PENDING_OR_DUBIOUS")
+        }
+        val appBonus = when {
+            isDefinitionPrompt(source.stem) && isApplicationScenario(candidate.stem) -> 35
+            isApplicationScenario(candidate.stem) -> 15
+            else -> 0
+        }
+        if (source.targetConceptAmbiguous) {
+            return CandidateAlignmentDecision.Accepted(
+                mode = VerificationMode.TOPIC_PRACTICE,
+                framingReasonCode = "TARGET_CONCEPT_AMBIGUOUS_TOPIC_PRACTICE",
+                framingReasonPt = "A questão original abrange múltiplos conceitos sem alvo único inequívoco; item enquadrado como prática do tópico.",
+                applicationBonus = 0
+            )
+        }
+        val srcCid = source.targetConceptId
+        if (!srcCid.isNullOrBlank()) {
+            if (candidate.targetConceptAmbiguous) {
+                return CandidateAlignmentDecision.Accepted(
+                    mode = VerificationMode.TOPIC_PRACTICE,
+                    framingReasonCode = "CANDIDATE_CONCEPT_AMBIGUOUS_TOPIC_PRACTICE",
+                    framingReasonPt = "A questão candidata envolve mais de um conceito; enquadrada como prática do tópico.",
+                    applicationBonus = 0
+                )
+            }
+            val matchesConcept = candidate.targetConceptId == srcCid || srcCid in candidate.allConceptIds
+            if (matchesConcept) {
+                val overlap = ruleOverlapRatio(source, candidate)
+                if (candidate.isAiUnconfirmedBinding &&
+                    candidate.anchoredSourceQuestionId != source.questionId &&
+                    overlap < 0.12
+                ) {
+                    return CandidateAlignmentDecision.Accepted(
+                        mode = VerificationMode.TOPIC_PRACTICE,
+                        framingReasonCode = "AI_UNCONFIRMED_CONCEPT_RULE_WEAK",
+                        framingReasonPt = "Vínculo conceitual declarado apenas por IA sem sustentação suficiente da mesma regra decisiva; tratado como prática do tópico.",
+                        applicationBonus = 0
+                    )
+                }
+                return CandidateAlignmentDecision.Accepted(
+                    mode = VerificationMode.CONCEPTUAL_TRANSFER,
+                    framingReasonCode = "SAME_CONCEPT_AND_RULE_NEW_CONTEXT",
+                    framingReasonPt = "Mesmo conceito-alvo e regra decisiva sustentados em situação distinta.",
+                    applicationBonus = appBonus
+                )
+            }
+            return CandidateAlignmentDecision.Accepted(
+                mode = VerificationMode.TOPIC_PRACTICE,
+                framingReasonCode = if (candidate.targetConceptId != null) {
+                    "TOPIC_ONLY_CONCEPT_DIVERGENT"
+                } else {
+                    "TOPIC_ONLY_UNCONFIRMED_CONCEPT"
+                },
+                framingReasonPt = "O item pertence ao mesmo tópico, mas avalia conceito ou regra distinta da questão original; oferecido como prática do tópico.",
+                applicationBonus = 0
+            )
+        }
+        val overlap = ruleOverlapRatio(source, candidate)
+        val isAnchored = source.questionId.isNotEmpty() && candidate.anchoredSourceQuestionId == source.questionId
+        if (candidate.isAiUnconfirmedBinding && !isAnchored && overlap < 0.25) {
+            return CandidateAlignmentDecision.Accepted(
+                mode = VerificationMode.TOPIC_PRACTICE,
+                framingReasonCode = "AI_SELF_DECLARED_WITHOUT_CONFIRMED_TARGET",
+                framingReasonPt = "Declaração de IA sem conceito confirmado na questão original; mantida no nível de prática do tópico.",
+                applicationBonus = 0
+            )
+        }
+        if (isAnchored || overlap >= 0.22) {
+            return CandidateAlignmentDecision.Accepted(
+                mode = VerificationMode.CONCEPTUAL_TRANSFER,
+                framingReasonCode = "SHARED_DECISIVE_RULE_NEW_CONTEXT",
+                framingReasonPt = "Mesma regra decisiva identificada em contexto de aplicação distinto.",
+                applicationBonus = appBonus
+            )
+        }
+        return CandidateAlignmentDecision.Accepted(
+            mode = VerificationMode.TOPIC_PRACTICE,
+            framingReasonCode = "TOPIC_ONLY_RULE_DIVERGENT",
+            framingReasonPt = "Apenas o tópico coincide e a regra decisiva diverge ou não é determinável; classificado como prática do tópico.",
+            applicationBonus = 0
+        )
+    }
+}
+
+object OperationalCostCalculator {
+    fun computeCostPerCompletedVerification(
+        totalCostUsd: Double,
+        completedVerificationsCount: Int,
+        costIsEstimated: Boolean
+    ): Triple<Double?, Double?, String> {
+        val safeCost = if (totalCostUsd.isFinite()) max(0.0, totalCostUsd) else 0.0
+        if (completedVerificationsCount <= 0) {
+            return Triple(null, null, "sem conclusões")
+        }
+        val raw = safeCost / completedVerificationsCount.toDouble()
+        val rounded4 = round4(raw)
+        val suffix = if (costIsEstimated) " (estimado)" else ""
+        return Triple(raw, rounded4, "US$ %.4f%s".format(java.util.Locale.US, rounded4, suffix))
+    }
 }

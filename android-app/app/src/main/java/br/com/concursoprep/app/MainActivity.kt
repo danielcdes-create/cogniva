@@ -298,6 +298,74 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
                     isBlank = isBlank,
                     confidenceExplicit = confidenceExplicit
                 )
+            },
+            onSubmitMetacognitiveAnswer = { question, chosenIndex, confidenceLevel, timeSpentSeconds, isBlank, confidenceExplicit, declaredConfidence, cognitiveStrategy, strategySkipped, activeSeconds, answerChangeCount, initialChosenIndex, consultedResources, focusLossCount ->
+                viewModel.submitAnswer(
+                    question = question,
+                    chosenIndex = chosenIndex,
+                    confidenceLevel = confidenceLevel,
+                    timeSpentSeconds = timeSpentSeconds,
+                    isBlank = isBlank,
+                    confidenceExplicit = confidenceExplicit,
+                    declaredConfidence = declaredConfidence,
+                    cognitiveStrategy = cognitiveStrategy,
+                    strategySkipped = strategySkipped,
+                    activeSeconds = activeSeconds,
+                    answerChangeCount = answerChangeCount,
+                    initialChosenIndex = initialChosenIndex,
+                    consultedResources = consultedResources,
+                    focusLossCount = focusLossCount
+                )
+            },
+            onEvaluateCtv = { question, isCorrect, isBlank, declaredConfidence, cognitiveStrategy, confidenceLevel ->
+                viewModel.evaluateCtvForAttempt(
+                    question = question,
+                    isCorrect = isCorrect,
+                    isBlank = isBlank,
+                    declaredConfidence = declaredConfidence,
+                    cognitiveStrategy = cognitiveStrategy,
+                    confidenceLevel = confidenceLevel
+                )
+            },
+            onSubmitCtvAttempt = { sourceQ, compQ, chosenIdx, declConf, strat, actSecs, timing, wasExposed, parentCorrect ->
+                viewModel.submitCtvAttempt(
+                    sourceQuestion = sourceQ,
+                    complementaryQuestion = compQ,
+                    chosenIndex = chosenIdx,
+                    declaredConfidence = declConf,
+                    cognitiveStrategy = strat,
+                    activeSeconds = actSecs,
+                    verificationTiming = timing,
+                    wasPreviouslyExposed = wasExposed,
+                    parentWasCorrect = parentCorrect
+                )
+            },
+            onRecordCtvDisplayed = { eval, srcId ->
+                viewModel.recordCtvDisplayed(eval, srcId)
+            },
+            onDismissCtvOffer = { eval, srcId ->
+                viewModel.dismissCtvOffer(eval, srcId)
+            },
+            onSubmitCtvFullAttempt = { sourceQ, eval, chosenIdx, declConf, strat, actSecs, displayedAt, resList, fLoss, parentCorrect ->
+                val cq = eval.complementaryQuestion ?: error("Questão complementar ausente na avaliação CTV.")
+                viewModel.submitCtvAttempt(
+                    sourceQuestion = sourceQ,
+                    complementaryQuestion = cq,
+                    chosenIndex = chosenIdx,
+                    declaredConfidence = declConf,
+                    cognitiveStrategy = strat,
+                    activeSeconds = actSecs,
+                    verificationTiming = eval.verificationTiming,
+                    wasPreviouslyExposed = eval.wasPreviouslyExposed,
+                    parentWasCorrect = parentCorrect,
+                    offerId = eval.offerId,
+                    displayedAt = displayedAt,
+                    consultedResources = resList,
+                    focusLossCount = fLoss,
+                    triggerReason = eval.triggerReason,
+                    deliverySource = eval.deliverySource,
+                    verificationMode = eval.verificationMode
+                )
             }
         )
         return

@@ -110,9 +110,19 @@ fn validate(
         || item.session_uuid.len() > 100
         || !(0..=3).contains(&item.confidence_level)
         || !(1..=86400).contains(&item.time_spent_seconds)
+        || item.active_seconds.is_some_and(|s| !(0..=86400).contains(&s))
+        || item.consulted_resources.len() > 20
+        || item.consulted_resources.iter().any(|r| r.len() > 64)
         || item.user_note.as_ref().is_some_and(|s| s.len() > 20000)
     {
         return Err(AppError::BadRequest("Tentativa fora dos limites".into()));
+    }
+    if let Some(init_idx) = item.initial_chosen_index {
+        if !item.is_blank && init_idx >= question.answers.len() {
+            return Err(AppError::BadRequest(
+                "Alternativa inicial fora dos limites da questão".into(),
+            ));
+        }
     }
     if item.question_revision.is_empty() || item.question_revision != question.revision()? {
         return Err(AppError::Conflict("A questão mudou ou a tentativa antiga não possui versão. Revise o item preservado antes de sincronizar.".into()));
@@ -226,6 +236,14 @@ fn project(
         position_in_session: item.position_in_session,
         elapsed_session_seconds: item.elapsed_session_seconds,
         session_interrupted: item.session_interrupted,
+        declared_confidence: item.declared_confidence,
+        cognitive_strategy: item.cognitive_strategy,
+        strategy_skipped: item.strategy_skipped,
+        active_seconds: item.active_seconds,
+        answer_change_count: item.answer_change_count,
+        initial_chosen_index: item.initial_chosen_index,
+        consulted_resources: item.consulted_resources.clone(),
+        focus_loss_count: item.focus_loss_count,
     };
     activity.past_sessions.push(event.clone());
     // Delivery order cannot change the meaning of occurrence order: keep pastSessions chronological.
@@ -468,6 +486,57 @@ fn project(
         activity.spaced_repetition_interval
     };
 
+    let effective_declared_conf = item.declared_confidence.or_else(|| {
+        crate::services::metacognitive_engine::DeclaredConfidence::from_legacy_band(
+            item.confidence_level,
+            item.confidence_explicit,
+        )
+    });
+    let rationale_contradicted = match (
+        item.selected_evidence_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty()),
+        question.effective_evidence_challenge(),
+    ) {
+        (Some(sel), Some(ch)) => {
+            let norm = crate::models::question::normalize_synthesized_evidence_id(
+                sel,
+                question.evidence_challenge.is_some(),
+            );
+            norm != ch.correct_evidence_id
+        }
+        _ => false,
+    };
+    let consistent_history = answered_sessions.len() >= 2
+        && activity.percentual_acertos >= 75.0
+        && !activity.high_confidence_error_flag;
+    let behavioral_ev = crate::services::metacognitive_engine::BehavioralEvidence {
+        active_seconds: item.active_seconds,
+        total_elapsed_seconds: item.time_spent_seconds,
+        answer_change_count: item.answer_change_count,
+        initial_chosen_index: item.initial_chosen_index,
+        final_chosen_index: (!item.is_blank).then_some(item.chosen_index),
+        consulted_resources: item.consulted_resources.clone(),
+        focus_loss_count: item.focus_loss_count,
+        session_interrupted: item.session_interrupted,
+        prior_question_exposures: answered_sessions.len().saturating_sub(1) as u32,
+        prior_concept_exposures: 0,
+        prior_gabarito_exposed: prior_had_history,
+    };
+    let metacognitive_assessment = Some(crate::services::metacognitive_engine::build_assessment(
+        &crate::services::metacognitive_engine::MetacognitiveMatrixInputs {
+            is_blank: item.is_blank,
+            is_correct: correct,
+            declared_confidence: effective_declared_conf,
+            cognitive_strategy: item.cognitive_strategy,
+            consistent_history,
+            rationale_contradicted,
+        },
+        &behavioral_ev,
+        answered_sessions.len() >= 2,
+    ));
+
     let ack = ProcessedAttemptResult {
         confidence_avg: activity.nivel_confianca_med_rec,
         attempts_total: activity.quantidade_praticas,
@@ -485,6 +554,7 @@ fn project(
         next_review_interval_days,
         accuracy_accumulated_pct: activity.percentual_acertos,
         in_error_notebook: activity.in_error_notebook,
+        metacognitive_assessment,
         next_review_at: (monotonic_ultima + Duration::days(next_review_interval_days as i64))
             .to_rfc3339(),
         canonical_subject_id: activity.canonical_subject_id.clone(),
@@ -595,6 +665,14 @@ pub async fn commit(
                     )
                     .upsert(true)
                     .await;
+                let _ = crate::services::ctv_reconciliation::reconcile_user_ctv_history(
+                    &state.db,
+                    user_id,
+                    &item.question_id,
+                    &item.question_revision,
+                    "",
+                )
+                .await;
                 return Ok(ack);
             }
         }
@@ -672,6 +750,14 @@ pub async fn commit(
                     )
                     .upsert(true)
                     .await;
+                let _ = crate::services::ctv_reconciliation::reconcile_user_ctv_history(
+                    &state.db,
+                    user_id,
+                    &item.question_id,
+                    &item.question_revision,
+                    "",
+                )
+                .await;
                 return Ok(ack);
             }
             Ok(_) => continue,
@@ -770,6 +856,14 @@ mod tests {
             position_in_session: None,
             elapsed_session_seconds: None,
             session_interrupted: false,
+            declared_confidence: None,
+            cognitive_strategy: None,
+            strategy_skipped: false,
+            active_seconds: None,
+            answer_change_count: 0,
+            initial_chosen_index: None,
+            consulted_resources: Vec::new(),
+            focus_loss_count: 0,
         };
         let (fields, event, ack) =
             project(empty(123, &q, Utc::now()), &q, &item, Utc::now()).unwrap();
@@ -839,6 +933,14 @@ mod tests {
             position_in_session: None,
             elapsed_session_seconds: None,
             session_interrupted: false,
+            declared_confidence: None,
+            cognitive_strategy: None,
+            strategy_skipped: false,
+            active_seconds: None,
+            answer_change_count: 0,
+            initial_chosen_index: None,
+            consulted_resources: Vec::new(),
+            focus_loss_count: 0,
         };
         let (_, _, ack) = project(act, &q, &item, now).unwrap();
         assert_eq!(ack.attempts_total, 6);
@@ -888,6 +990,14 @@ mod tests {
             position_in_session: None,
             elapsed_session_seconds: None,
             session_interrupted: false,
+            declared_confidence: None,
+            cognitive_strategy: None,
+            strategy_skipped: false,
+            active_seconds: None,
+            answer_change_count: 0,
+            initial_chosen_index: None,
+            consulted_resources: Vec::new(),
+            focus_loss_count: 0,
         };
         let newer_online_right = AnswerAttemptItem {
             exam_component_id: None,
@@ -914,6 +1024,14 @@ mod tests {
             position_in_session: None,
             elapsed_session_seconds: None,
             session_interrupted: false,
+            declared_confidence: None,
+            cognitive_strategy: None,
+            strategy_skipped: false,
+            active_seconds: None,
+            answer_change_count: 0,
+            initial_chosen_index: None,
+            consulted_resources: Vec::new(),
+            focus_loss_count: 0,
         };
 
         let apply_step = |existing: Option<Document>, item: &AnswerAttemptItem| -> Document {
@@ -1039,6 +1157,14 @@ mod tests {
             position_in_session: None,
             elapsed_session_seconds: Some(120),
             session_interrupted: false,
+            declared_confidence: None,
+            cognitive_strategy: None,
+            strategy_skipped: false,
+            active_seconds: None,
+            answer_change_count: 0,
+            initial_chosen_index: None,
+            consulted_resources: Vec::new(),
+            focus_loss_count: 0,
         };
         let (fields_b, event_b, ack_b) = project(
             empty(99, &q, now - Duration::days(10)),
@@ -1139,6 +1265,14 @@ mod tests {
             position_in_session: None,
             elapsed_session_seconds: None,
             session_interrupted: false,
+            declared_confidence: None,
+            cognitive_strategy: None,
+            strategy_skipped: false,
+            active_seconds: None,
+            answer_change_count: 0,
+            initial_chosen_index: None,
+            consulted_resources: Vec::new(),
+            focus_loss_count: 0,
         };
 
         // Valid evidence_id accepted in batch validate

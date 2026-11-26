@@ -425,6 +425,59 @@ def validate_question(q, catalog, allow_server_provenance=True):
             "editorial_card.plausible_conceptual_errors",
         )
 
+    dmeta = q.get("diagnostic_meta")
+    if dmeta is not None:
+        require(
+            is_strict_int(dmeta.get("usage_count")),
+            "diagnostic_meta.usage_count must be strict int",
+            "INVALID_INTEGER",
+            "diagnostic_meta.usage_count",
+        )
+        qm = dmeta.get("quality_metrics")
+        if qm is not None:
+            for int_field in ("attempts_count", "correct_count", "open_reports_count"):
+                require(
+                    is_strict_int(qm.get(int_field)),
+                    f"diagnostic_meta.quality_metrics.{int_field} must be strict int",
+                    "INVALID_INTEGER",
+                    f"diagnostic_meta.quality_metrics.{int_field}",
+                )
+        active_subjects_map = {s["subject_id"]: s for s in catalog.get("subjects", [])}
+        active_topics_map = {t["topic_id"]: t for t in catalog.get("topics", [])}
+        dsubj = dmeta["subject_id"]
+        dtop = dmeta["topic_id"]
+        require(
+            dsubj in active_subjects_map and dtop in active_topics_map and active_topics_map[dtop]["subject_id"] == dsubj,
+            "diagnostic_meta taxonomy outside catalog",
+            "INVALID_TAXONOMY_LINK",
+            "diagnostic_meta.topic_id",
+        )
+        require(
+            active_subjects_map[dsubj].get("status") == "ACTIVE" and active_topics_map[dtop].get("status") == "ACTIVE",
+            "diagnostic_meta taxonomy inactive in catalog",
+            "INACTIVE_TAXONOMY_LINK",
+            "diagnostic_meta.topic_id",
+        )
+        cids = dmeta.get("concept_ids") or []
+        require(
+            len(set(cids)) == len(cids) and all(bool(cid.strip()) for cid in cids),
+            "duplicate or empty concept_id in diagnostic_meta.concept_ids",
+            "DUPLICATE_TAXONOMY_LINK",
+            "diagnostic_meta.concept_ids",
+        )
+        cat_concepts = catalog.get("concepts") or []
+        if cat_concepts:
+            concepts_by_id = {c["concept_id"]: c for c in cat_concepts}
+            for cid in cids:
+                require(
+                    cid in concepts_by_id
+                    and concepts_by_id[cid].get("subject_id") == dsubj
+                    and concepts_by_id[cid].get("topic_id") == dtop,
+                    "concept_id in diagnostic_meta invalid for subject/topic",
+                    "INVALID_TAXONOMY_LINK",
+                    "diagnostic_meta.concept_ids",
+                )
+
     require(bool(q["question"].strip()), "empty question", "EMPTY_QUESTION", "question")
     answers = q["answers"]
     require(all(a.strip() for a in answers), "blank answer option", "INVALID_ANSWERS", "answers")
@@ -630,6 +683,19 @@ def bson_to_contract_question(bson_doc):
         rub_rev = grad_doc["rubric"].get("revision")
         if rub_rev is not None and not is_strict_int(rub_rev):
             fail("INVALID_INTEGER", "grading.rubric.revision", "BSON grading.rubric.revision must be int32/int64")
+    dmeta_doc = bson_doc.get("diagnostic_meta")
+    if isinstance(dmeta_doc, dict):
+        if "usage_count" in dmeta_doc and not is_strict_int(dmeta_doc["usage_count"]):
+            fail("INVALID_INTEGER", "diagnostic_meta.usage_count", "BSON diagnostic_meta.usage_count must be int32/int64")
+        qm_doc = dmeta_doc.get("quality_metrics")
+        if isinstance(qm_doc, dict):
+            for int_field in ("attempts_count", "correct_count", "open_reports_count"):
+                if int_field in qm_doc and not is_strict_int(qm_doc[int_field]):
+                    fail(
+                        "INVALID_INTEGER",
+                        f"diagnostic_meta.quality_metrics.{int_field}",
+                        f"BSON diagnostic_meta.quality_metrics.{int_field} must be int32/int64",
+                    )
 
     projected = copy.deepcopy(bson_doc)
     projected["_id"] = {"$oid": str(raw_id)}
@@ -723,14 +789,31 @@ def evaluate_question_eligibility(
     primary_subject_id = primary_link.get("subject_id") if primary_link else None
     primary_topic_id = primary_link.get("topic_id") if primary_link else None
 
-    if (
-        classification.get("state") != "CONFIRMED"
-        or primary_link is None
-        or primary_subject_id not in active_subjects
-        or (primary_subject_id, primary_topic_id) not in active_topics
-    ):
+    dmeta = question.get("diagnostic_meta") if isinstance(question.get("diagnostic_meta"), dict) else None
+    ctv_auto_approved = (
+        mode == "COMPLEMENTARY_VERIFICATION"
+        and dmeta is not None
+        and dmeta.get("validation_status") in ("AUTO_APPROVED", "HUMAN_CONFIRMED")
+        and dmeta.get("quality_status") in ("OPERATIONAL", "MONITORING")
+        and dmeta.get("content_hash") is not None
+        and dmeta.get("content_hash") == question.get("content_revision")
+        and dmeta.get("subject_id") in active_subjects
+        and (dmeta.get("subject_id"), dmeta.get("topic_id")) in active_topics
+        and (question.get("validity") or {}).get("status") != "OBSOLETE"
+    )
+    if ctv_auto_approved and primary_subject_id is None:
+        primary_subject_id = dmeta.get("subject_id")
+        primary_topic_id = dmeta.get("topic_id")
+
+    classification_confirmed = (
+        classification.get("state") == "CONFIRMED"
+        and primary_link is not None
+        and primary_subject_id in active_subjects
+        and (primary_subject_id, primary_topic_id) in active_topics
+    )
+    if not classification_confirmed and not ctv_auto_approved:
         add_reason("CLASSIFICATION_NOT_CONFIRMED")
-    elif not trusted_human_review(primary_link.get("provenance"), trusted_review_context):
+    elif classification_confirmed and not trusted_human_review(primary_link.get("provenance"), trusted_review_context):
         add_reason("HUMAN_REVIEW_REQUIRED")
 
     for origin in question.get("origins") or []:
@@ -743,16 +826,18 @@ def evaluate_question_eligibility(
     vstatus = validity.get("status")
     historical = validity.get("scope") == "EXPLICIT_HISTORICAL_DATE"
     expected_historical = mode == "HISTORICAL_ONLY"
-    if vstatus != "CURRENT" or historical != expected_historical:
+    if not ctv_auto_approved and (vstatus != "CURRENT" or historical != expected_historical):
         add_reason("VALIDITY_NOT_CONFIRMED")
-    else:
-        if not trusted_human_review(validity.get("decision"), trusted_review_context):
+    elif vstatus == "CURRENT" and historical == expected_historical:
+        if not trusted_human_review(validity.get("decision"), trusted_review_context) and not ctv_auto_approved:
             add_reason("HUMAN_REVIEW_REQUIRED")
         due_raw = validity.get("review_due_on")
         if due_raw is not None:
             due_date = _parse_iso_date(due_raw, "validity.review_due_on")
             if due_date < as_of:
                 add_reason("VALIDITY_REVIEW_EXPIRED")
+    elif ctv_auto_approved and historical:
+        add_reason("VALIDITY_NOT_CONFIRMED")
 
     # 9. Exam compatibility context
     coverage_mode = None

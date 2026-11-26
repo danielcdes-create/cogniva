@@ -112,7 +112,13 @@ export const helpTopics = [
     'Consulte em Missões os episódios declarativos publicados, a duração real calculada e a integridade dos vídeos locais (resolução, codecs e SHA-256).',
     'Abra a experiência do estudante em /missoes/ (ou na aba Missões do aplicativo Android) para reproduzir as cenas com legendas e transcrição em português brasileiro.',
     'Verifique a separação estrita em 3 dimensões: progresso narrativo, desempenho formativo nas decisões da cena e domínio demonstrado exclusivamente em questões humanas reais do acervo.'
-  ],notes:['Decisões narrativas da missão nunca são gravadas automaticamente em todasQuestoes nem conferem domínio formal sem avaliação independente no acervo.'],page:'missions',action:'Abrir Missões'}
+  ],notes:['Decisões narrativas da missão nunca são gravadas automaticamente em todasQuestoes nem conferem domínio formal sem avaliação independente no acervo.'],page:'missions',action:'Abrir Missões'},
+  {id:'motor-ctv-ia',title:'Motor CTV (Database First, AI on Demand), Custo por Verificação Concluída e Simulador',category:'Telas do portal',keywords:'CTV Conceptual Transfer Verification reutilização economia simulador IA todasQuestoes deduplicação custo metacognição verificação concluída coortes',intro:'Acompanhe a contabilidade operacional real do Motor de Verificação Adaptativa de Domínio Conceitual (CTV), as coortes de seleção adaptativa, o acervo permanente de questões complementares e o simulador hipotético de reutilização.',steps:[
+    'Consulte no painel operacional o período agregado integral, entregas por reuso online sem chamada, entregas por cache offline reconciliadas à parte, chamadas reais ao provedor (incluindo duplicatas barradas pós-chamada) e o Custo por verificação concluída (custo total atribuível dividido pelas verificações efetivamente respondidas).',
+    'Acompanhe separadamente as coortes de Disparo Adaptativo por Dificuldade e de Amostragem Periódica, mantendo ofertas dispensadas fora do denominador da taxa de sucesso independente.',
+    'Use os controles deslizantes do Simulador Hipotético de Economia com Reutilização em bloco separado para projetar cenários referenciais sem misturá-los aos números reais observados.',
+    'Revise as questões complementares persistidas em todasQuestoes: itens com sinalizações de problema pelos alunos são suspensos automaticamente (SUSPENDED) e itens com aderência conceitual ou normativa incerta aguardam revisão humana (PENDING_HUMAN_REVIEW).'
+  ],notes:['Quando o custo unitário provém de configuração de referência, o indicador exibe explicitamente a marcação de valor estimado; quando não há verificações concluídas no período, exibe sem conclusões. Questões CTV não confirmadas por curador humano permanecem estritamente isoladas dos simulados oficiais.'],page:'ctv',action:'Abrir Motor CTV & IA'}
 ];
 
 export function searchHelp(query) {

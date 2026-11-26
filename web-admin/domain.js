@@ -488,3 +488,33 @@ export function reconcileExamDrafts(ws, serverExams) {
   }
   return changed;
 }
+
+export function simulateAiReuseEconomy(monthlyVerifications, reuseRatePct, avgCostPerGeneration) {
+  const safeVerif = Math.max(0, Math.min(10000000, Math.round(Number.isFinite(Number(monthlyVerifications)) ? Number(monthlyVerifications) : 0)));
+  const safeReuse = Math.max(0, Math.min(100, Number.isFinite(Number(reuseRatePct)) ? Number(reuseRatePct) : 0));
+  const safeCost = Math.max(0, Math.min(100, Number.isFinite(Number(avgCostPerGeneration)) ? Number(avgCostPerGeneration) : 0));
+
+  const avoided = Math.min(safeVerif, Math.round(safeVerif * (safeReuse / 100)));
+  const generated = Math.max(0, safeVerif - avoided);
+
+  const withoutReuse = safeVerif * safeCost;
+  const withReuse = generated * safeCost;
+  const monthlySavings = Math.max(0, withoutReuse - withReuse);
+  const annualSavings = monthlySavings * 12;
+  const reductionPct = withoutReuse > 0 ? (monthlySavings / withoutReuse) * 100 : 0;
+
+  const round2 = v => Math.round(v * 100) / 100;
+  return {
+    monthly_verifications: safeVerif,
+    reuse_rate_pct: round2(safeReuse),
+    avg_cost_per_generation: Math.round(safeCost * 10000) / 10000,
+    cost_without_reuse: round2(withoutReuse),
+    cost_with_reuse: round2(withReuse),
+    monthly_savings: round2(monthlySavings),
+    avoided_generations_monthly: avoided,
+    generated_questions_monthly: generated,
+    annual_savings: round2(annualSavings),
+    cost_reduction_pct: round2(reductionPct),
+    disclaimer_pt: 'Estimativa operacional hipotética baseada no custo unitário de referência informado; não constitui comprovação contábil ou financeira auditada.'
+  };
+}

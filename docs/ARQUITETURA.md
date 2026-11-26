@@ -1,6 +1,6 @@
 # Arquitetura do Ecossistema Cogniva 2.0
 
-Este documento descreve a arquitetura unificada do **Cogniva `2.4.3`** (`build 33`), consolidando os contratos compartilhados (`contract_version: 5`), o backend Rust (`cogniva-api`), o módulo experiencial **Missões** (`/missoes/` e Android), a arquitetura em 3 camadas (Diagnóstico de 3 Sinais sob Escassez `< 15`, Simulador de Decisão sob Incerteza & Curva de 300 min e Protocolo de Entrada de 60s), o painel administrativo web (`/admin/`), o aplicativo Android *offline-first* (`Room v7`), a governança LGPD e a infraestrutura de entrega contínua.
+Este documento descreve a arquitetura unificada do **Cogniva `2.4.4`** (`build 34`), consolidando os contratos compartilhados (`contract_version: 5`), o backend Rust (`cogniva-api`), o módulo experiencial **Missões** (`/missoes/` e Android), a arquitetura em 3 camadas (Verificação Conceitual `CTV` Alinhada à Regra Decisiva & Diagnóstico de 3 Sinais sob Escassez `< 15`, Calibração *Walk-Forward* + Simulador de Decisão sob Incerteza & Curva de 300 min e Protocolo de Entrada de 60s), o painel administrativo web (`/admin/`), o aplicativo Android *offline-first* (`Room v8`), a governança LGPD e a infraestrutura de entrega contínua.
 
 ---
 
@@ -9,14 +9,14 @@ Este documento descreve a arquitetura unificada do **Cogniva `2.4.3`** (`build 3
 ```mermaid
 flowchart LR
   subgraph Clientes
-    AND["Android App 2.4.3 / build 33 (Kotlin / Compose / Room v7)"]
+    AND["Android App 2.4.4 / build 34 (Kotlin / Compose / Room v8)"]
     MIS["Portal Web /missoes/ (ES Modules + HTTP Range + CSP)"]
     ADM["Painel Web /admin/ (ES Modules + CSP + WCAG AA)"]
   end
 
   subgraph Servidor["VPS DigitalOcean"]
     NGX["Nginx TLS + HSTS + Rate Limit IPv6 /64 + Gate 503"]
-    API["cogniva-api 2.4.3 (Rust / Axum / Tokio · Contract v5)"]
+    API["cogniva-api 2.4.4 (Rust / Axum / Tokio · Contract v5)"]
   end
 
   subgraph Dados["Persistência e Contratos"]
@@ -36,7 +36,7 @@ flowchart LR
   - [`shared/knowledge-catalog.json`](../shared/knowledge-catalog.json) & [`shared/knowledge-concepts-seed.json`](../shared/knowledge-concepts-seed.json): Catálogo canônico unificado (`schema_version: 2`, `catalog_version: 2`, hash gênese preservado) estendido com conceitos (`concepts[]` em grafo acíclico DAG) e fontes normativas versionadas (`normative_sources[]` com `content_sha256`).
   - [`shared/exam-templates.json`](../shared/exam-templates.json): Templates globais oficiais de concursos (`CPNU`, `RFB`, `BNDES`, `AFT`).
   - [`shared/domain-contracts.json`](../shared/domain-contracts.json): Vetores normativos (`contract_version: 5`, `min_questions_for_mastery: 15`) de revisão JCS SHA-256, cálculo de domínio, pontuação líquida ponderada, curvas SRS, fuso de estudo (`America/Sao_Paulo`, `UTC-3`), protocolo `entry_60s`, diagnóstico de 3 sinais (`diagnostics`), transferência cross-banca (`transfer`), curva logística de 300 minutos (`performance_300m`), simulador de decisão sob incerteza (`decision_uncertainty`) e fadiga controlada por dificuldade (`fatigue` — detalhados em [`MOTORES-DECISAO-CORE-LOOP.md`](MOTORES-DECISAO-CORE-LOOP.md)).
-  - [`shared/schemas/question-contracts.schema.json`](../shared/schemas/question-contracts.schema.json): Contrato JSON Schema 2020-12 de questões 100% V2 (`question-v2-validator-2.3.0`, `validator_revision = 6`), incluindo `concept_id` opcional, `evidence_challenge` e Ficha Editorial Rastreável (`editorial_card`).
+  - [`shared/schemas/question-contracts.schema.json`](../shared/schemas/question-contracts.schema.json): Contrato JSON Schema 2020-12 de questões 100% V2 (`question-v2-validator-2.4.0`, `validator_revision = 7`), incluindo `concept_id` opcional, `evidence_challenge`, Ficha Editorial Rastreável (`editorial_card`) e metadados permanentes de Verificação Conceitual Complementar (`diagnostic_meta`).
   - [`shared/missions-catalog.json`](../shared/missions-catalog.json) & [`shared/schemas/missions.schema.json`](../shared/schemas/missions.schema.json): Catálogo declarativo hierárquico do módulo **Missões** (`Carreira → Disciplina → Temporada → Missão → Cena → Interação → Evidência`, detalhado em [`MODULO-MISSOES.md`](MODULO-MISSOES.md)).
 
 ---
@@ -73,6 +73,7 @@ O Cogniva 2.0 opera com autenticação 100% própria e governança integral de d
 | `knowledge_catalog_*` | Snapshots imutáveis (`versions`), ponteiro ativo (`head`), auditoria de ativações e rascunhos colaborativos (`catalog_editor_drafts`). |
 | `question_classification_suggestions` | Propostas de classificação IA V2 pendentes de revisão humana (`PENDING`, `ACCEPTED`, `REJECTED`, `STALE`). |
 | `tutor_budgets` | Controle atômico de orçamento diário por usuário e teto global no fuso `America/Sao_Paulo` (`UTC-3`). |
+| `ctv_offers` / `conceptual_transfer_attempts` / `study_recommendation_events` | Ciclo de vida de ofertas CTV (`SUPPLIED` → `DISPLAYED` → `DISMISSED`/`ANSWERED`), tentativas complementares reconciliadas entre dispositivos e telemetria de recomendações (todos expurgados sob LGPD Art. 18); auditoria operacional impessoal em `ai_generation_audit`. |
 
 ---
 
@@ -82,8 +83,8 @@ O Cogniva 2.0 opera com autenticação 100% própria e governança integral de d
    - Python, Rust e Kotlin computam `SHA-256(JCS({question_type, question, answers, correct_answer_indices, grading}))` em conformidade estrita com a RFC 8785.
 2. **Replay Cronológico e SRS Consistente:**
    - O cálculo de intervalo no motor SRS aplica bônus sobre a sequência consecutiva atual (`streak_atual`), e lotes de sincronização offline com `client_answered_at` reordenam e reprocessam transições cronologicamente sem regredir `ultima_resposta_em`.
-3. **Banco Local Room v7, Motores Simétricos e Troca Segura de Conta:**
-   - Isolamento em bancos SQLite por conta (`cogniva-<userId>.db`, migrações `1 → 7` com schema exportado em `7.json`), execução local simétrica dos 5 motores em `PerformanceEngines.kt`, persistência atômica de simulados + omissões estratégicas (`isBlank`) e telemetria de sessão contra morte de processo e isolamento de falhas entre sincronização de perfil e sincronização de tentativas.
+3. **Banco Local Room v8, Motores Simétricos e Troca Segura de Conta:**
+   - Isolamento em bancos SQLite por conta (`cogniva-<userId>.db`, migrações `1 → 8` com schemas exportados em `7.json` e `8.json`), captura pré-gabarito de confiança em 5 níveis, estratégia cognitiva neutra em 7 opções e telemetria comportamental, execução local simétrica dos motores em `PerformanceEngines.kt` (incluindo `MetacognitiveEngine`, `ConceptMasteryEngine` e `ReuseEconomySimulator`), fallback CTV *offline-first* sobre o cache local e persistência atômica de simulados + omissões estratégicas (`isBlank`).
 
 ---
 

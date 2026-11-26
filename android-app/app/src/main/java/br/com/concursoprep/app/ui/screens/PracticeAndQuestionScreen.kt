@@ -59,6 +59,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -66,6 +67,9 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.launch
 import br.com.concursoprep.app.domain.model.SessionSnapshot
 import br.com.concursoprep.app.domain.model.SessionAnswer
@@ -88,15 +92,22 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import java.util.Locale
 import br.com.concursoprep.app.R
+import br.com.concursoprep.app.domain.exam.BehavioralEvidenceDto
 import br.com.concursoprep.app.domain.exam.CalibrationCellDto
 import br.com.concursoprep.app.domain.exam.CalibrationEngine
+import br.com.concursoprep.app.domain.exam.CognitiveStrategy
+import br.com.concursoprep.app.domain.exam.DeclaredConfidence
 import br.com.concursoprep.app.domain.exam.ExamCatalog
 import br.com.concursoprep.app.domain.exam.ExamMomentScenarioDto
+import br.com.concursoprep.app.domain.exam.MetacognitiveEngine
+import br.com.concursoprep.app.domain.exam.MetacognitiveMatrixInputs
 import br.com.concursoprep.app.domain.exam.StrategyAction
 import br.com.concursoprep.app.domain.exam.StrategyEngine
 import br.com.concursoprep.app.domain.exam.StrategyPosture
 import br.com.concursoprep.app.domain.exam.UncertaintyDecisionInputs
 import br.com.concursoprep.app.domain.model.ContextualLookupUiState
+import br.com.concursoprep.app.domain.model.CtvEvaluateResponseDto
+import br.com.concursoprep.app.domain.model.CtvSubmitResponseDto
 import br.com.concursoprep.app.domain.model.QuestionDto
 import br.com.concursoprep.app.domain.model.QuestionType
 import br.com.concursoprep.app.domain.model.QuizMode
@@ -298,7 +309,56 @@ fun QuestionSessionScreen(
     onRequestContextualLookupAi: (questionId: String, selectedText: String, isAnswerSubmitted: Boolean) -> Unit = { _, _, _ -> },
     onDismissContextualLookup: () -> Unit = {},
     onSelectEvidence: (questionId: String, evidenceId: String) -> Unit = { _, _ -> },
-    onSubmitExtendedAnswer: (suspend (question: QuestionDto, chosenIndex: Int, confidenceLevel: Int, timeSpentSeconds: Int, isBlank: Boolean, confidenceExplicit: Boolean) -> Boolean)? = null
+    onSubmitExtendedAnswer: (suspend (question: QuestionDto, chosenIndex: Int, confidenceLevel: Int, timeSpentSeconds: Int, isBlank: Boolean, confidenceExplicit: Boolean) -> Boolean)? = null,
+    onSubmitMetacognitiveAnswer: (suspend (
+        question: QuestionDto,
+        chosenIndex: Int,
+        confidenceLevel: Int,
+        timeSpentSeconds: Int,
+        isBlank: Boolean,
+        confidenceExplicit: Boolean,
+        declaredConfidence: DeclaredConfidence?,
+        cognitiveStrategy: CognitiveStrategy?,
+        strategySkipped: Boolean,
+        activeSeconds: Int,
+        answerChangeCount: Int,
+        initialChosenIndex: Int?,
+        consultedResources: List<String>,
+        focusLossCount: Int
+    ) -> Boolean)? = null,
+    onEvaluateCtv: (suspend (
+        question: QuestionDto,
+        isCorrect: Boolean,
+        isBlank: Boolean,
+        declaredConfidence: DeclaredConfidence?,
+        cognitiveStrategy: CognitiveStrategy?,
+        confidenceLevel: Int
+    ) -> CtvEvaluateResponseDto)? = null,
+    onSubmitCtvAttempt: (suspend (
+        sourceQuestion: QuestionDto,
+        complementaryQuestion: QuestionDto,
+        chosenIndex: Int,
+        declaredConfidence: DeclaredConfidence?,
+        cognitiveStrategy: CognitiveStrategy?,
+        activeSeconds: Int,
+        verificationTiming: String,
+        wasPreviouslyExposed: Boolean,
+        parentWasCorrect: Boolean
+    ) -> CtvSubmitResponseDto)? = null,
+    onRecordCtvDisplayed: (evaluation: CtvEvaluateResponseDto, sourceQuestionId: String) -> Unit = { _, _ -> },
+    onDismissCtvOffer: (evaluation: CtvEvaluateResponseDto, sourceQuestionId: String) -> Unit = { _, _ -> },
+    onSubmitCtvFullAttempt: (suspend (
+        sourceQuestion: QuestionDto,
+        evaluation: CtvEvaluateResponseDto,
+        chosenIndex: Int,
+        declaredConfidence: DeclaredConfidence?,
+        cognitiveStrategy: CognitiveStrategy?,
+        activeSeconds: Int,
+        displayedAt: String?,
+        consultedResources: List<String>,
+        focusLossCount: Int,
+        parentWasCorrect: Boolean
+    ) -> CtvSubmitResponseDto)? = null
 ) {
     var currentIndex by rememberSaveable(snapshot?.sessionId) { mutableIntStateOf(snapshot?.currentIndex ?: initialIndex) }
     val userAnswers = remember(snapshot?.sessionId) { mutableStateMapOf<String, UserAttemptState>().apply { putAll(snapshot?.answers.orEmpty()) } }
@@ -466,6 +526,22 @@ fun QuestionSessionScreen(
     var selectedConfidence by remember(question.id, isSimuladoReviewMode) {
         mutableIntStateOf(currentAttempt?.confidenceLevel ?: 2)
     }
+    var selectedDeclaredConfidence by remember(question.id, isSimuladoReviewMode) {
+        mutableStateOf(
+            currentAttempt?.declaredConfidence
+                ?: if (currentAttempt?.submitted == true || currentAttempt?.confidenceExplicit == true) {
+                    DeclaredConfidence.fromLegacyBand(currentAttempt.confidenceLevel, true)
+                } else {
+                    null
+                }
+        )
+    }
+    var selectedStrategy by remember(question.id, isSimuladoReviewMode) {
+        mutableStateOf(currentAttempt?.cognitiveStrategy)
+    }
+    var strategySkipped by remember(question.id, isSimuladoReviewMode) {
+        mutableStateOf(currentAttempt?.strategySkipped == true)
+    }
     var confidenceExplicitlySelected by remember(question.id, isSimuladoReviewMode) {
         mutableStateOf(currentAttempt?.confidenceExplicit == true || currentAttempt?.submitted == true)
     }
@@ -476,16 +552,122 @@ fun QuestionSessionScreen(
         mutableStateOf(currentAttempt?.submitted == true || isSimuladoReviewMode)
     }
     var hintClickCount by remember(question.id) { mutableIntStateOf(0) }
+    var initialChosenIndex by remember(question.id) {
+        mutableStateOf(currentAttempt?.initialChosenIndex ?: initialSelectedOptionIndex)
+    }
+    var answerChangeCount by remember(question.id) {
+        mutableIntStateOf(currentAttempt?.answerChangeCount ?: 0)
+    }
+    var consultedResources by remember(question.id) {
+        mutableStateOf(currentAttempt?.consultedResources?.toSet() ?: emptySet())
+    }
+    var focusLossCount by remember(question.id) {
+        mutableIntStateOf(currentAttempt?.focusLossCount ?: 0)
+    }
+    var activeForegroundSeconds by remember(question.id) {
+        mutableIntStateOf(currentAttempt?.activeSeconds ?: 1)
+    }
+    var isAppInForeground by remember { mutableStateOf(true) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, question.id, isAnswerSubmitted) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_PAUSE -> {
+                    if (isAppInForeground && !isAnswerSubmitted) {
+                        focusLossCount += 1
+                    }
+                    isAppInForeground = false
+                }
+                Lifecycle.Event.ON_RESUME -> {
+                    isAppInForeground = true
+                }
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    LaunchedEffect(question.id, isAnswerSubmitted, isAppInForeground) {
+        while (!isAnswerSubmitted && isAppInForeground) {
+            delay(1000L)
+            activeForegroundSeconds = (activeForegroundSeconds + 1).coerceAtMost(86400)
+        }
+    }
+
+    // Estado da Camada 3: Verificação Adaptativa de Domínio Conceitual (CTV) antes de revelar o gabarito original
+    var activeCtvEvaluation by remember(question.id) { mutableStateOf<CtvEvaluateResponseDto?>(null) }
+    var ctvChosenIndex by remember(question.id) { mutableStateOf<Int?>(null) }
+    var ctvDeclaredConfidence by remember(question.id) { mutableStateOf<DeclaredConfidence?>(null) }
+    var ctvActiveSeconds by remember(question.id) { mutableIntStateOf(1) }
+    var ctvDisplayedAtIso by remember(question.id) { mutableStateOf<String?>(null) }
+    var ctvFocusLossCount by remember(question.id) { mutableIntStateOf(0) }
+    var ctvSubmitting by remember(question.id) { mutableStateOf(false) }
+    var ctvResult by remember(question.id) {
+        mutableStateOf(
+            if (currentAttempt?.ctvCompleted == true && currentAttempt.ctvDiagnosticTitle != null) {
+                CtvSubmitResponseDto(
+                    ctvAttemptId = "",
+                    parentAttemptId = "",
+                    complementaryQuestionId = "",
+                    isCorrect = true,
+                    correctIndex = 0,
+                    consolidatedDiagnosticTitlePt = currentAttempt.ctvDiagnosticTitle,
+                    consolidatedDiagnosticMessagePt = currentAttempt.ctvDiagnosticMessage.orEmpty()
+                )
+            } else {
+                null
+            }
+        )
+    }
+    val ctvPendingStage = activeCtvEvaluation?.triggered == true &&
+        activeCtvEvaluation?.complementaryQuestion != null &&
+        ctvResult == null
+    DisposableEffect(lifecycleOwner, ctvPendingStage) {
+        val ctvObserver = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE && ctvPendingStage) {
+                ctvFocusLossCount += 1
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(ctvObserver)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(ctvObserver) }
+    }
+    LaunchedEffect(ctvPendingStage, activeCtvEvaluation?.offerId, activeCtvEvaluation?.complementaryQuestion?.id) {
+        val eval = activeCtvEvaluation
+        if (ctvPendingStage && eval != null) {
+            if (ctvDisplayedAtIso == null) {
+                ctvDisplayedAtIso = java.time.Instant.now().toString()
+            }
+            onRecordCtvDisplayed(eval, question.id)
+        }
+    }
+    LaunchedEffect(ctvPendingStage, isAppInForeground) {
+        while (ctvPendingStage && isAppInForeground) {
+            delay(1000L)
+            ctvActiveSeconds = (ctvActiveSeconds + 1).coerceAtMost(3600)
+        }
+    }
 
     val computeElapsedSeconds = {
         ((System.currentTimeMillis() - questionStartEpochMs) / 1000L).toInt().coerceIn(1, 3600)
     }
 
+    val recordOptionChoice = { idx: Int ->
+        if (initialChosenIndex == null) {
+            initialChosenIndex = idx
+        } else if (selectedOptionIndex != null && selectedOptionIndex != idx) {
+            answerChangeCount += 1
+        }
+        selectedOptionIndex = idx
+        isMarkedBlank = false
+    }
+
     val correctIndex = question.correctAnswerIndices.singleOrNull() ?: -1
     val isBlankAnswer = isMarkedBlank || (isSimuladoReviewMode && selectedOptionIndex == null)
     val isUserCorrect = !isBlankAnswer && selectedOptionIndex != null && selectedOptionIndex == correctIndex
-    val isHighConfidenceError = isAnswerSubmitted && !isBlankAnswer && !isUserCorrect && selectedConfidence >= 2
+    val isHighConfidenceError = isAnswerSubmitted && !isBlankAnswer && !isUserCorrect &&
+        (selectedDeclaredConfidence?.isHigh == true || (selectedDeclaredConfidence == null && selectedConfidence >= 2))
     val hideFeedback = isSimuladoMode && !isSimuladoReviewMode
+    val hideOriginalGabarito = hideFeedback || ctvPendingStage
     val ext = LocalExtendedColors.current
     val headerMeta = remember(
         question.id,
@@ -708,25 +890,77 @@ fun QuestionSessionScreen(
                                 onClick = {
                                     val chosen = selectedOptionIndex ?: return@Button
                                     val elapsed = computeElapsedSeconds()
+                                    val actSecs = activeForegroundSeconds.coerceIn(1, elapsed.coerceAtLeast(1))
                                     val explicitFlag = !requireExplicitConfidence || confidenceExplicitlySelected
+                                    val resolvedDecl = selectedDeclaredConfidence
+                                        ?: if (explicitFlag) DeclaredConfidence.fromLegacyBand(selectedConfidence, true) else null
+                                    val skipFlag = strategySkipped || selectedStrategy == null
                                     actionScope.launch {
                                         saving=true
                                         try {
-                                            val ok = if (onSubmitExtendedAnswer != null) {
-                                                onSubmitExtendedAnswer(question, chosen, selectedConfidence, elapsed, false, explicitFlag)
-                                            } else {
-                                                onSubmitAnswer(question, chosen, selectedConfidence, elapsed)
+                                            val ok = when {
+                                                onSubmitMetacognitiveAnswer != null -> onSubmitMetacognitiveAnswer(
+                                                    question,
+                                                    chosen,
+                                                    selectedConfidence,
+                                                    elapsed,
+                                                    false,
+                                                    explicitFlag,
+                                                    resolvedDecl,
+                                                    selectedStrategy,
+                                                    skipFlag,
+                                                    actSecs,
+                                                    answerChangeCount,
+                                                    initialChosenIndex,
+                                                    consultedResources.toList(),
+                                                    focusLossCount
+                                                )
+                                                onSubmitExtendedAnswer != null -> onSubmitExtendedAnswer(
+                                                    question,
+                                                    chosen,
+                                                    selectedConfidence,
+                                                    elapsed,
+                                                    false,
+                                                    explicitFlag
+                                                )
+                                                else -> onSubmitAnswer(question, chosen, selectedConfidence, elapsed)
                                             }
                                             if (ok) {
-                                                isAnswerSubmitted=true
                                                 userAnswers[question.id]=UserAttemptState(
                                                     chosenIndex = chosen,
                                                     confidenceLevel = selectedConfidence,
                                                     timeSpentSeconds = elapsed,
                                                     submitted = true,
                                                     isBlank = false,
-                                                    confidenceExplicit = explicitFlag
+                                                    confidenceExplicit = explicitFlag,
+                                                    declaredConfidence = resolvedDecl,
+                                                    cognitiveStrategy = selectedStrategy,
+                                                    strategySkipped = skipFlag,
+                                                    activeSeconds = actSecs,
+                                                    answerChangeCount = answerChangeCount,
+                                                    initialChosenIndex = initialChosenIndex,
+                                                    consultedResources = consultedResources.toList(),
+                                                    focusLossCount = focusLossCount
                                                 )
+                                                if (onEvaluateCtv != null && !isSimuladoMode && !isSmartEntrySession) {
+                                                    val eval = runCatching {
+                                                        onEvaluateCtv(
+                                                            question,
+                                                            chosen == correctIndex,
+                                                            false,
+                                                            resolvedDecl,
+                                                            selectedStrategy,
+                                                            selectedConfidence
+                                                        )
+                                                    }.getOrNull()
+                                                    if (eval?.triggered == true && eval.complementaryQuestion != null) {
+                                                        activeCtvEvaluation = eval
+                                                        ctvChosenIndex = null
+                                                        ctvDeclaredConfidence = null
+                                                        ctvActiveSeconds = 1
+                                                    }
+                                                }
+                                                isAnswerSubmitted=true
                                             }
                                         }finally{saving=false}
                                     }
@@ -742,6 +976,93 @@ fun QuestionSessionScreen(
                                 Text(
                                     text = stringResource(R.string.action_confirm_answer),
                                     style = MaterialTheme.typography.titleMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    } else if (ctvPendingStage) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    activeCtvEvaluation?.let { onDismissCtvOffer(it, question.id) }
+                                    activeCtvEvaluation = null
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(
+                                    text = "Ver gabarito agora",
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            val compQ = activeCtvEvaluation?.complementaryQuestion
+                            Button(
+                                onClick = {
+                                    val cq = compQ ?: return@Button
+                                    val ctvEvalSnapshot = activeCtvEvaluation ?: return@Button
+                                    val cIdx = ctvChosenIndex ?: return@Button
+                                    actionScope.launch {
+                                        ctvSubmitting = true
+                                        try {
+                                            val res = if (onSubmitCtvFullAttempt != null) {
+                                                onSubmitCtvFullAttempt(
+                                                    question,
+                                                    ctvEvalSnapshot,
+                                                    cIdx,
+                                                    ctvDeclaredConfidence,
+                                                    null,
+                                                    ctvActiveSeconds,
+                                                    ctvDisplayedAtIso,
+                                                    consultedResources.toList(),
+                                                    ctvFocusLossCount,
+                                                    isUserCorrect
+                                                )
+                                            } else {
+                                                onSubmitCtvAttempt?.invoke(
+                                                    question,
+                                                    cq,
+                                                    cIdx,
+                                                    ctvDeclaredConfidence,
+                                                    null,
+                                                    ctvActiveSeconds,
+                                                    ctvEvalSnapshot.verificationTiming,
+                                                    ctvEvalSnapshot.wasPreviouslyExposed,
+                                                    isUserCorrect
+                                                )
+                                            }
+                                            if (res != null) {
+                                                ctvResult = res
+                                                userAnswers[question.id]?.let { prev ->
+                                                    userAnswers[question.id] = prev.copy(
+                                                        ctvCompleted = true,
+                                                        ctvDiagnosticTitle = res.consolidatedDiagnosticTitlePt,
+                                                        ctvDiagnosticMessage = res.consolidatedDiagnosticMessagePt
+                                                    )
+                                                }
+                                            } else {
+                                                activeCtvEvaluation = null
+                                            }
+                                        } finally {
+                                            ctvSubmitting = false
+                                        }
+                                    }
+                                },
+                                enabled = ctvChosenIndex != null && !ctvSubmitting,
+                                modifier = Modifier
+                                    .weight(1.25f)
+                                    .heightIn(min = 48.dp),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(
+                                    text = "Confirmar verificação",
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -1013,6 +1334,7 @@ fun QuestionSessionScreen(
                             onHint = {
                                 val hIdx = hintClickCount
                                 hintClickCount += 1
+                                consultedResources = consultedResources + "contextual-hint"
                                 onRequestAiTutor(
                                     question.id,
                                     "contextual-hint",
@@ -1021,13 +1343,16 @@ fun QuestionSessionScreen(
                                 )
                             },
                             onSincereDoctor = {
+                                consultedResources = consultedResources + "dr-sincero"
                                 onRequestAiTutor(question.id, "dr-sincero", "Análise do Dr. Sincero", null)
                             },
                             onSimplify = {
+                                consultedResources = consultedResources + "child-friendly-pre"
                                 onRequestAiTutor(question.id, "child-friendly-pre", "Simplificar Pergunta", null)
                             },
                             onLookupLayer = if (onOpenContextualLookup != null) {
                                 {
+                                    consultedResources = consultedResources + "contextual-lookup"
                                     val seed = extractSuggestedLookupTerms(question).firstOrNull().orEmpty()
                                     onOpenContextualLookup(question, seed)
                                 }
@@ -1055,19 +1380,26 @@ fun QuestionSessionScreen(
                         ) {
                             question.answers.mapIndexed { index,label->index to label }.forEach { (idx, label) ->
                                 val isSelected = selectedOptionIndex == idx
-                                val showColor = isAnswerSubmitted && !hideFeedback
+                                val showColor = isAnswerSubmitted && !hideOriginalGabarito
                                 Button(
                                     onClick = {
                                         if (!isAnswerSubmitted || hideFeedback) {
-                                            selectedOptionIndex = idx
-                                            isMarkedBlank = false
+                                            recordOptionChoice(idx)
                                             val elapsed = computeElapsedSeconds()
                                             val attempt = UserAttemptState(
                                                 chosenIndex = idx,
                                                 confidenceLevel = selectedConfidence,
                                                 timeSpentSeconds = elapsed,
                                                 isBlank = false,
-                                                confidenceExplicit = confidenceExplicitlySelected
+                                                confidenceExplicit = confidenceExplicitlySelected,
+                                                declaredConfidence = selectedDeclaredConfidence,
+                                                cognitiveStrategy = selectedStrategy,
+                                                strategySkipped = strategySkipped,
+                                                activeSeconds = activeForegroundSeconds,
+                                                answerChangeCount = answerChangeCount,
+                                                initialChosenIndex = initialChosenIndex,
+                                                consultedResources = consultedResources.toList(),
+                                                focusLossCount = focusLossCount
                                             )
                                             userAnswers[question.id] = attempt
                                             persistSessionNow(currentIndex, isSimuladoFinished, isSimuladoReviewMode)
@@ -1113,18 +1445,25 @@ fun QuestionSessionScreen(
                             selected = selectedOptionIndex == idx,
                             isAnswerSubmitted = isAnswerSubmitted,
                             isCorrectOption = idx == correctIndex,
-                            hideFeedback = hideFeedback,
+                            hideFeedback = hideOriginalGabarito,
                             onClick = {
                                 if (!isAnswerSubmitted || hideFeedback) {
-                                    selectedOptionIndex = idx
-                                    isMarkedBlank = false
+                                    recordOptionChoice(idx)
                                     val elapsed = computeElapsedSeconds()
                                     val attempt = UserAttemptState(
                                         chosenIndex = idx,
                                         confidenceLevel = selectedConfidence,
                                         timeSpentSeconds = elapsed,
                                         isBlank = false,
-                                        confidenceExplicit = confidenceExplicitlySelected
+                                        confidenceExplicit = confidenceExplicitlySelected,
+                                        declaredConfidence = selectedDeclaredConfidence,
+                                        cognitiveStrategy = selectedStrategy,
+                                        strategySkipped = strategySkipped,
+                                        activeSeconds = activeForegroundSeconds,
+                                        answerChangeCount = answerChangeCount,
+                                        initialChosenIndex = initialChosenIndex,
+                                        consultedResources = consultedResources.toList(),
+                                        focusLossCount = focusLossCount
                                     )
                                     userAnswers[question.id] = attempt
                                     persistSessionNow(currentIndex, isSimuladoFinished, isSimuladoReviewMode)
@@ -1200,27 +1539,168 @@ fun QuestionSessionScreen(
                         ConfidenceSelectorGrid(
                             selectedConfidence = selectedConfidence,
                             hasExplicitSelection = !requireExplicitConfidence || confidenceExplicitlySelected,
-                            onSelectConfidence = { level ->
-                                selectedConfidence = level
+                            selectedDeclaredConfidence = selectedDeclaredConfidence,
+                            onSelectDeclaredConfidence = { decl ->
+                                selectedDeclaredConfidence = decl
+                                selectedConfidence = decl.toLegacyBand()
                                 confidenceExplicitlySelected = true
                                 if (selectedOptionIndex != null) {
                                     val elapsed = computeElapsedSeconds()
-                                    val attempt = UserAttemptState(
+                                    userAnswers[question.id] = UserAttemptState(
                                         chosenIndex = selectedOptionIndex!!,
-                                        confidenceLevel = level,
+                                        confidenceLevel = decl.toLegacyBand(),
                                         timeSpentSeconds = elapsed,
                                         isBlank = false,
-                                        confidenceExplicit = true
+                                        confidenceExplicit = true,
+                                        declaredConfidence = decl,
+                                        cognitiveStrategy = selectedStrategy,
+                                        strategySkipped = strategySkipped,
+                                        activeSeconds = activeForegroundSeconds,
+                                        answerChangeCount = answerChangeCount,
+                                        initialChosenIndex = initialChosenIndex,
+                                        consultedResources = consultedResources.toList(),
+                                        focusLossCount = focusLossCount
                                     )
-                                    userAnswers[question.id] = attempt
                                     persistSessionNow(currentIndex, isSimuladoFinished, isSimuladoReviewMode)
                                 }
+                            },
+                            showStrategySelector = !hideFeedback,
+                            selectedStrategy = selectedStrategy,
+                            strategySkipped = strategySkipped,
+                            onSelectStrategy = { strat ->
+                                selectedStrategy = strat
+                                strategySkipped = false
+                                if (selectedOptionIndex != null) {
+                                    val elapsed = computeElapsedSeconds()
+                                    userAnswers[question.id] = UserAttemptState(
+                                        chosenIndex = selectedOptionIndex!!,
+                                        confidenceLevel = selectedConfidence,
+                                        timeSpentSeconds = elapsed,
+                                        isBlank = false,
+                                        confidenceExplicit = confidenceExplicitlySelected,
+                                        declaredConfidence = selectedDeclaredConfidence,
+                                        cognitiveStrategy = strat,
+                                        strategySkipped = false,
+                                        activeSeconds = activeForegroundSeconds,
+                                        answerChangeCount = answerChangeCount,
+                                        initialChosenIndex = initialChosenIndex,
+                                        consultedResources = consultedResources.toList(),
+                                        focusLossCount = focusLossCount
+                                    )
+                                    persistSessionNow(currentIndex, isSimuladoFinished, isSimuladoReviewMode)
+                                }
+                            },
+                            onSkipStrategy = {
+                                selectedStrategy = null
+                                strategySkipped = true
+                                if (selectedOptionIndex != null) {
+                                    val elapsed = computeElapsedSeconds()
+                                    userAnswers[question.id] = UserAttemptState(
+                                        chosenIndex = selectedOptionIndex!!,
+                                        confidenceLevel = selectedConfidence,
+                                        timeSpentSeconds = elapsed,
+                                        isBlank = false,
+                                        confidenceExplicit = confidenceExplicitlySelected,
+                                        declaredConfidence = selectedDeclaredConfidence,
+                                        cognitiveStrategy = null,
+                                        strategySkipped = true,
+                                        activeSeconds = activeForegroundSeconds,
+                                        answerChangeCount = answerChangeCount,
+                                        initialChosenIndex = initialChosenIndex,
+                                        consultedResources = consultedResources.toList(),
+                                        focusLossCount = focusLossCount
+                                    )
+                                    persistSessionNow(currentIndex, isSimuladoFinished, isSimuladoReviewMode)
+                                }
+                            },
+                            onSelectConfidence = { level ->
+                                selectedConfidence = level
+                                confidenceExplicitlySelected = true
                             }
                         )
                     }
                 }
 
-                if (isAnswerSubmitted && !hideFeedback) {
+                // Camada 3: Verificação Adaptativa de Domínio Conceitual (CTV) antes da revelação do gabarito original
+                if (ctvPendingStage) {
+                    val ctvEval = activeCtvEvaluation!!
+                    val compQ = ctvEval.complementaryQuestion!!
+                    item(key = "ctv_verification_step") {
+                        Card(
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("ctv_verification_card")
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Text(
+                                    text = "Verificação Complementar de Conceito",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = ctvEval.studentFramingPt
+                                        ?: "Vamos verificar este conceito em outro contexto antes de abrir o gabarito comentado.",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surface,
+                                    contentColor = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = compQ.question,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Medium,
+                                        modifier = Modifier.padding(14.dp)
+                                    )
+                                }
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .selectableGroup(),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    compQ.answers.forEachIndexed { idx, ansText ->
+                                        OptionCard(
+                                            letter = if (compQ.questionType == QuestionType.TRUE_FALSE) {
+                                                if (idx == 0) "C" else "E"
+                                            } else {
+                                                ('A' + idx).toString()
+                                            },
+                                            text = ansText,
+                                            selected = ctvChosenIndex == idx,
+                                            isAnswerSubmitted = false,
+                                            isCorrectOption = false,
+                                            hideFeedback = true,
+                                            onClick = { ctvChosenIndex = idx }
+                                        )
+                                    }
+                                }
+                                if (ctvChosenIndex != null) {
+                                    ConfidenceSelectorGrid(
+                                        selectedConfidence = ctvDeclaredConfidence?.toLegacyBand() ?: 2,
+                                        hasExplicitSelection = ctvDeclaredConfidence != null,
+                                        selectedDeclaredConfidence = ctvDeclaredConfidence,
+                                        onSelectDeclaredConfidence = { ctvDeclaredConfidence = it },
+                                        showStrategySelector = false,
+                                        onSelectConfidence = {}
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (isAnswerSubmitted && !hideOriginalGabarito) {
                     item(key = "post_feedback") {
                         val correctOptionLabel = question.formatPostAnswerCorrectLabel(correctIndex)
                         val formattedExplanation = remember(question.id, question.explanation) {
@@ -1244,11 +1724,47 @@ fun QuestionSessionScreen(
                         } else {
                             null
                         }
-                        val confidenceBadgeText = when (selectedConfidence.coerceIn(0, 3)) {
-                            0 -> "Nenhuma Ideia"
-                            1 -> "Chutei"
-                            2 -> "Mais ou Menos"
-                            else -> "Certeza Absoluta"
+                        val resolvedDeclConf = selectedDeclaredConfidence
+                            ?: DeclaredConfidence.fromLegacyBand(selectedConfidence, true)
+                        val confidenceBadgeText = resolvedDeclConf?.labelPt ?: "Não informada"
+                        val hasCustomChForMeta = question.hasCustomEvidenceChallenge()
+                        val normSelectedEvForMeta = normalizeEvidenceOptionId(selectedEvidenceId, hasCustomChForMeta)
+                        val rationaleContradicted = isUserCorrect &&
+                            challenge != null &&
+                            normSelectedEvForMeta != null &&
+                            normSelectedEvForMeta != challenge.correctEvidenceId
+                        val metacognitiveAssessment = remember(
+                            isBlankAnswer,
+                            isUserCorrect,
+                            resolvedDeclConf,
+                            selectedStrategy,
+                            rationaleContradicted,
+                            activeForegroundSeconds,
+                            answerChangeCount,
+                            consultedResources,
+                            question.userStats
+                        ) {
+                            MetacognitiveEngine.buildAssessment(
+                                inputs = MetacognitiveMatrixInputs(
+                                    isBlank = isBlankAnswer,
+                                    isCorrect = isUserCorrect,
+                                    declaredConfidence = resolvedDeclConf,
+                                    cognitiveStrategy = selectedStrategy,
+                                    consistentHistory = (question.userStats?.attempts ?: 0) >= 2 &&
+                                        (question.userStats?.accuracyPct ?: 0.0) >= 75.0,
+                                    rationaleContradicted = rationaleContradicted
+                                ),
+                                behavioral = BehavioralEvidenceDto(
+                                    activeSeconds = currentAttempt?.activeSeconds ?: activeForegroundSeconds,
+                                    totalElapsedSeconds = currentAttempt?.timeSpentSeconds ?: activeForegroundSeconds,
+                                    answerChangeCount = currentAttempt?.answerChangeCount ?: answerChangeCount,
+                                    initialChosenIndex = currentAttempt?.initialChosenIndex ?: initialChosenIndex,
+                                    finalChosenIndex = selectedOptionIndex,
+                                    consultedResources = currentAttempt?.consultedResources ?: consultedResources.toList(),
+                                    focusLossCount = currentAttempt?.focusLossCount ?: focusLossCount
+                                ),
+                                hasMultiAttemptEvidence = (question.userStats?.attempts ?: 0) >= 2
+                            )
                         }
                         val userChosenSummary = when {
                             isBlankAnswer -> null
@@ -1256,7 +1772,7 @@ fun QuestionSessionScreen(
                                 selectedOptionIndex?.let { question.answers.getOrNull(it) }
                             else -> selectedOptionIndex?.let { "Alternativa ${'A' + it}" }
                         }
-                        val recordedSeconds = currentAttempt?.timeSpentSeconds
+                        val recordedSeconds = currentAttempt?.activeSeconds ?: currentAttempt?.timeSpentSeconds
 
                         Card(
                             shape = RoundedCornerShape(14.dp),
@@ -1289,7 +1805,7 @@ fun QuestionSessionScreen(
                                 )
 
                                 if (userChosenSummary != null) {
-                                    val timeSuffix = recordedSeconds?.takeIf { it > 0 }?.let { " · ${it}s" }.orEmpty()
+                                    val timeSuffix = recordedSeconds?.takeIf { it > 0 }?.let { " · ${it}s ativos" }.orEmpty()
                                     Text(
                                         text = "Sua marcação: $userChosenSummary · Confiança: $confidenceBadgeText$timeSuffix",
                                         style = MaterialTheme.typography.labelMedium
@@ -1303,11 +1819,71 @@ fun QuestionSessionScreen(
                                         contentColor = ext.onError
                                     ) {
                                         Text(
-                                            text = "Indício de Excesso de Confiança: erro declarado com confiança alta. Prioridade elevada de revisão.",
+                                            text = "Indício preliminar de equívoco com confiança elevada: prioridade reforçada para revisão deste conceito.",
                                             style = MaterialTheme.typography.bodyMedium,
                                             fontWeight = FontWeight.SemiBold,
                                             modifier = Modifier.padding(10.dp)
                                         )
+                                    }
+                                }
+
+                                // Camada 5: Diagnóstico Metacognitivo Proporcional (Autopercepção × Evidência × Inferência Preliminar + CTV)
+                                if (!isBlankAnswer) {
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                        contentColor = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(12.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Text(
+                                                text = "Leitura Metacognitiva · ${metacognitiveAssessment.inferenceSupport.labelPt}",
+                                                style = MaterialTheme.typography.labelLarge,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                            Text(
+                                                text = metacognitiveAssessment.systemInferenceMessage,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                            Text(
+                                                text = metacognitiveAssessment.selfPerceptionSummary,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Text(
+                                                text = metacognitiveAssessment.observedEvidenceSummary,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            ctvResult?.let { ctvRes ->
+                                                HorizontalDivider(
+                                                    modifier = Modifier.padding(vertical = 4.dp),
+                                                    color = MaterialTheme.colorScheme.outlineVariant
+                                                )
+                                                Text(
+                                                    text = "Verificação Complementar: ${ctvRes.consolidatedDiagnosticTitlePt}",
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (ctvRes.isCorrect) ext.correct else ext.warning
+                                                )
+                                                Text(
+                                                    text = ctvRes.consolidatedDiagnosticMessagePt,
+                                                    style = MaterialTheme.typography.bodySmall
+                                                )
+                                                ctvRes.explanation?.takeIf { it.isNotBlank() }?.let { compExp ->
+                                                    Text(
+                                                        text = "Gabarito da verificação: $compExp",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            }
+                                        }
                                     }
                                 }
 
@@ -1586,7 +2162,7 @@ fun QuestionSessionScreen(
                                             modifier = Modifier.fillMaxWidth()
                                         ) {
                                             Text(
-                                                text = "Indício de Competência Ilusória detectado: resposta correta, porém apoiada em premissa diferente do fundamento oficial. O sistema preserva o conceito em observação (< 15 questões).",
+                                                text = "Acerto registrado, porém o fundamento selecionado diverge da regra cobrada; o domínio conceitual ainda não foi confirmado.",
                                                 style = MaterialTheme.typography.bodySmall,
                                                 fontWeight = FontWeight.SemiBold,
                                                 modifier = Modifier.padding(10.dp)

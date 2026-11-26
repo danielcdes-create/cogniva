@@ -247,3 +247,16 @@ Missões apresenta episódios audiovisuais interativos estruturados em Carreira 
 Decisões narrativas da missão nunca são gravadas automaticamente em todasQuestoes nem conferem domínio formal sem avaliação independente no acervo.
 
 No portal: **Abrir Missões**.
+
+## Motor CTV (Database First, AI on Demand), Custo por Verificação Concluída e Simulador
+
+Acompanhe a contabilidade operacional real do Motor de Verificação Adaptativa de Domínio Conceitual (CTV), as coortes de seleção adaptativa, o acervo permanente de questões complementares e o simulador hipotético de reutilização.
+
+1. Consulte no painel operacional o período agregado integral, entregas por reuso online sem chamada, entregas por cache offline reconciliadas à parte, chamadas reais ao provedor (incluindo duplicatas barradas pós-chamada) e o Custo por verificação concluída (custo total atribuível dividido pelas verificações efetivamente respondidas).
+2. Acompanhe separadamente as coortes de Disparo Adaptativo por Dificuldade e de Amostragem Periódica, mantendo ofertas dispensadas fora do denominador da taxa de sucesso independente.
+3. Use os controles deslizantes do Simulador Hipotético de Economia com Reutilização em bloco separado para projetar cenários referenciais sem misturá-los aos números reais observados.
+4. Revise as questões complementares persistidas em todasQuestoes: itens com sinalizações de problema pelos alunos são suspensos automaticamente (SUSPENDED) e itens com aderência conceitual ou normativa incerta aguardam revisão humana (PENDING_HUMAN_REVIEW).
+
+Quando o custo unitário provém de configuração de referência, o indicador exibe explicitamente a marcação de valor estimado; quando não há verificações concluídas no período, exibe sem conclusões. Questões CTV não confirmadas por curador humano permanecem estritamente isoladas dos simulados oficiais.
+
+No portal: **Abrir Motor CTV & IA**.

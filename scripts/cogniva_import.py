@@ -489,12 +489,29 @@ try:
         raise RuntimeError(f"Template de concurso '{exam_id}' não encontrado em /api/v1/admin/exam-templates")
 
     subject_meta = {}
+    component_meta = {}
     for s in exam_tpl["subjects"]:
-        subject_meta[s["canonical_subject_id"]] = {
+        entry = {
             "component_id": s["local_subject_id"],
             "disciplina": s["display_name"],
             "subject_ref": s,
         }
+        subject_meta[s["canonical_subject_id"]] = entry
+        component_meta[s["local_subject_id"]] = entry
+
+    topic_preferred_component = {}
+    for pkg in packages:
+        p_comp = pkg.get("component_id")
+        if p_comp:
+            for chunk in pkg["chunks"]:
+                for it in chunk:
+                    topic_preferred_component[(it["subject_id"], it["topic_id"])] = p_comp
+
+    def resolve_subject_entry(s_id: str, t_id: str | None = None, explicit_comp: str | None = None):
+        comp_key = explicit_comp or (topic_preferred_component.get((s_id, t_id)) if t_id else None)
+        if comp_key and comp_key in component_meta:
+            return component_meta[comp_key]
+        return subject_meta.get(s_id)
 
     topics_with_children = {
         t["parent_topic_id"] for t in existing_topics.values() if t.get("parent_topic_id")
@@ -507,14 +524,20 @@ try:
                 f"O tópico '{t_id}' é um TOPIC pai com subassuntos filhos. "
                 "Classifique as questões sempre em um SUBTOPIC folha para preservar o rastreamento de domínio."
             )
-        if s_id not in subject_meta:
+        s_entry = resolve_subject_entry(s_id, t_id)
+        if s_entry is None:
             raise RuntimeError(
                 f"A disciplina '{s_id}' não possui componente na grade do concurso '{exam_id}'. "
                 "Adicione o componente da disciplina ao template do concurso antes de vincular."
             )
-        s_obj = subject_meta[s_id]["subject_ref"]
+        s_obj = s_entry["subject_ref"]
         if replace_custom:
-            filtered = [t for t in s_obj["topics"] if t.get("canonical_topic_id") is not None]
+            filtered = [
+                t
+                for t in s_obj["topics"]
+                if t.get("canonical_topic_id") is not None
+                and not str(t.get("canonical_topic_id")).startswith("custom-")
+            ]
             if len(filtered) != len(s_obj["topics"]):
                 s_obj["topics"] = filtered
                 exam_modified = True
@@ -540,8 +563,22 @@ try:
 
     if exam_modified and not dry_run:
         exam_tpl = api(f"/api/v1/admin/exam-templates/{exam_id}", exam_tpl, method="PUT")
-    if not dry_run:
         user_exam = api(f"/api/v1/exams/{exam_id}/adopt-template", {})
+    elif not dry_run:
+        exams_res = api("/api/v1/exams")
+        exam_list = exams_res if isinstance(exams_res, list) else exams_res.get("exams", [])
+        cur_user_exam = next(
+            (e for e in exam_list if (e.get("_id") or e.get("id")) == exam_id),
+            None,
+        )
+        if (
+            cur_user_exam is not None
+            and cur_user_exam.get("sync_status") == "SYNCED"
+            and cur_user_exam.get("base_template_revision") == exam_tpl.get("revision")
+        ):
+            user_exam = cur_user_exam
+        else:
+            user_exam = api(f"/api/v1/exams/{exam_id}/adopt-template", {})
     else:
         user_exam = exam_tpl
 
@@ -587,7 +624,8 @@ try:
                 crev = doc["content_revision"]
                 srev = doc.get("semantic_revision")
 
-                doc["disciplina"] = subject_meta[s_id]["disciplina"]
+                s_entry = resolve_subject_entry(s_id, t_id, explicit_comp_id)
+                doc["disciplina"] = s_entry["disciplina"]
                 doc["canonical_subject_id"] = s_id
                 doc["canonical_topic_id"] = t_id
                 doc["concursos"] = [exam_id]
@@ -651,7 +689,8 @@ try:
                 s_id = plink["subject_id"]
                 t_id = plink["topic_id"]
                 tlabel = existing_topics[t_id]["label"]
-                comp_id = explicit_comp_id or subject_meta[s_id]["component_id"]
+                s_entry = resolve_subject_entry(s_id, t_id, explicit_comp_id)
+                comp_id = explicit_comp_id or s_entry["component_id"]
                 rec = api(f"/api/v1/exams/{exam_id}/compatibility", {
                     "operation_id": stable(f"compat:{pkg_key}:{qid}:rev{user_exam['revision']}"),
                     "question_id": qid,
@@ -687,8 +726,9 @@ try:
     quiz_verified_topics = {}
     if not dry_run and verify_quiz:
         for s_id, t_id in sorted(referenced_pairs):
-            comp_id = subject_meta[s_id]["component_id"]
-            disciplina = subject_meta[s_id]["disciplina"]
+            s_entry = resolve_subject_entry(s_id, t_id)
+            comp_id = s_entry["component_id"]
+            disciplina = s_entry["disciplina"]
             drawn = api("/api/v1/quiz/generate", {
                 "user_id": user_id,
                 "mode": "STANDARD",

@@ -2563,5 +2563,105 @@ test('questionView commits v2 edits and clears editorialError on raw JSON edit, 
   assert.equal(getAppState().ws.archives.at(-1).type, 'catalog-activation-not-applied');
   assert.equal(getAppState().ws.catalog.catalog.catalog_version, 5);
   assert.equal(getAppState().ws.catalog.activationPending, undefined);
+
+  // ctvView renders interactive Reuse Economy Simulator and updates outputs on slider input
+  navigate('ctv');
+  view = doc.getElementById('view');
+  const verifSlider = doc.getElementById('ctv-slider-verifications');
+  const reuseSlider = doc.getElementById('ctv-slider-reuse');
+  const costSlider = doc.getElementById('ctv-slider-cost');
+  assert.ok(verifSlider && reuseSlider && costSlider);
+  verifSlider.value = '20000';
+  verifSlider.dispatchEvent({type: 'input', target: verifSlider});
+  reuseSlider.value = '80';
+  reuseSlider.dispatchEvent({type: 'input', target: reuseSlider});
+  costSlider.value = '0.05';
+  costSlider.dispatchEvent({type: 'input', target: costSlider});
+  assert.match(doc.getElementById('ctv-out-without').textContent, /1\.000,00/);
+  assert.match(doc.getElementById('ctv-out-with').textContent, /200,00/);
+  assert.match(doc.getElementById('ctv-out-monthly-savings').textContent, /800,00/);
+  assert.match(doc.getElementById('ctv-out-avoided').textContent, /16\.000/);
+
+  // A13 & A08: ctvView separates hypothetical simulator from real operational breakdown ($0.09 / 2 = $0.045) and handles 0 completions ("sem conclusões")
+  setAppStateForTest({
+    ctvMetricsData: {
+      reference_period_label_pt: '2026-11-01T00:00:00Z até 2026-11-26T00:00:00Z',
+      reference_cost_per_generation_usd: 0.03,
+      operational_breakdown: {
+        period_start: '2026-11-01T00:00:00Z',
+        period_end: '2026-11-26T00:00:00Z',
+        full_period_aggregated: true,
+        total_requests_evaluated: 4,
+        search_inconclusive_count: 0,
+        requests_with_student_delivery: 3,
+        reuse_without_call_deliveries: 1,
+        reuse_without_call_rate_pct: 33.33,
+        offline_cache_deliveries_reconciled: 1,
+        real_provider_calls: 3,
+        duplicates_barred_after_call: 1,
+        avoided_generation_requests: 1,
+        persisted_ai_items_count: 1,
+        completed_verifications_count: 2,
+        total_attributable_cost_usd: 0.09,
+        cost_per_completed_verification_raw_usd: 0.045,
+        cost_per_completed_verification_rounded_usd: 0.045,
+        cost_per_completed_verification_display_pt: 'US$ (estimado) 0.0450',
+        cost_is_estimated: true,
+        cost_source_label_pt: 'Estimativa configurada por chamada (US$ 0.0300)'
+      },
+      adaptive_selection: {
+        difficulty_triggered: {
+          cohort_id: 'DIFFICULTY_DETECTED',
+          label_pt: 'Disparo adaptativo por dificuldade ou fragilidade',
+          offers_count: 3,
+          dismissals_count: 1,
+          responses_count: 2,
+          independent_eligible_responses: 2,
+          independent_correct_count: 1,
+          independent_success_rate_pct: 50.0,
+          summary_pt: '1/2 verificações independentes corretas (50.0%) · 1 oferta(s) dispensada(s)'
+        },
+        periodic_sampling: {
+          cohort_id: 'PERIODIC_SAMPLING',
+          label_pt: 'Amostragem periódica de acompanhamento',
+          offers_count: 4,
+          dismissals_count: 0,
+          responses_count: 4,
+          independent_eligible_responses: 4,
+          independent_correct_count: 3,
+          independent_success_rate_pct: 75.0,
+          summary_pt: '3/4 verificações independentes corretas (75.0%)'
+        },
+        unknown_condition_count: 1
+      },
+      ctv_bank_summary: {ai_generated_total: 2, auto_approved: 1, pending_human_review: 1, suspended: 0},
+      operational_kpis: [],
+      recent_ctv_questions: []
+    }
+  });
+  render();
+  view = doc.getElementById('view');
+  assert.equal(doc.getElementById('ctv-cost-per-completed').textContent, 'US$ (estimado) 0.0450');
+  assert.match(view.textContent, /exato: US\$ 0\.045/);
+  assert.match(view.textContent, /1\/2 verificações independentes corretas/);
+  assert.match(view.textContent, /3\/4 verificações independentes corretas/);
+  assert.match(view.textContent, /1 duplicata\(s\) barrada\(s\) pós-chamada/);
+  assert.match(view.textContent, /Cache offline à parte: 1/);
+
+  // Zero completed verifications -> displays "sem conclusões"
+  setAppStateForTest({
+    ctvMetricsData: {
+      ...getAppState().ctvMetricsData,
+      operational_breakdown: {
+        ...getAppState().ctvMetricsData.operational_breakdown,
+        completed_verifications_count: 0,
+        cost_per_completed_verification_raw_usd: null,
+        cost_per_completed_verification_rounded_usd: null,
+        cost_per_completed_verification_display_pt: 'sem conclusões'
+      }
+    }
+  });
+  render();
+  assert.equal(doc.getElementById('ctv-cost-per-completed').textContent, 'sem conclusões');
 });
 

@@ -193,6 +193,60 @@ pub fn decode(mut raw: Document) -> Result<QuestionDocument, AppError> {
     Ok(q)
 }
 
+/// Decodifica uma questão para o Motor CTV (`EligibilityMode::ComplementaryVerification`):
+/// aceita tanto itens humanos curados (`decode`) quanto itens CTV gerados por IA e aprovados
+/// (`validation_status` em `AUTO_APPROVED`/`HUMAN_CONFIRMED` e `quality_status != SUSPENDED`),
+/// mantendo `StandardObjective` estritamente isolado em `decode`.
+pub fn decode_for_ctv(mut raw: Document) -> Result<QuestionDocument, AppError> {
+    if let Ok(std_doc) = decode(raw.clone()) {
+        return Ok(std_doc);
+    }
+    let catalog = crate::services::question_contracts::catalog_ref();
+    let eval_date = chrono::Utc::now().date_naive();
+    let elig = crate::services::question_eligibility::evaluate_bson_question_for_practice(
+        &raw,
+        &catalog,
+        None,
+        eval_date,
+        &crate::services::question_eligibility::TrustedReviewContext::default(),
+        crate::services::question_eligibility::EligibilityMode::ComplementaryVerification,
+    );
+    if !elig.eligible {
+        return Err(AppError::Conflict(
+            "Questão complementar não elegível para verificação CTV".into(),
+        ));
+    }
+    if let Some(subj) = elig.primary_subject_id {
+        raw.insert("canonical_subject_id", subj);
+    } else {
+        raw.insert("canonical_subject_id", Bson::Null);
+    }
+    if let Some(top) = elig.primary_topic_id {
+        raw.insert("canonical_topic_id", top);
+    } else {
+        raw.insert("canonical_topic_id", Bson::Null);
+    }
+    if let Some(Bson::String(single_concurso)) = raw.get("concursos").cloned() {
+        let items = if single_concurso.trim().is_empty() {
+            Vec::new()
+        } else {
+            vec![Bson::String(single_concurso)]
+        };
+        raw.insert("concursos", Bson::Array(items));
+    }
+    let mut q: QuestionDocument = bson::from_document(raw)
+        .map_err(|_| AppError::Conflict("Documento de questão CTV inválido".into()))?;
+    let computed_rev = q.revision()?;
+    if !q.content_revision.is_empty() && q.content_revision != computed_rev {
+        return Err(AppError::Conflict(
+            "Revisão de conteúdo divergente do enunciado atual".into(),
+        ));
+    }
+    q.content_revision = computed_rev;
+    q.knowledge_binding_verified = false;
+    Ok(q)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

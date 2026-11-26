@@ -25,7 +25,8 @@ import {
   reconcileQuestionDraft,
   isExamDraftDirty,
   reconcileExamDrafts,
-  buildEditorialCard
+  buildEditorialCard,
+  simulateAiReuseEconomy
 } from './domain.js';
 
 const $ = selector => document.querySelector(selector);
@@ -35,6 +36,7 @@ const pretty = value => JSON.stringify(value,null,2);
 
 const labels = {
   overview:'Visão geral',
+  ctv:'Motor CTV & IA',
   missions:'Missões',
   exams:'Concursos',
   edital:'Editais e grades',
@@ -105,6 +107,7 @@ const trunkIcons = [
 ];
 const helpForPage = {
   overview:'visao-geral',
+  ctv:'motor-ctv-ia',
   missions:'missoes-interativas',
   exams:'concursos',
   exam:'editais-grades',
@@ -133,6 +136,8 @@ let catalogTab = 'trunks';
 let proposalsData = null, proposalStatusFilter = 'PENDING';
 let reportsData = null, reportStatusFilter = 'open';
 let missionsAdminData = null;
+let ctvMetricsData = null;
+let ctvSimState = {monthlyVerifications: 10000, reuseRatePct: 75, avgCostPerGeneration: 0.03};
 let lastRenderedRoute = null;
 let openDetailsByRoute = new Map();
 let examUiState = new Map();
@@ -294,6 +299,7 @@ function resetToLoginView(message = '') {
   proposalsData = null;
   reportsData = null;
   missionsAdminData = null;
+  ctvMetricsData = null;
   questionPage = null;
   questionCursor = null;
   questionCursorStack = [];
@@ -720,6 +726,7 @@ export function render() {
   }
   const views = {
     overview:overviewView,
+    ctv:ctvView,
     missions:missionsView,
     exams:examsView,
     edital:examsView,
@@ -809,6 +816,7 @@ function overviewView() {
     card(
       h('h2',{},'Acesso rápido'),
       h('div',{class:'catalog-row'},h('div',{},h('strong',{},'Templates globais de concursos'),h('small',{},'CPNU, RFB, BNDES, AFT e novos editais compartilhados.')),button('Organizar →',()=>navigate('exams'))),
+      h('div',{class:'catalog-row'},h('div',{},h('strong',{},'Motor CTV & economia de IA'),h('small',{},`${summary.questions_ctv_generated ?? 0} questão(ões) complementar(es) permanente(s) · simulador de reutilização.`)),button('Simular →',()=>navigate('ctv'))),
       h('div',{class:'catalog-row'},h('div',{},h('strong',{},'Banco de questões e validade'),h('small',{},'Filtre por validade ou classificação, edite explicação, ano e nível.')),button('Explorar →',()=>navigate('questions'))),
       h('div',{class:'catalog-row'},h('div',{},h('strong',{},'Classificação IA'),h('small',{},'Gere e revise propostas para questões ainda sem tópico canônico.')),button('Classificar →',()=>navigate('classification'))),
       h('div',{class:'catalog-row'},h('div',{},h('strong',{},'Reportes de estudantes'),h('small',{},'Modere sinalizações sem bloqueio global indevido.')),button('Moderar →',()=>navigate('reports'))),
@@ -1358,6 +1366,18 @@ function questionView() {
   }
 
   if(parsed.question_type==='OPEN_ENDED')root.append(openEndedBanner());
+  if(parsed.diagnostic_meta){
+    const dm=parsed.diagnostic_meta;
+    root.append(card(
+      actions(
+        badge(`Ativo CTV · ${dm.generation_origin || 'AI_ON_DEMAND'}`,'good'),
+        badge(`Validação CTV: ${dm.validation_status || 'PENDING_HUMAN_REVIEW'}`,dm.validation_status==='AUTO_APPROVED' || dm.validation_status==='HUMAN_CONFIRMED'?'good':'warning'),
+        badge(`Qualidade: ${dm.quality_status || 'MONITORING'}`,dm.quality_status==='SUSPENDED'?'danger':''),
+        badge(`Reutilizações: ${dm.usage_count ?? 0}`)
+      ),
+      h('p',{class:'review-meta'},`Propósito diagnóstico: ${dm.diagnostic_purpose || 'CONCEPTUAL_TRANSFER'} · Tópico CTV: ${dm.subject_id}/${dm.topic_id}${dm.source_question_id?' · Derivada de '+dm.source_question_id:''}`)
+    ));
+  }
 
   let sendBtn=null;
   const raw=field('Documento JSON',draft.text,v=>edit(()=>{if(draft.submitted)return;draft.text=v;delete draft.rubricText;draft.rubricError=null;delete draft.editorialDraft;draft.editorialError=null;draft.preview=null;draft.operationId=uid();if(sendBtn)sendBtn.disabled=true;}),{multiline:true,rows:22,code:true,disabled:draft.submitted});
@@ -2043,6 +2063,253 @@ function fetchAdminMissions() {
   });
 }
 
+function fetchCtvMetrics() {
+  return run('Consultando métricas do Motor CTV e eficiência de IA…', async () => {
+    ctvMetricsData = await api('admin/ai-ctv/metrics');
+    if (ctvMetricsData?.default_simulation) {
+      ctvSimState = {
+        monthlyVerifications: ctvMetricsData.default_simulation.monthly_verifications || 10000,
+        reuseRatePct: ctvMetricsData.default_simulation.reuse_rate_pct ?? 75,
+        avgCostPerGeneration: ctvMetricsData.default_simulation.avg_cost_per_generation || 0.03
+      };
+    }
+  });
+}
+
+function formatUsd(val) {
+  return `US$ ${Number(val || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+}
+
+function ctvView() {
+  const root = h(
+    'div',
+    {},
+    heading(
+      'Motor CTV & Eficiência de IA',
+      'Database First, AI on Demand: questões complementares geradas por IA tornam-se ativos permanentes em todasQuestoes.',
+      button('Atualizar métricas CTV', fetchCtvMetrics, 'primary')
+    )
+  );
+
+  // Interactive Reuse Cost Avoidance Simulator
+  const verifValueLabel = h('strong', {id: 'ctv-sim-verif-label'});
+  const reuseValueLabel = h('strong', {id: 'ctv-sim-reuse-label'});
+  const costValueLabel = h('strong', {id: 'ctv-sim-cost-label'});
+
+  const outWithout = h('strong', {id: 'ctv-out-without'});
+  const outWith = h('strong', {id: 'ctv-out-with'});
+  const outMonthlySavings = h('strong', {id: 'ctv-out-monthly-savings'});
+  const outAvoided = h('strong', {id: 'ctv-out-avoided'});
+  const outAnnualSavings = h('strong', {id: 'ctv-out-annual-savings'});
+  const outReductionPct = h('strong', {id: 'ctv-out-reduction-pct'});
+  const disclaimerNode = h('p', {class: 'simulator-disclaimer', role: 'note'});
+
+  const refreshSimulatorDisplay = () => {
+    const sim = simulateAiReuseEconomy(
+      ctvSimState.monthlyVerifications,
+      ctvSimState.reuseRatePct,
+      ctvSimState.avgCostPerGeneration
+    );
+    verifValueLabel.textContent = `${sim.monthly_verifications.toLocaleString('pt-BR')} verificações/mês`;
+    reuseValueLabel.textContent = `${sim.reuse_rate_pct}% de reutilização`;
+    costValueLabel.textContent = `US$ ${sim.avg_cost_per_generation.toFixed(2)} por geração`;
+    outWithout.textContent = formatUsd(sim.cost_without_reuse);
+    outWith.textContent = formatUsd(sim.cost_with_reuse);
+    outMonthlySavings.textContent = formatUsd(sim.monthly_savings);
+    outAvoided.textContent = `${sim.avoided_generations_monthly.toLocaleString('pt-BR')} chamadas`;
+    outAnnualSavings.textContent = formatUsd(sim.annual_savings);
+    outReductionPct.textContent = `${sim.cost_reduction_pct.toFixed(1)}%`;
+    disclaimerNode.textContent = sim.disclaimer_pt;
+  };
+
+  const verifSlider = h('input', {
+    id: 'ctv-slider-verifications',
+    type: 'range',
+    min: '1000',
+    max: '100000',
+    step: '1000',
+    value: String(ctvSimState.monthlyVerifications),
+    'aria-label': 'Verificações mensais',
+    oninput: e => {
+      ctvSimState.monthlyVerifications = Number(e.target.value);
+      refreshSimulatorDisplay();
+    }
+  });
+  const reuseSlider = h('input', {
+    id: 'ctv-slider-reuse',
+    type: 'range',
+    min: '0',
+    max: '100',
+    step: '5',
+    value: String(ctvSimState.reuseRatePct),
+    'aria-label': 'Taxa de reutilização (%)',
+    oninput: e => {
+      ctvSimState.reuseRatePct = Number(e.target.value);
+      refreshSimulatorDisplay();
+    }
+  });
+  const costSlider = h('input', {
+    id: 'ctv-slider-cost',
+    type: 'range',
+    min: '0.01',
+    max: '0.50',
+    step: '0.01',
+    value: String(ctvSimState.avgCostPerGeneration),
+    'aria-label': 'Custo médio por geração (US$)',
+    oninput: e => {
+      ctvSimState.avgCostPerGeneration = Number(e.target.value);
+      refreshSimulatorDisplay();
+    }
+  });
+
+  refreshSimulatorDisplay();
+
+  root.append(
+    card(
+      h('span', {class: 'eyebrow'}, 'CENÁRIO HIPOTÉTICO — SIMULADOR DE ECONOMIA COM REUTILIZAÇÃO'),
+      h('h2', {}, 'Simulação hipotética de reaproveitamento (separada dos dados operacionais reais)'),
+      h('p', {}, 'Projeção paramétrica: compara um cenário hipotético com 100% de geração sob demanda contra a taxa de reutilização e o custo unitário de referência assumidos abaixo.'),
+      h('div', {class: 'simulator-sliders'},
+        h('div', {class: 'simulator-slider-row'},
+          h('div', {class: 'component-head'}, h('label', {for: 'ctv-slider-verifications'}, 'Verificações mensais'), verifValueLabel),
+          verifSlider
+        ),
+        h('div', {class: 'simulator-slider-row'},
+          h('div', {class: 'component-head'}, h('label', {for: 'ctv-slider-reuse'}, 'Taxa de reutilização (%)'), reuseValueLabel),
+          reuseSlider
+        ),
+        h('div', {class: 'simulator-slider-row'},
+          h('div', {class: 'component-head'}, h('label', {for: 'ctv-slider-cost'}, 'Custo médio por geração (US$)'), costValueLabel),
+          costSlider
+        )
+      ),
+      h('div', {class: 'stat-grid simulator-grid'},
+        h('section', {class: 'card stat'}, h('span', {}, 'SEM REUTILIZAÇÃO'), outWithout, h('small', {}, '100% geradas sob demanda')),
+        h('section', {class: 'card stat'}, h('span', {}, 'COM REUTILIZAÇÃO'), outWith, h('small', {}, 'Database First ativo')),
+        h('section', {class: 'card stat'}, h('span', {}, 'ECONOMIA MENSAL ESTIMADA'), outMonthlySavings, h('small', {}, 'Custo evitado no mês')),
+        h('section', {class: 'card stat'}, h('span', {}, 'GERAÇÕES EVITADAS / MÊS'), outAvoided, h('small', {}, 'Atendidas pelo acervo')),
+        h('section', {class: 'card stat'}, h('span', {}, 'ECONOMIA ANUAL ESTIMADA'), outAnnualSavings, h('small', {}, 'Projeção de 12 meses')),
+        h('section', {class: 'card stat'}, h('span', {}, 'REDUÇÃO DO CUSTO'), outReductionPct, h('small', {}, 'Eficiência marginal'))
+      ),
+      disclaimerNode
+    )
+  );
+
+  if (!ctvMetricsData) {
+    root.append(
+      card(
+        h('h2', {}, 'Indicadores operacionais reais do servidor'),
+        h('p', {}, 'Carregue os 8 KPIs operacionais auditados em tempo real (Question Reuse Rate, AI Generation Rate, aprovação automática, prevenção de duplicatas e fila de questões CTV).'),
+        button('Carregar KPIs operacionais CTV', fetchCtvMetrics, 'primary')
+      )
+    );
+    return root;
+  }
+
+  const bankSummary = ctvMetricsData.ctv_bank_summary || {};
+  const op = ctvMetricsData.operational_breakdown || null;
+  const adaptive = ctvMetricsData.adaptive_selection || null;
+  const periodLabel = ctvMetricsData.reference_period_label_pt
+    || (op?.period_start && op?.period_end ? `${op.period_start} até ${op.period_end}` : 'Histórico operacional completo agregado');
+  const costDisplay = op
+    ? (op.completed_verifications_count === 0
+        ? 'sem conclusões'
+        : (op.cost_per_completed_verification_display_pt || 'sem conclusões'))
+    : '—';
+
+  root.append(
+    op ? card(
+      h('span', {class: 'eyebrow'}, 'CONTABILIDADE OPERACIONAL AUDITADA (SEPARADA DO SIMULADOR)'),
+      h('h2', {}, 'Solicitações, chamadas reais ao provedor, reuso e custo por verificação concluída'),
+      h('p', {}, `Período efetivamente agregado: ${periodLabel}${op.full_period_aggregated ? ' (período completo sem corte de volume)' : ''}. Origem do custo: ${op.cost_source_label_pt || 'Estimativa configurada por chamada'}.`),
+      h('div', {class: 'stat-grid'},
+        h('section', {class: 'card stat'},
+          h('span', {}, 'REUSO SEM CHAMADA'),
+          h('strong', {}, op.reuse_without_call_rate_pct == null ? `${op.reuse_without_call_deliveries ?? 0}/0` : `${op.reuse_without_call_rate_pct}%`),
+          h('small', {}, `${op.reuse_without_call_deliveries ?? 0} de ${op.requests_with_student_delivery ?? 0} entregas elegíveis c/ 0 chamadas · Cache offline à parte: ${op.offline_cache_deliveries_reconciled ?? 0}`)
+        ),
+        h('section', {class: 'card stat'},
+          h('span', {}, 'CHAMADAS REAIS & DUPLICATAS'),
+          h('strong', {}, `${op.real_provider_calls ?? 0} chamada(s)`),
+          h('small', {}, `${op.duplicates_barred_after_call ?? 0} duplicata(s) barrada(s) pós-chamada · ${op.persisted_ai_items_count ?? 0} item(ns) persistido(s)`)
+        ),
+        h('section', {class: 'card stat'},
+          h('span', {}, 'CUSTO POR VERIFICAÇÃO CONCLUÍDA'),
+          h('strong', {id: 'ctv-cost-per-completed'}, costDisplay),
+          h('small', {}, op.completed_verifications_count > 0
+            ? `Custo total ${op.cost_is_estimated ? 'estimado ' : ''}US$ ${Number(op.total_attributable_cost_usd || 0).toFixed(4)} ÷ ${op.completed_verifications_count} conclusões${op.cost_per_completed_verification_raw_usd != null ? ` (exato: US$ ${op.cost_per_completed_verification_raw_usd})` : ''}`
+            : `Custo atribuível ${op.cost_is_estimated ? 'estimado ' : ''}US$ ${Number(op.total_attributable_cost_usd || 0).toFixed(4)} · 0 verificações respondidas`)
+        ),
+        h('section', {class: 'card stat'},
+          h('span', {}, 'BUSCAS NO ACERVO'),
+          h('strong', {}, `${op.total_requests_evaluated ?? 0} avaliada(s)`),
+          h('small', {}, `${op.avoided_generation_requests ?? 0} chamadas evitadas pelo banco · ${op.search_inconclusive_count ?? 0} busca(s) inconclusiva(s)`)
+        )
+      )
+    ) : null,
+    adaptive ? card(
+      h('h2', {}, 'Seleção Adaptativa · Coortes de Disparo vs. Amostragem Periódica'),
+      h('div', {class: 'catalog-row'},
+        h('div', {},
+          h('strong', {}, adaptive.difficulty_triggered?.label_pt || 'Disparo por dificuldade detectada'),
+          h('small', {}, `${adaptive.difficulty_triggered?.summary_pt || ''} · Ofertas: ${adaptive.difficulty_triggered?.offers_count ?? 0} · Dispensas: ${adaptive.difficulty_triggered?.dismissals_count ?? 0} · Respostas: ${adaptive.difficulty_triggered?.responses_count ?? 0}`)
+        ),
+        badge('DIFFICULTY_DETECTED', 'warning')
+      ),
+      h('div', {class: 'catalog-row'},
+        h('div', {},
+          h('strong', {}, adaptive.periodic_sampling?.label_pt || 'Amostragem periódica de acompanhamento'),
+          h('small', {}, `${adaptive.periodic_sampling?.summary_pt || ''} · Ofertas: ${adaptive.periodic_sampling?.offers_count ?? 0} · Dispensas: ${adaptive.periodic_sampling?.dismissals_count ?? 0} · Respostas: ${adaptive.periodic_sampling?.responses_count ?? 0}`)
+        ),
+        badge('PERIODIC_SAMPLING', 'good')
+      ),
+      (adaptive.unknown_condition_count ?? 0) > 0
+        ? h('p', {class: 'review-meta'}, `Registros legados com condição de exposição desconhecida preservados: ${adaptive.unknown_condition_count}.`)
+        : null
+    ) : null,
+    card(
+      h('h2', {}, 'Saúde do acervo CTV em todasQuestoes'),
+      actions(
+        badge(`Total CTV IA: ${bankSummary.ai_generated_total ?? 0}`),
+        badge(`Autoaprovadas / confirmadas: ${bankSummary.auto_approved ?? 0}`, 'good'),
+        badge(`Aguardando revisão humana: ${bankSummary.pending_human_review ?? 0}`, 'warning'),
+        badge(`Suspensas por qualidade/reporte: ${bankSummary.suspended ?? 0}`, (bankSummary.suspended ?? 0) > 0 ? 'danger' : '')
+      )
+    ),
+    card(
+      h('h2', {}, '8 KPIs Operacionais de IA & Reutilização'),
+      ...(ctvMetricsData.operational_kpis || []).map(kpi =>
+        h('div', {class: 'catalog-row'},
+          h('div', {},
+            h('strong', {}, `${kpi.label_pt}: ${kpi.value == null ? 'Amostra insuficiente (n = 0)' : `${kpi.value} ${kpi.unit}`}`),
+            h('small', {class: 'kpi-meta'}, `${kpi.formal_definition} · n = ${kpi.sample_size_n} · Limitação: ${kpi.interpretive_limitation}`)
+          ),
+          badge(kpi.kpi_id)
+        )
+      )
+    ),
+    card(
+      h('h2', {}, `Questões complementares CTV recentes (${(ctvMetricsData.recent_ctv_questions || []).length})`),
+      (ctvMetricsData.recent_ctv_questions || []).length
+        ? (ctvMetricsData.recent_ctv_questions || []).map(q =>
+            h('div', {class: 'catalog-row'},
+              h('div', {},
+                h('strong', {}, q.question_snippet || q.question_id),
+                h('small', {}, `${q.subject_id}/${q.topic_id} · ${q.diagnostic_purpose} · Reutilizações: ${q.usage_count ?? 0}${q.model_identifier ? ' · Modelo: ' + q.model_identifier : ''}`)
+              ),
+              actions(
+                badge(q.validation_status, q.validation_status === 'AUTO_APPROVED' || q.validation_status === 'HUMAN_CONFIRMED' ? 'good' : 'warning'),
+                badge(q.quality_status, q.quality_status === 'SUSPENDED' ? 'danger' : ''),
+                button('Abrir no editor →', () => openQuestionEditor(q.question_id))
+              )
+            )
+          )
+        : h('p', {class: 'empty'}, 'Nenhuma questão complementar gerada por IA registrada até o momento.')
+    )
+  );
+  return root;
+}
+
 function missionsView() {
   const openPortalLink = h('a', {href: '/missoes/', class: 'button-link'}, 'Abrir experiência do aluno (/missoes/) ↗');
   const root = h(
@@ -2505,7 +2772,7 @@ export function shouldWarnBeforeUnload() {
 }
 
 export function getAppState() {
-  return {current, me, data, ws, busy, storageBlocked, quotaExceeded, loadErrors, selectedExam, selectedQuestion, questionPage, questionCursor, questionCursorStack, proposalsData, proposalStatusFilter, reportsData, reportStatusFilter, missionsAdminData};
+  return {current, me, data, ws, busy, storageBlocked, quotaExceeded, loadErrors, selectedExam, selectedQuestion, questionPage, questionCursor, questionCursorStack, proposalsData, proposalStatusFilter, reportsData, reportStatusFilter, missionsAdminData, ctvMetricsData, ctvSimState};
 }
 
 export function setAppStateForTest(patch = {}) {
@@ -2527,6 +2794,8 @@ export function setAppStateForTest(patch = {}) {
   if ('reportsData' in patch) reportsData = patch.reportsData;
   if ('reportStatusFilter' in patch) reportStatusFilter = patch.reportStatusFilter;
   if ('missionsAdminData' in patch) missionsAdminData = patch.missionsAdminData;
+  if ('ctvMetricsData' in patch) ctvMetricsData = patch.ctvMetricsData;
+  if ('ctvSimState' in patch) ctvSimState = patch.ctvSimState;
   if (me && $('#app') && $('#login')) {
     $('#login').hidden = true;
     $('#app').hidden = false;

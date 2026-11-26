@@ -675,5 +675,478 @@
       "expected_lambda": -0.88809251,
       "expected_shrunk_delta": 0.181069959
     }
+  ],
+  "metacognitive_scales": {
+    "declared_confidence": [
+      { "code": "GUESS", "ordinal": 1, "legacy_band": 1, "label_pt": "Chutei" },
+      { "code": "LOW", "ordinal": 2, "legacy_band": 1, "label_pt": "Pouco confiante" },
+      { "code": "MEDIUM", "ordinal": 3, "legacy_band": 2, "label_pt": "Parcialmente confiante" },
+      { "code": "HIGH", "ordinal": 4, "legacy_band": 3, "label_pt": "Muito confiante" },
+      { "code": "VERY_HIGH", "ordinal": 5, "legacy_band": 3, "label_pt": "Praticamente certo" }
+    ],
+    "cognitive_strategies": [
+      { "code": "CONCEPTUAL_KNOWLEDGE", "label_pt": "Conhecia o conceito e consegui aplicá-lo." },
+      { "code": "LOGICAL_DEDUCTION", "label_pt": "Deduzi a resposta por raciocínio lógico." },
+      { "code": "ELIMINATION", "label_pt": "Eliminei as alternativas incorretas." },
+      { "code": "PATTERN_RECOGNITION", "label_pt": "Reconheci termos ou conceitos familiares." },
+      { "code": "INTUITION", "label_pt": "Respondi por intuição." },
+      { "code": "RANDOM_GUESS", "label_pt": "Escolhi aleatoriamente." },
+      { "code": "UNSPECIFIED", "label_pt": "Não sei identificar como cheguei à resposta." }
+    ]
+  },
+  "metacognitive_matrix": [
+    {
+      "is_blank": false,
+      "is_correct": true,
+      "declared_confidence": "VERY_HIGH",
+      "cognitive_strategy": "CONCEPTUAL_KNOWLEDGE",
+      "consistent_history": true,
+      "rationale_contradicted": false,
+      "expected_diagnosis": "POSSIBLE_CONCEPTUAL_MASTERY",
+      "expected_support": "HIGH",
+      "expected_ctv_priority": "PERIODIC_SAMPLE"
+    },
+    {
+      "is_blank": false,
+      "is_correct": true,
+      "declared_confidence": "LOW",
+      "cognitive_strategy": "CONCEPTUAL_KNOWLEDGE",
+      "consistent_history": false,
+      "rationale_contradicted": false,
+      "expected_diagnosis": "INSECURE_KNOWLEDGE",
+      "expected_support": "MODERATE",
+      "expected_ctv_priority": "RECOMMENDED"
+    },
+    {
+      "is_blank": false,
+      "is_correct": true,
+      "declared_confidence": "GUESS",
+      "cognitive_strategy": "RANDOM_GUESS",
+      "consistent_history": false,
+      "rationale_contradicted": false,
+      "expected_diagnosis": "POSSIBLE_CASUAL_HIT",
+      "expected_support": "HIGH",
+      "expected_ctv_priority": "HIGH"
+    },
+    {
+      "is_blank": false,
+      "is_correct": true,
+      "declared_confidence": "MEDIUM",
+      "cognitive_strategy": "PATTERN_RECOGNITION",
+      "consistent_history": false,
+      "rationale_contradicted": false,
+      "expected_diagnosis": "UNCONFIRMED_MASTERY",
+      "expected_support": "MODERATE",
+      "expected_ctv_priority": "RECOMMENDED"
+    },
+    {
+      "is_blank": false,
+      "is_correct": true,
+      "declared_confidence": "HIGH",
+      "cognitive_strategy": "CONCEPTUAL_KNOWLEDGE",
+      "consistent_history": false,
+      "rationale_contradicted": true,
+      "expected_diagnosis": "POSSIBLE_MASTERY_ILLUSION",
+      "expected_support": "HIGH",
+      "expected_ctv_priority": "HIGH"
+    },
+    {
+      "is_blank": false,
+      "is_correct": true,
+      "declared_confidence": "HIGH",
+      "cognitive_strategy": "ELIMINATION",
+      "consistent_history": true,
+      "rationale_contradicted": false,
+      "expected_diagnosis": "FUNCTIONAL_REASONING",
+      "expected_support": "MODERATE",
+      "expected_ctv_priority": "OPTIONAL"
+    },
+    {
+      "is_blank": false,
+      "is_correct": false,
+      "declared_confidence": "VERY_HIGH",
+      "cognitive_strategy": "CONCEPTUAL_KNOWLEDGE",
+      "consistent_history": false,
+      "rationale_contradicted": false,
+      "expected_diagnosis": "POSSIBLE_CONCEPTUAL_MISCONCEPTION",
+      "expected_support": "HIGH",
+      "expected_ctv_priority": "HIGH"
+    },
+    {
+      "is_blank": false,
+      "is_correct": false,
+      "declared_confidence": "LOW",
+      "cognitive_strategy": "UNSPECIFIED",
+      "consistent_history": false,
+      "rationale_contradicted": false,
+      "expected_diagnosis": "POSSIBLE_KNOWLEDGE_GAP",
+      "expected_support": "MODERATE",
+      "expected_ctv_priority": "OPTIONAL"
+    },
+    {
+      "is_blank": false,
+      "is_correct": false,
+      "declared_confidence": "GUESS",
+      "cognitive_strategy": "RANDOM_GUESS",
+      "consistent_history": false,
+      "rationale_contradicted": false,
+      "expected_diagnosis": "UNDEMONSTRATED_KNOWLEDGE",
+      "expected_support": "MODERATE",
+      "expected_ctv_priority": "NONE"
+    }
+  ],
+  "concept_mastery_states": [
+    {
+      "attempts": 0,
+      "distinct_questions": 0,
+      "accuracy": 0.0,
+      "grounded_rate": 0.0,
+      "high_conf_error_rate": 0.0,
+      "transfer_attempts": 0,
+      "transfer_success_rate": 0.0,
+      "has_spaced_retention": false,
+      "retrievability": 0.0,
+      "consistency": 0.0,
+      "expected_state": "NOT_EVALUATED"
+    },
+    {
+      "attempts": 2,
+      "distinct_questions": 2,
+      "accuracy": 1.0,
+      "grounded_rate": 1.0,
+      "high_conf_error_rate": 0.0,
+      "transfer_attempts": 0,
+      "transfer_success_rate": 0.0,
+      "has_spaced_retention": false,
+      "retrievability": 0.9,
+      "consistency": 1.0,
+      "expected_state": "INSUFFICIENT_EVIDENCE"
+    },
+    {
+      "attempts": 4,
+      "distinct_questions": 3,
+      "accuracy": 0.5,
+      "grounded_rate": 0.5,
+      "high_conf_error_rate": 0.0,
+      "transfer_attempts": 0,
+      "transfer_success_rate": 0.0,
+      "has_spaced_retention": false,
+      "retrievability": 0.7,
+      "consistency": 0.5,
+      "expected_state": "EMERGING_KNOWLEDGE"
+    },
+    {
+      "attempts": 5,
+      "distinct_questions": 4,
+      "accuracy": 0.6,
+      "grounded_rate": 0.4,
+      "high_conf_error_rate": 0.4,
+      "transfer_attempts": 1,
+      "transfer_success_rate": 0.0,
+      "has_spaced_retention": false,
+      "retrievability": 0.75,
+      "consistency": 0.35,
+      "expected_state": "UNSTABLE_KNOWLEDGE"
+    },
+    {
+      "attempts": 5,
+      "distinct_questions": 4,
+      "accuracy": 0.8,
+      "grounded_rate": 0.75,
+      "high_conf_error_rate": 0.0,
+      "transfer_attempts": 0,
+      "transfer_success_rate": 0.0,
+      "has_spaced_retention": false,
+      "retrievability": 0.85,
+      "consistency": 0.8,
+      "expected_state": "DEVELOPING_MASTERY"
+    },
+    {
+      "attempts": 6,
+      "distinct_questions": 5,
+      "accuracy": 0.833333333,
+      "grounded_rate": 0.8,
+      "high_conf_error_rate": 0.0,
+      "transfer_attempts": 1,
+      "transfer_success_rate": 1.0,
+      "has_spaced_retention": false,
+      "retrievability": 0.88,
+      "consistency": 0.82,
+      "expected_state": "DEMONSTRATED_MASTERY"
+    },
+    {
+      "attempts": 8,
+      "distinct_questions": 6,
+      "accuracy": 0.875,
+      "grounded_rate": 0.85,
+      "high_conf_error_rate": 0.0,
+      "transfer_attempts": 2,
+      "transfer_success_rate": 1.0,
+      "has_spaced_retention": true,
+      "retrievability": 0.9,
+      "consistency": 0.88,
+      "expected_state": "CONSOLIDATED_MASTERY"
+    },
+    {
+      "attempts": 8,
+      "distinct_questions": 6,
+      "accuracy": 0.875,
+      "grounded_rate": 0.85,
+      "high_conf_error_rate": 0.0,
+      "transfer_attempts": 2,
+      "transfer_success_rate": 1.0,
+      "has_spaced_retention": true,
+      "retrievability": 0.55,
+      "consistency": 0.85,
+      "expected_state": "MASTERY_AT_RISK"
+    }
+  ],
+  "ai_reuse_simulator": [
+    {
+      "monthly_verifications": 10000,
+      "reuse_rate_pct": 75.0,
+      "avg_cost_per_generation": 0.04,
+      "expected_cost_without_reuse": 400.0,
+      "expected_cost_with_reuse": 100.0,
+      "expected_monthly_savings": 300.0,
+      "expected_avoided_generations": 7500,
+      "expected_annual_savings": 3600.0,
+      "expected_cost_reduction_pct": 75.0
+    },
+    {
+      "monthly_verifications": 50000,
+      "reuse_rate_pct": 85.0,
+      "avg_cost_per_generation": 0.02,
+      "expected_cost_without_reuse": 1000.0,
+      "expected_cost_with_reuse": 150.0,
+      "expected_monthly_savings": 850.0,
+      "expected_avoided_generations": 42500,
+      "expected_annual_savings": 10200.0,
+      "expected_cost_reduction_pct": 85.0
+    }
+  ],
+  "ctv_alignment_vectors": {
+    "source": {
+      "question_id": "q_orig_duration",
+      "subject_id": "MFIN",
+      "topic_id": "MFIN_01_004",
+      "target_concept_id": "CON_MFIN_DURATION_MODIFICADA",
+      "tested_rule": "A duration modificada mede a sensibilidade percentual aproximada do preço de um título a variações na taxa de juros.",
+      "question_type": "MULTIPLE_CHOICE",
+      "stem": "Em finanças de renda fixa no Banco Central, qual é o significado econômico da duration modificada de um título prefixado?",
+      "correct_answer_text": "Mede a elasticidade ou sensibilidade percentual aproximada do preço diante de pequena mudança na taxa de retorno.",
+      "content_revision": "rev_orig_duration"
+    },
+    "candidates": [
+      {
+        "id": "cand_duration_application",
+        "target_concept_id": "CON_MFIN_DURATION_MODIFICADA",
+        "tested_rule": "Para um mesmo pequeno choque de juros, o título com maior duration modificada sofre maior variação percentual aproximada de preço.",
+        "question_type": "MULTIPLE_CHOICE",
+        "stem": "Dois títulos públicos A e B possuem durations modificadas de 2,4 e 5,8 anos. Sob o mesmo pequeno choque paralelo de +0,25 ponto percentual na taxa de juros, qual título apresenta maior variação percentual aproximada no preço?",
+        "correct_answer_text": "O título B, cuja variação percentual aproximada é cerca de 1,45%.",
+        "content_revision": "rev_cand_duration",
+        "expected_accepted": true,
+        "expected_mode": "CONCEPTUAL_TRANSFER",
+        "expected_reason_code": "SAME_CONCEPT_AND_RULE_NEW_CONTEXT",
+        "expected_application_bonus": 35
+      },
+      {
+        "id": "cand_convexity_definition",
+        "target_concept_id": "CON_MFIN_CONVEXIDADE",
+        "tested_rule": "A convexidade mede a curvatura da relação preço-taxa de segunda ordem.",
+        "question_type": "MULTIPLE_CHOICE",
+        "stem": "Na gestão de renda fixa, qual é a definição de convexidade de uma carteira de títulos?",
+        "correct_answer_text": "A derivada segunda relativa do preço em relação à taxa, medindo a curvatura preço-taxa.",
+        "content_revision": "rev_cand_convexity",
+        "expected_accepted": true,
+        "expected_mode": "TOPIC_PRACTICE",
+        "expected_reason_code": "TOPIC_ONLY_CONCEPT_DIVERGENT",
+        "expected_application_bonus": 0
+      },
+      {
+        "id": "cand_shallow_paraphrase",
+        "target_concept_id": "CON_MFIN_DURATION_MODIFICADA",
+        "tested_rule": "A duration modificada mede a sensibilidade percentual aproximada do preço.",
+        "question_type": "MULTIPLE_CHOICE",
+        "stem": "No contexto de finanças de renda fixa do Banco Central, qual o significado econômico da duration modificada de um título prefixado?",
+        "correct_answer_text": "Mede a elasticidade ou sensibilidade percentual aproximada do preço diante de pequena mudança na taxa de retorno.",
+        "content_revision": "rev_cand_paraphrase",
+        "expected_accepted": false,
+        "expected_reason_code": "PARAPHRASE_OR_PRESERVED_ANSWER_CUE"
+      }
+    ]
+  },
+  "ctv_independence_vectors": [
+    {
+      "verification_mode": "CONCEPTUAL_TRANSFER",
+      "action": "ANSWERED",
+      "verification_timing": "PRE_FEEDBACK",
+      "was_previously_exposed": false,
+      "exposure_history_known": true,
+      "had_decisive_help": false,
+      "is_correct": true,
+      "expected_attempts_delta": 1,
+      "expected_correct_delta": 1,
+      "expected_code": "INDEPENDENT_CORRECT"
+    },
+    {
+      "verification_mode": "CONCEPTUAL_TRANSFER",
+      "action": "ANSWERED",
+      "verification_timing": "PRE_FEEDBACK",
+      "was_previously_exposed": false,
+      "exposure_history_known": true,
+      "had_decisive_help": false,
+      "is_correct": false,
+      "expected_attempts_delta": 1,
+      "expected_correct_delta": 0,
+      "expected_code": "INDEPENDENT_ERROR"
+    },
+    {
+      "verification_mode": "CONCEPTUAL_TRANSFER",
+      "action": "DISMISSED",
+      "verification_timing": "PRE_FEEDBACK",
+      "was_previously_exposed": false,
+      "exposure_history_known": true,
+      "had_decisive_help": false,
+      "is_correct": false,
+      "expected_attempts_delta": 0,
+      "expected_correct_delta": 0,
+      "expected_code": "EXPOSED_AND_DISMISSED"
+    },
+    {
+      "verification_mode": "CONCEPTUAL_TRANSFER",
+      "action": "PRELOADED_ONLY",
+      "verification_timing": "PRE_FEEDBACK",
+      "was_previously_exposed": false,
+      "exposure_history_known": true,
+      "had_decisive_help": false,
+      "is_correct": false,
+      "expected_attempts_delta": 0,
+      "expected_correct_delta": 0,
+      "expected_code": "PRELOADED_NOT_DISPLAYED"
+    },
+    {
+      "verification_mode": "CONCEPTUAL_TRANSFER",
+      "action": "ANSWERED",
+      "verification_timing": "PRE_FEEDBACK",
+      "was_previously_exposed": false,
+      "exposure_history_known": true,
+      "had_decisive_help": true,
+      "is_correct": true,
+      "expected_attempts_delta": 0,
+      "expected_correct_delta": 0,
+      "expected_code": "POST_INSTRUCTION_FIXATION"
+    },
+    {
+      "verification_mode": "CONCEPTUAL_TRANSFER",
+      "action": "ANSWERED",
+      "verification_timing": "PRE_FEEDBACK",
+      "was_previously_exposed": true,
+      "exposure_history_known": true,
+      "had_decisive_help": false,
+      "is_correct": true,
+      "expected_attempts_delta": 0,
+      "expected_correct_delta": 0,
+      "expected_code": "PRIOR_EXPOSURE_REVIEW"
+    },
+    {
+      "verification_mode": "CONCEPTUAL_TRANSFER",
+      "action": "ANSWERED",
+      "verification_timing": "UNKNOWN_CONDITION",
+      "was_previously_exposed": false,
+      "exposure_history_known": false,
+      "had_decisive_help": false,
+      "is_correct": true,
+      "expected_attempts_delta": 0,
+      "expected_correct_delta": 0,
+      "expected_code": "UNKNOWN_CONDITION"
+    }
+  ],
+  "hit_grounding_vectors": [
+    {
+      "is_correct": true,
+      "declared_confidence": "HIGH",
+      "cognitive_strategy": null,
+      "evidence_compatible": null,
+      "expected_category": "UNKNOWN_GROUNDING",
+      "expected_credits_comprehension": false,
+      "expected_is_evaluable": false
+    },
+    {
+      "is_correct": true,
+      "declared_confidence": "MEDIUM",
+      "cognitive_strategy": "LOGICAL_DEDUCTION",
+      "evidence_compatible": true,
+      "expected_category": "VALID_FUNCTIONAL_STRATEGY",
+      "expected_credits_comprehension": true,
+      "expected_is_evaluable": true
+    },
+    {
+      "is_correct": true,
+      "declared_confidence": "HIGH",
+      "cognitive_strategy": "ELIMINATION",
+      "evidence_compatible": false,
+      "expected_category": "DIVERGENT_RATIONALE",
+      "expected_credits_comprehension": false,
+      "expected_is_evaluable": true
+    }
+  ],
+  "walkforward_brier_vectors": {
+    "policy_version": "calibration-walkforward-v2.0",
+    "reference_pairs": [
+      { "p": 0.70, "y": true },
+      { "p": 0.40, "y": false }
+    ],
+    "expected_reference_brier": 0.125,
+    "sequence": [
+      { "attempt_id": "a1", "occurred_at_ms": 1000, "question_type": "MULTIPLE_CHOICE", "declared_confidence": "HIGH", "is_correct": true, "expected_p": 0.85, "expected_cold_start": true },
+      { "attempt_id": "a2", "occurred_at_ms": 2000, "question_type": "TRUE_FALSE", "declared_confidence": "GUESS", "is_correct": false, "expected_p": 0.50, "expected_cold_start": true },
+      { "attempt_id": "a3", "occurred_at_ms": 3000, "question_type": "MULTIPLE_CHOICE", "declared_confidence": "HIGH", "is_correct": true, "expected_p": 0.871428571, "expected_cold_start": false },
+      { "attempt_id": "a4", "occurred_at_ms": 4000, "question_type": "MULTIPLE_CHOICE", "declared_confidence": "HIGH", "is_correct": false, "expected_p": 0.8875, "expected_cold_start": false }
+    ]
+  },
+  "metacognitive_priority_vectors": {
+    "base": {
+      "edital_weight": 0.25,
+      "incidence_weight": 1.0,
+      "retrievability": 0.72,
+      "verified_competence": false,
+      "distinct_questions": 4,
+      "avg_seconds": 48.0,
+      "unmet_prerequisites_count": 0,
+      "dependent_count": 0
+    },
+    "expected_baseline_utility": 0.2735,
+    "recurrent_hce": {
+      "high_confidence_error_rate": 0.50,
+      "high_confidence_error_count": 2,
+      "incompatible_rationale_count": 2,
+      "expected_utility": 0.4034125,
+      "expected_rule_code": "RECURRENT_HIGH_CONF_MISCONCEPTION"
+    },
+    "functional_verified": {
+      "functional_elimination_transfer_verified": true,
+      "expected_utility": 0.11487,
+      "expected_advance_rule_code": "ADVANCE_AFTER_FUNCTIONAL_TRANSFER"
+    }
+  },
+  "operational_cost_vectors": [
+    {
+      "total_cost_usd": 0.09,
+      "completed_verifications_count": 2,
+      "cost_is_estimated": true,
+      "expected_raw": 0.045,
+      "expected_rounded": 0.045,
+      "expected_display": "US$ 0.0450 (estimado)"
+    },
+    {
+      "total_cost_usd": 0.06,
+      "completed_verifications_count": 0,
+      "cost_is_estimated": true,
+      "expected_raw": null,
+      "expected_rounded": null,
+      "expected_display": "sem conclusões"
+    }
   ]
 }

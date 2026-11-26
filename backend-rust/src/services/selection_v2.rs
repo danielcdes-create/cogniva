@@ -565,18 +565,42 @@ pub async fn generate(
             while let Some(row) = act_cursor.try_next().await? {
                 acts_by_id.insert(row.question_id, row);
             }
+            let ctv_failed_topics: HashSet<String> = state
+                .db
+                .collection::<Document>("conceptual_transfer_attempts")
+                .find(doc! {
+                    "user_id": req.user_id,
+                    "counts_as_independent_transfer": true,
+                    "is_correct": false
+                })
+                .projection(doc! { "canonical_topic_id": 1 })
+                .await?
+                .try_collect::<Vec<_>>()
+                .await?
+                .into_iter()
+                .filter_map(|d| d.get_str("canonical_topic_id").ok().map(str::to_string))
+                .collect();
+
             let mut retention_due = Vec::new();
-            let mut persistent_gaps = Vec::new();
+            let mut persistent_gaps: Vec<(i32, String, QuestionDocument)> = Vec::new();
             let mut new_items = Vec::new();
             for q in candidates {
                 let hex = q.id.to_hex();
+                let tid = q.canonical_topic_id.as_deref().unwrap_or("");
+                let topic_failed_transfer = ctv_failed_topics.contains(tid);
                 if let Some(act) = acts_by_id.get(&q.id) {
                     let has_answered = act.quantidade_praticas > 0
                         || act.past_sessions.iter().any(|s| !s.is_blank);
                     if !has_answered {
                         new_items.push((hex, q));
-                    } else if act.error_notebook() || act.high_confidence_error_flag {
-                        persistent_gaps.push((hex, q));
+                    } else if act.error_notebook()
+                        || act.high_confidence_error_flag
+                        || topic_failed_transfer
+                    {
+                        let gap_rank = (if act.high_confidence_error_flag { 40 } else { 0 })
+                            + (if topic_failed_transfer { 30 } else { 0 })
+                            + (if act.error_notebook() { 15 } else { 0 });
+                        persistent_gaps.push((gap_rank, hex, q));
                     } else if act.review_due(now)
                         || (act.memory_stability_days > 0.0
                             && crate::services::retention_engine::retrievability(
@@ -586,15 +610,23 @@ pub async fn generate(
                     {
                         retention_due.push((hex, q));
                     } else if !act.dominada {
-                        persistent_gaps.push((hex, q));
+                        persistent_gaps.push((5, hex, q));
                     }
+                } else if topic_failed_transfer {
+                    // Questão inédita em tópico com falha de transferência CTV entra prioritariamente na fila adaptativa!
+                    persistent_gaps.push((35, hex, q));
                 } else {
                     new_items.push((hex, q));
                 }
             }
+            persistent_gaps.sort_by(|a, b| b.0.cmp(&a.0));
+            let sorted_gaps: Vec<(String, QuestionDocument)> = persistent_gaps
+                .into_iter()
+                .map(|(_, h, q)| (h, q))
+                .collect();
             crate::services::prioritization_engine::interleave_buckets(
                 &retention_due,
-                &persistent_gaps,
+                &sorted_gaps,
                 &new_items,
                 if exam.is_some() { 2000 } else { quantity },
                 |(hex, _)| hex.as_str(),
@@ -1092,6 +1124,14 @@ mod tests {
                 position_in_session: None,
                 elapsed_session_seconds: None,
                 session_interrupted: false,
+                declared_confidence: None,
+                cognitive_strategy: None,
+                strategy_skipped: false,
+                active_seconds: None,
+                answer_change_count: 0,
+                initial_chosen_index: None,
+                consulted_resources: Vec::new(),
+                focus_loss_count: 0,
             }],
             quantidade_praticas: 3,
             quantidade_acertos: 1,

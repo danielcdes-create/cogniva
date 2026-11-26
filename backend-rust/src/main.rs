@@ -325,6 +325,14 @@ pub fn build_router(state: Arc<AppState>) -> Router {
             "/api/v1/admin/missions",
             get(routes::missions::admin_missions_overview),
         )
+        .route(
+            "/api/v1/admin/ai-ctv/metrics",
+            get(routes::admin_data::ai_ctv_metrics),
+        )
+        .route(
+            "/api/v1/admin/ai-ctv/simulate",
+            post(routes::admin_data::ai_ctv_simulate),
+        )
         .route_layer(axum::middleware::from_fn(security::require_admin));
 
     let authenticated_routes = Router::new()
@@ -357,8 +365,16 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         )
         .route("/api/v1/learning/state", get(routes::learning::get_state))
         .route(
+            "/api/v1/learning/analytics",
+            get(routes::learning::get_analytics),
+        )
+        .route(
             "/api/v1/study/next-action",
             get(routes::study_loop::get_next_action),
+        )
+        .route(
+            "/api/v1/study/recommendation-feedback",
+            post(routes::study_loop::handle_recommendation_feedback),
         )
         .route(
             "/api/v1/quiz/generate",
@@ -371,6 +387,22 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route(
             "/api/v1/quiz/attempt-evidence",
             post(routes::quiz::handle_attach_attempt_evidence),
+        )
+        .route(
+            "/api/v1/quiz/ctv/evaluate",
+            post(routes::quiz::handle_ctv_evaluate),
+        )
+        .route(
+            "/api/v1/quiz/ctv/events",
+            post(routes::quiz::handle_ctv_event),
+        )
+        .route(
+            "/api/v1/quiz/ctv/submit",
+            post(routes::quiz::handle_ctv_submit),
+        )
+        .route(
+            "/api/v1/quiz/ctv/state",
+            get(routes::quiz::handle_ctv_state),
         )
         .route(
             "/api/v1/questions/:id/ai/:kind",

@@ -244,6 +244,32 @@ interface ConcursoApiService {
         @Body payload: AttachAttemptEvidencePayload
     ): AttachAttemptEvidenceResponse
 
+    @GET("learning/analytics")
+    suspend fun getLearningAnalytics(): br.com.concursoprep.app.domain.model.StudentLearningAnalyticsDto
+
+    @POST("quiz/ctv/evaluate")
+    suspend fun evaluateCtv(
+        @Body payload: br.com.concursoprep.app.domain.model.CtvEvaluateRequestDto
+    ): br.com.concursoprep.app.domain.model.CtvEvaluateResponseDto
+
+    @POST("quiz/ctv/submit")
+    suspend fun submitCtvAttempt(
+        @Body payload: br.com.concursoprep.app.domain.model.CtvSubmitRequestDto
+    ): br.com.concursoprep.app.domain.model.CtvSubmitResponseDto
+
+    @POST("quiz/ctv/events")
+    suspend fun recordCtvEvent(
+        @Body payload: br.com.concursoprep.app.domain.model.CtvLifecycleEventRequestDto
+    ): br.com.concursoprep.app.domain.model.CtvLifecycleEventResponseDto
+
+    @GET("quiz/ctv/state")
+    suspend fun getCtvState(): br.com.concursoprep.app.domain.model.CtvUserStateResponseDto
+
+    @POST("study/recommendation-feedback")
+    suspend fun recordRecommendationFeedback(
+        @Body payload: br.com.concursoprep.app.domain.model.RecommendationFeedbackRequestDto
+    ): br.com.concursoprep.app.domain.model.RecommendationFeedbackResponseDto
+
     @POST("questions/{id}/ai/{kind}")
     suspend fun requestAiTutor(
         @Path("id") questionId: String,

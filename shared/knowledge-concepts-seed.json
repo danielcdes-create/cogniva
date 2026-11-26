@@ -45,6 +45,28 @@
       "content_sha256": "542a793310a7e4a79b9c7a49dc419c7fb16e0ef2f0047a495c486689b8d465f2",
       "updated_at": "2026-11-18",
       "status": "ACTIVE"
+    },
+    {
+      "source_id": "MAT_FIN_DURATION_MODIFICADA",
+      "kind": "FORMULA_MODEL",
+      "title": "Duration Modificada e Sensibilidade Percentual do Preço a Juros",
+      "canonical_uri": "urn:cogniva:formula:duration-modificada-renda-fixa",
+      "locator": "ΔP / P ≈ -D_mod * Δy",
+      "excerpt": "A duration modificada mede a sensibilidade percentual aproximada do preço de um título de renda fixa a pequenas variações na taxa de juros (yield): ΔP/P ≈ -D_mod · Δy. Para um mesmo choque pequeno de taxa, maior duration modificada implica maior variação percentual aproximada do preço.",
+      "content_sha256": "6b3b0907d8e1a9d7c5b22e31a47e5c62b90c88f4d9e3711a65b0f4d8e2c13a91",
+      "updated_at": "2026-11-25",
+      "status": "ACTIVE"
+    },
+    {
+      "source_id": "MAT_FIN_CONVEXIDADE",
+      "kind": "FORMULA_MODEL",
+      "title": "Convexidade em Renda Fixa e Curvatura da Relação Preço-Taxa",
+      "canonical_uri": "urn:cogniva:formula:convexidade-renda-fixa",
+      "locator": "ΔP / P ≈ -D_mod * Δy + 0.5 * C * (Δy)^2",
+      "excerpt": "A convexidade mede a curvatura (segunda derivada normalizada) da relação entre o preço de um título de renda fixa e sua taxa de retorno, corrigindo a aproximação linear da duration em choques maiores de juros.",
+      "content_sha256": "9c41f72b0a8e61d3c47f18b2d5a09e6c71f3b8a24d90e5c1a67b3d8f2e40c512",
+      "updated_at": "2026-11-25",
+      "status": "ACTIVE"
     }
   ],
   "concepts": [
@@ -93,6 +115,30 @@
       "prerequisite_concept_ids": [],
       "source_ids": ["CF88_ART_165_ORCAMENTO"],
       "default_incidence_weight": 1.5,
+      "status": "ACTIVE",
+      "revision": 1
+    },
+    {
+      "concept_id": "CON_MFIN_DURATION_MODIFICADA",
+      "subject_id": "MFIN",
+      "topic_id": "MFIN_01_004",
+      "label": "Duration modificada e sensibilidade percentual do preço a variações de juros",
+      "aliases": ["Duration modificada", "Durations modificadas", "Sensibilidade linear do preço à taxa"],
+      "prerequisite_concept_ids": [],
+      "source_ids": ["MAT_FIN_DURATION_MODIFICADA"],
+      "default_incidence_weight": 1.6,
+      "status": "ACTIVE",
+      "revision": 1
+    },
+    {
+      "concept_id": "CON_MFIN_CONVEXIDADE",
+      "subject_id": "MFIN",
+      "topic_id": "MFIN_01_004",
+      "label": "Convexidade de títulos de renda fixa e curvatura preço-taxa",
+      "aliases": ["Convexidade", "Ajuste de segunda ordem preço-taxa"],
+      "prerequisite_concept_ids": ["CON_MFIN_DURATION_MODIFICADA"],
+      "source_ids": ["MAT_FIN_CONVEXIDADE"],
+      "default_incidence_weight": 1.4,
       "status": "ACTIVE",
       "revision": 1
     }

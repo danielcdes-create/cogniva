@@ -417,6 +417,8 @@ pub async fn summary(
         obsolete_count,
         unclassified_count,
         open_ended_count,
+        ctv_total_count,
+        ctv_auto_approved_count,
         open_reports,
         pending_proposals,
     ) = tokio::try_join!(
@@ -426,6 +428,8 @@ pub async fn summary(
         questions.count_documents(doc! { "validity.status": "OBSOLETE" }),
         questions.count_documents(doc! { "classification.state": "UNCLASSIFIED" }),
         questions.count_documents(doc! { "question_type": "OPEN_ENDED" }),
+        questions.count_documents(doc! { "diagnostic_meta.generation_origin": "AI_ON_DEMAND" }),
+        questions.count_documents(doc! { "diagnostic_meta.validation_status": "AUTO_APPROVED" }),
         reports.count_documents(doc! { "fix.status_solved": { "$ne": true } }),
         suggestions.count_documents(doc! { "status": "PENDING" }),
     )?;
@@ -438,6 +442,8 @@ pub async fn summary(
         "questions_obsolete": obsolete_count,
         "questions_unclassified": unclassified_count,
         "questions_open_ended": open_ended_count,
+        "questions_ctv_generated": ctv_total_count,
+        "questions_ctv_auto_approved": ctv_auto_approved_count,
         "open_reports": open_reports,
         "pending_proposals": pending_proposals,
         "exams": templates.len(),
@@ -820,4 +826,50 @@ pub async fn catalog_version(
     crate::services::catalog_runtime::version(&state, version)
         .await
         .map(Json)
+}
+
+#[derive(Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AiCtvMetricsQuery {
+    pub reference_cost_usd: Option<f64>,
+    pub from: Option<String>,
+    pub to: Option<String>,
+}
+
+pub async fn ai_ctv_metrics(
+    State(state): State<Arc<AppState>>,
+    Extension(_user): Extension<SessionUser>,
+    Query(query): Query<AiCtvMetricsQuery>,
+) -> Result<Json<crate::services::learning_analytics::AdminAiCtvMetricsResponse>, AppError> {
+    let metrics = crate::services::ctv_admin_metrics::compute_admin_ctv_metrics_with_window(
+        &state,
+        crate::services::ctv_admin_metrics::AdminCtvMetricsQuery {
+            reference_cost_usd: query.reference_cost_usd,
+            from: query.from,
+            to: query.to,
+        },
+    )
+    .await?;
+    Ok(Json(metrics))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AiReuseSimulatorRequest {
+    pub monthly_verifications: u64,
+    pub reuse_rate_pct: f64,
+    pub avg_cost_per_generation: f64,
+}
+
+pub async fn ai_ctv_simulate(
+    Extension(_user): Extension<SessionUser>,
+    Json(req): Json<AiReuseSimulatorRequest>,
+) -> Result<Json<crate::services::concept_mastery_engine::ReuseEconomySimulation>, AppError> {
+    Ok(Json(
+        crate::services::concept_mastery_engine::simulate_ai_reuse_economy(
+            req.monthly_verifications,
+            req.reuse_rate_pct,
+            req.avg_cost_per_generation,
+        ),
+    ))
 }

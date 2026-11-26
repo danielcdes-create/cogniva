@@ -396,31 +396,38 @@ class AppUpdateManagerAndSchemaTest {
     }
 
     @Test
-    fun roomSchemaV7ExportAndMigrationChainAreComplete() {
+    fun roomSchemaV8ExportAndMigrationChainAreComplete() {
         val migrations = listOf(
             ExamMigrations.MIGRATION_1_2,
             ExamMigrations.MIGRATION_2_3,
             ExamMigrations.MIGRATION_3_4,
             ExamMigrations.MIGRATION_4_5,
             ExamMigrations.MIGRATION_5_6,
-            ExamMigrations.MIGRATION_6_7
+            ExamMigrations.MIGRATION_6_7,
+            ExamMigrations.MIGRATION_7_8
         )
         assertEquals(
-            listOf(1 to 2, 2 to 3, 3 to 4, 4 to 5, 5 to 6, 6 to 7),
+            listOf(1 to 2, 2 to 3, 3 to 4, 4 to 5, 5 to 6, 6 to 7, 7 to 8),
             migrations.map { it.startVersion to it.endVersion }
         )
 
-        val schemaCandidates = listOf(
+        val v7Candidates = listOf(
             File("schemas/br.com.concursoprep.app.data.local.AppDatabase/7.json"),
             File("app/schemas/br.com.concursoprep.app.data.local.AppDatabase/7.json")
         )
+        assertTrue("Historical Room v7 schema 7.json must remain preserved", v7Candidates.any { it.exists() })
+
+        val schemaCandidates = listOf(
+            File("schemas/br.com.concursoprep.app.data.local.AppDatabase/8.json"),
+            File("app/schemas/br.com.concursoprep.app.data.local.AppDatabase/8.json")
+        )
         val schemaFile = schemaCandidates.firstOrNull { it.exists() }
-        assertTrue("Room v7 exported schema 7.json must exist at ${schemaCandidates.map { it.path }}", schemaFile != null)
+        assertTrue("Room v8 exported schema 8.json must exist at ${schemaCandidates.map { it.path }}", schemaFile != null)
 
         val root = Json.parseToJsonElement(schemaFile!!.readText()).jsonObject
         assertEquals(1, root["formatVersion"]!!.jsonPrimitive.int)
         val dbObj = root["database"]!!.jsonObject
-        assertEquals(7, dbObj["version"]!!.jsonPrimitive.int)
+        assertEquals(8, dbObj["version"]!!.jsonPrimitive.int)
         val entitiesByName = dbObj["entities"]!!.jsonArray.associate {
             val obj = it.jsonObject
             obj["tableName"]!!.jsonPrimitive.content to obj
@@ -460,7 +467,15 @@ class AppUpdateManagerAndSchemaTest {
                     "selectedEvidenceId",
                     "positionInSession",
                     "elapsedSessionSeconds",
-                    "sessionInterrupted"
+                    "sessionInterrupted",
+                    "declaredConfidence",
+                    "cognitiveStrategy",
+                    "strategySkipped",
+                    "activeSeconds",
+                    "answerChangeCount",
+                    "initialChosenIndex",
+                    "consultedResourcesCsv",
+                    "focusLossCount"
                 )
             )
         )

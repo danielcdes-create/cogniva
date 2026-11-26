@@ -296,4 +296,247 @@ class SharedDomainContractTest {
             }
         }
     }
+
+    @Test
+    fun metacognitiveScalesMatrixConceptMasteryAndReuseSimulatorMatchSharedContract() {
+        val scales = fixture.getValue("metacognitive_scales").jsonObject
+        val confArr = scales.getValue("declared_confidence").jsonArray
+        assertEquals(DeclaredConfidence.entries.size, confArr.size)
+        confArr.forEachIndexed { idx, raw ->
+            val v = raw.jsonObject
+            val item = DeclaredConfidence.entries[idx]
+            assertEquals(v.getValue("code").jsonPrimitive.content, item.name)
+            assertEquals(v.getValue("ordinal").jsonPrimitive.int, item.ordinalLevel)
+            assertEquals(v.getValue("legacy_band").jsonPrimitive.int, item.toLegacyBand())
+            assertEquals(v.getValue("label_pt").jsonPrimitive.content, item.labelPt)
+        }
+
+        val stratArr = scales.getValue("cognitive_strategies").jsonArray
+        assertEquals(CognitiveStrategy.entries.size, stratArr.size)
+        stratArr.forEachIndexed { idx, raw ->
+            val v = raw.jsonObject
+            val item = CognitiveStrategy.entries[idx]
+            assertEquals(v.getValue("code").jsonPrimitive.content, item.name)
+            assertEquals(v.getValue("label_pt").jsonPrimitive.content, item.labelPt)
+        }
+
+        fixture.getValue("metacognitive_matrix").jsonArray.forEach { raw ->
+            val v = raw.jsonObject
+            val declConf = v["declared_confidence"]?.jsonPrimitive?.contentOrNull?.let(DeclaredConfidence::valueOf)
+            val cogStrat = v["cognitive_strategy"]?.jsonPrimitive?.contentOrNull?.let(CognitiveStrategy::valueOf)
+            val inputs = MetacognitiveMatrixInputs(
+                isBlank = v.getValue("is_blank").jsonPrimitive.boolean,
+                isCorrect = v.getValue("is_correct").jsonPrimitive.boolean,
+                declaredConfidence = declConf,
+                cognitiveStrategy = cogStrat,
+                consistentHistory = v.getValue("consistent_history").jsonPrimitive.boolean,
+                rationaleContradicted = v.getValue("rationale_contradicted").jsonPrimitive.boolean
+            )
+            val (diag, sup, pri) = MetacognitiveEngine.classifyPreliminaryMatrix(inputs)
+            assertEquals(v.getValue("expected_diagnosis").jsonPrimitive.content, diag.name)
+            assertEquals(v.getValue("expected_support").jsonPrimitive.content, sup.name)
+            assertEquals(v.getValue("expected_ctv_priority").jsonPrimitive.content, pri.name)
+            val assessment = MetacognitiveEngine.buildAssessment(inputs)
+            assertFalse(assessment.systemInferenceMessage.contains("Competência ilusória detectada"))
+        }
+
+        fixture.getValue("concept_mastery_states").jsonArray.forEach { raw ->
+            val v = raw.jsonObject
+            val eval = ConceptMasteryEngine.classifyConceptMastery(
+                ConceptMasteryInputs(
+                    attempts = v.getValue("attempts").jsonPrimitive.int,
+                    distinctQuestions = v.getValue("distinct_questions").jsonPrimitive.int,
+                    accuracy = v.getValue("accuracy").jsonPrimitive.double,
+                    groundedRate = v.getValue("grounded_rate").jsonPrimitive.double,
+                    highConfErrorRate = v.getValue("high_conf_error_rate").jsonPrimitive.double,
+                    transferAttempts = v.getValue("transfer_attempts").jsonPrimitive.int,
+                    transferSuccessRate = v.getValue("transfer_success_rate").jsonPrimitive.double,
+                    hasSpacedRetention = v.getValue("has_spaced_retention").jsonPrimitive.boolean,
+                    retrievability = v.getValue("retrievability").jsonPrimitive.double,
+                    consistency = v.getValue("consistency").jsonPrimitive.double
+                )
+            )
+            assertEquals(v.getValue("expected_state").jsonPrimitive.content, eval.state.name)
+        }
+
+        fixture.getValue("ai_reuse_simulator").jsonArray.forEach { raw ->
+            val v = raw.jsonObject
+            val sim = ReuseEconomySimulator.simulateAiReuseEconomy(
+                monthlyVerifications = v.getValue("monthly_verifications").jsonPrimitive.long,
+                reuseRatePct = v.getValue("reuse_rate_pct").jsonPrimitive.double,
+                avgCostPerGeneration = v.getValue("avg_cost_per_generation").jsonPrimitive.double
+            )
+            assertEquals(v.getValue("expected_cost_without_reuse").jsonPrimitive.double, sim.costWithoutReuse, 1e-6)
+            assertEquals(v.getValue("expected_cost_with_reuse").jsonPrimitive.double, sim.costWithReuse, 1e-6)
+            assertEquals(v.getValue("expected_monthly_savings").jsonPrimitive.double, sim.monthlySavings, 1e-6)
+            assertEquals(v.getValue("expected_avoided_generations").jsonPrimitive.long, sim.avoidedGenerationsMonthly)
+            assertEquals(v.getValue("expected_annual_savings").jsonPrimitive.double, sim.annualSavings, 1e-6)
+            assertEquals(v.getValue("expected_cost_reduction_pct").jsonPrimitive.double, sim.costReductionPct, 1e-6)
+            assertTrue(sim.disclaimerPt.contains("hipotética"))
+        }
+    }
+
+    @Test
+    fun ctvAlignmentIndependenceGroundingWalkforwardPriorityAndCostMatchSharedContract() {
+        val alignSec = fixture.getValue("ctv_alignment_vectors").jsonObject
+        val srcV = alignSec.getValue("source").jsonObject
+        val srcTid = srcV["target_concept_id"]?.jsonPrimitive?.contentOrNull
+        val srcProf = QuestionAlignmentProfile(
+            questionId = srcV.getValue("question_id").jsonPrimitive.content,
+            subjectId = srcV["subject_id"]?.jsonPrimitive?.contentOrNull,
+            topicId = srcV["topic_id"]?.jsonPrimitive?.contentOrNull,
+            targetConceptId = srcTid,
+            allConceptIds = listOfNotNull(srcTid),
+            testedRule = srcV["tested_rule"]?.jsonPrimitive?.contentOrNull,
+            questionType = srcV.getValue("question_type").jsonPrimitive.content,
+            stem = srcV.getValue("stem").jsonPrimitive.content,
+            correctAnswerText = srcV["correct_answer_text"]?.jsonPrimitive?.contentOrNull,
+            contentRevision = srcV.getValue("content_revision").jsonPrimitive.content
+        )
+        alignSec.getValue("candidates").jsonArray.forEach { raw ->
+            val cv = raw.jsonObject
+            val cTid = cv["target_concept_id"]?.jsonPrimitive?.contentOrNull
+            val candProf = QuestionAlignmentProfile(
+                questionId = cv.getValue("id").jsonPrimitive.content,
+                subjectId = srcProf.subjectId,
+                topicId = srcProf.topicId,
+                targetConceptId = cTid,
+                allConceptIds = listOfNotNull(cTid),
+                testedRule = cv["tested_rule"]?.jsonPrimitive?.contentOrNull,
+                questionType = cv.getValue("question_type").jsonPrimitive.content,
+                stem = cv.getValue("stem").jsonPrimitive.content,
+                correctAnswerText = cv["correct_answer_text"]?.jsonPrimitive?.contentOrNull,
+                contentRevision = cv.getValue("content_revision").jsonPrimitive.content
+            )
+            val dec = CtvAlignmentEngine.evaluateCandidateAlignment(srcProf, candProf, allowSeenReview = false)
+            if (cv.getValue("expected_accepted").jsonPrimitive.boolean) {
+                assertTrue("Expected Accepted for ${candProf.questionId}, got $dec", dec is CandidateAlignmentDecision.Accepted)
+                val acc = dec as CandidateAlignmentDecision.Accepted
+                assertEquals(cv.getValue("expected_mode").jsonPrimitive.content, acc.mode.code)
+                assertEquals(cv.getValue("expected_reason_code").jsonPrimitive.content, acc.framingReasonCode)
+                assertEquals(cv.getValue("expected_application_bonus").jsonPrimitive.int, acc.applicationBonus)
+            } else {
+                assertTrue("Expected Rejected for ${candProf.questionId}, got $dec", dec is CandidateAlignmentDecision.Rejected)
+                val rej = dec as CandidateAlignmentDecision.Rejected
+                assertEquals(cv.getValue("expected_reason_code").jsonPrimitive.content, rej.reasonCode)
+            }
+        }
+
+        fixture.getValue("ctv_independence_vectors").jsonArray.forEach { raw ->
+            val iv = raw.jsonObject
+            val verdict = CtvAlignmentEngine.evaluateCtvIndependence(
+                CtvIndependenceInput(
+                    verificationMode = VerificationMode.fromCode(iv.getValue("verification_mode").jsonPrimitive.content),
+                    action = iv.getValue("action").jsonPrimitive.content,
+                    verificationTiming = iv.getValue("verification_timing").jsonPrimitive.content,
+                    wasPreviouslyExposed = iv.getValue("was_previously_exposed").jsonPrimitive.boolean,
+                    exposureHistoryKnown = iv.getValue("exposure_history_known").jsonPrimitive.boolean,
+                    hadDecisiveHelp = iv.getValue("had_decisive_help").jsonPrimitive.boolean,
+                    isCorrect = iv.getValue("is_correct").jsonPrimitive.boolean
+                )
+            )
+            assertEquals(iv.getValue("expected_attempts_delta").jsonPrimitive.int, verdict.independentAttemptsDelta)
+            assertEquals(iv.getValue("expected_correct_delta").jsonPrimitive.int, verdict.independentCorrectDelta)
+            assertEquals(iv.getValue("expected_code").jsonPrimitive.content, verdict.classificationCode)
+        }
+
+        fixture.getValue("hit_grounding_vectors").jsonArray.forEach { raw ->
+            val gv = raw.jsonObject
+            val dc = gv["declared_confidence"]?.jsonPrimitive?.contentOrNull?.let(DeclaredConfidence::valueOf)
+            val cs = gv["cognitive_strategy"]?.jsonPrimitive?.contentOrNull?.let(CognitiveStrategy::valueOf)
+            val evCompat = gv["evidence_compatible"]?.jsonPrimitive?.booleanOrNull
+            val cat = MetacognitiveEngine.classifyHitGrounding(
+                isCorrect = gv.getValue("is_correct").jsonPrimitive.boolean,
+                declaredConfidence = dc,
+                cognitiveStrategy = cs,
+                evidenceCompatible = evCompat
+            )
+            assertEquals(gv.getValue("expected_category").jsonPrimitive.content, cat.name)
+            assertEquals(gv.getValue("expected_credits_comprehension").jsonPrimitive.boolean, cat.creditsComprehension)
+            assertEquals(gv.getValue("expected_is_evaluable").jsonPrimitive.boolean, cat.isEvaluable)
+        }
+
+        val wfSec = fixture.getValue("walkforward_brier_vectors").jsonObject
+        assertEquals(wfSec.getValue("policy_version").jsonPrimitive.content, CalibrationEngine.CALIBRATION_POLICY_VERSION)
+        val refPairs = wfSec.getValue("reference_pairs").jsonArray.map { el ->
+            val obj = el.jsonObject
+            obj.getValue("p").jsonPrimitive.double to obj.getValue("y").jsonPrimitive.boolean
+        }
+        val refBrier = checkNotNull(CalibrationEngine.computeBrierScore(refPairs))
+        assertEquals(wfSec.getValue("expected_reference_brier").jsonPrimitive.double, refBrier, 1e-12)
+
+        val wfSeq = wfSec.getValue("sequence").jsonArray
+        val wfEvents = wfSeq.map { el ->
+            val ev = el.jsonObject
+            WalkforwardCalibrationInput(
+                attemptId = ev.getValue("attempt_id").jsonPrimitive.content,
+                occurredAtMs = ev.getValue("occurred_at_ms").jsonPrimitive.long,
+                questionType = ev.getValue("question_type").jsonPrimitive.content,
+                declaredConfidence = DeclaredConfidence.valueOf(ev.getValue("declared_confidence").jsonPrimitive.content),
+                isCorrect = ev.getValue("is_correct").jsonPrimitive.boolean
+            )
+        }
+        val wfRep = CalibrationEngine.evaluateWalkforwardCalibration(wfEvents)
+        wfSeq.forEachIndexed { idx, el ->
+            val ev = el.jsonObject
+            assertEquals(ev.getValue("expected_p").jsonPrimitive.double, wfRep.traces[idx].predictedProbability, 1e-8)
+            assertEquals(ev.getValue("expected_cold_start").jsonPrimitive.boolean, wfRep.traces[idx].usedColdStartPrior)
+        }
+
+        val mpSec = fixture.getValue("metacognitive_priority_vectors").jsonObject
+        val mpBaseObj = mpSec.getValue("base").jsonObject
+        val mpBase = PrioritizationInputs(
+            editalWeight = mpBaseObj.getValue("edital_weight").jsonPrimitive.double,
+            incidenceWeight = mpBaseObj.getValue("incidence_weight").jsonPrimitive.double,
+            retrievability = mpBaseObj.getValue("retrievability").jsonPrimitive.double,
+            verifiedCompetence = mpBaseObj.getValue("verified_competence").jsonPrimitive.boolean,
+            distinctQuestions = mpBaseObj.getValue("distinct_questions").jsonPrimitive.int,
+            avgSeconds = mpBaseObj.getValue("avg_seconds").jsonPrimitive.double,
+            unmetPrerequisitesCount = mpBaseObj.getValue("unmet_prerequisites_count").jsonPrimitive.int,
+            dependentCount = mpBaseObj.getValue("dependent_count").jsonPrimitive.int
+        )
+        val baseU = PrioritizationEngine.priorityUtilityMetacognitive(mpBase, MetacognitivePrioritySignals())
+        assertEquals(mpSec.getValue("expected_baseline_utility").jsonPrimitive.double, baseU, 1e-8)
+
+        val recHceObj = mpSec.getValue("recurrent_hce").jsonObject
+        val hceSig = MetacognitivePrioritySignals(
+            highConfidenceErrorRate = recHceObj.getValue("high_confidence_error_rate").jsonPrimitive.double,
+            highConfidenceErrorCount = recHceObj.getValue("high_confidence_error_count").jsonPrimitive.int,
+            incompatibleRationaleCount = recHceObj.getValue("incompatible_rationale_count").jsonPrimitive.int
+        )
+        val hceU = PrioritizationEngine.priorityUtilityMetacognitive(mpBase, hceSig)
+        assertEquals(recHceObj.getValue("expected_utility").jsonPrimitive.double, hceU, 1e-8)
+        val hceReason = PrioritizationEngine.buildMetacognitiveDecisionReason(
+            signals = hceSig,
+            unitTitle = "Duration modificada",
+            fallbackReasonPt = "Assunto familiar",
+            advancedAfterFunctionalTransfer = false
+        )
+        assertEquals(recHceObj.getValue("expected_rule_code").jsonPrimitive.content, hceReason.decisionRuleCode)
+
+        val funcObj = mpSec.getValue("functional_verified").jsonObject
+        val funcSig = MetacognitivePrioritySignals(
+            functionalEliminationTransferVerified = funcObj.getValue("functional_elimination_transfer_verified").jsonPrimitive.boolean
+        )
+        val funcU = PrioritizationEngine.priorityUtilityMetacognitive(mpBase, funcSig)
+        assertEquals(funcObj.getValue("expected_utility").jsonPrimitive.double, funcU, 1e-8)
+
+        fixture.getValue("operational_cost_vectors").jsonArray.forEach { raw ->
+            val cv = raw.jsonObject
+            val (rawVal, roundedVal, displayStr) = OperationalCostCalculator.computeCostPerCompletedVerification(
+                totalCostUsd = cv.getValue("total_cost_usd").jsonPrimitive.double,
+                completedVerificationsCount = cv.getValue("completed_verifications_count").jsonPrimitive.int,
+                costIsEstimated = cv.getValue("cost_is_estimated").jsonPrimitive.boolean
+            )
+            assertEquals(cv.getValue("expected_display").jsonPrimitive.content, displayStr)
+            val expRaw = cv["expected_raw"]?.jsonPrimitive?.doubleOrNull
+            if (expRaw == null) {
+                assertNull(rawVal)
+                assertNull(roundedVal)
+            } else {
+                assertEquals(expRaw, rawVal!!, 1e-12)
+                assertEquals(cv.getValue("expected_rounded").jsonPrimitive.double, roundedVal!!, 1e-12)
+            }
+        }
+    }
 }

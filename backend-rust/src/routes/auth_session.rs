@@ -1175,6 +1175,9 @@ pub fn lgpd_deletion_plan(uid: i64) -> LgpdDeletionPlan {
             doc! { "$or": [{ "actor_user_id": uid }, { "_id": { "$regex": &uid_prefix } }] },
         ),
         ("mission_progress", doc! { "user_id": uid }),
+        ("conceptual_transfer_attempts", doc! { "user_id": uid }),
+        ("ctv_offers", doc! { "user_id": uid }),
+        ("study_recommendation_events", doc! { "user_id": uid }),
     ];
 
     let personal_actions: Vec<bson::Bson> = LGPD_PERSONAL_REVIEW_EVENT_ACTIONS

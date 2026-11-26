@@ -83,6 +83,22 @@ pub struct PastSessionEntry {
     pub elapsed_session_seconds: Option<i32>,
     #[serde(default)]
     pub session_interrupted: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub declared_confidence: Option<crate::services::metacognitive_engine::DeclaredConfidence>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cognitive_strategy: Option<crate::services::metacognitive_engine::CognitiveStrategy>,
+    #[serde(default)]
+    pub strategy_skipped: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_seconds: Option<i32>,
+    #[serde(default)]
+    pub answer_change_count: u16,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub initial_chosen_index: Option<usize>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub consulted_resources: Vec<String>,
+    #[serde(default)]
+    pub focus_loss_count: u16,
 }
 
 /// Documento da coleção `userActivityLog` (100% compatível com o banco atual + extensões do App)

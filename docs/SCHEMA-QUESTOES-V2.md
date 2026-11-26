@@ -1,13 +1,13 @@
-# Contratos e Schema de Questões V2 (Cogniva 2.3 — Compatível `schema_version = 2`)
+# Contratos e Schema de Questões V2 (Cogniva 2.4 — Compatível `schema_version = 2`)
 
-No **Cogniva `2.4.3`** (`NT-COGNIVA-QUESTIONS-002` + Ficha Editorial Rastreável & Grafo de Conceitos), 100% do acervo em `cogniva.todasQuestoes` preserva `schema_version = 2` com endurecimento completo de proveniência autenticada, separação entre identidade semântica e política de correção, vínculo opcional a conceitos (`concept_id`), desafio de evidência pós-resposta (`evidence_challenge`), **Ficha Editorial Rastreável (`editorial_card`)**, idempotência transacional, elegibilidade centralizada e validação estrita de `ObjectId` e inteiros.
+No **Cogniva `2.4.4`** (`NT-COGNIVA-QUESTIONS-002` + Ficha Editorial Rastreável, Grafo de Conceitos & Verificação Conceitual `CTV`), 100% do acervo em `cogniva.todasQuestoes` preserva `schema_version = 2` com endurecimento completo de proveniência autenticada, separação entre identidade semântica e política de correção, vínculo opcional a conceitos (`concept_id`), desafio de evidência pós-resposta (`evidence_challenge`), **Ficha Editorial Rastreável (`editorial_card`)**, metadados permanentes de verificação complementar (`diagnostic_meta`), idempotência transacional, elegibilidade centralizada e validação estrita de `ObjectId` e inteiros.
 
 Os contratos formais residem em:
 - Schema JSON canônico: [`shared/schemas/question-contracts.schema.json`](../shared/schemas/question-contracts.schema.json)
 - Vetores de paridade Rust/Python: [`shared/examples/question-contracts/parity-vectors-v2-1.json`](../shared/examples/question-contracts/parity-vectors-v2-1.json)
 - Validador e avaliador em Rust: [`backend-rust/src/services/question_contracts.rs`](../backend-rust/src/services/question_contracts.rs) e [`backend-rust/src/services/question_eligibility.rs`](../backend-rust/src/services/question_eligibility.rs)
 - Validador e avaliador em Python: [`scripts/question_contracts.py`](../scripts/question_contracts.py)
-- Persistência, CAS e validadores MongoDB: [`backend-rust/src/services/question_storage.rs`](../backend-rust/src/services/question_storage.rs) (`question-v2-validator-2.3.0`, `validator_revision = 6`)
+- Persistência, CAS e validadores MongoDB: [`backend-rust/src/services/question_storage.rs`](../backend-rust/src/services/question_storage.rs) (`question-v2-validator-2.4.0`, `validator_revision = 7`)
 
 ---
 
@@ -22,8 +22,18 @@ Os contratos formais residem em:
 | `question_import_commits` | Recibos duráveis de idempotência de lote (`idempotency_key` + `payload_digest` + `reviewed`). |
 | `question_classification_suggestions` | Sugestões geradas por IA (`PENDING`, `ACCEPTED`, `EDITED_ACCEPTED`, `DEFERRED`, `REJECTED`, `SUPERSEDED`); nunca alteram seleção de treino sem aceitação humana autenticada. |
 | `question_exam_compatibility` | Decisões explícitas (`DIRECT`, `ANALOGOUS`, `EXCLUDED`) vinculadas ao proprietário da grade, componente, revisão do edital e `question_semantic_revision`. |
-| `reportedQuestoes` | Reportes de problemas abertos por estudantes, isolados por `user_id` denunciante até resolução administrativa (anonimizáveis sob LGPD Art. 18). |
+| `reportedQuestoes` | Reportes de problemas abertos por estudantes, isolados por `user_id` denunciante até resolução administrativa (anonimizáveis sob LGPD Art. 18; reportes abertos sobre itens IA CTV `AUTO_APPROVED` suspendem imediatamente `diagnostic_meta.quality_status = "SUSPENDED"`). |
 | `answer_evaluations` | Avaliações imutáveis de respostas discursivas referenciando tentativa, rubrica e política de revisão. |
+| `conceptual_transfer_attempts` | Tentativas complementares de verificação adaptativa (`CTV`) vinculadas a `parent_attempt_id`, `source_question_id`, `complementary_question_id` e `verification_timing` (`PRE_FEEDBACK` / `POST_INSTRUCTION`), expurgadas sob LGPD Art. 18 sem remover a questão do acervo. |
+| `ai_generation_audit` | Trilha operacional impessoal do motor CTV (`REUSED_FROM_DB`, `GENERATED_PERSISTED`, `GENERATION_REJECTED`, `GENERATION_FAILED`), sem dados pessoais de estudantes, alimentando os 8 KPIs operacionais do `/admin/`. |
+
+---
+
+### Metadado Diagnóstico Opcional V2.4 (`diagnostic_meta`) e Modo `COMPLEMENTARY_VERIFICATION`
+
+Questões complementares geradas sob demanda pelo motor CTV são ativos V2 permanentes em `todasQuestoes` com o bloco opcional `#/$defs/diagnostic_meta` (fora de `content_revision` e `semantic_revision`):
+- `source_question_id`, `subject_id`, `topic_id`, `concept_ids[]`, `diagnostic_purpose` (`CONCEPTUAL_TRANSFER`, `MISCONCEPTION_CHECK`, `RULE_BOUNDARY_CHECK`, `LONGITUDINAL_RETENTION`), `generation_origin` (`AI_ON_DEMAND`, `HUMAN_CURATED`, `AI_HUMAN_REVISED`), `model_identifier`, `prompt_id`, `prompt_version`, `generated_at`, `validation_status` (`VALIDATED`, `NEEDS_HUMAN_REVIEW`, `REJECTED`), `estimated_difficulty`, `content_hash`, `usage_count`, `quality_status` (`AUTO_APPROVED`, `PENDING_HUMAN_REVIEW`, `HUMAN_CONFIRMED`, `SUSPENDED`, `REJECTED`) e `quality_metrics` (`attempts_count`, `correct_count`, `avg_active_seconds`, `discrimination_index`, `open_reports_count`).
+- **Isolamento de Elegibilidade:** No modo `STANDARD_OBJECTIVE` (simulados oficiais e baterias regulares), itens `AI_CTV` sem confirmação humana permanecem retidos por `HUMAN_REVIEW_REQUIRED`; já no modo `COMPLEMENTARY_VERIFICATION` (`evaluate_question_eligibility`), são elegíveis exclusivamente quando `quality_status` é `AUTO_APPROVED` ou `HUMAN_CONFIRMED` (itens `PENDING_HUMAN_REVIEW`, `SUSPENDED` ou `REJECTED` retornam `CTV_QUALITY_NOT_APPROVED`).
 
 ---
 

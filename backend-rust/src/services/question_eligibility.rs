@@ -14,6 +14,7 @@ pub enum EligibilityMode {
     StandardObjective,
     HistoricalOnly,
     DiscursiveExplicit,
+    ComplementaryVerification,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -172,12 +173,46 @@ pub fn evaluate_question_eligibility(
         })
         .unwrap_or_default();
 
-    let primary_subject_id = primary_link
+    let mut primary_subject_id = primary_link
         .and_then(|l| l["subject_id"].as_str())
         .map(str::to_string);
-    let primary_topic_id = primary_link
+    let mut primary_topic_id = primary_link
         .and_then(|l| l["topic_id"].as_str())
         .map(str::to_string);
+
+    let ctv_auto_approved = if mode == EligibilityMode::ComplementaryVerification {
+        question
+            .get("diagnostic_meta")
+            .filter(|v| v.is_object())
+            .is_some_and(|dmeta| {
+                let vstat = dmeta.get("validation_status").and_then(Value::as_str);
+                let qstat = dmeta.get("quality_status").and_then(Value::as_str);
+                let chash = dmeta.get("content_hash").and_then(Value::as_str);
+                let crev = question.get("content_revision").and_then(Value::as_str);
+                let subj = dmeta.get("subject_id").and_then(Value::as_str);
+                let top = dmeta.get("topic_id").and_then(Value::as_str);
+                let taxonomy_ok = subj
+                    .zip(top)
+                    .is_some_and(|(s, t)| active_subjects.contains(s) && active_topics.contains(&(s, t)));
+                matches!(vstat, Some("AUTO_APPROVED" | "HUMAN_CONFIRMED"))
+                    && matches!(qstat, Some("OPERATIONAL" | "MONITORING"))
+                    && chash.is_some()
+                    && chash == crev
+                    && taxonomy_ok
+                    && question["validity"]["status"].as_str() != Some("OBSOLETE")
+            })
+    } else {
+        false
+    };
+
+    if ctv_auto_approved && primary_subject_id.is_none() {
+        primary_subject_id = question["diagnostic_meta"]["subject_id"]
+            .as_str()
+            .map(str::to_string);
+        primary_topic_id = question["diagnostic_meta"]["topic_id"]
+            .as_str()
+            .map(str::to_string);
+    }
 
     let classification_confirmed = question["classification"]["state"] == "CONFIRMED"
         && primary_link.is_some()
@@ -189,11 +224,13 @@ pub fn evaluate_question_eligibility(
             .zip(primary_topic_id.as_deref())
             .is_some_and(|pair| active_topics.contains(&pair));
 
-    if !classification_confirmed {
+    if !classification_confirmed && !ctv_auto_approved {
         push_unique(&mut reasons, "CLASSIFICATION_NOT_CONFIRMED");
-    } else if let Some(plink) = primary_link {
-        if !trusted_human_review(&plink["provenance"], trusted_review_context) {
-            push_unique(&mut reasons, "HUMAN_REVIEW_REQUIRED");
+    } else if classification_confirmed {
+        if let Some(plink) = primary_link {
+            if !trusted_human_review(&plink["provenance"], trusted_review_context) {
+                push_unique(&mut reasons, "HUMAN_REVIEW_REQUIRED");
+            }
         }
     }
 
@@ -213,10 +250,12 @@ pub fn evaluate_question_eligibility(
     let historical = question["validity"]["scope"] == "EXPLICIT_HISTORICAL_DATE";
     let expected_historical = mode == EligibilityMode::HistoricalOnly;
 
-    if vstatus != Some("CURRENT") || historical != expected_historical {
+    if !ctv_auto_approved && (vstatus != Some("CURRENT") || historical != expected_historical) {
         push_unique(&mut reasons, "VALIDITY_NOT_CONFIRMED");
-    } else {
-        if !trusted_human_review(&question["validity"]["decision"], trusted_review_context) {
+    } else if vstatus == Some("CURRENT") && historical == expected_historical {
+        if !trusted_human_review(&question["validity"]["decision"], trusted_review_context)
+            && !ctv_auto_approved
+        {
             push_unique(&mut reasons, "HUMAN_REVIEW_REQUIRED");
         }
         if let Some(due_raw) = question["validity"]["review_due_on"].as_str() {
@@ -228,6 +267,8 @@ pub fn evaluate_question_eligibility(
                 Err(_) => push_unique(&mut reasons, "INVALID_VALIDITY_DEADLINE"),
             }
         }
+    } else if ctv_auto_approved && historical {
+        push_unique(&mut reasons, "VALIDITY_NOT_CONFIRMED");
     }
 
     // 9. Exam compatibility context

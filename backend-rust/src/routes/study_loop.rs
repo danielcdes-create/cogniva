@@ -12,7 +12,13 @@ use crate::{
         exam_store,
         fatigue_engine::{evaluate_from_activities, FatigueReport},
         knowledge,
-        prioritization_engine::{format_entry_60s_header, priority_utility, PrioritizationInputs},
+        metacognitive_engine::{
+            classify_hit_grounding, DeclaredConfidence, HitGroundingCategory,
+        },
+        prioritization_engine::{
+            build_metacognitive_decision_reason, format_entry_60s_header,
+            priority_utility_metacognitive, MetacognitivePrioritySignals, PrioritizationInputs,
+        },
         quiz_selector::{QuizGenerateRequest, QuizMode},
         retention_engine::retrievability,
         selection_v2,
@@ -61,6 +67,8 @@ pub struct ExamGapSummaryDto {
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct ThreeSignalSummaryDto {
     pub grounded_hits: u32,
+    #[serde(default)]
+    pub unknown_grounding_hits: u32,
     pub illusory_competence_hits: u32,
     pub hesitant_hits: u32,
     pub overconfidence_errors: u32,
@@ -79,6 +87,9 @@ pub struct StrategyBandGuidanceDto {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct NextActionResponse {
+    pub recommendation_id: String,
+    pub decision_rule_code: String,
+    pub recommended_quiz_mode: String,
     pub schedule_header: String,
     pub entry_question: Option<QuestionDto>,
     pub entry_reason: String,
@@ -89,6 +100,23 @@ pub struct NextActionResponse {
     pub strategy_guidance: Vec<StrategyBandGuidanceDto>,
     pub exam_scenarios: Vec<ExamMomentScenarioDto>,
     pub fatigue_report: FatigueReport,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RecommendationFeedbackRequest {
+    pub recommendation_id: String,
+    /// `"ACCEPTED"` | `"DISMISSED"`
+    pub outcome: String,
+    #[serde(default)]
+    pub additional_active_seconds: i32,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RecommendationFeedbackResponse {
+    pub recommendation_id: String,
+    pub outcome: String,
+    pub additional_active_seconds: i32,
+    pub subsequent_unseen_correct_observed: bool,
 }
 
 pub type UnitDiagnosticTuple = (DiagnosticStatus, TransferStatus, f64, usize, f64);
@@ -415,6 +443,192 @@ pub async fn get_next_action(
         now_ms,
     );
 
+    // Extrai sinais metacognitivos e de verificação complementar CTV confirmados por tópico (Seção 4 / A09)
+    let ctv_attempts_for_user: Vec<Document> = state
+        .db
+        .collection::<Document>("conceptual_transfer_attempts")
+        .find(doc! { "user_id": user.user_id })
+        .await?
+        .try_collect()
+        .await?;
+
+    #[derive(Default)]
+    struct TopicMetaAcc {
+        attempts: usize,
+        corrects: usize,
+        hce_count: usize,
+        incompatible_rationale_count: usize,
+        fragile_corrects: usize,
+        functional_corrects: usize,
+        has_high_acc_q: bool,
+        has_low_acc_q: bool,
+        indep_transfer_ok: bool,
+        indep_transfer_fail: bool,
+        latest_post_exp_ok_ms: Option<i64>,
+    }
+
+    let mut meta_by_topic: HashMap<String, TopicMetaAcc> = HashMap::new();
+    let mut chronological_topic_seq: Vec<(i64, String)> = Vec::new();
+
+    for act in &typed_activities {
+        let Some(tid) = act.canonical_topic_id.as_deref().filter(|s| !s.is_empty()) else {
+            continue;
+        };
+        let qdoc_opt = q_docs.get(&act.question_id);
+        let decoded_q = qdoc_opt
+            .and_then(|d| crate::services::question_compatibility::decode(d.clone()).ok());
+        let has_curated_ch = decoded_q
+            .as_ref()
+            .is_some_and(|q| q.evidence_challenge.is_some());
+        let decoded_ch = decoded_q
+            .as_ref()
+            .and_then(|q| q.effective_evidence_challenge());
+
+        let m = meta_by_topic.entry(tid.to_string()).or_default();
+        if act.quantidade_praticas > 0 {
+            if act.percentual_acertos >= 80.0 {
+                m.has_high_acc_q = true;
+            }
+            if act.percentual_acertos <= 35.0 {
+                m.has_low_acc_q = true;
+            }
+        }
+        for s in &act.past_sessions {
+            if s.is_blank {
+                continue;
+            }
+            let ts = s.data.timestamp_millis();
+            chronological_topic_seq.push((ts, tid.to_string()));
+            m.attempts += 1;
+            let ev_compat = match (s.selected_evidence_id.as_deref(), decoded_ch.as_ref()) {
+                (Some(sel), Some(ch)) if !sel.trim().is_empty() => {
+                    let norm_sel = crate::models::question::normalize_synthesized_evidence_id(
+                        sel,
+                        has_curated_ch,
+                    );
+                    Some(norm_sel == ch.correct_evidence_id)
+                }
+                _ => None,
+            };
+            let decl_conf = s.declared_confidence.or_else(|| {
+                DeclaredConfidence::from_legacy_band(s.nivel_confianca, s.confidence_explicit)
+            });
+            if ev_compat == Some(false) {
+                m.incompatible_rationale_count += 1;
+            }
+            if s.status {
+                m.corrects += 1;
+                let hg = classify_hit_grounding(true, decl_conf, s.cognitive_strategy, ev_compat);
+                if matches!(
+                    hg,
+                    HitGroundingCategory::FragileOrGuess | HitGroundingCategory::DivergentRationale
+                ) {
+                    m.fragile_corrects += 1;
+                }
+                if hg == HitGroundingCategory::ValidFunctionalStrategy {
+                    m.functional_corrects += 1;
+                }
+            } else if decl_conf.is_some_and(DeclaredConfidence::is_high) || s.nivel_confianca >= 3 {
+                m.hce_count += 1;
+            }
+        }
+    }
+
+    for ctv in &ctv_attempts_for_user {
+        let Some(tid) = ctv
+            .get_str("canonical_topic_id")
+            .ok()
+            .filter(|s| !s.is_empty())
+        else {
+            continue;
+        };
+        let m = meta_by_topic.entry(tid.to_string()).or_default();
+        let vmode = ctv
+            .get_str("verification_mode")
+            .unwrap_or("CONCEPTUAL_TRANSFER");
+        let is_indep = ctv
+            .get_bool("counts_as_independent_transfer")
+            .unwrap_or_else(|_| {
+                ctv.get_str("verification_timing").ok() == Some("PRE_FEEDBACK")
+                    && !ctv.get_bool("was_previously_exposed").unwrap_or(false)
+            })
+            && vmode == "CONCEPTUAL_TRANSFER";
+        let is_ok = ctv.get_bool("is_correct").unwrap_or(false);
+        if is_indep {
+            if is_ok {
+                m.indep_transfer_ok = true;
+            } else {
+                m.indep_transfer_fail = true;
+            }
+        } else if is_ok
+            && (ctv.get_str("classification_code").ok() == Some("POST_INSTRUCTION_FIXATION")
+                || ctv.get_str("verification_timing").ok() == Some("POST_INSTRUCTION"))
+        {
+            if let Ok(odt) = ctv.get_datetime("occurred_at") {
+                let ms = odt.timestamp_millis();
+                m.latest_post_exp_ok_ms = Some(m.latest_post_exp_ok_ms.map_or(ms, |p| p.max(ms)));
+            }
+        }
+    }
+
+    chronological_topic_seq.sort_by_key(|(ts, _)| *ts);
+    let mut consecutive_by_topic: HashMap<String, usize> = HashMap::new();
+    if let Some((_, last_tid)) = chronological_topic_seq.last() {
+        let streak = chronological_topic_seq
+            .iter()
+            .rev()
+            .take_while(|(_, t)| t == last_tid)
+            .count();
+        consecutive_by_topic.insert(last_tid.clone(), streak);
+    }
+
+    let any_functional_transfer_cleared = meta_by_topic
+        .values()
+        .any(|m| m.functional_corrects > 0 && m.indep_transfer_ok && m.hce_count == 0);
+
+    let mut signals_by_topic: HashMap<String, MetacognitivePrioritySignals> = HashMap::new();
+    for (tid, m) in &meta_by_topic {
+        let hce_rate = if m.attempts > 0 {
+            (m.hce_count as f64) / (m.attempts as f64)
+        } else {
+            0.0
+        };
+        let fragile_rate = if m.corrects > 0 {
+            (m.fragile_corrects as f64) / (m.corrects as f64)
+        } else {
+            0.0
+        };
+        let (pending_spacing, spaced_due) = match m.latest_post_exp_ok_ms {
+            Some(ts) if !m.indep_transfer_ok => {
+                let elapsed = now_ms - ts;
+                if elapsed < 18 * 3_600_000 {
+                    (true, false)
+                } else {
+                    (false, true)
+                }
+            }
+            _ => (false, false),
+        };
+        let conflicting = m.has_high_acc_q && m.has_low_acc_q;
+        signals_by_topic.insert(
+            tid.clone(),
+            MetacognitivePrioritySignals {
+                high_confidence_error_rate: hce_rate,
+                high_confidence_error_count: m.hce_count,
+                incompatible_rationale_count: m.incompatible_rationale_count,
+                fragile_correct_rate: fragile_rate,
+                failed_transfer: m.indep_transfer_fail && !m.indep_transfer_ok,
+                functional_elimination_transfer_verified: m.functional_corrects > 0
+                    && m.indep_transfer_ok
+                    && m.hce_count == 0,
+                post_explanation_fixation_pending_spacing: pending_spacing,
+                post_explanation_spaced_due: spaced_due,
+                scarce_or_conflicting_evidence: conflicting,
+                recent_consecutive_exposures: consecutive_by_topic.get(tid).copied().unwrap_or(0),
+            },
+        );
+    }
+
     let mut verified_units = 0usize;
     let mut consolidating_units = 0usize;
     let mut insufficient_units = 0usize;
@@ -423,7 +637,7 @@ pub async fn get_next_action(
     let mut transfer_verified_units = 0usize;
     let mut transfer_available_units = 0usize;
     let mut transfer_unmeasured_units = 0usize;
-    let mut best_entry_topic: Option<(f64, String, String)> = None;
+    let mut best_entry_topic: Option<(f64, String, &'static str, String, &'static str)> = None;
 
     if let Some(exam) = active_exam {
         let total_weight: f64 = exam
@@ -485,18 +699,31 @@ pub async fn get_next_action(
                     TransferStatus::TransferUnmeasured => transfer_unmeasured_units += 1,
                     TransferStatus::TransferFailed => {}
                 }
-                let base_u = priority_utility(&PrioritizationInputs {
-                    edital_weight: norm_w,
-                    incidence_weight: 1.0,
-                    retrievability: r,
-                    verified_competence: st == DiagnosticStatus::VerifiedCompetence,
-                    distinct_questions: dq,
-                    avg_seconds: avg_s,
-                    unmet_prerequisites_count: 0,
-                    dependent_count: 0,
-                });
-                // Protocolo 60s prioriza assunto familiar (`dq >= 1`) com retenção pendente (`r < 0.90`)
-                let entry_boost = if dq >= 1 && r < 0.90 {
+
+                let topic_signals = signals_by_topic
+                    .get(&top.canonical_topic_id)
+                    .cloned()
+                    .unwrap_or_default();
+
+                let base_u = priority_utility_metacognitive(
+                    &PrioritizationInputs {
+                        edital_weight: norm_w,
+                        incidence_weight: 1.0,
+                        retrievability: r,
+                        verified_competence: st == DiagnosticStatus::VerifiedCompetence
+                            || topic_signals.functional_elimination_transfer_verified,
+                        distinct_questions: dq,
+                        avg_seconds: avg_s,
+                        unmet_prerequisites_count: 0,
+                        dependent_count: 0,
+                    },
+                    &topic_signals,
+                );
+                let entry_boost = if topic_signals.functional_elimination_transfer_verified
+                    || topic_signals.post_explanation_fixation_pending_spacing
+                {
+                    1.0
+                } else if dq >= 1 && r < 0.90 {
                     1.65
                 } else if dq >= 1 {
                     1.20
@@ -504,7 +731,7 @@ pub async fn get_next_action(
                     1.0
                 };
                 let u = base_u * entry_boost;
-                let reason = match st {
+                let fallback_reason = match st {
                     DiagnosticStatus::IllusoryCompetence => format!(
                         "Acerto com premissa divergente em {} — conferir fundamento",
                         top.display_title
@@ -538,20 +765,48 @@ pub async fn get_next_action(
                         top.display_title
                     ),
                 };
+                let advanced_here = any_functional_transfer_cleared
+                    && !topic_signals.functional_elimination_transfer_verified;
+                let (rule_code, reason, rec_mode) = build_metacognitive_decision_reason(
+                    &topic_signals,
+                    &top.display_title,
+                    &fallback_reason,
+                    advanced_here,
+                );
                 if best_entry_topic
                     .as_ref()
-                    .is_none_or(|(best_u, _, _)| u > *best_u)
+                    .is_none_or(|(best_u, _, _, _, _)| u > *best_u)
                 {
-                    best_entry_topic = Some((u, top.canonical_topic_id.clone(), reason));
+                    best_entry_topic = Some((
+                        u,
+                        top.canonical_topic_id.clone(),
+                        rule_code,
+                        reason,
+                        rec_mode,
+                    ));
                 }
             }
         }
     }
 
-    let priority_topic_id = best_entry_topic.as_ref().map(|(_, tid, _)| tid.clone());
+    let priority_topic_id = best_entry_topic.as_ref().map(|(_, tid, _, _, _)| tid.clone());
+    let decision_rule_code = best_entry_topic
+        .as_ref()
+        .map(|(_, _, rc, _, _)| (*rc).to_string())
+        .unwrap_or_else(|| "BASELINE_REFERENCE".to_string());
+    let recommended_quiz_mode = best_entry_topic
+        .as_ref()
+        .map(|(_, _, _, _, rm)| (*rm).to_string())
+        .unwrap_or_else(|| "ENTRY_60S".to_string());
     let mut entry_reason = best_entry_topic
-        .map(|(_, _, r)| r)
+        .map(|(_, _, _, r, _)| r)
         .unwrap_or_else(|| "Assunto familiar com retenção pendente.".into());
+
+    let preferred_mode = match recommended_quiz_mode.as_str() {
+        "ADAPTIVE_LOOP" => QuizMode::AdaptiveLoop,
+        "TRANSFER_PROBE" => QuizMode::TransferProbe,
+        _ => QuizMode::Entry60s,
+    };
 
     let mut entry_questions = if let Some(tid) = &priority_topic_id {
         selection_v2::generate(
@@ -560,7 +815,7 @@ pub async fn get_next_action(
                 component_id: None,
                 trunk_focus_slugs: Vec::new(),
                 user_id: user.user_id,
-                mode: QuizMode::Entry60s,
+                mode: preferred_mode,
                 quantity: 1,
                 contest_id: active_exam.map(|e| e.id.clone()),
                 block_name: None,
@@ -576,6 +831,28 @@ pub async fn get_next_action(
     } else {
         Vec::new()
     };
+
+    if entry_questions.is_empty() && priority_topic_id.is_some() {
+        entry_questions = selection_v2::generate(
+            &state,
+            &QuizGenerateRequest {
+                component_id: None,
+                trunk_focus_slugs: Vec::new(),
+                user_id: user.user_id,
+                mode: QuizMode::Entry60s,
+                quantity: 1,
+                contest_id: active_exam.map(|e| e.id.clone()),
+                block_name: None,
+                disciplina: None,
+                source: None,
+                syllabus_topic_id: priority_topic_id.clone(),
+                single_question_id: None,
+                keyword_query: None,
+            },
+        )
+        .await
+        .unwrap_or_default();
+    }
 
     if entry_questions.is_empty() {
         entry_questions = selection_v2::generate(
@@ -658,14 +935,30 @@ pub async fn get_next_action(
                 _ => None,
             };
 
+            let decl_conf_s = s.declared_confidence.or_else(|| {
+                DeclaredConfidence::from_legacy_band(s.nivel_confianca, s.confidence_explicit)
+            });
             if s.status {
-                if ev_passed == Some(false) {
-                    three_signal.illusory_competence_hits += 1;
-                } else if s.nivel_confianca <= 1 {
-                    three_signal.hesitant_hits += 1;
-                } else {
-                    three_signal.grounded_hits += 1;
-                    had_prior_good = true;
+                match classify_hit_grounding(true, decl_conf_s, s.cognitive_strategy, ev_passed) {
+                    HitGroundingCategory::DivergentRationale => {
+                        three_signal.illusory_competence_hits += 1;
+                    }
+                    HitGroundingCategory::FragileOrGuess => {
+                        three_signal.hesitant_hits += 1;
+                    }
+                    HitGroundingCategory::UnknownGrounding => {
+                        if s.nivel_confianca <= 1 {
+                            three_signal.hesitant_hits += 1;
+                        } else {
+                            three_signal.unknown_grounding_hits += 1;
+                        }
+                    }
+                    HitGroundingCategory::ValidConceptualGrounding
+                    | HitGroundingCategory::ValidFunctionalStrategy => {
+                        three_signal.grounded_hits += 1;
+                        had_prior_good = true;
+                    }
+                    HitGroundingCategory::NotApplicableError => {}
                 }
             } else if s.nivel_confianca >= 3 || (s.nivel_confianca >= 2 && ev_passed == Some(false))
             {
@@ -727,9 +1020,32 @@ pub async fn get_next_action(
         _ => None,
     });
 
+    let entry_question = entry_questions.into_iter().next();
+    let recommendation_id = uuid::Uuid::new_v4().to_string();
+    let _ = state
+        .db
+        .collection::<Document>("study_recommendation_events")
+        .insert_one(doc! {
+            "_id": format!("{}:{recommendation_id}", user.user_id),
+            "recommendation_id": &recommendation_id,
+            "user_id": user.user_id,
+            "priority_topic_id": &priority_topic_id,
+            "entry_question_id": entry_question.as_ref().map(|q| q.id.as_str()),
+            "decision_rule_code": &decision_rule_code,
+            "recommended_quiz_mode": &recommended_quiz_mode,
+            "entry_reason": &entry_reason,
+            "outcome": "OFFERED",
+            "additional_active_seconds": 0_i32,
+            "recommended_at": bson::DateTime::from_chrono(now_utc),
+        })
+        .await;
+
     Ok(Json(NextActionResponse {
+        recommendation_id,
+        decision_rule_code,
+        recommended_quiz_mode,
         schedule_header,
-        entry_question: entry_questions.into_iter().next(),
+        entry_question,
         entry_reason,
         priority_topic_id,
         exam_gap_summary: ExamGapSummaryDto {
@@ -754,6 +1070,93 @@ pub async fn get_next_action(
         strategy_guidance,
         exam_scenarios,
         fatigue_report,
+    }))
+}
+
+/// Endpoint `POST /api/v1/study/recommendation-feedback`:
+/// Registra aceitação ou dispensa da ação recomendada em Hoje, o tempo ativo adicional dedicado
+/// e correlaciona com eventual acerto posterior em questão inédita do mesmo conceito/tópico (Seção 4).
+pub async fn handle_recommendation_feedback(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<SessionUser>,
+    Json(req): Json<RecommendationFeedbackRequest>,
+) -> Result<Json<RecommendationFeedbackResponse>, AppError> {
+    let rec_id = req.recommendation_id.trim();
+    if rec_id.is_empty() || rec_id.len() > 120 {
+        return Err(AppError::BadRequest(
+            "Identificador de recomendação inválido".into(),
+        ));
+    }
+    let outcome = match req.outcome.trim().to_ascii_uppercase().as_str() {
+        "ACCEPTED" => "ACCEPTED",
+        "DISMISSED" => "DISMISSED",
+        _ => {
+            return Err(AppError::BadRequest(
+                "Desfecho de recomendação inválido; use ACCEPTED ou DISMISSED".into(),
+            ))
+        }
+    };
+    let secs = req.additional_active_seconds.clamp(0, 86_400);
+    let coll = state
+        .db
+        .collection::<Document>("study_recommendation_events");
+    let doc_key = format!("{}:{rec_id}", user.user_id);
+    let existing = coll.find_one(doc! { "_id": &doc_key }).await?;
+
+    let mut subsequent_unseen_correct = false;
+    if let Some(ex) = &existing {
+        let rec_at = ex
+            .get_datetime("recommended_at")
+            .ok()
+            .map(|d| d.to_chrono());
+        let topic_opt = ex.get_str("priority_topic_id").ok().filter(|s| !s.is_empty());
+        let entry_qid_opt = ex.get_str("entry_question_id").ok().filter(|s| !s.is_empty());
+        if let (Some(r_dt), Some(tid)) = (rec_at, topic_opt) {
+            let acts: Vec<UserActivityDocument> = state
+                .db
+                .collection::<UserActivityDocument>("userActivityLog")
+                .find(doc! { "user_id": user.user_id, "canonical_topic_id": tid })
+                .await?
+                .try_collect()
+                .await?;
+            subsequent_unseen_correct = acts.iter().any(|a| {
+                let is_different_item = entry_qid_opt.is_none_or(|eq| a.question_id.to_hex() != eq);
+                let first_answered = a
+                    .past_sessions
+                    .iter()
+                    .filter(|s| !s.is_blank)
+                    .min_by_key(|s| s.data);
+                is_different_item
+                    && first_answered.is_some_and(|first| first.data > r_dt && first.status)
+            });
+        }
+    }
+
+    coll.update_one(
+        doc! { "_id": &doc_key },
+        doc! {
+            "$set": {
+                "outcome": outcome,
+                "additional_active_seconds": secs,
+                "subsequent_unseen_correct_observed": subsequent_unseen_correct,
+                "updated_at": bson::DateTime::now(),
+            },
+            "$setOnInsert": {
+                "_id": &doc_key,
+                "recommendation_id": rec_id,
+                "user_id": user.user_id,
+                "recommended_at": bson::DateTime::now(),
+            }
+        },
+    )
+    .upsert(true)
+    .await?;
+
+    Ok(Json(RecommendationFeedbackResponse {
+        recommendation_id: rec_id.to_string(),
+        outcome: outcome.to_string(),
+        additional_active_seconds: secs,
+        subsequent_unseen_correct_observed: subsequent_unseen_correct,
     }))
 }
 

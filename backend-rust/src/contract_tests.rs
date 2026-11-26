@@ -255,6 +255,105 @@ fn both_runtimes_share_utf8_mastery_weighted_score_srs_and_calendar_fixtures() {
             v["expected_action"].as_str().unwrap()
         );
     }
+
+    // Metacognitive Scales, Diagnostic Matrix, Multi-Dimensional Concept Mastery & AI Reuse Simulator parity
+    let scales = &f["metacognitive_scales"];
+    assert_eq!(scales["declared_confidence"].as_array().unwrap().len(), 5);
+    for item in scales["declared_confidence"].as_array().unwrap() {
+        let parsed: crate::services::metacognitive_engine::DeclaredConfidence =
+            serde_json::from_value(item["code"].clone()).unwrap();
+        assert_eq!(parsed.ordinal() as i64, item["ordinal"].as_i64().unwrap());
+        assert_eq!(
+            parsed.to_legacy_band() as i64,
+            item["legacy_band"].as_i64().unwrap()
+        );
+        assert_eq!(parsed.label_pt(), item["label_pt"].as_str().unwrap());
+    }
+    assert_eq!(scales["cognitive_strategies"].as_array().unwrap().len(), 7);
+    for item in scales["cognitive_strategies"].as_array().unwrap() {
+        let parsed: crate::services::metacognitive_engine::CognitiveStrategy =
+            serde_json::from_value(item["code"].clone()).unwrap();
+        assert_eq!(parsed.label_pt(), item["label_pt"].as_str().unwrap());
+    }
+
+    for v in f["metacognitive_matrix"].as_array().unwrap() {
+        let dc: Option<crate::services::metacognitive_engine::DeclaredConfidence> =
+            serde_json::from_value(v["declared_confidence"].clone()).unwrap();
+        let cs: Option<crate::services::metacognitive_engine::CognitiveStrategy> =
+            serde_json::from_value(v["cognitive_strategy"].clone()).unwrap();
+        let (diag, sup, prio) = crate::services::metacognitive_engine::classify_preliminary_matrix(
+            &crate::services::metacognitive_engine::MetacognitiveMatrixInputs {
+                is_blank: v["is_blank"].as_bool().unwrap(),
+                is_correct: v["is_correct"].as_bool().unwrap(),
+                declared_confidence: dc,
+                cognitive_strategy: cs,
+                consistent_history: v["consistent_history"].as_bool().unwrap(),
+                rationale_contradicted: v["rationale_contradicted"].as_bool().unwrap(),
+            },
+        );
+        assert_eq!(
+            serde_json::to_value(diag).unwrap().as_str().unwrap(),
+            v["expected_diagnosis"].as_str().unwrap()
+        );
+        assert_eq!(
+            serde_json::to_value(sup).unwrap().as_str().unwrap(),
+            v["expected_support"].as_str().unwrap()
+        );
+        assert_eq!(
+            serde_json::to_value(prio).unwrap().as_str().unwrap(),
+            v["expected_ctv_priority"].as_str().unwrap()
+        );
+    }
+
+    for v in f["concept_mastery_states"].as_array().unwrap() {
+        let eval = crate::services::concept_mastery_engine::classify_concept_mastery(
+            &crate::services::concept_mastery_engine::ConceptMasteryInputs {
+                attempts: v["attempts"].as_u64().unwrap() as usize,
+                distinct_questions: v["distinct_questions"].as_u64().unwrap() as usize,
+                accuracy: v["accuracy"].as_f64().unwrap(),
+                grounded_rate: v["grounded_rate"].as_f64().unwrap(),
+                high_conf_error_rate: v["high_conf_error_rate"].as_f64().unwrap(),
+                transfer_attempts: v["transfer_attempts"].as_u64().unwrap() as usize,
+                transfer_success_rate: v["transfer_success_rate"].as_f64().unwrap(),
+                has_spaced_retention: v["has_spaced_retention"].as_bool().unwrap(),
+                retrievability: v["retrievability"].as_f64().unwrap(),
+                consistency: v["consistency"].as_f64().unwrap(),
+                avg_active_seconds: Some(42.0),
+                reference_seconds: 50.0,
+            },
+        );
+        assert_eq!(
+            serde_json::to_value(eval.state).unwrap().as_str().unwrap(),
+            v["expected_state"].as_str().unwrap()
+        );
+    }
+
+    for v in f["ai_reuse_simulator"].as_array().unwrap() {
+        let sim = crate::services::concept_mastery_engine::simulate_ai_reuse_economy(
+            v["monthly_verifications"].as_u64().unwrap(),
+            v["reuse_rate_pct"].as_f64().unwrap(),
+            v["avg_cost_per_generation"].as_f64().unwrap(),
+        );
+        assert!(
+            (sim.cost_without_reuse - v["expected_cost_without_reuse"].as_f64().unwrap()).abs()
+                < 1e-6
+        );
+        assert!(
+            (sim.cost_with_reuse - v["expected_cost_with_reuse"].as_f64().unwrap()).abs() < 1e-6
+        );
+        assert!(
+            (sim.monthly_savings - v["expected_monthly_savings"].as_f64().unwrap()).abs() < 1e-6
+        );
+        assert_eq!(
+            sim.avoided_generations_monthly,
+            v["expected_avoided_generations"].as_u64().unwrap()
+        );
+        assert!((sim.annual_savings - v["expected_annual_savings"].as_f64().unwrap()).abs() < 1e-6);
+        assert!(
+            (sim.cost_reduction_pct - v["expected_cost_reduction_pct"].as_f64().unwrap()).abs()
+                < 1e-6
+        );
+    }
     for v in f["fatigue"].as_array().unwrap() {
         let rep = crate::services::fatigue_engine::evaluate_fatigue_with_difficulty(
             v["qualifying_sessions"].as_u64().unwrap() as u32,
@@ -284,6 +383,235 @@ fn both_runtimes_share_utf8_mastery_weighted_score_srs_and_calendar_fixtures() {
             (None, None) => {}
             (Some(a), Some(b)) => assert!((a - b).abs() < 1e-8),
             other => panic!("fatigue delta mismatch: {other:?}"),
+        }
+    }
+
+    // Parity across A01-A13 shared vectors (CTV alignment, independence truth table, grounding, walk-forward Brier, metacognitive priority & cost per completed verification)
+    let align_sec = &f["ctv_alignment_vectors"];
+    let src_v = &align_sec["source"];
+    let src_prof = crate::services::ctv_alignment::QuestionAlignmentProfile {
+        question_id: src_v["question_id"].as_str().unwrap().to_string(),
+        subject_id: src_v["subject_id"].as_str().map(str::to_string),
+        topic_id: src_v["topic_id"].as_str().map(str::to_string),
+        target_concept_id: src_v["target_concept_id"].as_str().map(str::to_string),
+        all_concept_ids: src_v["target_concept_id"]
+            .as_str()
+            .into_iter()
+            .map(str::to_string)
+            .collect(),
+        tested_rule: src_v["tested_rule"].as_str().map(str::to_string),
+        question_type: src_v["question_type"].as_str().unwrap().to_string(),
+        stem: src_v["stem"].as_str().unwrap().to_string(),
+        correct_answer_text: src_v["correct_answer_text"].as_str().map(str::to_string),
+        content_revision: src_v["content_revision"].as_str().unwrap().to_string(),
+        ..Default::default()
+    };
+    for cv in align_sec["candidates"].as_array().unwrap() {
+        let cand_prof = crate::services::ctv_alignment::QuestionAlignmentProfile {
+            question_id: cv["id"].as_str().unwrap().to_string(),
+            subject_id: src_prof.subject_id.clone(),
+            topic_id: src_prof.topic_id.clone(),
+            target_concept_id: cv["target_concept_id"].as_str().map(str::to_string),
+            all_concept_ids: cv["target_concept_id"]
+                .as_str()
+                .into_iter()
+                .map(str::to_string)
+                .collect(),
+            tested_rule: cv["tested_rule"].as_str().map(str::to_string),
+            question_type: cv["question_type"].as_str().unwrap().to_string(),
+            stem: cv["stem"].as_str().unwrap().to_string(),
+            correct_answer_text: cv["correct_answer_text"].as_str().map(str::to_string),
+            content_revision: cv["content_revision"].as_str().unwrap().to_string(),
+            ..Default::default()
+        };
+        let dec = crate::services::ctv_alignment::evaluate_candidate_alignment(
+            &src_prof, &cand_prof, false,
+        );
+        if cv["expected_accepted"].as_bool().unwrap() {
+            match dec {
+                crate::services::ctv_alignment::CandidateAlignmentDecision::Accepted {
+                    mode,
+                    framing_reason_code,
+                    application_bonus,
+                    ..
+                } => {
+                    assert_eq!(mode.code(), cv["expected_mode"].as_str().unwrap());
+                    assert_eq!(
+                        framing_reason_code,
+                        cv["expected_reason_code"].as_str().unwrap()
+                    );
+                    assert_eq!(
+                        application_bonus as i64,
+                        cv["expected_application_bonus"].as_i64().unwrap()
+                    );
+                }
+                other => panic!("expected Accepted, got {other:?}"),
+            }
+        } else {
+            match dec {
+                crate::services::ctv_alignment::CandidateAlignmentDecision::Rejected {
+                    reason_code,
+                } => {
+                    assert_eq!(reason_code, cv["expected_reason_code"].as_str().unwrap());
+                }
+                other => panic!("expected Rejected, got {other:?}"),
+            }
+        }
+    }
+
+    for iv in f["ctv_independence_vectors"].as_array().unwrap() {
+        let verdict = crate::services::ctv_alignment::evaluate_ctv_independence(
+            &crate::services::ctv_alignment::CtvIndependenceInput {
+                verification_mode: crate::services::ctv_alignment::VerificationMode::from_code(
+                    iv["verification_mode"].as_str().unwrap(),
+                ),
+                action: iv["action"].as_str().unwrap().to_string(),
+                verification_timing: iv["verification_timing"].as_str().unwrap().to_string(),
+                was_previously_exposed: iv["was_previously_exposed"].as_bool().unwrap(),
+                exposure_history_known: iv["exposure_history_known"].as_bool().unwrap(),
+                had_decisive_help: iv["had_decisive_help"].as_bool().unwrap(),
+                is_correct: iv["is_correct"].as_bool().unwrap(),
+            },
+        );
+        assert_eq!(
+            verdict.independent_attempts_delta as i64,
+            iv["expected_attempts_delta"].as_i64().unwrap()
+        );
+        assert_eq!(
+            verdict.independent_correct_delta as i64,
+            iv["expected_correct_delta"].as_i64().unwrap()
+        );
+        assert_eq!(
+            verdict.classification_code,
+            iv["expected_code"].as_str().unwrap()
+        );
+    }
+
+    for gv in f["hit_grounding_vectors"].as_array().unwrap() {
+        let dc: Option<crate::services::metacognitive_engine::DeclaredConfidence> =
+            serde_json::from_value(gv["declared_confidence"].clone()).unwrap();
+        let cs: Option<crate::services::metacognitive_engine::CognitiveStrategy> =
+            serde_json::from_value(gv["cognitive_strategy"].clone()).unwrap();
+        let cat = crate::services::metacognitive_engine::classify_hit_grounding(
+            gv["is_correct"].as_bool().unwrap(),
+            dc,
+            cs,
+            gv["evidence_compatible"].as_bool(),
+        );
+        assert_eq!(cat.code(), gv["expected_category"].as_str().unwrap());
+        assert_eq!(
+            cat.credits_comprehension(),
+            gv["expected_credits_comprehension"].as_bool().unwrap()
+        );
+        assert_eq!(
+            cat.is_evaluable(),
+            gv["expected_is_evaluable"].as_bool().unwrap()
+        );
+    }
+
+    let wf_sec = &f["walkforward_brier_vectors"];
+    assert_eq!(
+        crate::services::calibration_engine::CALIBRATION_POLICY_VERSION,
+        wf_sec["policy_version"].as_str().unwrap()
+    );
+    let ref_pairs: Vec<(f64, bool)> = wf_sec["reference_pairs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| (p["p"].as_f64().unwrap(), p["y"].as_bool().unwrap()))
+        .collect();
+    let ref_brier = crate::services::calibration_engine::compute_brier_score(&ref_pairs).unwrap();
+    assert!((ref_brier - wf_sec["expected_reference_brier"].as_f64().unwrap()).abs() < 1e-12);
+    let wf_events: Vec<crate::services::calibration_engine::WalkforwardCalibrationInput> =
+        wf_sec["sequence"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|ev| crate::services::calibration_engine::WalkforwardCalibrationInput {
+                attempt_id: ev["attempt_id"].as_str().unwrap().to_string(),
+                occurred_at_ms: ev["occurred_at_ms"].as_i64().unwrap(),
+                question_type: ev["question_type"].as_str().unwrap().to_string(),
+                declared_confidence: serde_json::from_value(ev["declared_confidence"].clone())
+                    .unwrap(),
+                is_correct: ev["is_correct"].as_bool().unwrap(),
+            })
+            .collect();
+    let wf_rep = crate::services::calibration_engine::evaluate_walkforward_calibration(&wf_events);
+    for (idx, ev) in wf_sec["sequence"].as_array().unwrap().iter().enumerate() {
+        assert!(
+            (wf_rep.traces[idx].predicted_probability - ev["expected_p"].as_f64().unwrap()).abs()
+                < 1e-8
+        );
+        assert_eq!(
+            wf_rep.traces[idx].used_cold_start_prior,
+            ev["expected_cold_start"].as_bool().unwrap()
+        );
+    }
+
+    let mp_sec = &f["metacognitive_priority_vectors"];
+    let mp_base: crate::services::prioritization_engine::PrioritizationInputs =
+        serde_json::from_value(mp_sec["base"].clone()).unwrap();
+    let empty_sig = crate::services::prioritization_engine::MetacognitivePrioritySignals::default();
+    let base_u = crate::services::prioritization_engine::priority_utility_metacognitive(
+        &mp_base, &empty_sig,
+    );
+    assert!((base_u - mp_sec["expected_baseline_utility"].as_f64().unwrap()).abs() < 1e-8);
+    let hce_sig = crate::services::prioritization_engine::MetacognitivePrioritySignals {
+        high_confidence_error_rate: mp_sec["recurrent_hce"]["high_confidence_error_rate"]
+            .as_f64()
+            .unwrap(),
+        high_confidence_error_count: mp_sec["recurrent_hce"]["high_confidence_error_count"]
+            .as_u64()
+            .unwrap() as usize,
+        incompatible_rationale_count: mp_sec["recurrent_hce"]["incompatible_rationale_count"]
+            .as_u64()
+            .unwrap() as usize,
+        ..Default::default()
+    };
+    let hce_u =
+        crate::services::prioritization_engine::priority_utility_metacognitive(&mp_base, &hce_sig);
+    assert!((hce_u - mp_sec["recurrent_hce"]["expected_utility"].as_f64().unwrap()).abs() < 1e-8);
+    let (hce_rule, _, _) =
+        crate::services::prioritization_engine::build_metacognitive_decision_reason(
+            &hce_sig,
+            "Duration modificada",
+            "Assunto familiar",
+            false,
+        );
+    assert_eq!(
+        hce_rule,
+        mp_sec["recurrent_hce"]["expected_rule_code"]
+            .as_str()
+            .unwrap()
+    );
+    let func_sig = crate::services::prioritization_engine::MetacognitivePrioritySignals {
+        functional_elimination_transfer_verified: mp_sec["functional_verified"]
+            ["functional_elimination_transfer_verified"]
+            .as_bool()
+            .unwrap(),
+        ..Default::default()
+    };
+    let func_u =
+        crate::services::prioritization_engine::priority_utility_metacognitive(&mp_base, &func_sig);
+    assert!(
+        (func_u - mp_sec["functional_verified"]["expected_utility"].as_f64().unwrap()).abs() < 1e-8
+    );
+
+    for cv in f["operational_cost_vectors"].as_array().unwrap() {
+        let (raw, rounded, display) =
+            crate::services::ctv_admin_metrics::compute_cost_per_completed_verification(
+                cv["total_cost_usd"].as_f64().unwrap(),
+                cv["completed_verifications_count"].as_u64().unwrap() as usize,
+                cv["cost_is_estimated"].as_bool().unwrap(),
+            );
+        assert_eq!(display, cv["expected_display"].as_str().unwrap());
+        match (raw, cv["expected_raw"].as_f64()) {
+            (None, None) => assert!(rounded.is_none()),
+            (Some(a), Some(b)) => {
+                assert!((a - b).abs() < 1e-12);
+                assert!((rounded.unwrap() - cv["expected_rounded"].as_f64().unwrap()).abs() < 1e-12);
+            }
+            other => panic!("cost vector mismatch: {other:?}"),
         }
     }
 }

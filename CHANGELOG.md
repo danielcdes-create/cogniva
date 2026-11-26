@@ -4,6 +4,29 @@ Todas as mudanças arquiteturais, de segurança, acessibilidade e operacionais r
 
 ---
 
+## [2.4.4] - 2026-11-26 (build 34)
+
+Evolução ponta a ponta para **Verificação Conceitual Alinhada à Regra Decisiva, Semântica Simétrica Online/Offline, Calibração Temporal *Walk-Forward*, Recomendação Adaptativa e Reutilização Auditável de Questões (`CTV — Database First, AI on Demand`)** integrada em `shared/`, `scripts/`, `backend-rust/`, `web-admin/` e `android-app/`.
+
+### 1. Alinhamento Conceitual e Verificação da Regra Decisiva (`ctv_alignment`, `ctv_engine`, `Room v8`)
+- **Identificação do Conceito-Alvo e da Regra Decisiva (`CONCEPTUAL_TRANSFER` vs. `TOPIC_PRACTICE`):** Resolução explícita de `target_concept_id` e `tested_rule` na tentativa original (preservando ambiguidade quando há múltiplos conceitos primários), priorização de itens elegíveis inéditos que exigem aplicar a mesma regra em nova situação (`SAME_CONCEPT_AND_RULE_NEW_CONTEXT`), rejeição de cópias/paráfrases ou preservação literal da pista do gabarito e classificação honesta de itens apenas do mesmo tópico como `TOPIC_PRACTICE` (mantendo o conceito original em `TRANSFER_UNMEASURED`).
+- **Governança Estrita sobre Itens Gerados por IA (`ctv-generator/2`, `question-v2-validator-2.4.0`):** Candidatos gerados com `normative_certainty = "UNCERTAIN"` ou aderência conceitual duvidosa são retidos em `PENDING_HUMAN_REVIEW` (`MONITORING`), decodificados exclusivamente por `decode_for_ctv` (mantendo `StandardObjective` e `SIMULADO` isolados até `HUMAN_CONFIRMED`) e suspensos automaticamente (`SUSPENDED`) sob reportes abertos ou anomalias operacionais.
+
+### 2. Semântica Unificada Online/Offline e Reconciliação Multi-Dispositivo (`ctv_reconciliation`, `ConcursoRepository`)
+- **Denominador Independente Simétrico (`evaluate_ctv_independence`):** Separação estrita entre qualidade da verificação, condição de aplicação e resultado (`is_correct` entra exclusivamente no numerador; respostas erradas em complementares inéditas pré-feedback contabilizam `+1` tentativa independente e `0` acertos tanto online quanto em modo avião).
+- **Ciclo de Vida Real da Oferta (`ctv_offers`, `POST /api/v1/quiz/ctv/events`, `GET /api/v1/quiz/ctv/state`):** Distinção entre pré-carregamento (`SUPPLIED` = `0` exposições), primeira exibição real do enunciado (`DISPLAYED`, idempotente em rotações/reaberturas), dispensa via *"Ver gabarito agora"* (`DISMISSED` = `0` tentativas independentes, marcando o item e sua `content_revision`/`semantic_revision` como vistos em reencontros futuros) e resposta após ajuda reveladora (`POST_INSTRUCTION_FIXATION` = `0` tentativas independentes, preservando independência em `contextual-lookup` genérico ou perda de foco isolada), com reconciliação cronológica entre aparelhos e contagem explícita de `UNKNOWN_CONDITION` para registros legados.
+
+### 3. Força da Evidência, Calibração *Walk-Forward* e Próxima Ação de Estudo (`calibration_engine`, `prioritization_engine`, `learning_analytics`)
+- **Fundamento Verificável sem Crédito por Omissão (`classify_hit_grounding`):** Acertos sem estratégia ou evidência observável permanecem como `UNKNOWN_GROUNDING` (`0` crédito de compreensão), reconhecendo `LOGICAL_DEDUCTION` e `ELIMINATION` como `VALID_FUNCTIONAL_STRATEGY` e preservando divergências (`DIVERGENT_RATIONALE`), com frases explícitas de amostra, numerador, denominador e cobertura.
+- **Calibração Temporal *Walk-Forward* (`calibration-walkforward-v2.0`) e Coortes Adaptativas:** Previsão $p_t$ estritamente anterior a cada tentativa ordenada por `(occurred_at, attempt_id)`, separando `TRUE_FALSE` e `MULTIPLE_CHOICE` nos 5 níveis de `DeclaredConfidence`, identificando previsões *cold-start*, calculando Brier puro $\frac{1}{N}\sum(p_t - y_t)^2$ e desagregando as coortes `DIFFICULTY_DETECTED` vs. `PERIODIC_SAMPLING` (dispensas excluídas do denominador).
+- **Recomendação Guiada pelo Diagnóstico (`GET /api/v1/study/next-action`, `POST /api/v1/study/recommendation-feedback`):** `priority_utility_metacognitive` e `ADAPTIVE_LOOP` desempatam a favor de equívocos recorrentes com alta confiança, agendam retomada espaçada após fixação pós-explicação, solicitam transferência sob evidência conflitante, avançam após transferência funcional verificada e registram recomendação, aceitação/dispensa, tempo adicional e acerto inédito subsequente.
+
+### 4. Paginação Completa de Reuso, Revalidação Pós-Duplicata e Custo por Verificação Concluída (`ctv_admin_metrics`, `/admin/`)
+- **Varredura por Cursor e Reconsulta sob Trava:** Busca paginada estável (`_id > cursor`) em `todasQuestoes` registrando `SEARCH_INCONCLUSIVE` em falhas/tetos de leitura, reconsulta sob trava de unidade e após reserva de cota, persistência permanente antes da entrega (`AI_GENERATED_PERMANENT`) e revalidação integral de elegibilidade, conceito e exposição caso a IA produza duplicata (`DUPLICATE_PREVENTED`: `1` chamada real, `1` duplicata barrada, `0` chamadas evitadas).
+- **Contabilidade Operacional vs. Simulador Hipotético (`GET /api/v1/admin/ai-ctv/metrics`):** Agregação em *streaming* de todo o período filtrado (sem truncamento silencioso), separação explícita entre entregas por cache offline e reuso online, e indicador auditável de **Custo por verificação concluída** (`custo atribuível / verificações respondidas`, exibindo `"sem conclusões"` quando o denominador é zero e rotulando valores estimados) separado visualmente do Simulador de Economia com Reutilização.
+
+---
+
 ## [2.4.3] - 2026-11-23 (build 33)
 
 Revisão integral do **processo pós-resposta** nas sessões de questões e simulados (`backend-rust/` + `android-app/`), eliminando duplicações textuais, falsos positivos de cláusulas de exceção, truncamentos no meio de palavras, chips redundantes/incompatíveis com o formato do item e divergências de IDs no Diagnóstico dos 3 Sinais.

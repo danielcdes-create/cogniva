@@ -48,7 +48,8 @@ class QuestionPracticeTest {
                 ExamMigrations.MIGRATION_3_4,
                 ExamMigrations.MIGRATION_4_5,
                 ExamMigrations.MIGRATION_5_6,
-                ExamMigrations.MIGRATION_6_7
+                ExamMigrations.MIGRATION_6_7,
+                ExamMigrations.MIGRATION_7_8
             )
             .build()
         val store = ViewModelStore()
@@ -130,6 +131,24 @@ class QuestionPracticeTest {
                                 confidenceExplicit = explicit
                             )
                         },
+                        onSubmitMetacognitiveAnswer = { question, choice, confidence, seconds, isBlank, explicit, declConf, strat, skipped, actSecs, changes, initIdx, resources, focusLoss ->
+                            model.submitAnswer(
+                                question = question,
+                                chosenIndex = choice,
+                                confidenceLevel = confidence,
+                                timeSpentSeconds = seconds,
+                                isBlank = isBlank,
+                                confidenceExplicit = explicit,
+                                declaredConfidence = declConf,
+                                cognitiveStrategy = strat,
+                                strategySkipped = skipped,
+                                activeSeconds = actSecs,
+                                answerChangeCount = changes,
+                                initialChosenIndex = initIdx,
+                                consultedResources = resources,
+                                focusLossCount = focusLoss
+                            )
+                        },
                         requireExplicitConfidence = true,
                         onReportProblem = { _, _ -> },
                         onExitSession = {}
@@ -146,9 +165,9 @@ class QuestionPracticeTest {
             // Explicit confidence still required before confirm CTA enables
             rule.onNodeWithTag("confirm_answer_cta").assertIsNotEnabled()
 
-            // 2. Select confidence ("Certeza Absoluta" = 3) in Compose UI
-            rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Certeza Absoluta"))
-            rule.onNodeWithText("Certeza Absoluta").performClick()
+            // 2. Select 5-level confidence ("Praticamente certo" -> VERY_HIGH / legacy band 3) in Compose UI
+            rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Praticamente certo"))
+            rule.onNodeWithText("Praticamente certo").performClick()
 
             // 3. Click Confirm Answer CTA button in Compose UI
             rule.onNodeWithTag("confirm_answer_cta").assertIsEnabled().performClick()
@@ -164,6 +183,7 @@ class QuestionPracticeTest {
             assertEquals("Alternativa B", pending.chosenText)
             assertTrue(pending.isCorrect)
             assertEquals(3, pending.confidenceLevel)
+            assertEquals("VERY_HIGH", pending.declaredConfidence)
             assertTrue(pending.confidenceExplicit)
             assertTrue(pending.questionRevision.isNotBlank())
             assertTrue(repository.pausedSession()!!.answers.getValue(q.id).submitted)

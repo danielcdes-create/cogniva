@@ -1,7 +1,13 @@
 package br.com.concursoprep.app.domain.model
 
+import br.com.concursoprep.app.domain.exam.CalibrationEngine
+import br.com.concursoprep.app.domain.exam.CognitiveStrategy
+import br.com.concursoprep.app.domain.exam.ConceptMasteryEvaluation
+import br.com.concursoprep.app.domain.exam.DeclaredConfidence
 import br.com.concursoprep.app.domain.exam.ExamCatalog
 import br.com.concursoprep.app.domain.exam.ExamMomentScenarioDto
+import br.com.concursoprep.app.domain.exam.FormatConfidenceCalibrationCellDto
+import br.com.concursoprep.app.domain.exam.MetacognitiveAssessmentDto
 import br.com.concursoprep.app.domain.exam.PrioritizationEngine
 import java.text.Normalizer
 import kotlinx.serialization.SerialName
@@ -138,6 +144,7 @@ data class ThreeSignalSummaryDto(
     @SerialName("grounded_hits") val groundedHits: Int = 0,
     @SerialName("illusory_competence_hits") val illusoryCompetenceHits: Int = 0,
     @SerialName("hesitant_hits") val hesitantHits: Int = 0,
+    @SerialName("unknown_grounding_hits") val unknownGroundingHits: Int = 0,
     @SerialName("overconfidence_errors") val overconfidenceErrors: Int = 0,
     @SerialName("conceptual_errors") val conceptualErrors: Int = 0,
     @SerialName("retrieval_failures") val retrievalFailures: Int = 0,
@@ -169,6 +176,9 @@ data class NextActionResponseDto(
     @SerialName("entry_question") val entryQuestion: QuestionDto? = null,
     @SerialName("entry_reason") val entryReason: String = "Assunto familiar com retenção pendente.",
     @SerialName("priority_topic_id") val priorityTopicId: String? = null,
+    @SerialName("recommendation_id") val recommendationId: String? = null,
+    @SerialName("decision_rule_code") val decisionRuleCode: String = "BASELINE_REFERENCE",
+    @SerialName("recommended_quiz_mode") val recommendedQuizMode: String = "ENTRY_60S",
     @SerialName("exam_gap_summary") val examGapSummary: ExamGapSummaryDto = ExamGapSummaryDto(),
     @SerialName("three_signal_summary") val threeSignalSummary: ThreeSignalSummaryDto = ThreeSignalSummaryDto(),
     @SerialName("calibration_cells") val calibrationCells: List<br.com.concursoprep.app.domain.exam.CalibrationCellDto> = emptyList(),
@@ -763,7 +773,15 @@ data class AnswerAttemptPayload(
     @SerialName("selected_evidence_id") val selectedEvidenceId: String? = null,
     @SerialName("position_in_session") val positionInSession: Int? = null,
     @SerialName("elapsed_session_seconds") val elapsedSessionSeconds: Int? = null,
-    @SerialName("session_interrupted") val sessionInterrupted: Boolean = false
+    @SerialName("session_interrupted") val sessionInterrupted: Boolean = false,
+    @SerialName("declared_confidence") val declaredConfidence: DeclaredConfidence? = null,
+    @SerialName("cognitive_strategy") val cognitiveStrategy: CognitiveStrategy? = null,
+    @SerialName("strategy_skipped") val strategySkipped: Boolean = false,
+    @SerialName("active_seconds") val activeSeconds: Int? = null,
+    @SerialName("answer_change_count") val answerChangeCount: Int = 0,
+    @SerialName("initial_chosen_index") val initialChosenIndex: Int? = null,
+    @SerialName("consulted_resources") val consultedResources: List<String> = emptyList(),
+    @SerialName("focus_loss_count") val focusLossCount: Int = 0
 )
 
 @Serializable
@@ -792,7 +810,8 @@ data class ProcessedAttemptDto(
     @SerialName("is_mastered") val isMastered: Boolean,
     @SerialName("next_review_interval_days") val nextReviewIntervalDays: Int,
     @SerialName("accuracy_accumulated_pct") val accuracyAccumulatedPct: Double,
-    @SerialName("in_error_notebook") val inErrorNotebook: Boolean
+    @SerialName("in_error_notebook") val inErrorNotebook: Boolean,
+    @SerialName("metacognitive_assessment") val metacognitiveAssessment: MetacognitiveAssessmentDto? = null
 )
 
 @Serializable
@@ -853,7 +872,285 @@ data class ProgressAnalyticsDto(
     val examGapSummary: ExamGapSummaryDto = ExamGapSummaryDto(),
     val threeSignalSummary: ThreeSignalSummaryDto = ThreeSignalSummaryDto(),
     val examScenarios: List<ExamMomentScenarioDto> = emptyList(),
-    val entryMetrics: EntryProtocolMetricsDto = EntryProtocolMetricsDto()
+    val entryMetrics: EntryProtocolMetricsDto = EntryProtocolMetricsDto(),
+    val studentLearningAnalytics: StudentLearningAnalyticsDto? = null
+)
+
+@Serializable
+data class CtvEvaluateRequestDto(
+    @SerialName("parent_attempt_id") val parentAttemptId: String,
+    @SerialName("source_question_id") val sourceQuestionId: String,
+    @SerialName("session_uuid") val sessionUuid: String,
+    @SerialName("quiz_mode") val quizMode: String,
+    @SerialName("is_correct") val isCorrect: Boolean,
+    @SerialName("is_blank") val isBlank: Boolean = false,
+    @SerialName("declared_confidence") val declaredConfidence: DeclaredConfidence? = null,
+    @SerialName("cognitive_strategy") val cognitiveStrategy: CognitiveStrategy? = null,
+    @SerialName("confidence_level") val confidenceLevel: Int = 2,
+    @SerialName("session_ctv_count") val sessionCtvCount: Int = 0,
+    @SerialName("attempts_since_last_ctv") val attemptsSinceLastCtv: Int = 0,
+    @SerialName("force_post_instruction") val forcePostInstruction: Boolean = false
+)
+
+@Serializable
+data class CtvEvaluateResponseDto(
+    val triggered: Boolean,
+    val status: String,
+    @SerialName("offer_id") val offerId: String? = null,
+    @SerialName("trigger_reason") val triggerReason: String? = null,
+    @SerialName("trigger_cohort") val triggerCohort: String = "DIFFICULTY_DETECTED",
+    @SerialName("diagnostic_purpose") val diagnosticPurpose: String? = null,
+    @SerialName("verification_mode") val verificationMode: String = "CONCEPTUAL_TRANSFER",
+    @SerialName("framing_reason_code") val framingReasonCode: String? = null,
+    @SerialName("framing_reason_pt") val framingReasonPt: String? = null,
+    @SerialName("target_concept_id") val targetConceptId: String? = null,
+    @SerialName("target_tested_rule") val targetTestedRule: String? = null,
+    @SerialName("delivery_source") val deliverySource: String? = null,
+    @SerialName("verification_timing") val verificationTiming: String = "PRE_FEEDBACK",
+    @SerialName("was_previously_exposed") val wasPreviouslyExposed: Boolean = false,
+    @SerialName("complementary_question") val complementaryQuestion: QuestionDto? = null,
+    @SerialName("student_framing_pt") val studentFramingPt: String? = null,
+    @SerialName("policy_version") val policyVersion: String = "ctv-policy-v1.0"
+)
+
+@Serializable
+data class CtvSubmitRequestDto(
+    @SerialName("ctv_attempt_id") val ctvAttemptId: String,
+    @SerialName("offer_id") val offerId: String? = null,
+    @SerialName("parent_attempt_id") val parentAttemptId: String,
+    @SerialName("source_question_id") val sourceQuestionId: String,
+    @SerialName("complementary_question_id") val complementaryQuestionId: String,
+    @SerialName("session_uuid") val sessionUuid: String,
+    @SerialName("verification_timing") val verificationTiming: String = "PRE_FEEDBACK",
+    @SerialName("verification_mode") val verificationMode: String? = null,
+    @SerialName("chosen_index") val chosenIndex: Int,
+    @SerialName("chosen_text") val chosenText: String = "",
+    @SerialName("declared_confidence") val declaredConfidence: DeclaredConfidence? = null,
+    @SerialName("cognitive_strategy") val cognitiveStrategy: CognitiveStrategy? = null,
+    @SerialName("active_seconds") val activeSeconds: Int = 15,
+    @SerialName("was_previously_exposed") val wasPreviouslyExposed: Boolean = false,
+    @SerialName("occurred_at") val occurredAt: String? = null,
+    @SerialName("displayed_at") val displayedAt: String? = null,
+    @SerialName("consulted_resources") val consultedResources: List<String> = emptyList(),
+    @SerialName("focus_loss_count") val focusLossCount: Int = 0,
+    @SerialName("had_decisive_help") val hadDecisiveHelp: Boolean = false,
+    @SerialName("trigger_reason") val triggerReason: String? = null,
+    @SerialName("delivery_source") val deliverySource: String? = null
+)
+
+@Serializable
+data class CtvSubmitResponseDto(
+    @SerialName("ctv_attempt_id") val ctvAttemptId: String,
+    @SerialName("offer_id") val offerId: String = "",
+    @SerialName("parent_attempt_id") val parentAttemptId: String,
+    @SerialName("complementary_question_id") val complementaryQuestionId: String,
+    @SerialName("is_correct") val isCorrect: Boolean,
+    @SerialName("correct_index") val correctIndex: Int,
+    val explanation: String? = null,
+    @SerialName("verification_timing") val verificationTiming: String = "PRE_FEEDBACK",
+    @SerialName("verification_mode") val verificationMode: String = "CONCEPTUAL_TRANSFER",
+    @SerialName("counts_as_independent_transfer") val countsAsIndependentTransfer: Boolean = false,
+    @SerialName("classification_code") val classificationCode: String = "",
+    @SerialName("target_concept_id") val targetConceptId: String? = null,
+    @SerialName("target_tested_rule") val targetTestedRule: String? = null,
+    @SerialName("consolidated_diagnostic_title_pt") val consolidatedDiagnosticTitlePt: String,
+    @SerialName("consolidated_diagnostic_message_pt") val consolidatedDiagnosticMessagePt: String
+)
+
+@Serializable
+data class CtvLifecycleEventRequestDto(
+    @SerialName("event_id") val eventId: String? = null,
+    @SerialName("offer_id") val offerId: String,
+    @SerialName("parent_attempt_id") val parentAttemptId: String,
+    @SerialName("source_question_id") val sourceQuestionId: String,
+    @SerialName("complementary_question_id") val complementaryQuestionId: String,
+    @SerialName("question_revision") val questionRevision: String? = null,
+    @SerialName("event_kind") val eventKind: String,
+    @SerialName("occurred_at") val occurredAt: String? = null,
+    @SerialName("trigger_reason") val triggerReason: String? = null,
+    @SerialName("verification_mode") val verificationMode: String? = null,
+    @SerialName("delivery_source") val deliverySource: String? = null,
+    @SerialName("target_concept_id") val targetConceptId: String? = null,
+    @SerialName("target_tested_rule") val targetTestedRule: String? = null,
+    @SerialName("framing_reason_code") val framingReasonCode: String? = null
+)
+
+@Serializable
+data class CtvLifecycleEventResponseDto(
+    @SerialName("offer_id") val offerId: String,
+    val state: String,
+    @SerialName("first_displayed_at") val firstDisplayedAt: String? = null,
+    @SerialName("dismissed_at") val dismissedAt: String? = null,
+    @SerialName("reconciled_attempts_count") val reconciledAttemptsCount: Int = 0
+)
+
+@Serializable
+data class CtvReconciledOfferDto(
+    @SerialName("offer_id") val offerId: String,
+    @SerialName("parent_attempt_id") val parentAttemptId: String = "",
+    @SerialName("source_question_id") val sourceQuestionId: String = "",
+    @SerialName("complementary_question_id") val complementaryQuestionId: String,
+    @SerialName("content_revision") val contentRevision: String = "",
+    @SerialName("semantic_revision") val semanticRevision: String = "",
+    val state: String = "SUPPLIED",
+    @SerialName("verification_mode") val verificationMode: String = "CONCEPTUAL_TRANSFER",
+    @SerialName("trigger_reason") val triggerReason: String? = null,
+    @SerialName("trigger_cohort") val triggerCohort: String = "DIFFICULTY_DETECTED",
+    @SerialName("first_displayed_at") val firstDisplayedAt: String? = null,
+    @SerialName("dismissed_at") val dismissedAt: String? = null
+)
+
+@Serializable
+data class CtvReconciledAttemptDto(
+    @SerialName("ctv_attempt_id") val ctvAttemptId: String,
+    @SerialName("offer_id") val offerId: String = "",
+    @SerialName("parent_attempt_id") val parentAttemptId: String = "",
+    @SerialName("source_question_id") val sourceQuestionId: String = "",
+    @SerialName("complementary_question_id") val complementaryQuestionId: String,
+    @SerialName("content_revision") val contentRevision: String = "",
+    @SerialName("verification_mode") val verificationMode: String = "CONCEPTUAL_TRANSFER",
+    @SerialName("verification_timing") val verificationTiming: String = "PRE_FEEDBACK",
+    @SerialName("is_correct") val isCorrect: Boolean,
+    @SerialName("was_previously_exposed") val wasPreviouslyExposed: Boolean = false,
+    @SerialName("counts_as_independent_transfer") val countsAsIndependentTransfer: Boolean = false,
+    @SerialName("classification_code") val classificationCode: String = "",
+    @SerialName("trigger_reason") val triggerReason: String? = null,
+    @SerialName("trigger_cohort") val triggerCohort: String = "DIFFICULTY_DETECTED",
+    @SerialName("target_concept_id") val targetConceptId: String? = null,
+    @SerialName("target_tested_rule") val targetTestedRule: String? = null,
+    @SerialName("occurred_at") val occurredAt: String = ""
+)
+
+@Serializable
+data class CtvUserStateResponseDto(
+    val offers: List<CtvReconciledOfferDto> = emptyList(),
+    val attempts: List<CtvReconciledAttemptDto> = emptyList()
+)
+
+@Serializable
+data class RecommendationFeedbackRequestDto(
+    @SerialName("recommendation_id") val recommendationId: String,
+    val outcome: String,
+    @SerialName("priority_topic_id") val priorityTopicId: String? = null,
+    @SerialName("decision_rule_code") val decisionRuleCode: String? = null,
+    @SerialName("additional_seconds") val additionalSeconds: Int = 0,
+    @SerialName("occurred_at") val occurredAt: String? = null
+)
+
+@Serializable
+data class RecommendationFeedbackResponseDto(
+    val status: String,
+    @SerialName("recommendation_id") val recommendationId: String
+)
+
+@Serializable
+data class FormalKpiDto(
+    @SerialName("kpi_id") val kpiId: String,
+    @SerialName("label_pt") val labelPt: String,
+    val value: Double? = null,
+    val unit: String = "%",
+    val numerator: Double = 0.0,
+    val denominator: Double = 0.0,
+    @SerialName("sample_size_n") val sampleSizeN: Int = 0,
+    @SerialName("formal_definition") val formalDefinition: String = "",
+    @SerialName("eligibility_criteria") val eligibilityCriteria: String = "",
+    @SerialName("missing_data_rule") val missingDataRule: String = "",
+    val granularity: String = "",
+    @SerialName("reference_period") val referencePeriod: String = "",
+    @SerialName("interpretive_limitation") val interpretiveLimitation: String = ""
+)
+
+@Serializable
+data class ConfidenceLevelCalibrationDto(
+    @SerialName("declared_confidence") val declaredConfidence: DeclaredConfidence,
+    @SerialName("label_pt") val labelPt: String,
+    val attempts: Int = 0,
+    val correct: Int = 0,
+    @SerialName("observed_accuracy_pct") val observedAccuracyPct: Double? = null,
+    @SerialName("calibrated_posterior_mean") val calibratedPosteriorMean: Double = 0.5,
+    @SerialName("credible_sd") val credibleSd: Double = 0.15,
+    @SerialName("sufficiency_status") val sufficiencyStatus: String = "EMPTY",
+    @SerialName("coverage_sentence_pt") val coverageSentencePt: String = ""
+)
+
+@Serializable
+data class GroundingEvidenceSummaryDto(
+    @SerialName("raw_correct_hits") val rawCorrectHits: Int = 0,
+    @SerialName("evaluable_grounding_hits") val evaluableGroundingHits: Int = 0,
+    @SerialName("unknown_grounding_hits") val unknownGroundingHits: Int = 0,
+    @SerialName("valid_conceptual_hits") val validConceptualHits: Int = 0,
+    @SerialName("valid_functional_strategy_hits") val validFunctionalStrategyHits: Int = 0,
+    @SerialName("divergent_rationale_hits") val divergentRationaleHits: Int = 0,
+    @SerialName("fragile_or_guess_hits") val fragileOrGuessHits: Int = 0,
+    @SerialName("coverage_sentence_pt") val coverageSentencePt: String = ""
+)
+
+@Serializable
+data class CtvAdaptiveCohortDto(
+    @SerialName("cohort_id") val cohortId: String = "",
+    @SerialName("label_pt") val labelPt: String = "",
+    @SerialName("eligibility_scope_pt") val eligibilityScopePt: String = "",
+    @SerialName("offers_count") val offersCount: Int = 0,
+    @SerialName("dismissals_count") val dismissalsCount: Int = 0,
+    @SerialName("responses_count") val responsesCount: Int = 0,
+    @SerialName("independent_eligible_responses") val independentEligibleResponses: Int = 0,
+    @SerialName("independent_correct_count") val independentCorrectCount: Int = 0,
+    @SerialName("independent_success_rate_pct") val independentSuccessRatePct: Double? = null,
+    @SerialName("summary_pt") val summaryPt: String = ""
+)
+
+@Serializable
+data class CtvAdaptiveSelectionReportDto(
+    @SerialName("difficulty_triggered") val difficultyTriggered: CtvAdaptiveCohortDto = CtvAdaptiveCohortDto(
+        cohortId = "DIFFICULTY_DETECTED",
+        labelPt = "Disparo adaptativo por dificuldade ou fragilidade"
+    ),
+    @SerialName("periodic_sampling") val periodicSampling: CtvAdaptiveCohortDto = CtvAdaptiveCohortDto(
+        cohortId = "PERIODIC_SAMPLING",
+        labelPt = "Amostragem periódica de acompanhamento"
+    ),
+    @SerialName("unknown_condition_count") val unknownConditionCount: Int = 0
+)
+
+@Serializable
+data class ConceptMasterySummaryDto(
+    @SerialName("not_evaluated") val notEvaluated: Int = 0,
+    @SerialName("insufficient_evidence") val insufficientEvidence: Int = 0,
+    @SerialName("emerging_knowledge") val emergingKnowledge: Int = 0,
+    @SerialName("unstable_knowledge") val unstableKnowledge: Int = 0,
+    @SerialName("developing_mastery") val developingMastery: Int = 0,
+    @SerialName("demonstrated_mastery") val demonstratedMastery: Int = 0,
+    @SerialName("consolidated_mastery") val consolidatedMastery: Int = 0,
+    @SerialName("mastery_at_risk") val masteryAtRisk: Int = 0
+)
+
+@Serializable
+data class UnitConceptMasteryDto(
+    @SerialName("unit_id") val unitId: String,
+    @SerialName("canonical_subject_id") val canonicalSubjectId: String,
+    @SerialName("canonical_topic_id") val canonicalTopicId: String,
+    @SerialName("concept_id") val conceptId: String? = null,
+    val attempts: Int = 0,
+    @SerialName("distinct_questions") val distinctQuestions: Int = 0,
+    @SerialName("transfer_attempts") val transferAttempts: Int = 0,
+    val evaluation: ConceptMasteryEvaluation
+)
+
+@Serializable
+data class StudentLearningAnalyticsDto(
+    @SerialName("generated_at") val generatedAt: String = "",
+    @SerialName("calibration_policy_version") val calibrationPolicyVersion: String = CalibrationEngine.CALIBRATION_POLICY_VERSION,
+    @SerialName("learning_kpis") val learningKpis: List<FormalKpiDto> = emptyList(),
+    @SerialName("empirical_brier_score") val empiricalBrierScore: Double? = null,
+    @SerialName("true_false_brier_score") val trueFalseBrierScore: Double? = null,
+    @SerialName("multiple_choice_brier_score") val multipleChoiceBrierScore: Double? = null,
+    @SerialName("cold_start_predictions_count") val coldStartPredictionsCount: Int = 0,
+    @SerialName("confidence_calibration") val confidenceCalibration: List<ConfidenceLevelCalibrationDto> = emptyList(),
+    @SerialName("confidence_calibration_by_format") val confidenceCalibrationByFormat: List<FormatConfidenceCalibrationCellDto> = emptyList(),
+    @SerialName("grounding_summary") val groundingSummary: GroundingEvidenceSummaryDto = GroundingEvidenceSummaryDto(),
+    @SerialName("ctv_adaptive_selection") val ctvAdaptiveSelection: CtvAdaptiveSelectionReportDto = CtvAdaptiveSelectionReportDto(),
+    @SerialName("concept_mastery_summary") val conceptMasterySummary: ConceptMasterySummaryDto = ConceptMasterySummaryDto(),
+    @SerialName("unit_mastery") val unitMastery: List<UnitConceptMasteryDto> = emptyList()
 )
 
 /**

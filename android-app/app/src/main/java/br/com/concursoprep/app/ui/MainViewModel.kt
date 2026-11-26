@@ -423,10 +423,22 @@ class MainViewModel(
 
     fun chooseConsciousRestToday(rested: Boolean = true) {
         operation {
+            val nextAct = _todayDashboard.value?.nextAction
             val metrics = repository.setConsciousRestToday(repository.ownerUserId, rested)
             _todayDashboard.value = _todayDashboard.value?.copy(entryMetrics = metrics)
             _analytics.value = _analytics.value?.copy(entryMetrics = metrics)
             if (rested) {
+                nextAct?.recommendationId?.takeIf { it.isNotBlank() }?.let { recId ->
+                    repository.recordRecommendationFeedback(
+                        repository.ownerUserId,
+                        RecommendationFeedbackRequestDto(
+                            recommendationId = recId,
+                            outcome = "DISMISSED",
+                            priorityTopicId = nextAct.priorityTopicId,
+                            decisionRuleCode = nextAct.decisionRuleCode
+                        )
+                    )
+                }
                 _userFeedbackMessage.emit("Sem estudar hoje registrado. Nenhuma punição ou cobrança — o acesso continua livre se mudar de ideia.")
             }
         }
@@ -441,6 +453,17 @@ class MainViewModel(
             try {
                 if (excludeQuestionIds.isEmpty()) {
                     repository.recordEntryVoluntaryStart(repository.ownerUserId)
+                    nextAct?.recommendationId?.takeIf { it.isNotBlank() }?.let { recId ->
+                        repository.recordRecommendationFeedback(
+                            repository.ownerUserId,
+                            RecommendationFeedbackRequestDto(
+                                recommendationId = recId,
+                                outcome = "ACCEPTED",
+                                priorityTopicId = nextAct.priorityTopicId,
+                                decisionRuleCode = nextAct.decisionRuleCode
+                            )
+                        )
+                    }
                 }
                 val preloaded=nextAct?.entryQuestion
                     ?.takeIf { it.id !in excludeQuestionIds }
@@ -600,7 +623,15 @@ class MainViewModel(
         timeSpentSeconds: Int = 60,
         isBlank: Boolean = false,
         confidenceExplicit: Boolean = false,
-        selectedEvidenceId: String? = null
+        selectedEvidenceId: String? = null,
+        declaredConfidence: DeclaredConfidence? = null,
+        cognitiveStrategy: CognitiveStrategy? = null,
+        strategySkipped: Boolean = false,
+        activeSeconds: Int? = null,
+        answerChangeCount: Int = 0,
+        initialChosenIndex: Int? = null,
+        consultedResources: List<String> = emptyList(),
+        focusLossCount: Int = 0
     ): Boolean {
         return try {
             require(question.correctAnswerIndices.size == 1 && (isBlank || chosenIndex in question.answers.indices))
@@ -613,13 +644,16 @@ class MainViewModel(
                 val safeIndex = if (isBlank) -1 else chosenIndex
                 val safeText = if (isBlank) "" else question.answers[chosenIndex]
                 val safeCorrect = !isBlank && chosenIndex in question.correctAnswerIndices
+                val resolvedDeclared = if (isBlank) null else (declaredConfidence ?: DeclaredConfidence.fromLegacyBand(confidenceLevel, confidenceExplicit))
+                val resolvedLegacyConf = if (isBlank) 0 else (resolvedDeclared?.toLegacyBand() ?: confidenceLevel.coerceIn(0, 3))
+                val cleanResources = consultedResources.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
                 val attempt = PendingAttemptEntity(
                     questionId = question.id,
                     chosenIndex = safeIndex,
                     chosenText = safeText,
                     isCorrect = safeCorrect,
                     timeSpentSeconds = timeSpentSeconds.coerceIn(1, 86400),
-                    confidenceLevel = confidenceLevel,
+                    confidenceLevel = resolvedLegacyConf,
                     sessionUuid = session.sessionId,
                     quizMode = session.mode.name,
                     examBlock = null,
@@ -632,24 +666,41 @@ class MainViewModel(
                     questionRevision = question.questionRevision,
                     examComponentId = question.examComponentId,
                     isBlank = isBlank,
-                    confidenceExplicit = confidenceExplicit,
+                    confidenceExplicit = confidenceExplicit || resolvedDeclared != null,
                     selectedEvidenceId = selectedEvidenceId,
                     positionInSession = pos,
                     elapsedSessionSeconds = sessionElapsed,
-                    sessionInterrupted = session.interrupted
+                    sessionInterrupted = session.interrupted,
+                    declaredConfidence = resolvedDeclared?.name,
+                    cognitiveStrategy = if (isBlank) null else cognitiveStrategy?.name,
+                    strategySkipped = strategySkipped || (!isBlank && cognitiveStrategy == null),
+                    activeSeconds = activeSeconds?.coerceIn(1, 86400),
+                    answerChangeCount = answerChangeCount.coerceAtLeast(0),
+                    initialChosenIndex = initialChosenIndex?.takeIf { it >= 0 },
+                    consultedResourcesCsv = cleanResources.joinToString(",").takeIf { it.isNotEmpty() },
+                    focusLossCount = focusLossCount.coerceAtLeast(0)
                 )
                 val next = session.copy(
                     answers = session.answers + (
                         question.id to SessionAnswer(
                             chosenIndex = safeIndex,
-                            confidenceLevel = confidenceLevel,
+                            confidenceLevel = resolvedLegacyConf,
                             timeSpentSeconds = timeSpentSeconds,
                             submitted = true,
                             isBlank = isBlank,
-                            confidenceExplicit = confidenceExplicit,
-                            selectedEvidenceId = selectedEvidenceId
+                            confidenceExplicit = confidenceExplicit || resolvedDeclared != null,
+                            selectedEvidenceId = selectedEvidenceId,
+                            declaredConfidence = resolvedDeclared,
+                            cognitiveStrategy = if (isBlank) null else cognitiveStrategy,
+                            strategySkipped = strategySkipped || (!isBlank && cognitiveStrategy == null),
+                            activeSeconds = activeSeconds?.coerceIn(1, 86400),
+                            answerChangeCount = answerChangeCount.coerceAtLeast(0),
+                            initialChosenIndex = initialChosenIndex?.takeIf { it >= 0 },
+                            consultedResources = cleanResources,
+                            focusLossCount = focusLossCount.coerceAtLeast(0)
                         )
                     ),
+                    attemptsSinceLastCtv = session.attemptsSinceLastCtv + 1,
                     revision = session.revision + 1
                 )
                 repository.recordAttemptUnlocked(session.ownerUserId, attempt, next)
@@ -670,6 +721,157 @@ class MainViewModel(
             _userFeedbackMessage.emit(e.message ?: "A resposta não foi salva. Tente novamente antes de sair.")
             false
         }
+    }
+
+    suspend fun evaluateCtvForAttempt(
+        question: QuestionDto,
+        isCorrect: Boolean,
+        isBlank: Boolean,
+        declaredConfidence: DeclaredConfidence?,
+        cognitiveStrategy: CognitiveStrategy?,
+        confidenceLevel: Int
+    ): CtvEvaluateResponseDto {
+        val session = _activeSession.value ?: return CtvEvaluateResponseDto(triggered = false, status = "no_session")
+        if (isBlank || session.isSmartEntry || session.mode == QuizMode.ENTRY_60S || session.mode == QuizMode.SIMULADO) {
+            return CtvEvaluateResponseDto(triggered = false, status = "not_triggered")
+        }
+        val parentAttemptId = ConcursoRepository.deterministicAttemptId(session.sessionId, question.id)
+        val req = CtvEvaluateRequestDto(
+            parentAttemptId = parentAttemptId,
+            sourceQuestionId = question.id,
+            sessionUuid = session.sessionId,
+            quizMode = session.mode.name,
+            isCorrect = isCorrect,
+            isBlank = false,
+            declaredConfidence = declaredConfidence,
+            cognitiveStrategy = cognitiveStrategy,
+            confidenceLevel = confidenceLevel,
+            sessionCtvCount = session.sessionCtvCount,
+            attemptsSinceLastCtv = (session.attemptsSinceLastCtv - 1).coerceAtLeast(0),
+            forcePostInstruction = false
+        )
+        val resp = repository.evaluateAndSupplyCtv(session.ownerUserId, req, question)
+        if (resp.triggered && resp.complementaryQuestion != null) {
+            repository.withMutationLock {
+                val cur = _activeSession.value
+                if (cur != null && cur.sessionId == session.sessionId) {
+                    val updated = cur.copy(
+                        sessionCtvCount = cur.sessionCtvCount + 1,
+                        attemptsSinceLastCtv = 0,
+                        revision = cur.revision + 1
+                    )
+                    _activeSession.value = updated
+                    repository.saveSession(updated)
+                }
+            }
+        }
+        return resp
+    }
+
+    fun recordCtvDisplayed(evaluation: CtvEvaluateResponseDto, sourceQuestionId: String) {
+        operation {
+            val session = _activeSession.value
+            val sessionId = session?.sessionId ?: UUID.randomUUID().toString()
+            val ownerId = session?.ownerUserId ?: repository.ownerUserId
+            val parentAttemptId = ConcursoRepository.deterministicAttemptId(sessionId, sourceQuestionId)
+            repository.recordCtvDisplayed(ownerId, evaluation, sourceQuestionId, parentAttemptId)
+            localStats()
+            appContext?.let { OfflineSyncWorker.enqueueNow(it) }
+        }
+    }
+
+    fun dismissCtvOffer(evaluation: CtvEvaluateResponseDto, sourceQuestionId: String) {
+        operation {
+            val session = _activeSession.value
+            val sessionId = session?.sessionId ?: UUID.randomUUID().toString()
+            val ownerId = session?.ownerUserId ?: repository.ownerUserId
+            val parentAttemptId = ConcursoRepository.deterministicAttemptId(sessionId, sourceQuestionId)
+            repository.recordCtvDismissed(ownerId, evaluation, sourceQuestionId, parentAttemptId)
+            localStats()
+            appContext?.let { OfflineSyncWorker.enqueueNow(it) }
+        }
+    }
+
+    suspend fun submitCtvAttempt(
+        sourceQuestion: QuestionDto,
+        complementaryQuestion: QuestionDto,
+        chosenIndex: Int,
+        declaredConfidence: DeclaredConfidence?,
+        cognitiveStrategy: CognitiveStrategy?,
+        activeSeconds: Int,
+        verificationTiming: String,
+        wasPreviouslyExposed: Boolean,
+        parentWasCorrect: Boolean,
+        offerId: String? = null,
+        displayedAt: String? = null,
+        consultedResources: List<String> = emptyList(),
+        focusLossCount: Int = 0,
+        triggerReason: String? = null,
+        deliverySource: String? = null,
+        verificationMode: String? = null
+    ): CtvSubmitResponseDto {
+        val session = _activeSession.value
+        val sessionId = session?.sessionId ?: UUID.randomUUID().toString()
+        val ownerId = session?.ownerUserId ?: repository.ownerUserId
+        val parentAttemptId = ConcursoRepository.deterministicAttemptId(sessionId, sourceQuestion.id)
+        val ctvAttemptId = ConcursoRepository.deterministicAttemptId(
+            sessionId,
+            "ctv:${sourceQuestion.id}:${complementaryQuestion.id}"
+        )
+        val chosenText = complementaryQuestion.answers.getOrElse(chosenIndex) { "" }
+        val hadDecisiveHelp = consultedResources.any(CtvAlignmentEngine::isRuleRevealingHelp)
+        val req = CtvSubmitRequestDto(
+            ctvAttemptId = ctvAttemptId,
+            offerId = offerId,
+            parentAttemptId = parentAttemptId,
+            sourceQuestionId = sourceQuestion.id,
+            complementaryQuestionId = complementaryQuestion.id,
+            sessionUuid = sessionId,
+            verificationTiming = verificationTiming,
+            verificationMode = verificationMode,
+            chosenIndex = chosenIndex,
+            chosenText = chosenText,
+            declaredConfidence = declaredConfidence,
+            cognitiveStrategy = cognitiveStrategy,
+            activeSeconds = activeSeconds.coerceIn(1, 3600),
+            wasPreviouslyExposed = wasPreviouslyExposed,
+            occurredAt = java.time.Instant.now().toString(),
+            displayedAt = displayedAt,
+            consultedResources = consultedResources,
+            focusLossCount = focusLossCount.coerceAtLeast(0),
+            hadDecisiveHelp = hadDecisiveHelp,
+            triggerReason = triggerReason,
+            deliverySource = deliverySource
+        )
+        val resp = repository.submitCtvAttemptOfflineResilient(
+            userId = ownerId,
+            request = req,
+            complementaryQuestion = complementaryQuestion,
+            parentWasCorrect = parentWasCorrect
+        )
+        repository.withMutationLock {
+            val cur = _activeSession.value
+            if (cur != null && cur.sessionId == sessionId) {
+                val prevAns = cur.answers[sourceQuestion.id]
+                if (prevAns != null) {
+                    val updated = cur.copy(
+                        answers = cur.answers + (
+                            sourceQuestion.id to prevAns.copy(
+                                ctvCompleted = true,
+                                ctvDiagnosticTitle = resp.consolidatedDiagnosticTitlePt,
+                                ctvDiagnosticMessage = resp.consolidatedDiagnosticMessagePt
+                            )
+                        ),
+                        revision = cur.revision + 1
+                    )
+                    _activeSession.value = updated
+                    repository.saveSession(updated)
+                }
+            }
+        }
+        localStats()
+        appContext?.let { OfflineSyncWorker.enqueueNow(it) }
+        return resp
     }
 
     /**
@@ -717,7 +919,15 @@ class MainViewModel(
                                     selectedEvidenceId = ans.selectedEvidenceId,
                                     positionInSession = session.questions.indexOfFirst { it.id == qId }.takeIf { it >= 0 }?.plus(1) ?: orderIdx,
                                     elapsedSessionSeconds = sessionElapsed,
-                                    sessionInterrupted = session.interrupted
+                                    sessionInterrupted = session.interrupted,
+                                    declaredConfidence = if (ans.isBlank) null else ans.declaredConfidence?.name,
+                                    cognitiveStrategy = if (ans.isBlank) null else ans.cognitiveStrategy?.name,
+                                    strategySkipped = ans.strategySkipped || (!ans.isBlank && ans.cognitiveStrategy == null),
+                                    activeSeconds = ans.activeSeconds?.coerceIn(1, 86400),
+                                    answerChangeCount = ans.answerChangeCount.coerceAtLeast(0),
+                                    initialChosenIndex = ans.initialChosenIndex?.takeIf { it >= 0 },
+                                    consultedResourcesCsv = ans.consultedResources.distinct().joinToString(",").takeIf { it.isNotEmpty() },
+                                    focusLossCount = ans.focusLossCount.coerceAtLeast(0)
                                 )
                             }
                             mergedAnswers[qId] = ans.copy(timeSpentSeconds = safeTime, submitted = true)

@@ -260,8 +260,8 @@ fun ProgressScreen(
                                 onClick = { onPracticeQuizMode(QuizMode.SRS_REVIEW, null) }
                             )
                             QuadrantBox(
-                                title = "Competência Ilusória",
-                                subtitle = "Acerto c/ premissa incorreta",
+                                title = "Domínio Não Confirmado",
+                                subtitle = "Acerto c/ fundamento divergente",
                                 count = sig.illusoryCompetenceHits,
                                 color = ext.warning,
                                 modifier = Modifier.weight(1f),
@@ -301,6 +301,207 @@ fun ProgressScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier.padding(10.dp)
                             )
+                        }
+                    }
+                }
+            }
+
+            // 3b. Domínio Conceitual Multidimensional (8 Estados) & KPIs Formais Metacognitivos
+            analytics.studentLearningAnalytics?.let { sla ->
+                item(key = "concept_mastery_8_states") {
+                    val cms = sla.conceptMasterySummary
+                    Card(
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "Domínio Conceitual Multidimensional (8 Estados)",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Avalia desempenho, compreensão, transferência CTV, retenção espaçada, calibração metacognitiva, fluência e consistência.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                MiniStatPill(
+                                    label = "Consolidado / Dem.",
+                                    value = "${cms.consolidatedMastery + cms.demonstratedMastery}",
+                                    accent = ext.correct,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                MiniStatPill(
+                                    label = "Em desenv. / Inicial",
+                                    value = "${cms.developingMastery + cms.emergingKnowledge}",
+                                    accent = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                MiniStatPill(
+                                    label = "Instável / Em risco",
+                                    value = "${cms.unstableKnowledge + cms.masteryAtRisk}",
+                                    accent = ext.warning,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            Text(
+                                text = "Consolidado: ${cms.consolidatedMastery} · Demonstrado: ${cms.demonstratedMastery} · Em desenvolvimento: ${cms.developingMastery} · Em risco: ${cms.masteryAtRisk} · Instável: ${cms.unstableKnowledge} · Inicial: ${cms.emergingKnowledge} · Evidência insuficiente: ${cms.insufficientEvidence} · Não avaliado: ${cms.notEvaluated}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                if (sla.confidenceCalibration.isNotEmpty() || sla.learningKpis.isNotEmpty()) {
+                    item(key = "formal_learning_kpis") {
+                        Card(
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surface,
+                                contentColor = MaterialTheme.colorScheme.onSurface
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = "Calibração Temporal (Walk-Forward) & Força da Evidência",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                if (sla.groundingSummary.coverageSentencePt.isNotBlank()) {
+                                    Text(
+                                        text = sla.groundingSummary.coverageSentencePt,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                sla.empiricalBrierScore?.let { brier ->
+                                    val fmtSplits = buildList {
+                                        sla.trueFalseBrierScore?.let { add(String.format(ptBrLocale, "C/E: %.4f", it)) }
+                                        sla.multipleChoiceBrierScore?.let { add(String.format(ptBrLocale, "Múltipla escolha: %.4f", it)) }
+                                    }.joinToString(" · ")
+                                    Text(
+                                        text = String.format(
+                                            ptBrLocale,
+                                            "Brier temporal walk-forward (previsão vs. resultado, não é %% de domínio): %.4f%s · política %s (cold-start: %d)",
+                                            brier,
+                                            if (fmtSplits.isNotEmpty()) " ($fmtSplits)" else "",
+                                            sla.calibrationPolicyVersion,
+                                            sla.coldStartPredictionsCount
+                                        ),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                } ?: Text(
+                                    text = "Brier temporal indisponível (amostra vazia com confiança declarada).",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                sla.confidenceCalibration.forEach { cal ->
+                                    val obsStr = cal.observedAccuracyPct?.let { String.format(ptBrLocale, "%.0f%%", it) } ?: "indisponível"
+                                    val postStr = String.format(ptBrLocale, "%.0f%%", cal.calibratedPosteriorMean * 100.0)
+                                    val headline = cal.coverageSentencePt.takeIf { it.isNotBlank() }
+                                        ?: "${cal.labelPt}: ${cal.correct}/${cal.attempts}"
+                                    Text(
+                                        text = "$headline Taxa observada: $obsStr · Estimativa do modelo: $postStr.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                val ctvSel = sla.ctvAdaptiveSelection
+                                if (ctvSel.difficultyTriggered.offersCount > 0 ||
+                                    ctvSel.periodicSampling.offersCount > 0 ||
+                                    ctvSel.unknownConditionCount > 0
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(10.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Text(
+                                                text = "Verificações Complementares por Coorte Adaptativa",
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                text = "Dificuldade detectada: ${ctvSel.difficultyTriggered.summaryPt} (ofertas: ${ctvSel.difficultyTriggered.offersCount}, dispensas: ${ctvSel.difficultyTriggered.dismissalsCount}, respostas: ${ctvSel.difficultyTriggered.responsesCount})",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Text(
+                                                text = "Amostragem periódica: ${ctvSel.periodicSampling.summaryPt} (ofertas: ${ctvSel.periodicSampling.offersCount}, dispensas: ${ctvSel.periodicSampling.dismissalsCount}, respostas: ${ctvSel.periodicSampling.responsesCount})",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            if (ctvSel.unknownConditionCount > 0) {
+                                                Text(
+                                                    text = "Registros históricos com condição desconhecida preservados: ${ctvSel.unknownConditionCount}.",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                                sla.learningKpis.take(6).forEach { kpi ->
+                                    val valStr = kpi.value?.let { v ->
+                                        if (kpi.unit == "%") String.format(ptBrLocale, "%.1f%%", v)
+                                        else String.format(ptBrLocale, "%.2f %s", v, kpi.unit).trim()
+                                    } ?: "Amostra pendente"
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(modifier = Modifier.padding(10.dp)) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text(
+                                                    text = kpi.labelPt,
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                                Text(
+                                                    text = "$valStr (n=${kpi.sampleSizeN})",
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
+                                            if (kpi.interpretiveLimitation.isNotBlank()) {
+                                                Text(
+                                                    text = kpi.interpretiveLimitation,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

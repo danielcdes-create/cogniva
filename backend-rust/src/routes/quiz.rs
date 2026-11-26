@@ -61,6 +61,26 @@ pub struct AnswerAttemptItem {
     pub elapsed_session_seconds: Option<i32>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub session_interrupted: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub declared_confidence: Option<crate::services::metacognitive_engine::DeclaredConfidence>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cognitive_strategy: Option<crate::services::metacognitive_engine::CognitiveStrategy>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub strategy_skipped: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_seconds: Option<i32>,
+    #[serde(default, skip_serializing_if = "is_zero_u16")]
+    pub answer_change_count: u16,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub initial_chosen_index: Option<usize>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub consulted_resources: Vec<String>,
+    #[serde(default, skip_serializing_if = "is_zero_u16")]
+    pub focus_loss_count: u16,
+}
+
+fn is_zero_u16(v: &u16) -> bool {
+    *v == 0
 }
 
 impl AnswerAttemptItem {
@@ -101,6 +121,8 @@ pub struct ProcessedAttemptResult {
     pub next_review_interval_days: i32,
     pub accuracy_accumulated_pct: f64,
     pub in_error_notebook: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metacognitive_assessment: Option<crate::services::metacognitive_engine::MetacognitiveAssessment>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -286,13 +308,34 @@ pub async fn handle_report_problem(
     let unique_reports = rep_coll
         .count_documents(doc! { "questao_id": q_oid })
         .await?;
+    let mut question_update = doc! {
+        "$max": { "reports": unique_reports as i64, "reports_unique": unique_reports as i64 }
+    };
+    if let Some(q_raw) = state
+        .db
+        .collection::<bson::Document>("todasQuestoes")
+        .find_one(doc! { "_id": q_oid })
+        .await?
+    {
+        if let Ok(dmeta) = q_raw.get_document("diagnostic_meta") {
+            let mut set_meta = doc! {
+                "diagnostic_meta.quality_metrics.open_reports_count": unique_reports as i64
+            };
+            if dmeta.get_str("generation_origin").ok() == Some("AI_ON_DEMAND")
+                && unique_reports >= 1
+                && dmeta.get_str("validation_status").ok() == Some("AUTO_APPROVED")
+            {
+                // Questão gerada por IA com sinalização de problema é suspensa preventivamente para curadoria humana.
+                set_meta.insert("diagnostic_meta.quality_status", "SUSPENDED");
+                set_meta.insert("diagnostic_meta.validation_status", "PENDING_HUMAN_REVIEW");
+            }
+            question_update.insert("$set", set_meta);
+        }
+    }
     state
         .db
         .collection::<bson::Document>("todasQuestoes")
-        .update_one(
-            doc! { "_id": q_oid },
-            doc! { "$max": { "reports": unique_reports as i64, "reports_unique": unique_reports as i64 } },
-        )
+        .update_one(doc! { "_id": q_oid }, question_update)
         .await?;
 
     Ok(Json(serde_json::json!({
@@ -300,4 +343,51 @@ pub async fn handle_report_problem(
         "question_id": question_id,
         "reported_category": req.problem_category
     })))
+}
+
+/// Endpoint `POST /api/v1/quiz/ctv/evaluate`:
+/// Avalia a política de Verificação Adaptativa de Domínio Conceitual (CTV) e aplica
+/// estritamente a estratégia `Database First, AI on Demand` (sem marcar exposição antes da exibição real).
+pub async fn handle_ctv_evaluate(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<SessionUser>,
+    Json(req): Json<crate::services::ctv_engine::CtvEvaluateRequest>,
+) -> Result<Json<crate::services::ctv_engine::CtvEvaluateResponse>, AppError> {
+    let resp = crate::services::ctv_engine::evaluate_and_supply(&state, &user, req).await?;
+    Ok(Json(resp))
+}
+
+/// Endpoint `POST /api/v1/quiz/ctv/events`:
+/// Registra de forma idempotente a primeira exibição real (`DISPLAYED`) ou a dispensa explícita
+/// (`DISMISSED` — "Ver gabarito agora") da oferta complementar, reconciliando exposições fora de ordem.
+pub async fn handle_ctv_event(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<SessionUser>,
+    Json(req): Json<crate::services::ctv_engine::CtvLifecycleEventRequest>,
+) -> Result<Json<crate::services::ctv_engine::CtvLifecycleEventResponse>, AppError> {
+    let resp = crate::services::ctv_engine::record_ctv_event(&state, user.user_id, req).await?;
+    Ok(Json(resp))
+}
+
+/// Endpoint `POST /api/v1/quiz/ctv/submit`:
+/// Registra tentativa complementar CTV vinculada à tentativa original sem sobrescrever
+/// o histórico original nem inflar pontuações de simulado, reconciliando histórico multi-dispositivo.
+pub async fn handle_ctv_submit(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<SessionUser>,
+    Json(req): Json<crate::services::ctv_engine::CtvSubmitRequest>,
+) -> Result<Json<crate::services::ctv_engine::CtvSubmitResponse>, AppError> {
+    let resp = crate::services::ctv_engine::submit_ctv_attempt(&state, user.user_id, req).await?;
+    Ok(Json(resp))
+}
+
+/// Endpoint `GET /api/v1/quiz/ctv/state`:
+/// Retorna o histórico reconciliado de ofertas exibidas/dispensadas e tentativas CTV do estudante
+/// para reconciliação determinística do estado provisório offline no Android.
+pub async fn handle_ctv_state(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<SessionUser>,
+) -> Result<Json<crate::services::ctv_engine::CtvUserStateResponse>, AppError> {
+    let resp = crate::services::ctv_engine::get_user_ctv_state(&state, user.user_id).await?;
+    Ok(Json(resp))
 }

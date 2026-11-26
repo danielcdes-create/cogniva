@@ -141,7 +141,7 @@ pub(crate) fn with_untrusted_guardrail(system_prompt: &str) -> String {
     }
 }
 
-fn verified_sources_for_question(questao: &QuestionDocument) -> Vec<serde_json::Value> {
+pub(crate) fn verified_sources_for_question(questao: &QuestionDocument) -> Vec<serde_json::Value> {
     let cat = crate::services::question_contracts::catalog_ref();
     let concepts = crate::services::catalog_runtime::effective_concepts(&cat);
     let norm_sources = crate::services::catalog_runtime::effective_normative_sources(&cat);
