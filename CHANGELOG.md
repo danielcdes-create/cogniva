@@ -4,6 +4,23 @@ Todas as mudanças arquiteturais, de segurança, acessibilidade e operacionais r
 
 ---
 
+## [2.4.5] - 2026-11-26 (build 35)
+
+Auditoria e consolidação do **Motor de Avaliação Metacognitiva** e refinamento da experiência de resolução de questões (`shared/`, `backend-rust/` e `android-app/`), eliminando redundâncias de interação pós-resposta, padronizando ergonomia visual e preservando integralmente dados históricos.
+
+### 1. Descontinuação Controlada da Rastreabilidade Pós-Gabarito Legada e Integridade Histórica (`PracticeAndQuestionScreen.kt`, `metacognitive_engine`, `knowledge.rs`)
+- **Remoção do Formulário Pós-Gabarito dos 3 Sinais:** Descontinuado na interface de resolução o bloco legado *"Rastreabilidade da Resposta · 3 Sinais (Opcional)"* (`evidence_challenge`), eliminando viés retrospectivo pós-exposição ao gabarito e acoplamentos ociosos na camada de UI/ViewModel, enquanto preserva `POST /api/v1/quiz/attempt-evidence` e `pending_evidence_patches` para drenagem idempotente de registros *offline* históricos.
+- **Separação Estrita de Proveniência (`RETROSPECTIVE_LEGACY_EVIDENCE`):** Registros históricos com `selected_evidence_id` permanecem preservados sem reescrita destrutiva; evidências coletadas após a exposição ao gabarito sem estratégia pré-gabarito são classificadas explicitamente como `RETROSPECTIVE_LEGACY_EVIDENCE` (`credits_comprehension = false`), jamais sendo equiparadas automaticamente a declarações pré-exposição.
+
+### 2. Desambiguação Contextual de Chutes e Padronização Visual de `CognitiveStrategy` (`QuestionComponents.kt`, `domain-contracts.json`)
+- **Consolidação sem Redundância entre Confiança e Estratégia:** Ao selecionar `"Chutei"` (`DeclaredConfidence.GUESS`), o seletor apresenta confirmação simplificada e opcional da natureza do chute (*Chute totalmente aleatório*, *Chute após eliminar alternativas* ou *Chute por intuição ou reconhecimento parcial*), consolidando sinais redundantes sem segunda etapa obrigatória, sem fabricar estratégia quando omitida e diferenciando analiticamente chutes após eliminação (`UNCONFIRMED_MASTERY` / `POSSIBLE_KNOWLEDGE_GAP`) de chutes puramente aleatórios (`POSSIBLE_CASUAL_HIT` / `UNDEMONSTRATED_KNOWLEDGE`).
+- **Cartões Uniformes de Largura Completa e Rótulos Concisos:** Substituição do `FlowRow` irregular por cartões tipo *radio* uniformes (`StrategyRadioOptionRow`, `fillMaxWidth()`, `minHeight >= 48.dp`, indicador circular alinhado à esquerda, cores neutras sem verde/vermelho) e textos concisos de menor carga cognitiva validados em `360dp`, `411dp`, `700dp`, `Font Scale 1.3`/`2.0` e temas claro/escuro via Paparazzi.
+
+### 3. Leitura Metacognitiva em Duas Camadas e Deduplicação Pós-Resposta (`PracticeAndQuestionScreen.kt`, `PerformanceEngines.kt`)
+- **Camada Primária Pedagógica + Camada Secundária Expansível:** Remoção do banner vermelho duplicado de erro com alta confiança e reestruturação do retorno pós-resposta em mensagem pedagógica concisa e não-julgamental (`pedagogical_feedback_pt`, integrada ao desfecho da Verificação Complementar `CTV` sem repetir gabarito, confiança ou tempo ativo já exibidos no cabeçalho) acompanhada de divulgação progressiva (`"Ver detalhes da avaliação"`) com sustentação diagnóstica, estratégia, interações, histórico prévio e explicação técnica do motor.
+
+---
+
 ## [2.4.4] - 2026-11-26 (build 34)
 
 Evolução ponta a ponta para **Verificação Conceitual Alinhada à Regra Decisiva, Semântica Simétrica Online/Offline, Calibração Temporal *Walk-Forward*, Recomendação Adaptativa e Reutilização Auditável de Questões (`CTV — Database First, AI on Demand`)** integrada em `shared/`, `scripts/`, `backend-rust/`, `web-admin/` e `android-app/`.

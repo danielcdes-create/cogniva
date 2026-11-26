@@ -136,13 +136,13 @@ impl CognitiveStrategy {
 
     pub const fn label_pt(self) -> &'static str {
         match self {
-            Self::ConceptualKnowledge => "Conhecia o conceito e consegui aplicá-lo.",
-            Self::LogicalDeduction => "Deduzi a resposta por raciocínio lógico.",
-            Self::Elimination => "Eliminei as alternativas incorretas.",
-            Self::PatternRecognition => "Reconheci termos ou conceitos familiares.",
+            Self::ConceptualKnowledge => "Conhecia e apliquei o conceito.",
+            Self::LogicalDeduction => "Deduzi por raciocínio lógico.",
+            Self::Elimination => "Eliminei alternativas.",
+            Self::PatternRecognition => "Reconheci termos familiares.",
             Self::Intuition => "Respondi por intuição.",
             Self::RandomGuess => "Escolhi aleatoriamente.",
-            Self::Unspecified => "Não sei identificar como cheguei à resposta.",
+            Self::Unspecified => "Não sei identificar.",
         }
     }
 
@@ -237,6 +237,8 @@ pub struct MetacognitiveAssessment {
     pub preliminary_diagnosis: PreliminaryDiagnosis,
     pub inference_support: SupportLevel,
     pub ctv_priority: CtvTriggerPriority,
+    #[serde(default)]
+    pub pedagogical_feedback_pt: String,
     pub self_perception_summary: String,
     pub observed_evidence_summary: String,
     pub system_inference_message: String,
@@ -255,8 +257,14 @@ pub fn classify_preliminary_matrix(
         );
     }
 
-    let is_guess = inputs.declared_confidence == Some(DeclaredConfidence::Guess)
-        || inputs.cognitive_strategy == Some(CognitiveStrategy::RandomGuess);
+    let is_pure_or_unconfirmed_guess = inputs.cognitive_strategy == Some(CognitiveStrategy::RandomGuess)
+        || (inputs.declared_confidence == Some(DeclaredConfidence::Guess)
+            && matches!(
+                inputs.cognitive_strategy,
+                None | Some(CognitiveStrategy::RandomGuess | CognitiveStrategy::Unspecified)
+            ));
+    let is_partial_guess = inputs.declared_confidence == Some(DeclaredConfidence::Guess)
+        && !is_pure_or_unconfirmed_guess;
 
     if inputs.is_correct {
         if inputs.rationale_contradicted {
@@ -266,11 +274,22 @@ pub fn classify_preliminary_matrix(
                 CtvTriggerPriority::High,
             );
         }
-        if is_guess {
+        if is_pure_or_unconfirmed_guess {
             return (
                 PreliminaryDiagnosis::PossibleCasualHit,
-                SupportLevel::High,
+                if inputs.cognitive_strategy == Some(CognitiveStrategy::RandomGuess) {
+                    SupportLevel::High
+                } else {
+                    SupportLevel::Moderate
+                },
                 CtvTriggerPriority::High,
+            );
+        }
+        if is_partial_guess {
+            return (
+                PreliminaryDiagnosis::UnconfirmedMastery,
+                SupportLevel::Moderate,
+                CtvTriggerPriority::Recommended,
             );
         }
         if inputs.declared_confidence == Some(DeclaredConfidence::Low) {
@@ -321,11 +340,18 @@ pub fn classify_preliminary_matrix(
             CtvTriggerPriority::Recommended,
         )
     } else {
-        if is_guess {
+        if is_pure_or_unconfirmed_guess {
             return (
                 PreliminaryDiagnosis::UndemonstratedKnowledge,
                 SupportLevel::Moderate,
                 CtvTriggerPriority::None,
+            );
+        }
+        if is_partial_guess {
+            return (
+                PreliminaryDiagnosis::PossibleKnowledgeGap,
+                SupportLevel::Moderate,
+                CtvTriggerPriority::Optional,
             );
         }
         if inputs
@@ -343,6 +369,70 @@ pub fn classify_preliminary_matrix(
             SupportLevel::Moderate,
             CtvTriggerPriority::Optional,
         )
+    }
+}
+
+/// Gera feedback pedagógico breve, claro e não-julgamental para a camada primária do aluno (Seção 7.3).
+pub fn pedagogical_feedback_pt(
+    inputs: &MetacognitiveMatrixInputs,
+    diagnosis: PreliminaryDiagnosis,
+    has_multi_attempt_evidence: bool,
+) -> &'static str {
+    if inputs.is_blank {
+        return "Questão deixada em branco. Nenhuma inferência de domínio foi registrada.";
+    }
+    if inputs.is_correct {
+        if inputs.rationale_contradicted || diagnosis == PreliminaryDiagnosis::PossibleCasualHit {
+            return "Você acertou, mas ainda precisamos verificar sua compreensão.";
+        }
+        if inputs.declared_confidence == Some(DeclaredConfidence::Guess)
+            && matches!(
+                inputs.cognitive_strategy,
+                Some(CognitiveStrategy::Elimination | CognitiveStrategy::LogicalDeduction)
+            )
+        {
+            return "Você eliminou alternativas, mas ainda respondeu com incerteza. Sua compreensão precisa ser confirmada.";
+        }
+        if matches!(
+            inputs.cognitive_strategy,
+            Some(CognitiveStrategy::PatternRecognition | CognitiveStrategy::Intuition)
+        ) {
+            return "Você reconheceu elementos importantes. Sua compreensão ainda precisa ser confirmada.";
+        }
+        if diagnosis == PreliminaryDiagnosis::InsecureKnowledge {
+            return "Você acertou, mas ainda demonstra insegurança neste conceito.";
+        }
+        if diagnosis == PreliminaryDiagnosis::FunctionalReasoning {
+            return if inputs.cognitive_strategy == Some(CognitiveStrategy::Elimination) {
+                "Você utilizou uma estratégia de eliminação eficaz."
+            } else {
+                "Você utilizou raciocínio lógico consistente nesta questão."
+            };
+        }
+        if diagnosis == PreliminaryDiagnosis::PossibleConceptualMastery
+            || inputs
+                .declared_confidence
+                .is_some_and(DeclaredConfidence::is_high)
+        {
+            return "Você acertou com segurança.";
+        }
+        if inputs.declared_confidence.is_none()
+            && inputs.cognitive_strategy.is_none()
+            && !has_multi_attempt_evidence
+        {
+            return "Ainda não há informações suficientes para avaliar seu domínio.";
+        }
+        "Você acertou, mas sua compreensão ainda precisa ser confirmada."
+    } else {
+        match diagnosis {
+            PreliminaryDiagnosis::PossibleConceptualMisconception => {
+                "Sua resposta indica um possível equívoco conceitual que merece revisão."
+            }
+            PreliminaryDiagnosis::UndemonstratedKnowledge => {
+                "Seu domínio deste conceito ainda não foi demonstrado."
+            }
+            _ => "Este conceito pode precisar de reforço.",
+        }
     }
 }
 
@@ -436,6 +526,12 @@ pub fn build_assessment(
         preliminary_diagnosis,
         inference_support,
         ctv_priority,
+        pedagogical_feedback_pt: pedagogical_feedback_pt(
+            inputs,
+            preliminary_diagnosis,
+            has_multi_attempt_evidence,
+        )
+        .to_string(),
         self_perception_summary,
         observed_evidence_summary,
         system_inference_message: inference_message_pt(
@@ -448,8 +544,9 @@ pub fn build_assessment(
     }
 }
 
-/// Classificação explícita da força do fundamento em um acerto (Seção 3.1 / A06).
-/// Evita contar acertos sem declaração ou justificativa como fundamentados por mera ausência de sinais negativos.
+/// Classificação explícita da força do fundamento em um acerto (Seção 3.1 / A06 e Seção 4.3).
+/// Evita contar acertos sem declaração como fundamentados e separa estritamente evidências
+/// retrospectivas legadas pós-gabarito (`RetrospectiveLegacyEvidence`) de declarações pré-gabarito.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum HitGroundingCategory {
@@ -458,6 +555,7 @@ pub enum HitGroundingCategory {
     ValidFunctionalStrategy,
     DivergentRationale,
     FragileOrGuess,
+    RetrospectiveLegacyEvidence,
     UnknownGrounding,
 }
 
@@ -469,12 +567,14 @@ impl HitGroundingCategory {
             Self::ValidFunctionalStrategy => "VALID_FUNCTIONAL_STRATEGY",
             Self::DivergentRationale => "DIVERGENT_RATIONALE",
             Self::FragileOrGuess => "FRAGILE_OR_GUESS",
+            Self::RetrospectiveLegacyEvidence => "RETROSPECTIVE_LEGACY_EVIDENCE",
             Self::UnknownGrounding => "UNKNOWN_GROUNDING",
         }
     }
 
-    /// Só concede crédito positivo na dimensão de compreensão quando houver evidência positiva identificável
-    /// (conhecimento conceitual, dedução lógica ou eliminação válidas e/ou justificativa compatível, sem divergência).
+    /// Só concede crédito positivo na dimensão de compreensão quando houver evidência positiva pré-exposição
+    /// (conhecimento conceitual, dedução lógica ou eliminação válidas sem divergência).
+    /// Evidência legada pós-gabarito (`RetrospectiveLegacyEvidence`) nunca é equiparada automaticamente.
     pub const fn credits_comprehension(self) -> bool {
         matches!(
             self,
@@ -516,10 +616,11 @@ pub fn classify_hit_grounding(
     ) {
         return HitGroundingCategory::ValidFunctionalStrategy;
     }
-    if cognitive_strategy == Some(CognitiveStrategy::ConceptualKnowledge)
-        || evidence_compatible == Some(true)
-    {
+    if cognitive_strategy == Some(CognitiveStrategy::ConceptualKnowledge) {
         return HitGroundingCategory::ValidConceptualGrounding;
+    }
+    if evidence_compatible == Some(true) {
+        return HitGroundingCategory::RetrospectiveLegacyEvidence;
     }
     HitGroundingCategory::UnknownGrounding
 }
@@ -599,5 +700,73 @@ mod tests {
             });
             assert_eq!(diag, PreliminaryDiagnosis::FunctionalReasoning);
         }
+    }
+
+    #[test]
+    fn guess_after_elimination_is_differentiated_from_pure_random_guess_and_unconfirmed_guess() {
+        let (pure_diag, pure_sup, pure_prio) =
+            classify_preliminary_matrix(&MetacognitiveMatrixInputs {
+                is_blank: false,
+                is_correct: true,
+                declared_confidence: Some(DeclaredConfidence::Guess),
+                cognitive_strategy: Some(CognitiveStrategy::RandomGuess),
+                consistent_history: false,
+                rationale_contradicted: false,
+            });
+        assert_eq!(pure_diag, PreliminaryDiagnosis::PossibleCasualHit);
+        assert_eq!(pure_sup, SupportLevel::High);
+        assert_eq!(pure_prio, CtvTriggerPriority::High);
+
+        let unconfirmed_inputs = MetacognitiveMatrixInputs {
+            is_blank: false,
+            is_correct: true,
+            declared_confidence: Some(DeclaredConfidence::Guess),
+            cognitive_strategy: None,
+            consistent_history: false,
+            rationale_contradicted: false,
+        };
+        let unconfirmed_assessment =
+            build_assessment(&unconfirmed_inputs, &BehavioralEvidence::default(), false);
+        assert_eq!(
+            unconfirmed_assessment.preliminary_diagnosis,
+            PreliminaryDiagnosis::PossibleCasualHit
+        );
+        assert_eq!(unconfirmed_assessment.inference_support, SupportLevel::Moderate);
+        assert!(unconfirmed_assessment.strategy_skipped);
+
+        let elim_guess_inputs = MetacognitiveMatrixInputs {
+            is_blank: false,
+            is_correct: true,
+            declared_confidence: Some(DeclaredConfidence::Guess),
+            cognitive_strategy: Some(CognitiveStrategy::Elimination),
+            consistent_history: false,
+            rationale_contradicted: false,
+        };
+        let elim_assessment =
+            build_assessment(&elim_guess_inputs, &BehavioralEvidence::default(), false);
+        assert_eq!(
+            elim_assessment.preliminary_diagnosis,
+            PreliminaryDiagnosis::UnconfirmedMastery
+        );
+        assert_eq!(elim_assessment.ctv_priority, CtvTriggerPriority::Recommended);
+        assert!(elim_assessment
+            .pedagogical_feedback_pt
+            .contains("eliminou alternativas"));
+    }
+
+    #[test]
+    fn retrospective_post_exposure_evidence_never_auto_credits_pre_exposure_comprehension() {
+        let g_retrospective = classify_hit_grounding(
+            true,
+            Some(DeclaredConfidence::High),
+            None,
+            Some(true),
+        );
+        assert_eq!(
+            g_retrospective,
+            HitGroundingCategory::RetrospectiveLegacyEvidence
+        );
+        assert!(!g_retrospective.credits_comprehension());
+        assert!(!g_retrospective.is_evaluable());
     }
 }

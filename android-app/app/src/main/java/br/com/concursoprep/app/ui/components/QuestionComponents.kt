@@ -1,6 +1,8 @@
 package br.com.concursoprep.app.ui.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -381,6 +383,7 @@ fun ConfidenceSelectorGrid(
 
             if (showStrategySelector && onSelectStrategy != null) {
                 val cs = MaterialTheme.colorScheme
+                val isGuessSelected = hasExplicitSelection && activeDeclared == DeclaredConfidence.GUESS
                 Spacer(modifier = Modifier.height(2.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -388,7 +391,11 @@ fun ConfidenceSelectorGrid(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Como você chegou à sua resposta?",
+                        text = if (isGuessSelected) {
+                            "Natureza do chute (opcional):"
+                        } else {
+                            "Como você chegou à sua resposta?"
+                        },
                         style = MaterialTheme.typography.titleSmall,
                         color = cs.onSurface,
                         modifier = Modifier.weight(1f)
@@ -421,44 +428,109 @@ fun ConfidenceSelectorGrid(
                 }
 
                 if (!strategySkipped || selectedStrategy != null) {
-                    FlowRow(
+                    val displayedOptions: List<Pair<CognitiveStrategy, String>> = if (isGuessSelected) {
+                        val baseGuessOptions = mutableListOf(
+                            CognitiveStrategy.RANDOM_GUESS to "Chute totalmente aleatório.",
+                            CognitiveStrategy.ELIMINATION to "Chute após eliminar alternativas.",
+                            CognitiveStrategy.INTUITION to "Chute por intuição ou reconhecimento parcial."
+                        )
+                        // Preserva seleção explícita prévia (nunca oculta nem sobrescreve silenciosamente)
+                        if (selectedStrategy != null && baseGuessOptions.none { it.first == selectedStrategy }) {
+                            baseGuessOptions += (selectedStrategy to selectedStrategy.labelPt)
+                        }
+                        baseGuessOptions
+                    } else {
+                        CognitiveStrategy.entries.map { it to it.labelPt }
+                    }
+
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .selectableGroup(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        CognitiveStrategy.entries.forEach { strat ->
+                        displayedOptions.forEach { (strat, displayLabel) ->
                             val isSel = selectedStrategy == strat
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = if (isSel) cs.secondaryContainer else cs.surface,
-                                contentColor = if (isSel) cs.onSecondaryContainer else cs.onSurface,
-                                border = BorderStroke(
-                                    width = if (isSel) 2.dp else 1.dp,
-                                    color = if (isSel) cs.primary else cs.outlineVariant
-                                ),
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .selectable(
-                                        selected = isSel,
-                                        onClick = {
-                                            onSelectStrategy(if (isSel) null else strat)
-                                        },
-                                        role = Role.RadioButton
-                                    )
-                            ) {
-                                Text(
-                                    text = strat.labelPt,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = if (isSel) FontWeight.SemiBold else FontWeight.Normal,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)
-                                )
-                            }
+                            StrategyRadioOptionRow(
+                                label = displayLabel,
+                                selected = isSel,
+                                onClick = {
+                                    val nextStrat = if (isSel) null else strat
+                                    if (nextStrat == CognitiveStrategy.RANDOM_GUESS && !hasExplicitSelection) {
+                                        selectLevel(DeclaredConfidence.GUESS)
+                                    }
+                                    onSelectStrategy(nextStrat)
+                                }
+                            )
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun StrategyRadioOptionRow(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val cs = MaterialTheme.colorScheme
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = if (selected) cs.secondaryContainer else cs.surface,
+        contentColor = if (selected) cs.onSecondaryContainer else cs.onSurface,
+        border = BorderStroke(
+            width = if (selected) 2.dp else 1.dp,
+            color = if (selected) cs.primary else cs.outlineVariant
+        ),
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .selectable(
+                selected = selected,
+                onClick = onClick,
+                role = Role.RadioButton
+            )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(18.dp)
+                    .border(
+                        width = 2.dp,
+                        color = if (selected) cs.primary else cs.outline,
+                        shape = RoundedCornerShape(9.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                if (selected) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .background(
+                                color = cs.primary,
+                                shape = RoundedCornerShape(4.dp)
+                            )
+                    )
+                }
+            }
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                textAlign = TextAlign.Start,
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }

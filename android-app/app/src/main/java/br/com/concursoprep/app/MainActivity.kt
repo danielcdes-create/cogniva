@@ -288,7 +288,6 @@ fun ConcursoPrepRootApp(viewModel: MainViewModel) {
             onOpenContextualLookup = { q, selected -> viewModel.openContextualLookup(q, selected) },
             onRequestContextualLookupAi = { qId, selected, submitted -> viewModel.requestContextualLookupAi(qId, selected, submitted) },
             onDismissContextualLookup = { viewModel.dismissContextualLookup() },
-            onSelectEvidence = { qId, evId -> viewModel.selectEvidenceForQuestion(qId, evId) },
             onSubmitExtendedAnswer = { question, chosenIndex, confidenceLevel, timeSpentSeconds, isBlank, confidenceExplicit ->
                 viewModel.submitAnswer(
                     question = question,

@@ -88,7 +88,7 @@ fun ProgressScreen(
             item(key = "progress_header") {
                 CognivaBrandHeader(
                     ecosystemProduct = "Cogniva Insights · Evidências",
-                    subtitle = "Diagnóstico 3 Sinais, Transferência, Decisão & Curva 300 min"
+                    subtitle = "Diagnóstico Metacognitivo, Transferência, Decisão & Curva 300 min"
                 )
             }
 
@@ -242,7 +242,7 @@ fun ProgressScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Text(
-                            text = "Diagnóstico dos 3 Sinais & Matriz Metacognitiva",
+                            text = "Diagnóstico Metacognitivo & Matriz de Confiança",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )

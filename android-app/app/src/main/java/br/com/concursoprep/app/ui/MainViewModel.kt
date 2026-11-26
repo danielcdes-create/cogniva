@@ -599,22 +599,6 @@ class MainViewModel(
             }
         }
     }
-    fun selectEvidenceForQuestion(questionId: String, evidenceId: String) {
-        operation {
-            val session = _activeSession.value ?: return@operation
-            repository.recordEvidenceSelection(session.ownerUserId, session.sessionId, questionId, evidenceId)
-            val prev = session.answers[questionId]
-            if (prev != null) {
-                val next = session.copy(
-                    answers = session.answers + (questionId to prev.copy(selectedEvidenceId = evidenceId)),
-                    revision = session.revision + 1
-                )
-                _activeSession.value = next
-                repository.saveSession(next)
-            }
-            appContext?.let { OfflineSyncWorker.enqueueNow(it) }
-        }
-    }
 
     suspend fun submitAnswer(
         question: QuestionDto,

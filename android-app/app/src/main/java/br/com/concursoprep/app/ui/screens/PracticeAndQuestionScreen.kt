@@ -308,7 +308,6 @@ fun QuestionSessionScreen(
     onOpenContextualLookup: ((QuestionDto, String) -> Unit)? = null,
     onRequestContextualLookupAi: (questionId: String, selectedText: String, isAnswerSubmitted: Boolean) -> Unit = { _, _, _ -> },
     onDismissContextualLookup: () -> Unit = {},
-    onSelectEvidence: (questionId: String, evidenceId: String) -> Unit = { _, _ -> },
     onSubmitExtendedAnswer: (suspend (question: QuestionDto, chosenIndex: Int, confidenceLevel: Int, timeSpentSeconds: Int, isBlank: Boolean, confidenceExplicit: Boolean) -> Boolean)? = null,
     onSubmitMetacognitiveAnswer: (suspend (
         question: QuestionDto,
@@ -545,9 +544,7 @@ fun QuestionSessionScreen(
     var confidenceExplicitlySelected by remember(question.id, isSimuladoReviewMode) {
         mutableStateOf(currentAttempt?.confidenceExplicit == true || currentAttempt?.submitted == true)
     }
-    var selectedEvidenceId by remember(question.id) {
-        mutableStateOf(currentAttempt?.selectedEvidenceId)
-    }
+    val historicalSelectedEvidenceId = currentAttempt?.selectedEvidenceId
     var isAnswerSubmitted by remember(question.id, isSimuladoReviewMode) {
         mutableStateOf(currentAttempt?.submitted == true || isSimuladoReviewMode)
     }
@@ -664,8 +661,6 @@ fun QuestionSessionScreen(
     val correctIndex = question.correctAnswerIndices.singleOrNull() ?: -1
     val isBlankAnswer = isMarkedBlank || (isSimuladoReviewMode && selectedOptionIndex == null)
     val isUserCorrect = !isBlankAnswer && selectedOptionIndex != null && selectedOptionIndex == correctIndex
-    val isHighConfidenceError = isAnswerSubmitted && !isBlankAnswer && !isUserCorrect &&
-        (selectedDeclaredConfidence?.isHigh == true || (selectedDeclaredConfidence == null && selectedConfidence >= 2))
     val hideFeedback = isSimuladoMode && !isSimuladoReviewMode
     val hideOriginalGabarito = hideFeedback || ctvPendingStage
     val ext = LocalExtendedColors.current
@@ -684,7 +679,9 @@ fun QuestionSessionScreen(
         ExamCatalog.resolveQuestionHeaderMeta(question, snapshot?.exam)
     }
     val editorial = remember(question.id, question.questionRevision) { question.effectiveEditorialCard() }
-    val challenge = remember(question.id, question.questionRevision) { question.effectiveEvidenceChallenge() }
+    val legacyChallenge = remember(question.id, question.questionRevision, historicalSelectedEvidenceId) {
+        if (historicalSelectedEvidenceId != null) question.effectiveEvidenceChallenge() else null
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -1570,6 +1567,13 @@ fun QuestionSessionScreen(
                             onSelectStrategy = { strat ->
                                 selectedStrategy = strat
                                 strategySkipped = false
+                                // Consolida os dois sinais sem exigir segunda interação redundante quando o aluno
+                                // declara escolha totalmente aleatória antes de escolher nível explícito de confiança.
+                                if (strat == CognitiveStrategy.RANDOM_GUESS && !confidenceExplicitlySelected) {
+                                    selectedDeclaredConfidence = DeclaredConfidence.GUESS
+                                    selectedConfidence = DeclaredConfidence.GUESS.toLegacyBand()
+                                    confidenceExplicitlySelected = true
+                                }
                                 if (selectedOptionIndex != null) {
                                     val elapsed = computeElapsedSeconds()
                                     userAnswers[question.id] = UserAttemptState(
@@ -1728,11 +1732,12 @@ fun QuestionSessionScreen(
                             ?: DeclaredConfidence.fromLegacyBand(selectedConfidence, true)
                         val confidenceBadgeText = resolvedDeclConf?.labelPt ?: "Não informada"
                         val hasCustomChForMeta = question.hasCustomEvidenceChallenge()
-                        val normSelectedEvForMeta = normalizeEvidenceOptionId(selectedEvidenceId, hasCustomChForMeta)
+                        val normSelectedEvForMeta = normalizeEvidenceOptionId(historicalSelectedEvidenceId, hasCustomChForMeta)
                         val rationaleContradicted = isUserCorrect &&
-                            challenge != null &&
+                            legacyChallenge != null &&
                             normSelectedEvForMeta != null &&
-                            normSelectedEvForMeta != challenge.correctEvidenceId
+                            normSelectedEvForMeta != legacyChallenge.correctEvidenceId
+                        var showTechnicalDetails by rememberSaveable(question.id) { mutableStateOf(false) }
                         val metacognitiveAssessment = remember(
                             isBlankAnswer,
                             isUserCorrect,
@@ -1812,23 +1817,25 @@ fun QuestionSessionScreen(
                                     )
                                 }
 
-                                if (isHighConfidenceError) {
-                                    Surface(
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = ext.error,
-                                        contentColor = ext.onError
-                                    ) {
-                                        Text(
-                                            text = "Indício preliminar de equívoco com confiança elevada: prioridade reforçada para revisão deste conceito.",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.SemiBold,
-                                            modifier = Modifier.padding(10.dp)
-                                        )
-                                    }
-                                }
-
-                                // Camada 5: Diagnóstico Metacognitivo Proporcional (Autopercepção × Evidência × Inferência Preliminar + CTV)
+                                // Camada Primária (Feedback pedagógico conciso) + Camada Secundária expansível (Detalhes técnicos)
                                 if (!isBlankAnswer) {
+                                    val primaryPedagogicalFeedback = ctvResult?.let { ctvRes ->
+                                        val isConceptTransfer = ctvRes.verificationMode.isBlank() ||
+                                            ctvRes.verificationMode == "CONCEPTUAL_TRANSFER"
+                                        when {
+                                            ctvRes.isCorrect && isConceptTransfer ->
+                                                "Você conseguiu aplicar o conceito em outro contexto."
+                                            !ctvRes.isCorrect && isConceptTransfer ->
+                                                "Precisamos reforçar a compreensão deste conceito."
+                                            ctvRes.isCorrect ->
+                                                "Boa prática complementar neste tópico. A aplicação independente do conceito segue em acompanhamento."
+                                            else ->
+                                                "Precisamos reforçar a compreensão deste tópico."
+                                        }
+                                    } ?: metacognitiveAssessment.pedagogicalFeedbackPt.ifBlank {
+                                        metacognitiveAssessment.systemInferenceMessage
+                                    }
+
                                     Surface(
                                         shape = RoundedCornerShape(10.dp),
                                         color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -1837,50 +1844,86 @@ fun QuestionSessionScreen(
                                     ) {
                                         Column(
                                             modifier = Modifier.padding(12.dp),
-                                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                                            verticalArrangement = Arrangement.spacedBy(6.dp)
                                         ) {
                                             Text(
-                                                text = "Leitura Metacognitiva · ${metacognitiveAssessment.inferenceSupport.labelPt}",
-                                                style = MaterialTheme.typography.labelLarge,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.primary
-                                            )
-                                            Text(
-                                                text = metacognitiveAssessment.systemInferenceMessage,
-                                                style = MaterialTheme.typography.bodySmall,
+                                                text = primaryPedagogicalFeedback,
+                                                style = MaterialTheme.typography.bodyMedium,
                                                 fontWeight = FontWeight.SemiBold
                                             )
-                                            Text(
-                                                text = metacognitiveAssessment.selfPerceptionSummary,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                            Text(
-                                                text = metacognitiveAssessment.observedEvidenceSummary,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
                                             ctvResult?.let { ctvRes ->
-                                                HorizontalDivider(
-                                                    modifier = Modifier.padding(vertical = 4.dp),
-                                                    color = MaterialTheme.colorScheme.outlineVariant
-                                                )
                                                 Text(
-                                                    text = "Verificação Complementar: ${ctvRes.consolidatedDiagnosticTitlePt}",
+                                                    text = "Verificação complementar: ${ctvRes.consolidatedDiagnosticTitlePt}",
                                                     style = MaterialTheme.typography.labelMedium,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = if (ctvRes.isCorrect) ext.correct else ext.warning
+                                                    color = if (ctvRes.isCorrect) ext.correct else ext.warning,
+                                                    fontWeight = FontWeight.SemiBold
+                                                )
+                                            }
+                                            Text(
+                                                text = if (showTechnicalDetails) {
+                                                    "Ocultar detalhes da avaliação"
+                                                } else {
+                                                    "Ver detalhes da avaliação"
+                                                },
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier
+                                                    .testTag("metacognitive_details_toggle")
+                                                    .clickable { showTechnicalDetails = !showTechnicalDetails }
+                                                    .padding(vertical = 2.dp)
+                                            )
+                                            if (showTechnicalDetails) {
+                                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                                                Text(
+                                                    text = "Sustentação diagnóstica: ${metacognitiveAssessment.inferenceSupport.labelPt}",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = MaterialTheme.colorScheme.primary
                                                 )
                                                 Text(
-                                                    text = ctvRes.consolidatedDiagnosticMessagePt,
-                                                    style = MaterialTheme.typography.bodySmall
+                                                    text = "Estratégia cognitiva: ${selectedStrategy?.labelPt ?: "Etapa pulada / não informada"}",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
-                                                ctvRes.explanation?.takeIf { it.isNotBlank() }?.let { compExp ->
+                                                val effChanges = currentAttempt?.answerChangeCount ?: answerChangeCount
+                                                val effResources = currentAttempt?.consultedResources ?: consultedResources.toList()
+                                                if (effChanges > 0 || effResources.isNotEmpty()) {
+                                                    val detailsParts = buildList {
+                                                        if (effChanges > 0) add("$effChanges troca(s) de alternativa")
+                                                        if (effResources.isNotEmpty()) add("${effResources.size} recurso(s) consultado(s)")
+                                                    }
                                                     Text(
-                                                        text = "Gabarito da verificação: $compExp",
+                                                        text = "Interações na resolução: ${detailsParts.joinToString(" · ")}",
                                                         style = MaterialTheme.typography.labelSmall,
                                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                                     )
+                                                }
+                                                question.userStats?.takeIf { it.attempts > 0 }?.let { stats ->
+                                                    Text(
+                                                        text = "Histórico prévio neste item: ${stats.attempts} tentativa(s) (${stats.accuracyPct.toInt()}% de acerto)",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                                Text(
+                                                    text = metacognitiveAssessment.systemInferenceMessage,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                ctvResult?.let { ctvRes ->
+                                                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                                                    Text(
+                                                        text = ctvRes.consolidatedDiagnosticMessagePt,
+                                                        style = MaterialTheme.typography.bodySmall
+                                                    )
+                                                    ctvRes.explanation?.takeIf { it.isNotBlank() }?.let { compExp ->
+                                                        Text(
+                                                            text = "Gabarito da verificação: $compExp",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
@@ -2083,102 +2126,6 @@ fun QuestionSessionScreen(
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.primary
                                     )
-                                }
-                            }
-                        }
-                    }
-
-                    // Diagnóstico dos 3 Sinais: Resposta × Confiança × Evidência Selecionada (em acertos e erros, sem nova pergunta jurídica)
-                    if (!isBlankAnswer && challenge != null && challenge.options.isNotEmpty()) {
-                        item(key = "evidence_challenge") {
-                            val hasCustomCh = question.hasCustomEvidenceChallenge()
-                            val normalizedSelectedEv = normalizeEvidenceOptionId(selectedEvidenceId, hasCustomCh)
-                            val pickedWrongEvidenceOnHit = isUserCorrect &&
-                                normalizedSelectedEv != null &&
-                                normalizedSelectedEv != challenge.correctEvidenceId
-                            Card(
-                                shape = RoundedCornerShape(14.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surface,
-                                    contentColor = MaterialTheme.colorScheme.onSurface
-                                ),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(16.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Text(
-                                        text = "Rastreabilidade da Resposta · 3 Sinais (Opcional)",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = challenge.prompt,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    challenge.options.forEach { opt ->
-                                        val isPicked = normalizedSelectedEv == opt.evidenceId
-                                        val isRightEv = opt.evidenceId == challenge.correctEvidenceId
-                                        Surface(
-                                            shape = RoundedCornerShape(10.dp),
-                                            color = when {
-                                                normalizedSelectedEv != null && isRightEv -> ext.correctContainer
-                                                isPicked && !isRightEv -> ext.errorContainer
-                                                else -> MaterialTheme.colorScheme.surfaceContainerLow
-                                            },
-                                            contentColor = when {
-                                                normalizedSelectedEv != null && isRightEv -> ext.onCorrectContainer
-                                                isPicked && !isRightEv -> ext.onErrorContainer
-                                                else -> MaterialTheme.colorScheme.onSurface
-                                            },
-                                            border = BorderStroke(
-                                                1.dp,
-                                                if (isPicked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
-                                            ),
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable(enabled = normalizedSelectedEv == null) {
-                                                    selectedEvidenceId = opt.evidenceId
-                                                    userAnswers[question.id]?.let { prev ->
-                                                        userAnswers[question.id] = prev.copy(selectedEvidenceId = opt.evidenceId)
-                                                    }
-                                                    onSelectEvidence(question.id, opt.evidenceId)
-                                                }
-                                        ) {
-                                            Text(
-                                                text = opt.text,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                modifier = Modifier.padding(12.dp)
-                                            )
-                                        }
-                                    }
-                                    if (pickedWrongEvidenceOnHit) {
-                                        Surface(
-                                            shape = RoundedCornerShape(8.dp),
-                                            color = ext.warningContainer,
-                                            contentColor = ext.onWarningContainer,
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) {
-                                            Text(
-                                                text = "Acerto registrado, porém o fundamento selecionado diverge da regra cobrada; o domínio conceitual ainda não foi confirmado.",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                fontWeight = FontWeight.SemiBold,
-                                                modifier = Modifier.padding(10.dp)
-                                            )
-                                        }
-                                    } else if (normalizedSelectedEv != null) {
-                                        Text(
-                                            text = if (isUserCorrect) {
-                                                "Raciocínio alinhado ao fundamento central registrado nos 3 Sinais."
-                                            } else {
-                                                "Leitura registrada para calibrar a próxima revisão deste tópico."
-                                            },
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-                                    }
                                 }
                             }
                         }

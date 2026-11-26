@@ -56,10 +56,21 @@ class QuestionPreviewMatrixScreenshotTest(
         }
 
         fun screenshotName(preview: ComposablePreview<AndroidPreviewInfo>): String {
-            return preview.previewInfo.name
+            val base = preview.previewInfo.name
                 .lowercase()
                 .replace(Regex("[^a-z0-9]+"), "_")
                 .trim('_')
+            return if (preview.methodName == "QuestionSessionPreviewMatrix") {
+                base
+            } else {
+                val prefix = preview.methodName
+                    .removeSuffix("PreviewMatrix")
+                    .replace(Regex("([a-z0-9])([A-Z])"), "$1_$2")
+                    .lowercase()
+                    .replace(Regex("[^a-z0-9]+"), "_")
+                    .trim('_')
+                "${prefix}_$base"
+            }
         }
 
         fun deviceConfigFor(preview: ComposablePreview<AndroidPreviewInfo>): DeviceConfig {

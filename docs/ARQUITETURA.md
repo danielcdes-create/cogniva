@@ -1,6 +1,6 @@
 # Arquitetura do Ecossistema Cogniva 2.0
 
-Este documento descreve a arquitetura unificada do **Cogniva `2.4.4`** (`build 34`), consolidando os contratos compartilhados (`contract_version: 5`), o backend Rust (`cogniva-api`), o módulo experiencial **Missões** (`/missoes/` e Android), a arquitetura em 3 camadas (Verificação Conceitual `CTV` Alinhada à Regra Decisiva & Diagnóstico de 3 Sinais sob Escassez `< 15`, Calibração *Walk-Forward* + Simulador de Decisão sob Incerteza & Curva de 300 min e Protocolo de Entrada de 60s), o painel administrativo web (`/admin/`), o aplicativo Android *offline-first* (`Room v8`), a governança LGPD e a infraestrutura de entrega contínua.
+Este documento descreve a arquitetura unificada do **Cogniva `2.4.5`** (`build 35`), consolidando os contratos compartilhados (`contract_version: 5`), o backend Rust (`cogniva-api`), o módulo experiencial **Missões** (`/missoes/` e Android), a arquitetura em 3 camadas (Motor de Avaliação Metacognitiva Consolidado + Verificação Conceitual `CTV` Alinhada à Regra Decisiva sob Escassez `< 15`, Calibração *Walk-Forward* + Simulador de Decisão sob Incerteza & Curva de 300 min e Protocolo de Entrada de 60s), o painel administrativo web (`/admin/`), o aplicativo Android *offline-first* (`Room v8`), a governança LGPD e a infraestrutura de entrega contínua.
 
 ---
 
@@ -9,14 +9,14 @@ Este documento descreve a arquitetura unificada do **Cogniva `2.4.4`** (`build 3
 ```mermaid
 flowchart LR
   subgraph Clientes
-    AND["Android App 2.4.4 / build 34 (Kotlin / Compose / Room v8)"]
+    AND["Android App 2.4.5 / build 35 (Kotlin / Compose / Room v8)"]
     MIS["Portal Web /missoes/ (ES Modules + HTTP Range + CSP)"]
     ADM["Painel Web /admin/ (ES Modules + CSP + WCAG AA)"]
   end
 
   subgraph Servidor["VPS DigitalOcean"]
     NGX["Nginx TLS + HSTS + Rate Limit IPv6 /64 + Gate 503"]
-    API["cogniva-api 2.4.4 (Rust / Axum / Tokio · Contract v5)"]
+    API["cogniva-api 2.4.5 (Rust / Axum / Tokio · Contract v5)"]
   end
 
   subgraph Dados["Persistência e Contratos"]

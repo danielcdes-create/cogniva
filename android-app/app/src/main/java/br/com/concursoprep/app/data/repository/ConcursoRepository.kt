@@ -856,12 +856,19 @@ class ConcursoRepository(
                         .maxByOrNull { safeInstant(it.second.occurredAt) }
                     val lastEv = lastRowAndEv?.second
                     val lastQuestion = lastRowAndEv?.first?.let { cachedById[it] }
-                    val evChallengePassed = if (lastEv?.selectedEvidenceId != null && lastQuestion != null) {
+                    val legacyEvCompatible = if (lastEv?.selectedEvidenceId != null && lastQuestion != null) {
                         val ch = lastQuestion.effectiveEvidenceChallenge()
                         val normSel = normalizeEvidenceOptionId(lastEv.selectedEvidenceId, lastQuestion.hasCustomEvidenceChallenge())
                         if (ch != null && normSel != null) normSel == ch.correctEvidenceId else null
                     } else {
                         null
+                    }
+                    val lastDeclConf = lastEv?.declaredConfidence
+                        ?: lastEv?.let { DeclaredConfidence.fromLegacyBand(it.confidenceLevel, it.confidenceLevel > 0) }
+                    val evChallengePassed = when {
+                        legacyEvCompatible == false -> false
+                        lastDeclConf?.isLowOrGuess != true && lastEv?.cognitiveStrategy?.isGroundedOrFunctional == true -> true
+                        else -> null
                     }
                     val nonBlankAttempts = unitRows.sumOf { it.attempts }
                     val correctAttempts = unitRows.sumOf { it.correct }
@@ -1053,6 +1060,7 @@ class ConcursoRepository(
                             seenCorrectBefore = true
                         }
                         HitGroundingCategory.UNKNOWN_GROUNDING,
+                        HitGroundingCategory.RETROSPECTIVE_LEGACY_EVIDENCE,
                         HitGroundingCategory.NOT_APPLICABLE_ERROR -> unknownGroundingHits++
                     }
                 } else {
@@ -1387,6 +1395,7 @@ class ConcursoRepository(
                             evaluableGroundingHits++; fragileHits++
                         }
                         HitGroundingCategory.UNKNOWN_GROUNDING,
+                        HitGroundingCategory.RETROSPECTIVE_LEGACY_EVIDENCE,
                         HitGroundingCategory.NOT_APPLICABLE_ERROR -> {
                             unknownGroundingHits++
                         }

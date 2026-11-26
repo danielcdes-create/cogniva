@@ -1,10 +1,18 @@
 package br.com.concursoprep.app
 
+import br.com.concursoprep.app.domain.exam.CognitiveStrategy
+import br.com.concursoprep.app.domain.exam.CtvTriggerPriority
+import br.com.concursoprep.app.domain.exam.DeclaredConfidence
 import br.com.concursoprep.app.domain.exam.FatigueEngine
+import br.com.concursoprep.app.domain.exam.HitGroundingCategory
+import br.com.concursoprep.app.domain.exam.MetacognitiveEngine
+import br.com.concursoprep.app.domain.exam.MetacognitiveMatrixInputs
+import br.com.concursoprep.app.domain.exam.PreliminaryDiagnosis
 import br.com.concursoprep.app.domain.exam.PrioritizationEngine
 import br.com.concursoprep.app.domain.exam.StrategyAction
 import br.com.concursoprep.app.domain.exam.StrategyEngine
 import br.com.concursoprep.app.domain.exam.StrategyPosture
+import br.com.concursoprep.app.domain.exam.SupportLevel
 import br.com.concursoprep.app.domain.model.EditorialCardDto
 import br.com.concursoprep.app.domain.model.EvidenceChallengeDto
 import br.com.concursoprep.app.domain.model.QuestionDto
@@ -253,6 +261,109 @@ class PerformanceEnginesAndModelsTest {
         assertNull(
             "Raw option copy ERR_ALT_* must not be surfaced as fake conceptual error",
             longMc.resolveActionableConceptualError(longMc.effectiveEditorialCard(), 0)
+        )
+    }
+
+    @Test
+    fun metacognitiveConsolidationDifferentiatesGuessTypesPreservesRetrospectiveProvenanceAndFormatsPedagogicalLayer() {
+        // 1. Chute totalmente aleatório vs. chute após eliminação vs. chute sem estratégia confirmada
+        val pureGuessHit = MetacognitiveEngine.buildAssessment(
+            MetacognitiveMatrixInputs(
+                isBlank = false,
+                isCorrect = true,
+                declaredConfidence = DeclaredConfidence.GUESS,
+                cognitiveStrategy = CognitiveStrategy.RANDOM_GUESS,
+                consistentHistory = false,
+                rationaleContradicted = false
+            )
+        )
+        assertEquals(PreliminaryDiagnosis.POSSIBLE_CASUAL_HIT, pureGuessHit.preliminaryDiagnosis)
+        assertEquals(SupportLevel.HIGH, pureGuessHit.inferenceSupport)
+        assertEquals(CtvTriggerPriority.HIGH, pureGuessHit.ctvPriority)
+        assertEquals("Você acertou, mas ainda precisamos verificar sua compreensão.", pureGuessHit.pedagogicalFeedbackPt)
+        assertFalse(pureGuessHit.strategySkipped)
+
+        val unconfirmedGuessHit = MetacognitiveEngine.buildAssessment(
+            MetacognitiveMatrixInputs(
+                isBlank = false,
+                isCorrect = true,
+                declaredConfidence = DeclaredConfidence.GUESS,
+                cognitiveStrategy = null,
+                consistentHistory = false,
+                rationaleContradicted = false
+            )
+        )
+        assertEquals(PreliminaryDiagnosis.POSSIBLE_CASUAL_HIT, unconfirmedGuessHit.preliminaryDiagnosis)
+        assertEquals(SupportLevel.MODERATE, unconfirmedGuessHit.inferenceSupport)
+        assertTrue("Unconfirmed guess must never fabricate an explicit strategy", unconfirmedGuessHit.strategySkipped)
+
+        val eliminationGuessHit = MetacognitiveEngine.buildAssessment(
+            MetacognitiveMatrixInputs(
+                isBlank = false,
+                isCorrect = true,
+                declaredConfidence = DeclaredConfidence.GUESS,
+                cognitiveStrategy = CognitiveStrategy.ELIMINATION,
+                consistentHistory = false,
+                rationaleContradicted = false
+            )
+        )
+        assertEquals(PreliminaryDiagnosis.UNCONFIRMED_MASTERY, eliminationGuessHit.preliminaryDiagnosis)
+        assertEquals(CtvTriggerPriority.RECOMMENDED, eliminationGuessHit.ctvPriority)
+        assertTrue(eliminationGuessHit.pedagogicalFeedbackPt.contains("eliminou alternativas"))
+
+        // 2. Evidência retrospectiva pós-gabarito (3 Sinais legado) nunca é equiparada automaticamente a estratégia pré-gabarito
+        val retrospectiveOnly = MetacognitiveEngine.classifyHitGrounding(
+            isCorrect = true,
+            declaredConfidence = DeclaredConfidence.HIGH,
+            cognitiveStrategy = null,
+            evidenceCompatible = true
+        )
+        assertEquals(HitGroundingCategory.RETROSPECTIVE_LEGACY_EVIDENCE, retrospectiveOnly)
+        assertFalse(retrospectiveOnly.creditsComprehension)
+        assertFalse(retrospectiveOnly.isEvaluable)
+
+        // 3. Mensagens pedagógicas concisas da camada primária (Seção 7.3)
+        val confidentElimination = MetacognitiveEngine.buildAssessment(
+            MetacognitiveMatrixInputs(
+                isBlank = false,
+                isCorrect = true,
+                declaredConfidence = DeclaredConfidence.HIGH,
+                cognitiveStrategy = CognitiveStrategy.ELIMINATION,
+                consistentHistory = false,
+                rationaleContradicted = false
+            )
+        )
+        assertEquals("Você utilizou uma estratégia de eliminação eficaz.", confidentElimination.pedagogicalFeedbackPt)
+
+        val highConfError = MetacognitiveEngine.buildAssessment(
+            MetacognitiveMatrixInputs(
+                isBlank = false,
+                isCorrect = false,
+                declaredConfidence = DeclaredConfidence.VERY_HIGH,
+                cognitiveStrategy = CognitiveStrategy.CONCEPTUAL_KNOWLEDGE,
+                consistentHistory = false,
+                rationaleContradicted = false
+            )
+        )
+        assertEquals(
+            "Sua resposta indica um possível equívoco conceitual que merece revisão.",
+            highConfError.pedagogicalFeedbackPt
+        )
+
+        val missingOptionalSignals = MetacognitiveEngine.buildAssessment(
+            inputs = MetacognitiveMatrixInputs(
+                isBlank = false,
+                isCorrect = true,
+                declaredConfidence = null,
+                cognitiveStrategy = null,
+                consistentHistory = false,
+                rationaleContradicted = false
+            ),
+            hasMultiAttemptEvidence = false
+        )
+        assertEquals(
+            "Ainda não há informações suficientes para avaliar seu domínio.",
+            missingOptionalSignals.pedagogicalFeedbackPt
         )
     }
 }

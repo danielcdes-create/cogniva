@@ -78,6 +78,8 @@ pub struct GroundingEvidenceSummaryDto {
     pub raw_correct_hits: usize,
     pub evaluable_grounding_hits: usize,
     pub unknown_grounding_hits: usize,
+    #[serde(default)]
+    pub retrospective_legacy_hits: usize,
     pub valid_conceptual_hits: usize,
     pub valid_functional_strategy_hits: usize,
     pub divergent_rationale_hits: usize,
@@ -434,6 +436,10 @@ pub async fn compute_student_analytics(
                     HitGroundingCategory::FragileOrGuess => {
                         grounding_summary.evaluable_grounding_hits += 1;
                         grounding_summary.fragile_or_guess_hits += 1;
+                    }
+                    HitGroundingCategory::RetrospectiveLegacyEvidence => {
+                        grounding_summary.retrospective_legacy_hits += 1;
+                        grounding_summary.unknown_grounding_hits += 1;
                     }
                     HitGroundingCategory::UnknownGrounding => {
                         grounding_summary.unknown_grounding_hits += 1;

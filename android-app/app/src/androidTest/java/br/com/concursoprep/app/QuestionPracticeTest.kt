@@ -184,9 +184,18 @@ class QuestionPracticeTest {
             assertTrue(pending.isCorrect)
             assertEquals(3, pending.confidenceLevel)
             assertEquals("VERY_HIGH", pending.declaredConfidence)
+            assertNull("Unselected optional strategy must remain null", pending.cognitiveStrategy)
             assertTrue(pending.confidenceExplicit)
             assertTrue(pending.questionRevision.isNotBlank())
             assertTrue(repository.pausedSession()!!.answers.getValue(q.id).submitted)
+
+            // 4. Post-answer UI shows primary pedagogical feedback, hides discontinued legacy 3-Signals block,
+            // and expands technical details only on demand.
+            rule.onNodeWithText("Rastreabilidade da Resposta · 3 Sinais (Opcional)").assertDoesNotExist()
+            rule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Você acertou com segurança."))
+            rule.onNodeWithText("Você acertou com segurança.").assertIsDisplayed()
+            rule.onNodeWithTag("metacognitive_details_toggle").performClick()
+            rule.onNodeWithText("Sustentação diagnóstica: Sustentação moderada").assertIsDisplayed()
         } finally {
             rule.runOnUiThread { store.clear() }
             repo?.awaitIdleForClose()

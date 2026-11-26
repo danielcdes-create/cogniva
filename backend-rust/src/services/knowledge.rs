@@ -192,8 +192,26 @@ pub fn project_units(activity: &Document, question: &Document) -> Vec<UnitQuesti
 
     let has_curated_ch = q.evidence_challenge.is_some();
     let effective_ch = q.effective_evidence_challenge();
+    let is_fragile_pre_exposure = |e: &Document| -> bool {
+        matches!(
+            e.get_str("declared_confidence").ok(),
+            Some("GUESS" | "LOW")
+        ) || matches!(
+            e.get_str("cognitive_strategy").ok(),
+            Some("RANDOM_GUESS" | "PATTERN_RECOGNITION" | "INTUITION")
+        )
+    };
+    let is_grounded_pre_exposure = |e: &Document| -> bool {
+        !matches!(e.get_str("declared_confidence").ok(), Some("GUESS" | "LOW"))
+            && matches!(
+                e.get_str("cognitive_strategy").ok(),
+                Some("CONCEPTUAL_KNOWLEDGE" | "LOGICAL_DEDUCTION" | "ELIMINATION")
+            )
+    };
     let is_verified_correct_event = |e: &&Document| -> bool {
-        if e.get_bool("status").ok() != Some(true) || e.get_i32("nivel_confianca").unwrap_or(0) < 2
+        if e.get_bool("status").ok() != Some(true)
+            || e.get_i32("nivel_confianca").unwrap_or(0) < 2
+            || is_fragile_pre_exposure(e)
         {
             return false;
         }
@@ -250,7 +268,7 @@ pub fn project_units(activity: &Document, question: &Document) -> Vec<UnitQuesti
         .sum();
     let avg_seconds = (total_secs as f64) / (events.len() as f64);
 
-    let evidence_challenge_passed = match (
+    let legacy_ev_compatible = match (
         last.get_str("selected_evidence_id").ok(),
         effective_ch.as_ref(),
     ) {
@@ -260,6 +278,15 @@ pub fn project_units(activity: &Document, question: &Document) -> Vec<UnitQuesti
             Some(norm_sel == ch.correct_evidence_id)
         }
         _ => None,
+    };
+    // Consolida diagnóstico pré-exposição sem equiparar automaticamente evidência pós-gabarito positiva:
+    // contradição explícita legada permanece Some(false), enquanto aprovação positiva exige estratégia pré-exposição válida.
+    let evidence_challenge_passed = if legacy_ev_compatible == Some(false) {
+        Some(false)
+    } else if is_grounded_pre_exposure(last) {
+        Some(true)
+    } else {
+        None
     };
 
     let raw_board = question

@@ -946,7 +946,8 @@ pub async fn get_next_action(
                     HitGroundingCategory::FragileOrGuess => {
                         three_signal.hesitant_hits += 1;
                     }
-                    HitGroundingCategory::UnknownGrounding => {
+                    HitGroundingCategory::UnknownGrounding
+                    | HitGroundingCategory::RetrospectiveLegacyEvidence => {
                         if s.nivel_confianca <= 1 {
                             three_signal.hesitant_hits += 1;
                         } else {

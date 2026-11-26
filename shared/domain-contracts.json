@@ -685,13 +685,13 @@
       { "code": "VERY_HIGH", "ordinal": 5, "legacy_band": 3, "label_pt": "Praticamente certo" }
     ],
     "cognitive_strategies": [
-      { "code": "CONCEPTUAL_KNOWLEDGE", "label_pt": "Conhecia o conceito e consegui aplicá-lo." },
-      { "code": "LOGICAL_DEDUCTION", "label_pt": "Deduzi a resposta por raciocínio lógico." },
-      { "code": "ELIMINATION", "label_pt": "Eliminei as alternativas incorretas." },
-      { "code": "PATTERN_RECOGNITION", "label_pt": "Reconheci termos ou conceitos familiares." },
+      { "code": "CONCEPTUAL_KNOWLEDGE", "label_pt": "Conhecia e apliquei o conceito." },
+      { "code": "LOGICAL_DEDUCTION", "label_pt": "Deduzi por raciocínio lógico." },
+      { "code": "ELIMINATION", "label_pt": "Eliminei alternativas." },
+      { "code": "PATTERN_RECOGNITION", "label_pt": "Reconheci termos familiares." },
       { "code": "INTUITION", "label_pt": "Respondi por intuição." },
       { "code": "RANDOM_GUESS", "label_pt": "Escolhi aleatoriamente." },
-      { "code": "UNSPECIFIED", "label_pt": "Não sei identificar como cheguei à resposta." }
+      { "code": "UNSPECIFIED", "label_pt": "Não sei identificar." }
     ]
   },
   "metacognitive_matrix": [
@@ -793,6 +793,28 @@
       "expected_diagnosis": "UNDEMONSTRATED_KNOWLEDGE",
       "expected_support": "MODERATE",
       "expected_ctv_priority": "NONE"
+    },
+    {
+      "is_blank": false,
+      "is_correct": true,
+      "declared_confidence": "GUESS",
+      "cognitive_strategy": "ELIMINATION",
+      "consistent_history": false,
+      "rationale_contradicted": false,
+      "expected_diagnosis": "UNCONFIRMED_MASTERY",
+      "expected_support": "MODERATE",
+      "expected_ctv_priority": "RECOMMENDED"
+    },
+    {
+      "is_blank": false,
+      "is_correct": false,
+      "declared_confidence": "GUESS",
+      "cognitive_strategy": "ELIMINATION",
+      "consistent_history": false,
+      "rationale_contradicted": false,
+      "expected_diagnosis": "POSSIBLE_KNOWLEDGE_GAP",
+      "expected_support": "MODERATE",
+      "expected_ctv_priority": "OPTIONAL"
     }
   ],
   "concept_mastery_states": [
@@ -1088,6 +1110,24 @@
       "cognitive_strategy": "ELIMINATION",
       "evidence_compatible": false,
       "expected_category": "DIVERGENT_RATIONALE",
+      "expected_credits_comprehension": false,
+      "expected_is_evaluable": true
+    },
+    {
+      "is_correct": true,
+      "declared_confidence": "HIGH",
+      "cognitive_strategy": null,
+      "evidence_compatible": true,
+      "expected_category": "RETROSPECTIVE_LEGACY_EVIDENCE",
+      "expected_credits_comprehension": false,
+      "expected_is_evaluable": false
+    },
+    {
+      "is_correct": true,
+      "declared_confidence": "GUESS",
+      "cognitive_strategy": "ELIMINATION",
+      "evidence_compatible": null,
+      "expected_category": "FRAGILE_OR_GUESS",
       "expected_credits_comprehension": false,
       "expected_is_evaluable": true
     }

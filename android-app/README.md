@@ -1,4 +1,4 @@
-# 📱 Cogniva Android App (`android-app` `2.4.4` / `build 34`)
+# 📱 Cogniva Android App (`android-app` `2.4.5` / `build 35`)
 
 Aplicativo nativo Android construído em **Kotlin + Jetpack Compose (Material 3)** com persistência local **Room v8** (com schemas exportados em `7.json` e `8.json`), **Verificação Conceitual Adaptativa (`CTV`) com Reconciliação Online/Offline**, **Módulo Missões Audiovisual Interativo** (`MissionsScreen.kt`), **Motores Simétricos de Decisão, Calibração *Walk-Forward* & Curva de 300 Minutos** (`PerformanceEngines.kt`, `contract_version: 5`), **Protocolo de Entrada de 60 Segundos ("Terça · 22h")**, **Consulta Contextual em Camada (Catálogo + IA + Google Partial Custom Tab)**, criptografia de sessão no **Android Keystore**, contraste **WCAG 2.1 AA** e sincronização *offline-first* idempotente com o backend `cogniva-api`.
 
@@ -6,7 +6,7 @@ Aplicativo nativo Android construído em **Kotlin + Jetpack Compose (Material 3)
 
 ---
 
-## 1. Arquitetura do Cliente (`2.4.4`)
+## 1. Arquitetura do Cliente (`2.4.5`)
 
 - **Autenticação Nativa, Modo Convidado e Direitos LGPD ([`AuthStore.kt`](app/src/main/java/br/com/concursoprep/app/data/AuthStore.kt), [`OnboardingScreen.kt`](app/src/main/java/br/com/concursoprep/app/ui/screens/OnboardingScreen.kt), [`AccountLinkForm.kt`](app/src/main/java/br/com/concursoprep/app/ui/screens/AccountLinkForm.kt), [`SettingsScreen.kt`](app/src/main/java/br/com/concursoprep/app/ui/screens/SettingsScreen.kt)):**
   - Início imediato como convidado (online ou offline) ou autenticação por e-mail e senha (`Entrar` / `Criar conta`).
@@ -33,8 +33,8 @@ Aplicativo nativo Android construído em **Kotlin + Jetpack Compose (Material 3)
 1. **`OnboardingScreen.kt`:** Boas-vindas ao Cogniva, escolha opcional entre estudo imediato ou conta por e-mail/senha, seleção dinâmica de templates de concursos e metas diárias.
 2. **`TodayScreen.kt`:** **Protocolo de Entrada de 60 Segundos ("Terça · 22h")** — tela inicial livre de metas atrasadas ou cobrança de sequência, exibindo proposta reversível (*"Só uma questão"* / **`Resolver 1 questão`** / **`Sem estudar hoje`**), atalho opcional para o **Simulador de Decisão (8–12 min)**, retomada de sessão pausada e alerta OTA.
 3. **`ContestsScreen.kt` & `ExamBuilderSheet.kt`:** Edital verticalizado por concurso ou tronco, treino por disciplina ou por tópico específico, modal de diff de edital publicado, janela estimada customizável (com tema `Theme.Cogniva.EdgeToEdgeDialog`) e controle de participação ativa na escada.
-4. **`PracticeAndQuestionScreen.kt` & `ContextualLookupSheet.kt`:** Sessão imersiva em tela cheia, seleção nativa de texto no enunciado + chip **`Consultar / Google`** abrindo **Camada de Consulta Contextual** (fontes normativas do catálogo, síntese enciclopédica, explicação IA sem spoiler e **Pesquisa Google / Planalto / STF-STJ em Camada** via Partial Custom Tab), botão **Deixar em Branco (Omitir · 0 pt)**, **Ficha Editorial Rastreável**, **Rastreabilidade dos 3 Sinais** (em acertos e erros, detectando `ILLUSORY_COMPETENCE`), **Simulador de Decisão sob Incerteza** e saída **`Encerrar`** ou **`Resolver outra`**.
-5. **`ProgressScreen.kt`:** Prontidão sob **Regra de Escassez `< 15` Questões Humanas**, **Mapa de Transferência Cross-Banca (`TRANSFER_PROBE` / `TRANSFER_UNMEASURED`)**, **Diagnóstico dos 3 Sinais & Omissões Estratégicas**, **Decisão sob Incerteza ($VE = 2p - 1$ e cenários de 300 min)**, **Curva Individual de 300 Minutos $p(t)$ com Controle de Dificuldade**, **Métricas Voluntárias do Protocolo 60s** e evidência por disciplina (`X/15`).
+4. **`PracticeAndQuestionScreen.kt` & `ContextualLookupSheet.kt`:** Sessão imersiva em tela cheia, seleção nativa de texto no enunciado + chip **`Consultar / Google`** abrindo **Camada de Consulta Contextual** (fontes normativas do catálogo, síntese enciclopédica, explicação IA sem spoiler e **Pesquisa Google / Planalto / STF-STJ em Camada** via Partial Custom Tab), botão **Deixar em Branco (Omitir · 0 pt)**, captura pré-gabarito de confiança em 5 níveis + estratégia cognitiva em cartões uniformes (com desambiguação contextual de chutes), **Leitura Metacognitiva em Duas Camadas** (feedback pedagógico conciso + detalhes técnicos expansíveis), **Ficha Editorial Rastreável**, **Simulador de Decisão sob Incerteza** e saída **`Encerrar`** ou **`Resolver outra`**.
+5. **`ProgressScreen.kt`:** Prontidão sob **Regra de Escassez `< 15` Questões Humanas**, **Mapa de Transferência Cross-Banca (`TRANSFER_PROBE` / `TRANSFER_UNMEASURED`)**, **Diagnóstico Metacognitivo, Matriz de Confiança & Omissões Estratégicas**, **Decisão sob Incerteza ($VE = 2p - 1$ e cenários de 300 min)**, **Curva Individual de 300 Minutos $p(t)$ com Controle de Dificuldade**, **Métricas Voluntárias do Protocolo 60s** e evidência por disciplina (`X/15`).
 6. **`SettingsScreen.kt` & `QuestionImportScreen.kt`:** Gestão de conta nativa Cogniva (login, criação de conta, logout e exclusão definitiva LGPD Art. 18 — [Política de Privacidade](../PRIVACY.md)), tema, sincronização offline-first, atualização OTA e módulo administrativo de inserção de questões V2 (visível para `userProfile.isAdmin`).
 
 ---

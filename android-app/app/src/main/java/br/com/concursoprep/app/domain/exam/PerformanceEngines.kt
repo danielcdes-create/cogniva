@@ -1204,19 +1204,19 @@ enum class CognitiveStrategy(
     val shortLabelPt: String
 ) {
     @SerialName("CONCEPTUAL_KNOWLEDGE")
-    CONCEPTUAL_KNOWLEDGE("Conhecia o conceito e consegui aplicá-lo.", "Conhecia o conceito"),
+    CONCEPTUAL_KNOWLEDGE("Conhecia e apliquei o conceito.", "Conhecia o conceito"),
     @SerialName("LOGICAL_DEDUCTION")
-    LOGICAL_DEDUCTION("Deduzi a resposta por raciocínio lógico.", "Dedução lógica"),
+    LOGICAL_DEDUCTION("Deduzi por raciocínio lógico.", "Dedução lógica"),
     @SerialName("ELIMINATION")
-    ELIMINATION("Eliminei as alternativas incorretas.", "Eliminação"),
+    ELIMINATION("Eliminei alternativas.", "Eliminação"),
     @SerialName("PATTERN_RECOGNITION")
-    PATTERN_RECOGNITION("Reconheci termos ou conceitos familiares.", "Termos familiares"),
+    PATTERN_RECOGNITION("Reconheci termos familiares.", "Termos familiares"),
     @SerialName("INTUITION")
     INTUITION("Respondi por intuição.", "Intuição"),
     @SerialName("RANDOM_GUESS")
     RANDOM_GUESS("Escolhi aleatoriamente.", "Escolha aleatória"),
     @SerialName("UNSPECIFIED")
-    UNSPECIFIED("Não sei identificar como cheguei à resposta.", "Não sei identificar");
+    UNSPECIFIED("Não sei identificar.", "Não sei identificar");
 
     val isGroundedOrFunctional: Boolean
         get() = this == CONCEPTUAL_KNOWLEDGE || this == LOGICAL_DEDUCTION || this == ELIMINATION
@@ -1281,6 +1281,7 @@ data class MetacognitiveAssessmentDto(
     @SerialName("preliminary_diagnosis") val preliminaryDiagnosis: PreliminaryDiagnosis,
     @SerialName("inference_support") val inferenceSupport: SupportLevel,
     @SerialName("ctv_priority") val ctvPriority: CtvTriggerPriority,
+    @SerialName("pedagogical_feedback_pt") val pedagogicalFeedbackPt: String = "",
     @SerialName("self_perception_summary") val selfPerceptionSummary: String,
     @SerialName("observed_evidence_summary") val observedEvidenceSummary: String,
     @SerialName("system_inference_message") val systemInferenceMessage: String,
@@ -1295,6 +1296,7 @@ enum class HitGroundingCategory {
     @SerialName("VALID_FUNCTIONAL_STRATEGY") VALID_FUNCTIONAL_STRATEGY,
     @SerialName("DIVERGENT_RATIONALE") DIVERGENT_RATIONALE,
     @SerialName("FRAGILE_OR_GUESS") FRAGILE_OR_GUESS,
+    @SerialName("RETROSPECTIVE_LEGACY_EVIDENCE") RETROSPECTIVE_LEGACY_EVIDENCE,
     @SerialName("UNKNOWN_GROUNDING") UNKNOWN_GROUNDING;
 
     val creditsComprehension: Boolean
@@ -1326,8 +1328,11 @@ object MetacognitiveEngine {
         ) {
             return HitGroundingCategory.VALID_FUNCTIONAL_STRATEGY
         }
-        if (cognitiveStrategy == CognitiveStrategy.CONCEPTUAL_KNOWLEDGE || evidenceCompatible == true) {
+        if (cognitiveStrategy == CognitiveStrategy.CONCEPTUAL_KNOWLEDGE) {
             return HitGroundingCategory.VALID_CONCEPTUAL_GROUNDING
+        }
+        if (evidenceCompatible == true) {
+            return HitGroundingCategory.RETROSPECTIVE_LEGACY_EVIDENCE
         }
         return HitGroundingCategory.UNKNOWN_GROUNDING
     }
@@ -1342,8 +1347,12 @@ object MetacognitiveEngine {
                 CtvTriggerPriority.NONE
             )
         }
-        val isGuess = inputs.declaredConfidence == DeclaredConfidence.GUESS ||
-            inputs.cognitiveStrategy == CognitiveStrategy.RANDOM_GUESS
+        val isPureOrUnconfirmedGuess = inputs.cognitiveStrategy == CognitiveStrategy.RANDOM_GUESS ||
+            (inputs.declaredConfidence == DeclaredConfidence.GUESS &&
+                (inputs.cognitiveStrategy == null ||
+                    inputs.cognitiveStrategy == CognitiveStrategy.RANDOM_GUESS ||
+                    inputs.cognitiveStrategy == CognitiveStrategy.UNSPECIFIED))
+        val isPartialGuess = inputs.declaredConfidence == DeclaredConfidence.GUESS && !isPureOrUnconfirmedGuess
 
         if (inputs.isCorrect) {
             if (inputs.rationaleContradicted) {
@@ -1353,11 +1362,18 @@ object MetacognitiveEngine {
                     CtvTriggerPriority.HIGH
                 )
             }
-            if (isGuess) {
+            if (isPureOrUnconfirmedGuess) {
                 return Triple(
                     PreliminaryDiagnosis.POSSIBLE_CASUAL_HIT,
-                    SupportLevel.HIGH,
+                    if (inputs.cognitiveStrategy == CognitiveStrategy.RANDOM_GUESS) SupportLevel.HIGH else SupportLevel.MODERATE,
                     CtvTriggerPriority.HIGH
+                )
+            }
+            if (isPartialGuess) {
+                return Triple(
+                    PreliminaryDiagnosis.UNCONFIRMED_MASTERY,
+                    SupportLevel.MODERATE,
+                    CtvTriggerPriority.RECOMMENDED
                 )
             }
             if (inputs.declaredConfidence == DeclaredConfidence.LOW) {
@@ -1402,11 +1418,18 @@ object MetacognitiveEngine {
                 CtvTriggerPriority.RECOMMENDED
             )
         } else {
-            if (isGuess) {
+            if (isPureOrUnconfirmedGuess) {
                 return Triple(
                     PreliminaryDiagnosis.UNDEMONSTRATED_KNOWLEDGE,
                     SupportLevel.MODERATE,
                     CtvTriggerPriority.NONE
+                )
+            }
+            if (isPartialGuess) {
+                return Triple(
+                    PreliminaryDiagnosis.POSSIBLE_KNOWLEDGE_GAP,
+                    SupportLevel.MODERATE,
+                    CtvTriggerPriority.OPTIONAL
                 )
             }
             if (inputs.declaredConfidence?.isHigh == true) {
@@ -1421,6 +1444,55 @@ object MetacognitiveEngine {
                 SupportLevel.MODERATE,
                 CtvTriggerPriority.OPTIONAL
             )
+        }
+    }
+
+    fun pedagogicalFeedbackPt(
+        inputs: MetacognitiveMatrixInputs,
+        diagnosis: PreliminaryDiagnosis,
+        hasMultiAttemptEvidence: Boolean = false
+    ): String {
+        if (inputs.isBlank) {
+            return "Questão deixada em branco. Nenhuma inferência de domínio foi registrada."
+        }
+        return if (inputs.isCorrect) {
+            when {
+                inputs.rationaleContradicted || diagnosis == PreliminaryDiagnosis.POSSIBLE_CASUAL_HIT ->
+                    "Você acertou, mas ainda precisamos verificar sua compreensão."
+                inputs.declaredConfidence == DeclaredConfidence.GUESS &&
+                    (inputs.cognitiveStrategy == CognitiveStrategy.ELIMINATION ||
+                        inputs.cognitiveStrategy == CognitiveStrategy.LOGICAL_DEDUCTION) ->
+                    "Você eliminou alternativas, mas ainda respondeu com incerteza. Sua compreensão precisa ser confirmada."
+                inputs.cognitiveStrategy == CognitiveStrategy.PATTERN_RECOGNITION ||
+                    inputs.cognitiveStrategy == CognitiveStrategy.INTUITION ->
+                    "Você reconheceu elementos importantes. Sua compreensão ainda precisa ser confirmada."
+                diagnosis == PreliminaryDiagnosis.INSECURE_KNOWLEDGE ->
+                    "Você acertou, mas ainda demonstra insegurança neste conceito."
+                diagnosis == PreliminaryDiagnosis.FUNCTIONAL_REASONING ->
+                    if (inputs.cognitiveStrategy == CognitiveStrategy.ELIMINATION) {
+                        "Você utilizou uma estratégia de eliminação eficaz."
+                    } else {
+                        "Você utilizou raciocínio lógico consistente nesta questão."
+                    }
+                diagnosis == PreliminaryDiagnosis.POSSIBLE_CONCEPTUAL_MASTERY ||
+                    inputs.declaredConfidence?.isHigh == true ->
+                    "Você acertou com segurança."
+                inputs.declaredConfidence == null &&
+                    inputs.cognitiveStrategy == null &&
+                    !hasMultiAttemptEvidence ->
+                    "Ainda não há informações suficientes para avaliar seu domínio."
+                else ->
+                    "Você acertou, mas sua compreensão ainda precisa ser confirmada."
+            }
+        } else {
+            when (diagnosis) {
+                PreliminaryDiagnosis.POSSIBLE_CONCEPTUAL_MISCONCEPTION ->
+                    "Sua resposta indica um possível equívoco conceitual que merece revisão."
+                PreliminaryDiagnosis.UNDEMONSTRATED_KNOWLEDGE ->
+                    "Seu domínio deste conceito ainda não foi demonstrado."
+                else ->
+                    "Este conceito pode precisar de reforço."
+            }
         }
     }
 
@@ -1487,6 +1559,7 @@ object MetacognitiveEngine {
             preliminaryDiagnosis = diagnosis,
             inferenceSupport = support,
             ctvPriority = priority,
+            pedagogicalFeedbackPt = pedagogicalFeedbackPt(inputs, diagnosis, hasMultiAttemptEvidence),
             selfPerceptionSummary = selfPerception,
             observedEvidenceSummary = observed,
             systemInferenceMessage = inferenceMessagePt(diagnosis, hasMultiAttemptEvidence),
