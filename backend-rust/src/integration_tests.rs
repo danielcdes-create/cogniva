@@ -3407,43 +3407,10 @@ async fn missions_end_to_end_flow_range_streaming_isolation_and_epistemology() {
     db.drop().await.unwrap();
 }
 
-#[tokio::test]
-#[ignore = "Requires dedicated loopback Mongo 27048"]
-async fn metacognitive_signals_ctv_database_first_persistence_auto_suspension_and_lgpd() {
-    let uri = std::env::var("COGNIVA_TEST_MONGODB_URI").unwrap();
-    assert!(uri.starts_with("mongodb://127.0.0.1:27048/"));
-    let client = Client::with_uri_str(&uri).await.unwrap();
-    let name = format!("cogniva_test_{}", uuid::Uuid::new_v4().simple());
-    let db = client.database(&name);
-    let cfg = config(&uri);
-    let secret = cfg.jwt_secret.clone();
-    let state = Arc::new(AppState::new(db.clone(), cfg));
-    let app = build_router(state.clone());
-
-    // 1. Prepare MongoDB schema (validates question-v2-validator-2.4.0 / validator_revision = 7)
-    services::question_storage::prepare(&db).await.unwrap();
-    let validator_version_doc = db
-        .collection::<Document>("cogniva_schema_versions")
-        .find_one(doc! { "_id": "question-v2:todasQuestoes" })
-        .await
-        .unwrap()
-        .expect("question-v2:todasQuestoes must be registered in cogniva_schema_versions");
-    assert_eq!(
-        validator_version_doc.get_i32("validator_revision").unwrap(),
-        services::question_storage::CURRENT_VALIDATOR_REVISION
-    );
-    assert_eq!(
-        validator_version_doc.get_str("source_sha256").unwrap(),
-        services::question_storage::QUESTION_VALIDATOR_V2_4_0_SHA256
-    );
-
-    seed_user_and_session(&db, 901, false).await;
-    seed_user_and_session(&db, 999, true).await;
-
-    // 2. Seed human source question + permanent AUTO_APPROVED AI CTV complementary question in todasQuestoes
-    let source_oid = ObjectId::new();
-    let ctv_ai_oid = ObjectId::new();
-
+fn build_dir_adm_source_and_ctv_docs(
+    source_oid: ObjectId,
+    ctv_ai_oid: ObjectId,
+) -> (Document, String, Document) {
     let source_doc = v2_question_doc(
         source_oid,
         "Segundo a Lei 9.784/1999, o direito da Administração de anular os atos administrativos de que decorram efeitos favoráveis para os destinatários decai em cinco anos, salvo comprovada má-fé.",
@@ -3485,7 +3452,7 @@ async fn metacognitive_signals_ctv_database_first_persistence_auto_suspension_an
     );
     ctv_json["origins"] = json!([
         {
-            "origin_id": format!("ctv-{}", ctv_ai_oid.to_hex()),
+            "origin_id": uuid::Uuid::new_v4().to_string(),
             "kind": "AI_GENERATED",
             "verification": "PENDING",
             "source_exam_code": null,
@@ -3527,8 +3494,10 @@ async fn metacognitive_signals_ctv_database_first_persistence_auto_suspension_an
         "scope": "CURRENT_KNOWLEDGE",
         "context_date": null
     });
-    ctv_json["canonical_subject_id"] = json!("DIR_ADM");
-    ctv_json["canonical_topic_id"] = json!("DIR_ADM_01_001");
+    if let Some(obj) = ctv_json.as_object_mut() {
+        obj.remove("canonical_subject_id");
+        obj.remove("canonical_topic_id");
+    }
     services::question_contracts::populate_v2_1_hashes(&mut ctv_json).unwrap();
     let ctv_content_rev = ctv_json["content_revision"].as_str().unwrap().to_string();
     ctv_json["diagnostic_meta"] = json!({
@@ -3557,6 +3526,89 @@ async fn metacognitive_signals_ctv_database_first_persistence_auto_suspension_an
     });
     services::question_contracts::validate(&ctv_json).unwrap();
     let ctv_doc = services::question_contracts::contract_to_bson_question(&ctv_json).unwrap();
+    (source_doc, source_rev, ctv_doc)
+}
+
+#[test]
+fn dir_adm_ctv_integration_fixture_satisfies_contract_eligibility_and_conceptual_transfer() {
+    let source_oid = ObjectId::new();
+    let ctv_ai_oid = ObjectId::new();
+    let (source_doc, _, ctv_doc) = build_dir_adm_source_and_ctv_docs(source_oid, ctv_ai_oid);
+    let catalog = services::question_contracts::catalog_ref();
+    let eval_date = chrono::Utc::now().date_naive();
+    let trusted = services::question_eligibility::TrustedReviewContext::default();
+    assert!(
+        !services::question_eligibility::evaluate_bson_question_for_practice(
+            &ctv_doc,
+            &catalog,
+            None,
+            eval_date,
+            &trusted,
+            services::question_eligibility::EligibilityMode::StandardObjective,
+        )
+        .eligible
+    );
+    assert!(
+        services::question_eligibility::evaluate_bson_question_for_practice(
+            &ctv_doc,
+            &catalog,
+            None,
+            eval_date,
+            &trusted,
+            services::question_eligibility::EligibilityMode::ComplementaryVerification,
+        )
+        .eligible
+    );
+    let src_q = services::question_compatibility::decode(source_doc.clone()).unwrap();
+    let ctv_q = services::question_compatibility::decode_for_ctv(ctv_doc.clone()).unwrap();
+    let src_prof = services::ctv_alignment::resolve_question_alignment_profile(&source_doc, &src_q);
+    let ctv_prof = services::ctv_alignment::resolve_question_alignment_profile(&ctv_doc, &ctv_q);
+    match services::ctv_alignment::evaluate_candidate_alignment(&src_prof, &ctv_prof, false) {
+        services::ctv_alignment::CandidateAlignmentDecision::Accepted { mode, .. } => {
+            assert_eq!(mode, services::ctv_alignment::VerificationMode::ConceptualTransfer);
+        }
+        other => panic!("expected ConceptualTransfer, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+#[ignore = "Requires dedicated loopback Mongo 27048"]
+async fn metacognitive_signals_ctv_database_first_persistence_auto_suspension_and_lgpd() {
+    let uri = std::env::var("COGNIVA_TEST_MONGODB_URI").unwrap();
+    assert!(uri.starts_with("mongodb://127.0.0.1:27048/"));
+    let client = Client::with_uri_str(&uri).await.unwrap();
+    let name = format!("cogniva_test_{}", uuid::Uuid::new_v4().simple());
+    let db = client.database(&name);
+    let cfg = config(&uri);
+    let secret = cfg.jwt_secret.clone();
+    let state = Arc::new(AppState::new(db.clone(), cfg));
+    let app = build_router(state.clone());
+
+    // 1. Prepare MongoDB schema (validates question-v2-validator-2.4.0 / validator_revision = 7)
+    services::question_storage::prepare(&db).await.unwrap();
+    let validator_version_doc = db
+        .collection::<Document>("cogniva_schema_versions")
+        .find_one(doc! { "_id": "question-v2:todasQuestoes" })
+        .await
+        .unwrap()
+        .expect("question-v2:todasQuestoes must be registered in cogniva_schema_versions");
+    assert_eq!(
+        validator_version_doc.get_i32("validator_revision").unwrap(),
+        services::question_storage::CURRENT_VALIDATOR_REVISION
+    );
+    assert_eq!(
+        validator_version_doc.get_str("source_sha256").unwrap(),
+        services::question_storage::QUESTION_VALIDATOR_V2_4_0_SHA256
+    );
+
+    seed_user_and_session(&db, 901, false).await;
+    seed_user_and_session(&db, 999, true).await;
+
+    // 2. Seed human source question + permanent AUTO_APPROVED AI CTV complementary question in todasQuestoes
+    let source_oid = ObjectId::new();
+    let ctv_ai_oid = ObjectId::new();
+    let (source_doc, source_rev, ctv_doc) =
+        build_dir_adm_source_and_ctv_docs(source_oid, ctv_ai_oid);
 
     db.collection::<Document>("todasQuestoes")
         .insert_many(vec![source_doc, ctv_doc])
