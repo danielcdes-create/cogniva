@@ -3424,12 +3424,17 @@ async fn metacognitive_signals_ctv_database_first_persistence_auto_suspension_an
     services::question_storage::prepare(&db).await.unwrap();
     let validator_version_doc = db
         .collection::<Document>("cogniva_schema_versions")
-        .find_one(doc! { "_id": "question-v2-validator-2.4.0" })
+        .find_one(doc! { "_id": "question-v2:todasQuestoes" })
         .await
-        .unwrap();
-    assert!(
-        validator_version_doc.is_some(),
-        "question-v2-validator-2.4.0 must be registered in cogniva_schema_versions"
+        .unwrap()
+        .expect("question-v2:todasQuestoes must be registered in cogniva_schema_versions");
+    assert_eq!(
+        validator_version_doc.get_i32("validator_revision").unwrap(),
+        services::question_storage::CURRENT_VALIDATOR_REVISION
+    );
+    assert_eq!(
+        validator_version_doc.get_str("source_sha256").unwrap(),
+        services::question_storage::QUESTION_VALIDATOR_V2_4_0_SHA256
     );
 
     seed_user_and_session(&db, 901, false).await;
@@ -3474,7 +3479,7 @@ async fn metacognitive_signals_ctv_database_first_persistence_auto_suspension_an
     ctv_json["correct_answer_indices"] = json!([0]);
     ctv_json["disciplina"] = json!("Direito Administrativo");
     ctv_json["source"] = json!("Cogniva CTV");
-    ctv_json["level"] = json!("Médio");
+    ctv_json["level"] = json!("MEDIUM");
     ctv_json["explanation"] = json!(
         "Nos termos do art. 54 da Lei 9.784/1999, a decadência quinquenal para anulação de atos favoráveis afasta-se diante de comprovada má-fé."
     );
@@ -3482,12 +3487,23 @@ async fn metacognitive_signals_ctv_database_first_persistence_auto_suspension_an
         {
             "origin_id": format!("ctv-{}", ctv_ai_oid.to_hex()),
             "kind": "AI_GENERATED",
-            "verification": "UNVERIFIED",
+            "verification": "PENDING",
+            "source_exam_code": null,
+            "institution": null,
+            "organizer": "Cogniva CTV",
+            "exam_year": null,
+            "question_number": null,
+            "source_reference": null,
             "provenance": {
-                "actor": { "type": "AI", "id": "grok-4" },
-                "method": "AI_GENERATION",
+                "actor": { "type": "AI", "id": "xai" },
+                "method": "AI_SUGGESTION",
                 "recorded_at": "2026-11-25T12:00:00Z",
-                "rationale": "Questão complementar CTV validada para transferência conceitual."
+                "rationale": "Questão complementar CTV validada para transferência conceitual.",
+                "evidence": [],
+                "model": "grok-4",
+                "prompt_id": "ctv-generator",
+                "prompt_version": "ctv-generator/2.0",
+                "source_suggestion_id": null
             }
         }
     ]);
@@ -3524,13 +3540,13 @@ async fn metacognitive_signals_ctv_database_first_persistence_auto_suspension_an
         "generation_origin": "AI_ON_DEMAND",
         "model_identifier": "grok-4",
         "prompt_id": "ctv-generator",
-        "prompt_version": "ctv-generator/1",
+        "prompt_version": "ctv-generator/2.0",
         "generated_at": "2026-11-25T12:00:00Z",
-        "validation_status": "VALIDATED",
-        "estimated_difficulty": "Médio",
+        "validation_status": "AUTO_APPROVED",
+        "estimated_difficulty": "MEDIUM",
         "content_hash": ctv_content_rev,
         "usage_count": 0,
-        "quality_status": "AUTO_APPROVED",
+        "quality_status": "OPERATIONAL",
         "quality_metrics": {
             "attempts_count": 0,
             "correct_count": 0,
@@ -3540,7 +3556,7 @@ async fn metacognitive_signals_ctv_database_first_persistence_auto_suspension_an
         }
     });
     services::question_contracts::validate(&ctv_json).unwrap();
-    let ctv_doc = Bson::try_from(ctv_json).unwrap().as_document().unwrap().clone();
+    let ctv_doc = services::question_contracts::contract_to_bson_question(&ctv_json).unwrap();
 
     db.collection::<Document>("todasQuestoes")
         .insert_many(vec![source_doc, ctv_doc])
@@ -3754,11 +3770,11 @@ async fn metacognitive_signals_ctv_database_first_persistence_auto_suspension_an
     // Original question activity log stays at attempts = 1 (never inflated by CTV!)
     let orig_act = db
         .collection::<Document>("userActivityLog")
-        .find_one(doc! { "user_id": 901_i64, "question_id": source_oid.to_hex() })
+        .find_one(doc! { "user_id": 901_i64, "question_id": source_oid })
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(orig_act.get_i32("total_attempts").unwrap(), 1);
+    assert_eq!(orig_act.get_i32("quantidade_praticas").unwrap(), 1);
 
     // 8. Student Learning Analytics returns 10 formal KPIs + 5-level calibration + 8-state mastery
     let (an_st, an_res) = request(
@@ -3907,7 +3923,7 @@ async fn metacognitive_signals_ctv_database_first_persistence_auto_suspension_an
 #[tokio::test]
 #[ignore = "Requires dedicated loopback Mongo 27048"]
 async fn acceptance_a01_through_a14_end_to_end() {
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     let uri = std::env::var("COGNIVA_TEST_MONGODB_URI").unwrap();
     assert!(uri.starts_with("mongodb://127.0.0.1:27048/"));
@@ -3915,17 +3931,14 @@ async fn acceptance_a01_through_a14_end_to_end() {
     let name = format!("cogniva_test_a01_a14_{}", uuid::Uuid::new_v4().simple());
     let db = client.database(&name);
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    let ai_calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let ai_calls = Arc::new(AtomicUsize::new(0));
     let ai_calls_srv = ai_calls.clone();
-    tokio::spawn(async move {
-        while let Ok((mut socket, _)) = listener.accept().await {
+    let mock_xai = Router::new().route(
+        "/responses",
+        axum::routing::post(move |axum::Json(_body): axum::Json<Value>| {
             let calls = ai_calls_srv.clone();
-            tokio::spawn(async move {
-                let mut buf = vec![0u8; 16384];
-                let _ = socket.read(&mut buf).await;
-                let n = calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+            async move {
+                let n = calls.fetch_add(1, Ordering::SeqCst) + 1;
                 let gen_obj = json!({
                     "question": format!("Em carteira institucional #{n}, dois títulos prefixados com durations modificadas de 2,4 e 5,6 sofrem o mesmo pequeno choque paralelo na taxa de juros de 0,30%. Qual apresenta maior variação percentual aproximada de preço?"),
                     "answers": [
@@ -3943,24 +3956,26 @@ async fn acceptance_a01_through_a14_end_to_end() {
                     "normative_certainty": "HIGH",
                     "concept_adherence": "CONFIRMED"
                 });
-                let body = json!({
-                    "choices": [{ "message": { "content": gen_obj.to_string() } }]
-                })
-                .to_string();
-                let resp = format!(
-                    "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
-                    body.len(),
-                    body
-                );
-                let _ = socket.write_all(resp.as_bytes()).await;
-            });
-        }
+                axum::Json(json!({
+                    "status": "completed",
+                    "output": [{
+                        "type": "message",
+                        "content": [{ "type": "output_text", "text": gen_obj.to_string() }]
+                    }]
+                }))
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let provider = tokio::spawn(async move {
+        axum::serve(listener, mock_xai).await.unwrap();
     });
 
     let mut cfg = config(&uri);
     cfg.xai_api_key = Some("test-xai-key".to_string());
     cfg.xai_model = Some("grok-4".to_string());
-    cfg.xai_base_url = format!("http://{addr}/v1");
+    cfg.xai_base_url = format!("http://{addr}");
     let secret = cfg.jwt_secret.clone();
     let state = Arc::new(AppState::new(db.clone(), cfg));
     let app = build_router(state.clone());
@@ -4091,4 +4106,5 @@ async fn acceptance_a01_through_a14_end_to_end() {
     assert_eq!(sub_wrong["counts_as_independent_transfer"], true);
 
     db.drop().await.unwrap();
+    provider.abort();
 }

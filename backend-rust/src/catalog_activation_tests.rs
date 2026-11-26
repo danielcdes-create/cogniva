@@ -774,7 +774,7 @@ async fn validator_migration_upgrades_v2_0_0_receipts_without_rewriting_document
     );
     assert_eq!(
         q_receipt.get_str("migration_id").unwrap(),
-        question_storage::VALIDATOR_MIGRATION_V2_3_0
+        question_storage::VALIDATOR_MIGRATION_V2_4_0
     );
 
     let mut new_sub5_doc = sub5_doc;

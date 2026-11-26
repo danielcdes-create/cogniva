@@ -36,6 +36,12 @@ pub struct LearningEvent {
     pub active_seconds: Option<i32>,
     #[serde(skip_serializing_if = "is_zero_u16")]
     pub answer_change_count: u16,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub initial_chosen_index: Option<usize>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub consulted_resources: Vec<String>,
+    #[serde(skip_serializing_if = "is_zero_u16")]
+    pub focus_loss_count: u16,
 }
 
 fn is_zero_u16(v: &u16) -> bool {
@@ -128,6 +134,9 @@ pub async fn get_state(
                 cognitive_strategy: e.cognitive_strategy,
                 active_seconds: e.active_seconds,
                 answer_change_count: e.answer_change_count,
+                initial_chosen_index: e.initial_chosen_index,
+                consulted_resources: e.consulted_resources.clone(),
+                focus_loss_count: e.focus_loss_count,
             })
             .collect();
         let non_blank_count = activity
