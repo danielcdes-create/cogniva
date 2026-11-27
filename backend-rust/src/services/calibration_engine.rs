@@ -90,7 +90,7 @@ pub fn normalize_calibration_format(raw: &str) -> &'static str {
 pub fn legacy_band_mapping_table() -> HashMap<&'static str, &'static str> {
     HashMap::from([
         ("0_explicit", "GUESS"),
-        ("1_explicit", "GUESS"),
+        ("1_explicit", "LOW"),
         ("2_explicit", "MEDIUM"),
         ("3_explicit", "HIGH"),
         ("unconfirmed_default", "UNDECLARED_EXCLUDED"),
@@ -358,7 +358,8 @@ mod tests {
     }
 
     #[test]
-    fn a07_walkforward_calibration_keeps_formats_separate_and_future_outcomes_never_leak_into_past() {
+    fn a07_walkforward_calibration_keeps_formats_separate_and_future_outcomes_never_leak_into_past()
+    {
         let base_events = vec![
             WalkforwardCalibrationInput {
                 attempt_id: "att-1".into(),
@@ -407,8 +408,7 @@ mod tests {
         // Predictions for att-1, att-2, att-3, and even att-4 (before att-4's outcome!) MUST be identical!
         for i in 0..4 {
             assert_eq!(
-                rep_a.traces[i].predicted_probability,
-                rep_b.traces[i].predicted_probability,
+                rep_a.traces[i].predicted_probability, rep_b.traces[i].predicted_probability,
                 "Future outcome leaked into prediction at step {i}"
             );
         }

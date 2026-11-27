@@ -41,12 +41,46 @@ pub fn canonical_filter(filter: Document) -> Document {
     }
 }
 
+fn strip_null_collection_fields(raw: &mut Document) {
+    for key in [
+        "concursos",
+        "disciplina",
+        "syllabus_topic_ids",
+        "contextualHint",
+        "answers",
+        "correct_answers",
+        "correct_answer_indices",
+    ] {
+        if matches!(raw.get(key), Some(Bson::Null)) {
+            raw.remove(key);
+        }
+    }
+}
+
+fn has_disqualifying_diagnostic_meta(raw: &Document) -> bool {
+    raw.get_document("diagnostic_meta").is_ok_and(|dmeta| {
+        matches!(
+            dmeta.get_str("quality_status").ok(),
+            Some("SUSPENDED" | "RETIRED")
+        ) || matches!(
+            dmeta.get_str("validation_status").ok(),
+            Some("PENDING_HUMAN_REVIEW" | "REJECTED" | "SUSPENDED")
+        ) || dmeta.get_str("generation_origin").ok() == Some("AI_ON_DEMAND")
+            && dmeta.get_str("validation_status").ok() != Some("HUMAN_CONFIRMED")
+    })
+}
+
 pub fn decode(mut raw: Document) -> Result<QuestionDocument, AppError> {
     if raw.get_str("question_type").ok() == Some("OPEN_ENDED")
         || raw.get_str("status").ok() == Some("ARCHIVED")
     {
         return Err(AppError::Conflict(
             "Formato discursivo ou estado arquivado fora da prática objetiva atual".into(),
+        ));
+    }
+    if has_disqualifying_diagnostic_meta(&raw) {
+        return Err(AppError::Conflict(
+            "Questão complementar suspensa ou restrita ao fluxo CTV".into(),
         ));
     }
     if let Ok(validity) = raw.get_document("validity") {
@@ -167,6 +201,7 @@ pub fn decode(mut raw: Document) -> Result<QuestionDocument, AppError> {
         };
         raw.insert("concursos", Bson::Array(items));
     }
+    strip_null_collection_fields(&mut raw);
 
     let mut q: QuestionDocument = bson::from_document(raw.clone())
         .map_err(|_| AppError::Conflict("Documento de questão inválido".into()))?;
@@ -198,6 +233,19 @@ pub fn decode(mut raw: Document) -> Result<QuestionDocument, AppError> {
 /// (`validation_status` em `AUTO_APPROVED`/`HUMAN_CONFIRMED` e `quality_status != SUSPENDED`),
 /// mantendo `StandardObjective` estritamente isolado em `decode`.
 pub fn decode_for_ctv(mut raw: Document) -> Result<QuestionDocument, AppError> {
+    if let Ok(dmeta) = raw.get_document("diagnostic_meta") {
+        if matches!(
+            dmeta.get_str("quality_status").ok(),
+            Some("SUSPENDED" | "RETIRED")
+        ) || matches!(
+            dmeta.get_str("validation_status").ok(),
+            Some("PENDING_HUMAN_REVIEW" | "REJECTED" | "SUSPENDED")
+        ) {
+            return Err(AppError::Conflict(
+                "Questão complementar suspensa ou aguardando revisão humana".into(),
+            ));
+        }
+    }
     if let Ok(std_doc) = decode(raw.clone()) {
         return Ok(std_doc);
     }
@@ -234,6 +282,7 @@ pub fn decode_for_ctv(mut raw: Document) -> Result<QuestionDocument, AppError> {
         };
         raw.insert("concursos", Bson::Array(items));
     }
+    strip_null_collection_fields(&mut raw);
     let mut q: QuestionDocument = bson::from_document(raw)
         .map_err(|_| AppError::Conflict("Documento de questão CTV inválido".into()))?;
     let computed_rev = q.revision()?;

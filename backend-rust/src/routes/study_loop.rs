@@ -12,9 +12,7 @@ use crate::{
         exam_store,
         fatigue_engine::{evaluate_from_activities, FatigueReport},
         knowledge,
-        metacognitive_engine::{
-            classify_hit_grounding, DeclaredConfidence, HitGroundingCategory,
-        },
+        metacognitive_engine::{classify_hit_grounding, DeclaredConfidence, HitGroundingCategory},
         prioritization_engine::{
             build_metacognitive_decision_reason, format_entry_60s_header,
             priority_utility_metacognitive, MetacognitivePrioritySignals, PrioritizationInputs,
@@ -107,12 +105,13 @@ pub struct RecommendationFeedbackRequest {
     pub recommendation_id: String,
     /// `"ACCEPTED"` | `"DISMISSED"`
     pub outcome: String,
-    #[serde(default)]
+    #[serde(default, alias = "additional_seconds")]
     pub additional_active_seconds: i32,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct RecommendationFeedbackResponse {
+    pub status: &'static str,
     pub recommendation_id: String,
     pub outcome: String,
     pub additional_active_seconds: i32,
@@ -214,7 +213,9 @@ pub fn aggregate_unit_diagnostics(
         acc.avg_seconds_sum += obs.avg_seconds;
 
         if !obs.board_key.is_empty() {
-            let is_cross_board = if !target_boards.is_empty() {
+            let is_cross_board = if obs.board_key == "__ctv_independent__" {
+                true
+            } else if !target_boards.is_empty() {
                 !target_boards.contains(&obs.board_key)
             } else {
                 match &acc.primary_board_when_untargeted {
@@ -246,7 +247,8 @@ pub fn aggregate_unit_diagnostics(
         let available_cross = cross_board_supply_by_topic
             .get(&acc.topic_id)
             .copied()
-            .unwrap_or(0);
+            .unwrap_or(0)
+            .max(acc.transfer_attempts);
         let transfer_status = evaluate_transfer_status(&TransferInputs {
             distinct_questions,
             available_cross_board_questions: available_cross,
@@ -421,6 +423,15 @@ pub async fn get_next_action(
         .map(|a| (a.question_id.to_hex(), a.memory_stability_days))
         .collect();
 
+    // Extrai sinais metacognitivos e de verificação complementar CTV confirmados por tópico (Seção 4 / A09)
+    let ctv_attempts_for_user: Vec<Document> = state
+        .db
+        .collection::<Document>("conceptual_transfer_attempts")
+        .find(doc! { "user_id": user.user_id })
+        .await?
+        .try_collect()
+        .await?;
+
     let mut collected_observations = Vec::new();
     for raw in &raw_rows {
         let Some(qid) = raw.get_object_id("question_id").ok() else {
@@ -430,9 +441,78 @@ pub async fn get_next_action(
             continue;
         };
         let stab = stability_by_qid.get(&qid.to_hex()).copied().unwrap_or(0.0);
-        for obs in knowledge::project_units(raw, qdoc) {
+        for mut obs in knowledge::project_units(raw, qdoc) {
+            if !obs.canonical_topic_id.is_empty() {
+                // Em get_next_action, exam.subjects.topics é indexado por canonical_topic_id:
+                // agrega por tópico para jamais descartar evidência de questões vinculadas a conceitos!
+                obs.unit_id = obs.canonical_topic_id.clone();
+            }
             collected_observations.push((obs, stab));
         }
+    }
+    for (ctv_idx, ctv) in ctv_attempts_for_user.iter().enumerate() {
+        let Some(tid) = ctv
+            .get_str("canonical_topic_id")
+            .ok()
+            .filter(|s| !s.is_empty())
+        else {
+            continue;
+        };
+        let vmode = ctv
+            .get_str("verification_mode")
+            .unwrap_or("CONCEPTUAL_TRANSFER");
+        let is_indep = ctv
+            .get_bool("counts_as_independent_transfer")
+            .unwrap_or_else(|_| {
+                ctv.get_str("verification_timing").ok() == Some("PRE_FEEDBACK")
+                    && !ctv.get_bool("was_previously_exposed").unwrap_or(false)
+            })
+            && vmode == "CONCEPTUAL_TRANSFER";
+        if !is_indep {
+            continue;
+        }
+        let is_ok = ctv.get_bool("is_correct").unwrap_or(false);
+        let ts_ms = ctv
+            .get_datetime("occurred_at")
+            .map(|d| d.timestamp_millis())
+            .unwrap_or(now_utc.timestamp_millis());
+        let cq_id = ctv
+            .get_str("complementary_question_id")
+            .ok()
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("ctv-indep-{ctv_idx}"));
+        let active_s = ctv.get_i32("active_seconds").unwrap_or(45).max(1) as f64;
+        collected_observations.push((
+            knowledge::UnitQuestionObservation {
+                unit_id: tid.to_string(),
+                canonical_subject_id: ctv
+                    .get_str("canonical_subject_id")
+                    .unwrap_or("")
+                    .to_string(),
+                canonical_topic_id: tid.to_string(),
+                concept_id: ctv
+                    .get_str("target_concept_id")
+                    .ok()
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_string),
+                question_id: cq_id,
+                board_key: "__ctv_independent__".to_string(),
+                non_blank_attempts: 1,
+                correct_attempts: usize::from(is_ok),
+                last_is_correct: is_ok,
+                last_confidence: if is_ok { 3 } else { 1 },
+                had_prior_verified_correct: false,
+                has_spaced_retention: false,
+                evidence_challenge_passed: Some(is_ok),
+                first_answered_ms: ts_ms,
+                last_answered_ms: ts_ms,
+                first_verified_correct_ms: is_ok.then_some(ts_ms),
+                last_verified_correct_ms: is_ok.then_some(ts_ms),
+                avg_seconds: active_s,
+            },
+            if is_ok { 3.0 } else { 0.5 },
+        ));
     }
 
     let now_ms = now_utc.timestamp_millis();
@@ -442,15 +522,6 @@ pub async fn get_next_action(
         &cross_board_supply_by_topic,
         now_ms,
     );
-
-    // Extrai sinais metacognitivos e de verificação complementar CTV confirmados por tópico (Seção 4 / A09)
-    let ctv_attempts_for_user: Vec<Document> = state
-        .db
-        .collection::<Document>("conceptual_transfer_attempts")
-        .find(doc! { "user_id": user.user_id })
-        .await?
-        .try_collect()
-        .await?;
 
     #[derive(Default)]
     struct TopicMetaAcc {
@@ -465,6 +536,7 @@ pub async fn get_next_action(
         indep_transfer_ok: bool,
         indep_transfer_fail: bool,
         latest_post_exp_ok_ms: Option<i64>,
+        latest_grounded_hit_ms: Option<i64>,
     }
 
     let mut meta_by_topic: HashMap<String, TopicMetaAcc> = HashMap::new();
@@ -475,8 +547,8 @@ pub async fn get_next_action(
             continue;
         };
         let qdoc_opt = q_docs.get(&act.question_id);
-        let decoded_q = qdoc_opt
-            .and_then(|d| crate::services::question_compatibility::decode(d.clone()).ok());
+        let decoded_q =
+            qdoc_opt.and_then(|d| crate::services::question_compatibility::decode(d.clone()).ok());
         let has_curated_ch = decoded_q
             .as_ref()
             .is_some_and(|q| q.evidence_challenge.is_some());
@@ -527,6 +599,10 @@ pub async fn get_next_action(
                 }
                 if hg == HitGroundingCategory::ValidFunctionalStrategy {
                     m.functional_corrects += 1;
+                }
+                if hg.credits_comprehension() {
+                    m.latest_grounded_hit_ms =
+                        Some(m.latest_grounded_hit_ms.map_or(ts, |p| p.max(ts)));
                 }
             } else if decl_conf.is_some_and(DeclaredConfidence::is_high) || s.nivel_confianca >= 3 {
                 m.hce_count += 1;
@@ -599,7 +675,9 @@ pub async fn get_next_action(
             0.0
         };
         let (pending_spacing, spaced_due) = match m.latest_post_exp_ok_ms {
-            Some(ts) if !m.indep_transfer_ok => {
+            Some(ts)
+                if !m.indep_transfer_ok && m.latest_grounded_hit_ms.is_none_or(|gh| gh <= ts) =>
+            {
                 let elapsed = now_ms - ts;
                 if elapsed < 18 * 3_600_000 {
                     (true, false)
@@ -627,6 +705,38 @@ pub async fn get_next_action(
                 recent_consecutive_exposures: consecutive_by_topic.get(tid).copied().unwrap_or(0),
             },
         );
+    }
+
+    let cat_for_dag = crate::services::question_contracts::catalog_ref();
+    let eff_concepts = crate::services::catalog_runtime::effective_concepts(&cat_for_dag);
+    let mut concept_to_topic: HashMap<String, String> = HashMap::new();
+    for c in &eff_concepts {
+        if let (Some(cid), Some(tid)) = (c["concept_id"].as_str(), c["topic_id"].as_str()) {
+            concept_to_topic.insert(cid.to_string(), tid.to_string());
+        }
+    }
+    let mut prereq_topics_by_topic: HashMap<String, HashSet<String>> = HashMap::new();
+    let mut dependent_topics_by_topic: HashMap<String, HashSet<String>> = HashMap::new();
+    for c in &eff_concepts {
+        let Some(tid) = c["topic_id"].as_str() else {
+            continue;
+        };
+        if let Some(prereqs) = c["prerequisite_concept_ids"].as_array() {
+            for p in prereqs.iter().filter_map(|v| v.as_str()) {
+                if let Some(p_tid) = concept_to_topic.get(p) {
+                    if p_tid != tid {
+                        prereq_topics_by_topic
+                            .entry(tid.to_string())
+                            .or_default()
+                            .insert(p_tid.clone());
+                        dependent_topics_by_topic
+                            .entry(p_tid.clone())
+                            .or_default()
+                            .insert(tid.to_string());
+                    }
+                }
+            }
+        }
     }
 
     let mut verified_units = 0usize;
@@ -693,17 +803,35 @@ pub async fn get_next_action(
                 }
                 match tst {
                     TransferStatus::TransferVerified => transfer_verified_units += 1,
-                    TransferStatus::TransferAvailable | TransferStatus::TransferProvisional => {
+                    TransferStatus::TransferAvailable
+                    | TransferStatus::TransferProvisional
+                    | TransferStatus::TransferFailed => {
                         transfer_available_units += 1;
                     }
                     TransferStatus::TransferUnmeasured => transfer_unmeasured_units += 1,
-                    TransferStatus::TransferFailed => {}
                 }
 
                 let topic_signals = signals_by_topic
                     .get(&top.canonical_topic_id)
                     .cloned()
                     .unwrap_or_default();
+
+                let unmet_prereqs =
+                    prereq_topics_by_topic
+                        .get(&top.canonical_topic_id)
+                        .map_or(0, |prereqs| {
+                            prereqs
+                                .iter()
+                                .filter(|pt| {
+                                    !diag_by_unit.get(*pt).is_some_and(|(pst, _, _, _, _)| {
+                                        *pst == DiagnosticStatus::VerifiedCompetence
+                                    })
+                                })
+                                .count()
+                        });
+                let dep_count = dependent_topics_by_topic
+                    .get(&top.canonical_topic_id)
+                    .map_or(0, HashSet::len);
 
                 let base_u = priority_utility_metacognitive(
                     &PrioritizationInputs {
@@ -714,8 +842,8 @@ pub async fn get_next_action(
                             || topic_signals.functional_elimination_transfer_verified,
                         distinct_questions: dq,
                         avg_seconds: avg_s,
-                        unmet_prerequisites_count: 0,
-                        dependent_count: 0,
+                        unmet_prerequisites_count: unmet_prereqs,
+                        dependent_count: dep_count,
                     },
                     &topic_signals,
                 );
@@ -789,7 +917,9 @@ pub async fn get_next_action(
         }
     }
 
-    let priority_topic_id = best_entry_topic.as_ref().map(|(_, tid, _, _, _)| tid.clone());
+    let priority_topic_id = best_entry_topic
+        .as_ref()
+        .map(|(_, tid, _, _, _)| tid.clone());
     let decision_rule_code = best_entry_topic
         .as_ref()
         .map(|(_, _, rc, _, _)| (*rc).to_string())
@@ -898,8 +1028,8 @@ pub async fn get_next_action(
         } else {
             "MULTIPLE_CHOICE"
         };
-        let decoded_q = qdoc_opt
-            .and_then(|d| crate::services::question_compatibility::decode(d.clone()).ok());
+        let decoded_q =
+            qdoc_opt.and_then(|d| crate::services::question_compatibility::decode(d.clone()).ok());
         let has_curated_ch = decoded_q
             .as_ref()
             .is_some_and(|q| q.evidence_challenge.is_some());
@@ -917,12 +1047,17 @@ pub async fn get_next_action(
                 }
                 continue;
             }
-            let band = s.nivel_confianca.clamp(1, 3);
-            let entry = cell_counts.entry((qt_norm, band)).or_insert((0, 0));
-            if s.status {
-                entry.0 += 1;
+            if s.declared_confidence.is_some() || s.confidence_explicit {
+                let band = s
+                    .declared_confidence
+                    .map(DeclaredConfidence::to_legacy_band)
+                    .unwrap_or_else(|| s.nivel_confianca.clamp(1, 3));
+                let entry = cell_counts.entry((qt_norm, band)).or_insert((0, 0));
+                if s.status {
+                    entry.0 += 1;
+                }
+                entry.1 += 1;
             }
-            entry.1 += 1;
 
             let ev_passed = match (s.selected_evidence_id.as_deref(), decoded_ch.as_ref()) {
                 (Some(sel), Some(ch)) if !sel.trim().is_empty() => {
@@ -1105,14 +1240,28 @@ pub async fn handle_recommendation_feedback(
     let existing = coll.find_one(doc! { "_id": &doc_key }).await?;
 
     let mut subsequent_unseen_correct = false;
+    let mut effective_secs = secs;
     if let Some(ex) = &existing {
+        let prev_obs = ex
+            .get_bool("subsequent_unseen_correct_observed")
+            .unwrap_or(false);
+        let prev_secs = ex.get_i32("additional_active_seconds").unwrap_or(0).max(0);
+        effective_secs = effective_secs.max(prev_secs);
         let rec_at = ex
             .get_datetime("recommended_at")
             .ok()
             .map(|d| d.to_chrono());
-        let topic_opt = ex.get_str("priority_topic_id").ok().filter(|s| !s.is_empty());
-        let entry_qid_opt = ex.get_str("entry_question_id").ok().filter(|s| !s.is_empty());
-        if let (Some(r_dt), Some(tid)) = (rec_at, topic_opt) {
+        let topic_opt = ex
+            .get_str("priority_topic_id")
+            .ok()
+            .filter(|s| !s.is_empty());
+        let entry_qid_opt = ex
+            .get_str("entry_question_id")
+            .ok()
+            .filter(|s| !s.is_empty());
+        if prev_obs {
+            subsequent_unseen_correct = true;
+        } else if let (Some(r_dt), Some(tid)) = (rec_at, topic_opt) {
             let acts: Vec<UserActivityDocument> = state
                 .db
                 .collection::<UserActivityDocument>("userActivityLog")
@@ -1138,7 +1287,7 @@ pub async fn handle_recommendation_feedback(
         doc! {
             "$set": {
                 "outcome": outcome,
-                "additional_active_seconds": secs,
+                "additional_active_seconds": effective_secs,
                 "subsequent_unseen_correct_observed": subsequent_unseen_correct,
                 "updated_at": bson::DateTime::now(),
             },
@@ -1154,9 +1303,10 @@ pub async fn handle_recommendation_feedback(
     .await?;
 
     Ok(Json(RecommendationFeedbackResponse {
+        status: "recorded",
         recommendation_id: rec_id.to_string(),
         outcome: outcome.to_string(),
-        additional_active_seconds: secs,
+        additional_active_seconds: effective_secs,
         subsequent_unseen_correct_observed: subsequent_unseen_correct,
     }))
 }

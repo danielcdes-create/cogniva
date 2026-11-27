@@ -146,18 +146,26 @@ pub fn priority_utility_metacognitive(
 
     // Penaliza apenas a descalibração metacognitiva / fundamento incompatível recorrente,
     // sem somar duas vezes o erro bruto já considerado em `retrievability` e `verified_competence`.
-    let recurrent_misconception_bonus = if signals.high_confidence_error_count >= 2
-        && signals.incompatible_rationale_count >= 2
-    {
-        0.25
-    } else if signals.high_confidence_error_count >= 2 {
-        0.12
+    let recurrent_misconception_bonus =
+        if signals.high_confidence_error_count >= 2 && signals.incompatible_rationale_count >= 2 {
+            0.25
+        } else if signals.high_confidence_error_count >= 2 {
+            0.12
+        } else {
+            0.0
+        };
+    let safe_hce_rate = if signals.high_confidence_error_rate.is_finite() {
+        signals.high_confidence_error_rate.clamp(0.0, 1.0)
     } else {
         0.0
     };
-    let hce_boost =
-        1.0 + 0.45 * signals.high_confidence_error_rate.clamp(0.0, 1.0) + recurrent_misconception_bonus;
-    let fragile_boost = 1.0 + 0.25 * signals.fragile_correct_rate.clamp(0.0, 1.0);
+    let safe_fragile_rate = if signals.fragile_correct_rate.is_finite() {
+        signals.fragile_correct_rate.clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let hce_boost = 1.0 + 0.45 * safe_hce_rate + recurrent_misconception_bonus;
+    let fragile_boost = 1.0 + 0.25 * safe_fragile_rate;
     let transfer_boost = if signals.failed_transfer { 1.30 } else { 1.0 };
     let conflict_boost = if signals.scarce_or_conflicting_evidence {
         1.18
@@ -227,14 +235,14 @@ pub fn build_metacognitive_decision_reason(
     if signals.post_explanation_spaced_due || signals.post_explanation_fixation_pending_spacing {
         return (
             "POST_EXPLANATION_SPACED_FOLLOWUP",
-            format!(
-                "Você acertou após a explicação. Vamos retomar {unit_title} em outra sessão."
-            ),
+            format!("Você acertou após a explicação. Vamos retomar {unit_title} em outra sessão."),
             "TRANSFER_PROBE",
         );
     }
 
-    if signals.failed_transfer || signals.scarce_or_conflicting_evidence || signals.fragile_correct_rate >= 0.40
+    if signals.failed_transfer
+        || signals.scarce_or_conflicting_evidence
+        || signals.fragile_correct_rate >= 0.40
     {
         return (
             "SCARCE_OR_CONFLICTING_EVIDENCE",
@@ -253,7 +261,11 @@ pub fn build_metacognitive_decision_reason(
         );
     }
 
-    ("BASELINE_REFERENCE", fallback_reason_pt.to_string(), "ENTRY_60S")
+    (
+        "BASELINE_REFERENCE",
+        fallback_reason_pt.to_string(),
+        "ENTRY_60S",
+    )
 }
 
 /// Pontua candidatas para o Protocolo de Entrada de 60 Segundos (`8–40 s`):
@@ -385,7 +397,8 @@ mod tests {
     }
 
     #[test]
-    fn a09_metacognitive_priority_breaks_ties_on_recurrent_hce_advances_after_functional_transfer_and_preserves_baseline() {
+    fn a09_metacognitive_priority_breaks_ties_on_recurrent_hce_advances_after_functional_transfer_and_preserves_baseline(
+    ) {
         let tied_base = PrioritizationInputs {
             edital_weight: 0.25,
             incidence_weight: 1.0,

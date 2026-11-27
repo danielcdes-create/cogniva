@@ -1,7 +1,10 @@
 use crate::{
     error::AppError,
     models::user::{UserDocument, UserProfileDto},
-    security::{self, SessionUser, MOBILE_SESSION_TTL_SECS, WEB_COOKIE_NAME, WEB_SESSION_TTL_SECS},
+    security::{
+        self, SessionUser, MISSIONS_COOKIE_NAME, MOBILE_SESSION_TTL_SECS, WEB_COOKIE_NAME,
+        WEB_SESSION_TTL_SECS,
+    },
     services::{
         rate_limit,
         scheduler::{run_daily_reviews_decay_and_countdown, DailyMaintenanceReport},
@@ -317,8 +320,19 @@ pub async fn profile(state: &AppState, user_id: i64) -> Result<UserProfileDto, A
     Ok(user.to_profile_dto())
 }
 
-async fn revoke_incoming_web_cookies(state: &AppState, headers: &HeaderMap) {
-    for prev_token in security::extract_web_cookies(headers) {
+async fn revoke_incoming_cookies_by_name(state: &AppState, headers: &HeaderMap, cookie_name: &str) {
+    let tokens = if cookie_name == WEB_COOKIE_NAME {
+        let mut t = security::extract_named_cookies(headers, WEB_COOKIE_NAME);
+        for leg in security::extract_named_cookies(headers, security::LEGACY_ADMIN_COOKIE_NAME) {
+            if !t.contains(&leg) {
+                t.push(leg);
+            }
+        }
+        t
+    } else {
+        security::extract_named_cookies(headers, cookie_name)
+    };
+    for prev_token in tokens {
         if let Ok(claims) =
             security::verify_session_token(&state.config.jwt_secret, &prev_token, "web")
         {
@@ -334,14 +348,15 @@ async fn revoke_incoming_web_cookies(state: &AppState, headers: &HeaderMap) {
     }
 }
 
-async fn build_auth_response(
+async fn build_auth_response_with_cookie(
     state: &AppState,
     user: &UserDocument,
     purpose: &str,
+    cookie_name: &str,
     headers: &HeaderMap,
 ) -> Result<Response, AppError> {
     if purpose == "web" {
-        revoke_incoming_web_cookies(state, headers).await;
+        revoke_incoming_cookies_by_name(state, headers, cookie_name).await;
     }
     let (token, ttl) = issue_db_session(state, user.user_id, purpose).await?;
     let historical_questions_count = state
@@ -369,7 +384,13 @@ async fn build_auth_response(
         .into_response();
         resp.headers_mut().insert(
             header::SET_COOKIE,
-            build_web_cookie(headers, &state.config.public_origin, &token, ttl)?,
+            build_named_web_cookie(
+                headers,
+                &state.config.public_origin,
+                cookie_name,
+                &token,
+                ttl,
+            )?,
         );
         resp.headers_mut()
             .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
@@ -475,6 +496,7 @@ pub async fn handle_guest_session(
                     daily_questions_target: 30,
                     daily_study_hours_target: 3.0,
                     onboarding_completed: false,
+                    deleting_account: false,
                     created_at: Some(now),
                     updated_at: Some(now),
                 };
@@ -511,7 +533,7 @@ pub async fn handle_guest_session(
 
             let mut reused_web_guest: Option<UserDocument> = None;
             if is_student_web {
-                for cookie_tok in security::extract_web_cookies(&headers) {
+                for cookie_tok in security::extract_web_cookies_for_route(&headers, true) {
                     let Ok(claims) = security::verify_session_token(
                         &state.config.jwt_secret,
                         &cookie_tok,
@@ -597,6 +619,7 @@ pub async fn handle_guest_session(
                         daily_questions_target: 30,
                         daily_study_hours_target: 3.0,
                         onboarding_completed: false,
+                        deleting_account: false,
                         created_at: Some(now),
                         updated_at: Some(now),
                     };
@@ -629,7 +652,12 @@ pub async fn handle_guest_session(
     };
 
     let purpose = if is_student_web { "web" } else { "mobile" };
-    build_auth_response(&state, &user, purpose, &headers).await
+    let cookie_name = if is_student_web {
+        MISSIONS_COOKIE_NAME
+    } else {
+        WEB_COOKIE_NAME
+    };
+    build_auth_response_with_cookie(&state, &user, purpose, cookie_name, &headers).await
 }
 
 /// `POST /api/v1/auth/register`: cadastra e-mail + senha Argon2id ou promove conta convidada in-place.
@@ -708,7 +736,7 @@ pub async fn handle_register(
         }
         active_guest_claims = Some((claims, true));
     } else if is_student_web {
-        for cookie_tok in security::extract_web_cookies(&headers) {
+        for cookie_tok in security::extract_web_cookies_for_route(&headers, true) {
             if let Ok(claims) =
                 security::verify_session_token(&state.config.jwt_secret, &cookie_tok, "web")
             {
@@ -899,6 +927,7 @@ pub async fn handle_register(
             daily_questions_target: 30,
             daily_study_hours_target: 3.0,
             onboarding_completed: false,
+            deleting_account: false,
             created_at: Some(now),
             updated_at: Some(now),
         };
@@ -913,7 +942,12 @@ pub async fn handle_register(
     };
 
     let purpose = if is_web { "web" } else { "mobile" };
-    build_auth_response(&state, &user, purpose, &headers).await
+    let cookie_name = if is_student_web {
+        MISSIONS_COOKIE_NAME
+    } else {
+        WEB_COOKIE_NAME
+    };
+    build_auth_response_with_cookie(&state, &user, purpose, cookie_name, &headers).await
 }
 
 /// `POST /api/v1/auth/login`: autentica e-mail + senha Argon2id (mobile Bearer ou web cookie).
@@ -1005,7 +1039,12 @@ async fn login_inner(
         .await;
 
     let purpose = if is_web { "web" } else { "mobile" };
-    build_auth_response(&state, &user, purpose, &headers).await
+    let cookie_name = if is_student_web {
+        MISSIONS_COOKIE_NAME
+    } else {
+        WEB_COOKIE_NAME
+    };
+    build_auth_response_with_cookie(&state, &user, purpose, cookie_name, &headers).await
 }
 
 /// `POST /api/v1/auth/logout`: revoga sessão Bearer e/ou cookie web na coleção `sessions`.
@@ -1054,6 +1093,18 @@ pub async fn handle_logout(
             header::SET_COOKIE,
             build_web_cookie(&headers, &state.config.public_origin, "", 0)?,
         );
+        if security::has_missions_cookie(&headers) {
+            resp.headers_mut().append(
+                header::SET_COOKIE,
+                build_named_web_cookie(
+                    &headers,
+                    &state.config.public_origin,
+                    MISSIONS_COOKIE_NAME,
+                    "",
+                    0,
+                )?,
+            );
+        }
         if security::has_legacy_admin_cookie(&headers) {
             resp.headers_mut().append(
                 header::SET_COOKIE,
@@ -1256,6 +1307,12 @@ pub fn build_account_deleted_response(
             header::SET_COOKIE,
             build_web_cookie(headers, public_origin, "", 0)?,
         );
+        if security::has_missions_cookie(headers) {
+            resp.headers_mut().append(
+                header::SET_COOKIE,
+                build_named_web_cookie(headers, public_origin, MISSIONS_COOKIE_NAME, "", 0)?,
+            );
+        }
         if security::has_legacy_admin_cookie(headers) {
             resp.headers_mut().append(
                 header::SET_COOKIE,
@@ -1283,10 +1340,23 @@ pub async fn handle_delete_account(
     body: Bytes,
 ) -> Result<Response, AppError> {
     validate_delete_confirmation(&body)?;
-    let plan = lgpd_deletion_plan(user.user_id);
+    let uid = user.user_id;
+    let uid_str = uid.to_string();
 
+    // 0. Bloqueia mutações concorrentes em outras abas/dispositivos imediatamente (LGPD Art. 18 race guard)
+    state
+        .db
+        .collection::<Document>("usuarios")
+        .update_one(
+            doc! { "user_id": uid },
+            doc! { "$set": { "deleting_account": true, "updated_at": bson::DateTime::now() } },
+        )
+        .await?;
+
+    let plan = lgpd_deletion_plan(uid);
     let mut deleted_documents = 0u64;
-    // 1. Anonimiza reportes de qualidade antes de remover a sessão/conta para permitir repetição idempotente em falhas de rede.
+
+    // 1. Anonimiza reportes de qualidade e vínculos administrativos preservados no acervo público
     let report_res = state
         .db
         .collection::<Document>("reportedQuestoes")
@@ -1295,6 +1365,48 @@ pub async fn handle_delete_account(
             plan.report_anonymize_update.clone(),
         )
         .await?;
+    let _ = state
+        .db
+        .collection::<Document>("reportedQuestoes")
+        .update_many(
+            doc! { "fix.resolved_by": uid },
+            doc! { "$set": { "fix.resolved_by": bson::Bson::Null } },
+        )
+        .await;
+    let _ = state
+        .db
+        .collection::<Document>("exam_revisions")
+        .update_many(
+            doc! { "scope": { "$ne": "user" }, "actor_user_id": uid },
+            doc! { "$set": { "actor_user_id": 0_i64 } },
+        )
+        .await;
+    for cat_coll in ["catalog_editor_drafts", "catalog_editor_versions"] {
+        let _ = state
+            .db
+            .collection::<Document>(cat_coll)
+            .update_many(
+                doc! { "owner_user_id": uid, "status": "ACTIVATED" },
+                doc! { "$set": { "owner_user_id": 0_i64 } },
+            )
+            .await;
+    }
+    let _ = state
+        .db
+        .collection::<Document>("knowledge_catalog_activations")
+        .update_many(
+            doc! { "activated_by": uid },
+            doc! { "$set": { "activated_by": 0_i64 } },
+        )
+        .await;
+    let _ = state
+        .db
+        .collection::<Document>("question_commands")
+        .update_many(
+            doc! { "actor_user_id": uid },
+            doc! { "$set": { "actor_user_id": 0_i64 } },
+        )
+        .await;
 
     // 2. Remove comandos/eventos pessoais do titular sem tocar em registros editoriais compartilhados.
     for (coll_name, filter) in &plan.scoped_cleanup_filters {
@@ -1307,6 +1419,7 @@ pub async fn handle_delete_account(
     }
 
     // 3. Remove dados pessoais e histórico primeiro, revogando sessões e a conta (`usuarios`) estritamente por último.
+    let _ = uid_str;
     for (coll_name, filter) in plan.ordered_delete_steps() {
         let res = state
             .db
@@ -1319,7 +1432,7 @@ pub async fn handle_delete_account(
     build_account_deleted_response(
         &headers,
         &state.config.public_origin,
-        user.user_id,
+        uid,
         deleted_documents,
         report_res.modified_count,
     )

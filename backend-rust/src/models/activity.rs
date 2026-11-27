@@ -18,6 +18,12 @@ pub struct ActivityDates {
     pub ultima_sessao: DateTime<Utc>,
     #[serde(
         default,
+        skip_serializing_if = "Option::is_none",
+        with = "bson::serde_helpers::chrono_datetime_as_bson_datetime_optional"
+    )]
+    pub ultima_resposta_em: Option<DateTime<Utc>>,
+    #[serde(
+        default,
         with = "bson::serde_helpers::chrono_datetime_as_bson_datetime_optional"
     )]
     pub ultima_revisao: Option<DateTime<Utc>>,
@@ -165,6 +171,19 @@ pub struct UserActivityDocument {
 }
 
 impl UserActivityDocument {
+    pub fn effective_last_answered(&self) -> DateTime<Utc> {
+        self.datas
+            .ultima_resposta_em
+            .or_else(|| {
+                self.past_sessions
+                    .iter()
+                    .rev()
+                    .find(|s| !s.is_blank)
+                    .map(|s| s.data)
+            })
+            .unwrap_or(self.datas.ultima_sessao)
+    }
+
     pub fn review_due(&self, now: DateTime<Utc>) -> bool {
         let has_answered =
             self.quantidade_praticas > 0 || self.past_sessions.iter().any(|s| !s.is_blank);
@@ -173,7 +192,7 @@ impl UserActivityDocument {
         }
         let clamped_days = self.spaced_repetition_interval.clamp(1, 3650) as i64;
         self.revisao_necessaria
-            || now >= self.datas.ultima_sessao + chrono::Duration::days(clamped_days)
+            || now >= self.effective_last_answered() + chrono::Duration::days(clamped_days)
     }
     pub fn error_notebook(&self) -> bool {
         if self.dominada {

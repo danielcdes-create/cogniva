@@ -223,7 +223,11 @@ fn truncate_chars(text: &str, max_chars: usize) -> String {
     let limit = max_chars.saturating_sub(1);
     let prefix: String = trimmed.chars().take(limit).collect();
     let min_word_cut = (limit * 60) / 100;
-    let clean_prefix = match prefix.char_indices().rev().find(|(_, ch)| ch.is_whitespace()) {
+    let clean_prefix = match prefix
+        .char_indices()
+        .rev()
+        .find(|(_, ch)| ch.is_whitespace())
+    {
         Some((byte_idx, _)) if prefix[..byte_idx].chars().count() >= min_word_cut => {
             &prefix[..byte_idx]
         }
@@ -335,13 +339,15 @@ fn pick_decisive_stem_fragment(stem: &str) -> String {
                 .nth(target_skip)
                 .map(|(idx, _)| {
                     chosen[idx..]
-                        .find(char::is_whitespace)
-                        .map(|ws| idx + ws + 1)
+                        .char_indices()
+                        .find(|(_, ch)| ch.is_whitespace())
+                        .map(|(ws, ch)| idx + ws + ch.len_utf8())
                         .unwrap_or(idx)
                 })
                 .unwrap_or(0);
-            let windowed = chosen[byte_start..]
-                .trim_start_matches(|c: char| c.is_whitespace() || matches!(c, ',' | ';' | ':' | '-' | '–' | '—'));
+            let windowed = chosen[byte_start..].trim_start_matches(|c: char| {
+                c.is_whitespace() || matches!(c, ',' | ';' | ':' | '-' | '–' | '—')
+            });
             if windowed.chars().count() >= 24 {
                 return format!("…{}", truncate_chars(windowed, 130));
             }
@@ -352,19 +358,12 @@ fn pick_decisive_stem_fragment(stem: &str) -> String {
 }
 
 pub(crate) fn deterministic_swap_evidence_order(question_id: &str) -> bool {
-    question_id
-        .bytes()
-        .fold(0u8, |acc, b| acc.wrapping_add(b))
-        & 1
-        == 1
+    question_id.bytes().fold(0u8, |acc, b| acc.wrapping_add(b)) & 1 == 1
 }
 
 /// Normaliza IDs legados (`ev_decisive`, `ev_err_1`, `ev_err_2`) emitidos por caches offline anteriores
 /// quando a questão utiliza o desafio de evidência sintetizado padrão.
-pub(crate) fn normalize_synthesized_evidence_id(
-    raw_id: &str,
-    has_curated_challenge: bool,
-) -> &str {
+pub(crate) fn normalize_synthesized_evidence_id(raw_id: &str, has_curated_challenge: bool) -> &str {
     let trimmed = raw_id.trim();
     if has_curated_challenge {
         return trimmed;
@@ -498,8 +497,9 @@ impl QuestionDocument {
             }
         });
 
-        let tested_rule = if let Some((_, _, _, excerpt)) =
-            sources.first().filter(|(_, _, _, ex)| !ex.trim().is_empty())
+        let tested_rule = if let Some((_, _, _, excerpt)) = sources
+            .first()
+            .filter(|(_, _, _, ex)| !ex.trim().is_empty())
         {
             truncate_chars(excerpt, 320)
         } else if let Some(exp) = self.explanation.as_deref().filter(|s| !s.trim().is_empty()) {
@@ -586,7 +586,9 @@ impl QuestionDocument {
                 plausible_errors.push(ConceptualErrorItemDto {
                     error_id: "ERR_REGRA_EXCECAO".to_string(),
                     label: "Inversão entre regra geral e cláusula restritiva/exceção".to_string(),
-                    description: "Desconsiderar a ressalva ou exceção expressa aplicável ao caso concreto.".to_string(),
+                    description:
+                        "Desconsiderar a ressalva ou exceção expressa aplicável ao caso concreto."
+                            .to_string(),
                 });
             } else if self.effective_question_type() == "TRUE_FALSE" {
                 plausible_errors.push(ConceptualErrorItemDto {
@@ -939,7 +941,8 @@ mod revision_tests {
     }
 
     #[test]
-    fn synthesized_post_answer_avoids_false_stem_exceptions_verdict_prefixes_and_explanation_echo() {
+    fn synthesized_post_answer_avoids_false_stem_exceptions_verdict_prefixes_and_explanation_echo()
+    {
         // Caso real reportado: "apenas para evitar reconhecer o prejuízo" no enunciado NÃO é exceção legal,
         // "Certo." e "Referência: ..." não devem poluir `tested_rule`, e `evidence_challenge` não deve repetir `tested_rule`.
         let q_disp: QuestionDocument = bson::from_document(doc! {
@@ -974,7 +977,8 @@ mod revision_tests {
         assert_eq!(challenge.options.len(), 2);
         for opt in &challenge.options {
             assert!(
-                !opt.text.contains("O efeito disposição envolve maior propensão"),
+                !opt.text
+                    .contains("O efeito disposição envolve maior propensão"),
                 "Desafio de 3 Sinais não deve repetir a explicação exibida acima: {}",
                 opt.text
             );
@@ -1015,5 +1019,27 @@ mod revision_tests {
             normalize_synthesized_evidence_id("ev_decisive", true),
             "ev_decisive"
         );
+    }
+
+    #[test]
+    fn pick_decisive_stem_fragment_handles_multibyte_utf8_whitespace_without_panic() {
+        // U+00A0 (NBSP, 2 bytes) e U+202F (NNBSP, 3 bytes) são comuns em PDFs de editais e provas brasileiras
+        let nbsp = "\u{00A0}";
+        let nnbsp = "\u{202F}";
+        let stem = format!(
+            "Considere{nbsp}a{nbsp}administração{nnbsp}pública{nbsp}federal{nbsp}direta{nnbsp}e{nbsp}autárquica{nbsp}no{nnbsp}exercício{nbsp}de{nbsp}poder{nnbsp}regulamentar,{nbsp}salvo{nnbsp}quando{nbsp}houver{nbsp}reserva{nbsp}legal{nbsp}estrita{nnbsp}prevista{nbsp}na{nbsp}Constituição{nbsp}Federal."
+        );
+        let q: QuestionDocument = bson::from_document(doc! {
+            "_id": ObjectId::new(),
+            "question_type": "MULTIPLE_CHOICE",
+            "question": stem,
+            "answers": ["Opção 1", "Opção 2", "Opção 3", "Opção 4", "Opção 5"],
+            "correct_answer_indices": [0],
+            "disciplina": "Direito Administrativo"
+        })
+        .unwrap();
+        let dto = q.to_dto(None);
+        let excerpt = &dto.editorial_card.expect("card").decisive_stem_excerpt;
+        assert!(excerpt.contains("salvo"));
     }
 }

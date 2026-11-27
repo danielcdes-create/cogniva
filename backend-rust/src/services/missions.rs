@@ -1670,6 +1670,7 @@ mod tests {
             question_id: ObjectId::new(),
             datas: ActivityDates {
                 ultima_sessao: now,
+                ultima_resposta_em: None,
                 ultima_revisao: None,
                 data_primeira_sessao: now,
                 data_primeiro_acerto: None,

@@ -2811,7 +2811,7 @@ async fn missions_end_to_end_flow_range_streaming_isolation_and_epistemology() {
         .to_str()
         .unwrap()
         .to_string();
-    assert!(set_cookie.contains("cogniva_web_session="));
+    assert!(set_cookie.contains("cogniva_missions_session="));
     assert!(set_cookie.contains("HttpOnly"));
     let cookie_pair = set_cookie.split(';').next().unwrap().to_string();
 
@@ -3419,10 +3419,7 @@ fn build_dir_adm_source_and_ctv_docs(
         "Direito Administrativo",
         Some(("DIR_ADM", "DIR_ADM_01_001")),
     );
-    let source_rev = source_doc
-        .get_str("content_revision")
-        .unwrap()
-        .to_string();
+    let source_rev = source_doc.get_str("content_revision").unwrap().to_string();
 
     let mut ctv_json: Value = serde_json::from_str(include_str!(
         "../../shared/examples/question-contracts/question-multiple-choice.json"
@@ -3441,8 +3438,9 @@ fn build_dir_adm_source_and_ctv_docs(
         "O ato convalida-se tacitamente por segurança jurídica independentemente de dolo.",
         "A revisão depende exclusivamente de anuência expressa do servidor beneficiado."
     ]);
-    ctv_json["correct_answers"] =
-        json!(["A anulação permanece cabível, pois a má-fé comprovada impede a decadência quinquenal."]);
+    ctv_json["correct_answers"] = json!([
+        "A anulação permanece cabível, pois a má-fé comprovada impede a decadência quinquenal."
+    ]);
     ctv_json["correct_answer_indices"] = json!([0]);
     ctv_json["disciplina"] = json!("Direito Administrativo");
     ctv_json["source"] = json!("Cogniva CTV");
@@ -3565,7 +3563,10 @@ fn dir_adm_ctv_integration_fixture_satisfies_contract_eligibility_and_conceptual
     let ctv_prof = services::ctv_alignment::resolve_question_alignment_profile(&ctv_doc, &ctv_q);
     match services::ctv_alignment::evaluate_candidate_alignment(&src_prof, &ctv_prof, false) {
         services::ctv_alignment::CandidateAlignmentDecision::Accepted { mode, .. } => {
-            assert_eq!(mode, services::ctv_alignment::VerificationMode::ConceptualTransfer);
+            assert_eq!(
+                mode,
+                services::ctv_alignment::VerificationMode::ConceptualTransfer
+            );
         }
         other => panic!("expected ConceptualTransfer, got {other:?}"),
     }
@@ -3810,7 +3811,12 @@ async fn metacognitive_signals_ctv_database_first_persistence_auto_suspension_an
         .unwrap()
         .unwrap();
     let dmeta = updated_ctv_doc.get_document("diagnostic_meta").unwrap();
-    assert_eq!(dmeta.get_i64("usage_count").unwrap_or(dmeta.get_i32("usage_count").unwrap_or(0) as i64), 1);
+    assert_eq!(
+        dmeta
+            .get_i64("usage_count")
+            .unwrap_or(dmeta.get_i32("usage_count").unwrap_or(0) as i64),
+        1
+    );
     let qmetrics = dmeta.get_document("quality_metrics").unwrap();
     assert_eq!(
         qmetrics
@@ -3840,7 +3846,10 @@ async fn metacognitive_signals_ctv_database_first_persistence_auto_suspension_an
     .await;
     assert_eq!(an_st, StatusCode::OK);
     assert_eq!(an_res["learning_kpis"].as_array().unwrap().len(), 10);
-    assert_eq!(an_res["confidence_calibration"].as_array().unwrap().len(), 5);
+    assert_eq!(
+        an_res["confidence_calibration"].as_array().unwrap().len(),
+        5
+    );
 
     // 9. Reporting a problem on an AUTO_APPROVED AI CTV item immediately auto-suspends it
     let (rep_st, _) = request(
@@ -3929,7 +3938,10 @@ async fn metacognitive_signals_ctv_database_first_persistence_auto_suspension_an
             .unwrap(),
     )
     .unwrap();
-    assert_eq!(admin_metrics["operational_kpis"].as_array().unwrap().len(), 8);
+    assert_eq!(
+        admin_metrics["operational_kpis"].as_array().unwrap().len(),
+        8
+    );
     assert_eq!(admin_metrics["ctv_bank_summary"]["suspended"], 1);
 
     // 11. LGPD Art. 18 deletion purges conceptual_transfer_attempts while keeping todasQuestoes & impersonal audit
@@ -4089,7 +4101,10 @@ async fn acceptance_a01_through_a14_end_to_end() {
     .await;
     assert_eq!(eval_701["triggered"], true, "{eval_701}");
     assert_eq!(eval_701["delivery_source"], "AI_GENERATED_PERMANENT");
-    let gen_qid = eval_701["complementary_question"]["id"].as_str().unwrap().to_string();
+    let gen_qid = eval_701["complementary_question"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
     assert_eq!(ai_calls.load(std::sync::atomic::Ordering::SeqCst), 1);
 
     let (_, eval_702) = request(

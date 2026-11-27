@@ -4,6 +4,25 @@ Todas as mudanças arquiteturais, de segurança, acessibilidade e operacionais r
 
 ---
 
+## [2.4.6] - 2026-11-27 (build 36)
+
+Auditoria adversarial exaustiva em 4 camadas (`backend-rust/`, `android-app/`, `web-admin/` + `web-missions/`, `scripts/` + `deploy/` + `.github/workflows/`), endurecendo sincronização *offline-first*, precisão metacognitiva/SRS, segurança de cota e sessão, performance em `192 MB`, acessibilidade WCAG 2.1 e pipeline de promoção atômica — preservando integralmente `contract_version: 5`, `schema_version: 2`, `validator_revision: 7` e `Room v8`. Relatório técnico completo em [`AUDIT_REPORT_2_4_6.md`](AUDIT_REPORT_2_4_6.md).
+
+### 1. Sincronização Offline-First sem Corridas e Simetria Metacognitiva (`backend-rust/`, `android-app/`, `web-missions/`)
+- **Eliminação de Fabricação de Confiança Declarada (`[P0-6]`):** `DeclaredConfidence::from_legacy_band(_, false)` retorna `None`/`null` em Rust e Kotlin; `LearningEvent` persiste `confidence_explicit` e `strategy_skipped`; `PracticeAndQuestionScreen.kt` preserva `"Não informada"` quando não selecionada e `web-missions/app.js` adota os 5 níveis canônicos (`GUESS`..`VERY_HIGH`) reiniciados a cada questão sem herança indevida.
+- **Drenagem Concorrente Segura e Paridade de Contratos (`[P0-1]`, `[P0-5]`, `[P1-6]`):** Alinhamento de `additional_active_seconds` e `status: "recorded"` em `POST /api/v1/study/recommendation-feedback`, remoção atômica por chaves concluídas sob `mutationMutex` nas 4 filas secundárias de `syncPendingAttempts`, reconciliação unificada `concept_id` ↔ `canonical_topic_id` + DAG em `GET /api/v1/study/next-action`, preservação de `pendingCtvEvaluation` em rotações de tela, *flush* prévio na promoção de convidado e separação de `retrospective_legacy_hits` nos analíticos de fundamento.
+
+### 2. Integridade V2, Precisão de SRS, Performance (`192 MB`) e Segurança/LGPD (`backend-rust/`)
+- **UTF-8 Seguro, CAS Completo e Elegibilidade Estrita (`[P0-2]`, `[P0-3]`, `[P1-2]`, `[P1-3]`):** Fatiamento UTF-8 seguro para espaços multi-byte (`NBSP`/`U+202F`) em `pick_decisive_stem_fragment`, guarda CAS estendida a `editorial_card`/`diagnostic_meta`/`evidence_challenge`, suporte completo a `reconfirm_validity` e filtro `PARTIAL` no `/admin/`, suspensão imediata de itens `AI_ON_DEMAND` sob reporte aberto e higienização recursiva de `Bson::Null`.
+- **Âncora Monotônica de SRS e Reconciliação `O(N)` (`[P1-1]`, `[P1-4]`):** Campo `ultima_resposta_em` separa omissões estratégicas (`is_blank = true`) da curva de esquecimento e protege `pastSessions` contra desalojamento; reconciliação CTV em memória `O(N)`, `$min` atômico em timestamps de oferta, projeções enxutas e índices compostos + TTL de 90 dias em `study_recommendation_events`.
+- **Endurecimento de Cota CTV/xAI, Proxy IP e LGPD Art. 18 (`[P0-4]`, `[P1-5]`, `[P1-7]`):** Campos internos de teste com `#[serde(skip)]`, contagem autoritativa de CTV por sessão e *rate limit* `ctv_eval` por usuário, teto de `2 MiB` na leitura xAI, seleção do IP público mais à direita em `X-Forwarded-For`, isolamento do cookie `cogniva_missions_session` e trava `deleting_account` contra corridas durante exclusão física LGPD.
+
+### 3. Portais Web, Scripts de Migração, Nginx IPv6 `/64` e Promoção Atômica (`web-*`, `scripts/`, `deploy/`, `.github/workflows/`)
+- **Curadoria `/admin/`, Acessibilidade WCAG 1.4.11 e Scripts (`web-admin/`, `web-missions/`, `scripts/`):** Restauração reversível de `evaluated_content_revision` ao desmarcar `reconfirmValidity`, leitura de `payload.detail` em respostas `503` de manutenção, `mainShell.inert` no menu móvel, contraste não-textual `>= 3.0:1` em bordas de controles (`#758691` / `#5676a4`), modo *insert-only* padrão (`--force-overwrite` opcional) em `migrate_cnu_to_cogniva.py` e preservação de pontuações fracionárias em `import_questions_batch.py`.
+- **Nginx, Rollback e Workflows (`deploy/`, `.github/workflows/`):** Modificador `(?s)` (`PCRE_DOTALL`) na extração binária de prefixo IPv6 `/64`, inclusão de `quiz/ctv/evaluate$` em `cogniva_ai_mut`, trava `.cogniva-deploy.lock` e proteção de templates `.conf` em `sync_nginx_site.py`, verificação de `/api/v1/ready` no rollback de `promote.py` e permissões mínimas explícitas em `emulator-insets.yml`.
+
+---
+
 ## [2.4.5] - 2026-11-26 (build 35)
 
 Auditoria e consolidação do **Motor de Avaliação Metacognitiva** e refinamento da experiência de resolução de questões (`shared/`, `backend-rust/` e `android-app/`), eliminando redundâncias de interação pós-resposta, padronizando ergonomia visual e preservando integralmente dados históricos.

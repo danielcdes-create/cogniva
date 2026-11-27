@@ -235,7 +235,7 @@ jobs:
           incoming="/opt/apps/cogniva-incoming/$run_slug"
           ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" "mkdir -p '$incoming' '/opt/apps/missoes/videos' && chmod 755 /opt/apps/missoes /opt/apps/missoes/videos"
           if [ -d missoes/videos ]; then
-            tar -cf - -C missoes/videos . | ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" "tar -xf - -C /opt/apps/missoes/videos && chmod 755 /opt/apps/missoes /opt/apps/missoes/videos && chmod 644 /opt/apps/missoes/videos/*.mp4"
+            tar -cf - -C missoes/videos . | ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$target" "tar -xf - -C /opt/apps/missoes/videos && chmod 755 /opt/apps/missoes /opt/apps/missoes/videos && find /opt/apps/missoes/videos -maxdepth 1 -type f -name '*.mp4' -exec chmod 644 {} +"
           fi
           scp -o BatchMode=yes -o StrictHostKeyChecking=yes deploy/nginx-cogniva.conf "$target:$incoming/nginx-cogniva.conf.tpl"
           scp -o BatchMode=yes -o StrictHostKeyChecking=yes deploy/nginx-rate-limits.conf "$target:$incoming/nginx-rate-limits.conf.tpl"

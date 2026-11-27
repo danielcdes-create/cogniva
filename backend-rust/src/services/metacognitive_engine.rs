@@ -76,9 +76,11 @@ impl DeclaredConfidence {
     }
 
     /// Reconstrói um nível ordinal aproximado a partir de registros históricos legados (`0..=3`)
-    /// quando `declared_confidence` ainda não estava presente.
+    /// quando `declared_confidence` ainda não estava presente. Tentativas sem confirmação explícita
+    /// de confiança (`explicit == false`, ex.: valor padrão 2) permanecem `None` para nunca contaminar
+    /// calibração nem diagnóstico metacognitivo.
     pub const fn from_legacy_band(band: i32, explicit: bool) -> Option<Self> {
-        if !explicit && band <= 0 {
+        if !explicit {
             return None;
         }
         match band {
@@ -257,7 +259,8 @@ pub fn classify_preliminary_matrix(
         );
     }
 
-    let is_pure_or_unconfirmed_guess = inputs.cognitive_strategy == Some(CognitiveStrategy::RandomGuess)
+    let is_pure_or_unconfirmed_guess = inputs.cognitive_strategy
+        == Some(CognitiveStrategy::RandomGuess)
         || (inputs.declared_confidence == Some(DeclaredConfidence::Guess)
             && matches!(
                 inputs.cognitive_strategy,
@@ -437,7 +440,10 @@ pub fn pedagogical_feedback_pt(
 }
 
 /// Gera mensagens proporcionais à evidência observada, evitando rótulos categóricos definitivos.
-pub fn inference_message_pt(diagnosis: PreliminaryDiagnosis, has_multi_attempt_evidence: bool) -> &'static str {
+pub fn inference_message_pt(
+    diagnosis: PreliminaryDiagnosis,
+    has_multi_attempt_evidence: bool,
+) -> &'static str {
     match diagnosis {
         PreliminaryDiagnosis::PossibleConceptualMastery => {
             "Acerto consistente com alta confiança. Evidência favorável à consolidação progressiva do conceito."
@@ -510,12 +516,18 @@ pub fn build_assessment(
         "Resposta incorreta"
     };
     let changes_note = if behavioral.answer_change_count > 0 {
-        format!(", {} troca(s) de alternativa", behavioral.answer_change_count)
+        format!(
+            ", {} troca(s) de alternativa",
+            behavioral.answer_change_count
+        )
     } else {
         String::new()
     };
     let resources_note = if !behavioral.consulted_resources.is_empty() {
-        format!(", {} recurso(s) auxiliar(es) consultado(s)", behavioral.consulted_resources.len())
+        format!(
+            ", {} recurso(s) auxiliar(es) consultado(s)",
+            behavioral.consulted_resources.len()
+        )
     } else {
         String::new()
     };
@@ -630,14 +642,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a06_unobserved_hit_stays_unknown_grounding_while_deduction_with_compatible_evidence_credits_once() {
+    fn a06_unobserved_hit_stays_unknown_grounding_while_deduction_with_compatible_evidence_credits_once(
+    ) {
         // Caso 1: acerto sem estratégia nem justificativa observável -> desempenho bruto, fundamento desconhecido!
-        let g_unobserved = classify_hit_grounding(
-            true,
-            Some(DeclaredConfidence::High),
-            None,
-            None,
-        );
+        let g_unobserved = classify_hit_grounding(true, Some(DeclaredConfidence::High), None, None);
         assert_eq!(g_unobserved, HitGroundingCategory::UnknownGrounding);
         assert!(!g_unobserved.credits_comprehension());
         assert!(!g_unobserved.is_evaluable());
@@ -731,7 +739,10 @@ mod tests {
             unconfirmed_assessment.preliminary_diagnosis,
             PreliminaryDiagnosis::PossibleCasualHit
         );
-        assert_eq!(unconfirmed_assessment.inference_support, SupportLevel::Moderate);
+        assert_eq!(
+            unconfirmed_assessment.inference_support,
+            SupportLevel::Moderate
+        );
         assert!(unconfirmed_assessment.strategy_skipped);
 
         let elim_guess_inputs = MetacognitiveMatrixInputs {
@@ -748,7 +759,10 @@ mod tests {
             elim_assessment.preliminary_diagnosis,
             PreliminaryDiagnosis::UnconfirmedMastery
         );
-        assert_eq!(elim_assessment.ctv_priority, CtvTriggerPriority::Recommended);
+        assert_eq!(
+            elim_assessment.ctv_priority,
+            CtvTriggerPriority::Recommended
+        );
         assert!(elim_assessment
             .pedagogical_feedback_pt
             .contains("eliminou alternativas"));
@@ -756,17 +770,32 @@ mod tests {
 
     #[test]
     fn retrospective_post_exposure_evidence_never_auto_credits_pre_exposure_comprehension() {
-        let g_retrospective = classify_hit_grounding(
-            true,
-            Some(DeclaredConfidence::High),
-            None,
-            Some(true),
-        );
+        let g_retrospective =
+            classify_hit_grounding(true, Some(DeclaredConfidence::High), None, Some(true));
         assert_eq!(
             g_retrospective,
             HitGroundingCategory::RetrospectiveLegacyEvidence
         );
         assert!(!g_retrospective.credits_comprehension());
         assert!(!g_retrospective.is_evaluable());
+    }
+
+    #[test]
+    fn from_legacy_band_never_fabricates_confidence_when_not_explicit() {
+        assert_eq!(DeclaredConfidence::from_legacy_band(1, false), None);
+        assert_eq!(DeclaredConfidence::from_legacy_band(2, false), None);
+        assert_eq!(DeclaredConfidence::from_legacy_band(3, false), None);
+        assert_eq!(
+            DeclaredConfidence::from_legacy_band(1, true),
+            Some(DeclaredConfidence::Low)
+        );
+        assert_eq!(
+            DeclaredConfidence::from_legacy_band(2, true),
+            Some(DeclaredConfidence::Medium)
+        );
+        assert_eq!(
+            DeclaredConfidence::from_legacy_band(3, true),
+            Some(DeclaredConfidence::High)
+        );
     }
 }

@@ -69,7 +69,7 @@ pub async fn questions(
         filter.insert("validity.status", vstatus);
     }
     if let Some(cstate) = q.classification_state.filter(|s| !s.is_empty()) {
-        if !["CONFIRMED", "PROPOSED", "UNCLASSIFIED"].contains(&cstate.as_str()) {
+        if !["CONFIRMED", "PARTIAL", "PROPOSED", "UNCLASSIFIED"].contains(&cstate.as_str()) {
             return Err(AppError::BadRequest(
                 "Estado de classificação inválido".into(),
             ));
@@ -126,6 +126,8 @@ pub async fn questions(
 pub struct EditPreview {
     pub operation_id: String,
     pub expected_revision: i64,
+    #[serde(default)]
+    pub reconfirm_validity: bool,
     pub document: Value,
 }
 
@@ -202,7 +204,7 @@ pub async fn prepare_question(
         .unwrap_or("UNDER_REVIEW")
         .to_string();
     let explicit_validity_decision =
-        body.document["validity"]["status"] != old["validity"]["status"];
+        body.reconfirm_validity || body.document["validity"]["status"] != old["validity"]["status"];
 
     // Substantive semantic edits without an explicit new validity decision transition to UNDER_REVIEW.
     // Operational-only grading changes (e.g. max_score/pass_score/engine) preserve verified normative validity.
@@ -365,6 +367,41 @@ pub async fn prepare_question(
             }
             if !link["link_id"].is_string() {
                 link["link_id"] = json!(uuid::Uuid::new_v4().to_string());
+            }
+        }
+    }
+
+    if body
+        .document
+        .get("diagnostic_meta")
+        .is_some_and(Value::is_object)
+    {
+        body.document["diagnostic_meta"]["content_hash"] = json!(&new_content_revision);
+        let (sid_opt, tid_opt) = body.document["classification"]["links"]
+            .as_array()
+            .and_then(|arr| arr.iter().find(|l| l["role"] == "PRIMARY"))
+            .map(|primary_link| {
+                (
+                    primary_link["subject_id"].as_str().map(str::to_owned),
+                    primary_link["topic_id"].as_str().map(str::to_owned),
+                )
+            })
+            .unwrap_or((None, None));
+        if let Some(sid) = sid_opt {
+            body.document["diagnostic_meta"]["subject_id"] = json!(sid);
+        }
+        if let Some(tid) = tid_opt {
+            body.document["diagnostic_meta"]["topic_id"] = json!(tid);
+        }
+        if body.document["validity"]["status"] == "CURRENT"
+            && body.document["classification"]["state"] == "CONFIRMED"
+        {
+            body.document["diagnostic_meta"]["validation_status"] = json!("HUMAN_CONFIRMED");
+            if matches!(
+                body.document["diagnostic_meta"]["quality_status"].as_str(),
+                Some("SUSPENDED" | "MONITORING")
+            ) {
+                body.document["diagnostic_meta"]["quality_status"] = json!("OPERATIONAL");
             }
         }
     }
@@ -734,6 +771,31 @@ pub async fn resolve_report(
             },
         )
         .await?;
+
+    if let Ok(q_oid) = existing.get_object_id("questao_id") {
+        let remaining_open = coll
+            .count_documents(doc! {
+                "questao_id": q_oid,
+                "fix.status_solved": { "$ne": true }
+            })
+            .await
+            .unwrap_or(0);
+        let q_coll = question_storage::collection(&state.db, "todasQuestoes");
+        if let Ok(Some(q_raw)) = q_coll.find_one(doc! { "_id": q_oid }).await {
+            if q_raw.get_document("diagnostic_meta").is_ok() {
+                let _ = q_coll
+                    .update_one(
+                        doc! { "_id": q_oid },
+                        doc! {
+                            "$set": {
+                                "diagnostic_meta.quality_metrics.open_reports_count": remaining_open as i64
+                            }
+                        },
+                    )
+                    .await;
+            }
+        }
+    }
 
     Ok(Json(json!({
         "status": "resolved",

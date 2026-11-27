@@ -1660,6 +1660,7 @@ test('questionView invalidates preview and disables Confirmar edição on editor
 
   let serverQuestion = structuredClone(baseQ);
   let lastPreparedPayload = null;
+  let lastPreparedBody = null;
 
   const {doc, storage} = setupEnv(async (url, options) => {
     if (url.includes(`/admin/questions/v2/${qId}`)) {
@@ -1667,6 +1668,7 @@ test('questionView invalidates preview and disables Confirmar edição on editor
     }
     if (url.includes(`/admin/questions/${qId}/prepare-edit`) && options.method === 'POST') {
       const body = JSON.parse(options.body);
+      lastPreparedBody = body;
       lastPreparedPayload = body.document;
       return {
         ok: true,
@@ -1772,7 +1774,7 @@ test('questionView invalidates preview and disables Confirmar edição on editor
   findFieldControl(view, 'Estado de validade').dispatchEvent({type: 'change', bubbles: true});
   assert.match(JSON.parse(getAppState().ws.questionEdits[qId].text).validity.reference_date, /^\d{4}-\d{2}-\d{2}$/);
 
-  // Toggle reconfirmValidity checkbox
+  // Toggle reconfirmValidity checkbox -> clears evaluated_content_revision when checked and restores original when unchecked
   view = doc.getElementById('view');
   const reconfirmBox = view.querySelectorAll('input[type="checkbox"]').find(
     cb => cb.parentElement?.textContent.includes('Reconfirmar explicitamente o estado de validade')
@@ -1780,6 +1782,18 @@ test('questionView invalidates preview and disables Confirmar edição on editor
   reconfirmBox.checked = true;
   reconfirmBox.dispatchEvent({type: 'change', bubbles: true});
   assert.equal(getAppState().ws.questionEdits[qId].reconfirmValidity, true);
+  assert.equal(JSON.parse(getAppState().ws.questionEdits[qId].text).validity.evaluated_content_revision, null);
+
+  reconfirmBox.checked = false;
+  reconfirmBox.dispatchEvent({type: 'change', bubbles: true});
+  assert.equal(getAppState().ws.questionEdits[qId].reconfirmValidity, false);
+  assert.equal(
+    JSON.parse(getAppState().ws.questionEdits[qId].text).validity.evaluated_content_revision,
+    baseQ.validity.evaluated_content_revision
+  );
+
+  reconfirmBox.checked = true;
+  reconfirmBox.dispatchEvent({type: 'change', bubbles: true});
 
   // Removing primary classification while keeping secondary link sets state === 'PARTIAL' (never 'PROPOSED')
   const discSelect = findFieldControl(view, 'Disciplina da questão');
@@ -1797,12 +1811,13 @@ test('questionView invalidates preview and disables Confirmar edição on editor
   assert.equal(updatedDoc.classification.links.length, 1);
   assert.equal(updatedDoc.classification.links[0].role, 'SECONDARY');
 
-  // Validate sends updated payload cleanly
+  // Validate sends updated payload + explicit reconfirm_validity cleanly
   getAppState().ws.questionEdits[qId].original.revision = 2;
   findButton(view, 'Validar edição').click();
   await flush();
   await flush();
   assert.equal(lastPreparedPayload.classification.state, 'PARTIAL');
+  assert.equal(lastPreparedBody.reconfirm_validity, true);
 });
 
 // --- 12. [P1] reportsView Moderation: open / resolved / all Filters & Individual vs Batch Resolve ---

@@ -134,7 +134,7 @@ pub fn is_trusted_proxy_ip(ip: IpAddr) -> bool {
     }
 }
 
-/// Extrai o IP real do cliente: confia em `X-Real-IP` (ou primeiro IP de `X-Forwarded-For`)
+/// Extrai o IP real do cliente: confia em `X-Real-IP` (ou no IP não-confiável mais à direita de `X-Forwarded-For`)
 /// apenas quando a conexão direta vem de loopback ou proxy reverso privado (ex.: Nginx local/Docker).
 pub fn extract_client_ip(headers: &HeaderMap, peer_ip: Option<IpAddr>) -> IpAddr {
     let trusted_peer = peer_ip.is_none_or(is_trusted_proxy_ip);
@@ -146,13 +146,21 @@ pub fn extract_client_ip(headers: &HeaderMap, peer_ip: Option<IpAddr>) -> IpAddr
         {
             return real_ip;
         }
-        if let Some(forwarded_ip) = headers
-            .get("x-forwarded-for")
-            .and_then(|v| v.to_str().ok())
-            .and_then(|raw| raw.split(',').next())
-            .and_then(|first| first.trim().parse::<IpAddr>().ok())
-        {
-            return forwarded_ip;
+        if let Some(raw_xff) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
+            let parsed_ips: Vec<IpAddr> = raw_xff
+                .split(',')
+                .filter_map(|part| part.trim().parse::<IpAddr>().ok())
+                .collect();
+            if let Some(&rightmost_public) = parsed_ips
+                .iter()
+                .rev()
+                .find(|&&ip| !is_trusted_proxy_ip(ip))
+            {
+                return rightmost_public;
+            }
+            if let Some(&fallback_ip) = parsed_ips.last() {
+                return fallback_ip;
+            }
         }
     }
     peer_ip.unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST))
@@ -453,6 +461,17 @@ mod tests {
         assert_eq!(
             extract_client_ip(&h, Some("203.0.113.77".parse().unwrap())),
             "203.0.113.77".parse::<IpAddr>().unwrap()
+        );
+
+        // Rightmost non-trusted hop wins in X-Forwarded-For so client-prepended IPs cannot spoof identity
+        let mut xff_headers = HeaderMap::new();
+        xff_headers.insert(
+            "x-forwarded-for",
+            "1.2.3.4, 198.51.100.88, 172.18.0.5".parse().unwrap(),
+        );
+        assert_eq!(
+            extract_client_ip(&xff_headers, Some("127.0.0.1".parse().unwrap())),
+            "198.51.100.88".parse::<IpAddr>().unwrap()
         );
     }
 

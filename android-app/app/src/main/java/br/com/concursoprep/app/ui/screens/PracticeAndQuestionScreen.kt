@@ -528,7 +528,7 @@ fun QuestionSessionScreen(
     var selectedDeclaredConfidence by remember(question.id, isSimuladoReviewMode) {
         mutableStateOf(
             currentAttempt?.declaredConfidence
-                ?: if (currentAttempt?.submitted == true || currentAttempt?.confidenceExplicit == true) {
+                ?: if (currentAttempt?.confidenceExplicit == true) {
                     DeclaredConfidence.fromLegacyBand(currentAttempt.confidenceLevel, true)
                 } else {
                     null
@@ -542,7 +542,7 @@ fun QuestionSessionScreen(
         mutableStateOf(currentAttempt?.strategySkipped == true)
     }
     var confidenceExplicitlySelected by remember(question.id, isSimuladoReviewMode) {
-        mutableStateOf(currentAttempt?.confidenceExplicit == true || currentAttempt?.submitted == true)
+        mutableStateOf(currentAttempt?.confidenceExplicit == true)
     }
     val historicalSelectedEvidenceId = currentAttempt?.selectedEvidenceId
     var isAnswerSubmitted by remember(question.id, isSimuladoReviewMode) {
@@ -592,11 +592,12 @@ fun QuestionSessionScreen(
     }
 
     // Estado da Camada 3: Verificação Adaptativa de Domínio Conceitual (CTV) antes de revelar o gabarito original
-    var activeCtvEvaluation by remember(question.id) { mutableStateOf<CtvEvaluateResponseDto?>(null) }
+    var activeCtvEvaluation by remember(question.id) { mutableStateOf(currentAttempt?.pendingCtvEvaluation) }
     var ctvChosenIndex by remember(question.id) { mutableStateOf<Int?>(null) }
     var ctvDeclaredConfidence by remember(question.id) { mutableStateOf<DeclaredConfidence?>(null) }
     var ctvActiveSeconds by remember(question.id) { mutableIntStateOf(1) }
-    var ctvDisplayedAtIso by remember(question.id) { mutableStateOf<String?>(null) }
+    var ctvDisplayedAtIso by remember(question.id) { mutableStateOf(currentAttempt?.ctvDisplayedAtIso) }
+    var ctvConsultedResources by remember(question.id) { mutableStateOf(emptySet<String>()) }
     var ctvFocusLossCount by remember(question.id) { mutableIntStateOf(0) }
     var ctvSubmitting by remember(question.id) { mutableStateOf(false) }
     var ctvResult by remember(question.id) {
@@ -632,7 +633,12 @@ fun QuestionSessionScreen(
         val eval = activeCtvEvaluation
         if (ctvPendingStage && eval != null) {
             if (ctvDisplayedAtIso == null) {
-                ctvDisplayedAtIso = java.time.Instant.now().toString()
+                val nowIso = java.time.Instant.now().toString()
+                ctvDisplayedAtIso = nowIso
+                userAnswers[question.id]?.let { prev ->
+                    userAnswers[question.id] = prev.copy(ctvDisplayedAtIso = nowIso)
+                    persistSessionNow(currentIndex, isSimuladoFinished, isSimuladoReviewMode)
+                }
             }
             onRecordCtvDisplayed(eval, question.id)
         }
@@ -955,9 +961,14 @@ fun QuestionSessionScreen(
                                                         ctvChosenIndex = null
                                                         ctvDeclaredConfidence = null
                                                         ctvActiveSeconds = 1
+                                                        ctvConsultedResources = emptySet()
+                                                        userAnswers[question.id]?.let { prev ->
+                                                            userAnswers[question.id] = prev.copy(pendingCtvEvaluation = eval)
+                                                        }
                                                     }
                                                 }
                                                 isAnswerSubmitted=true
+                                                persistSessionNow(currentIndex, isSimuladoFinished, isSimuladoReviewMode)
                                             }
                                         }finally{saving=false}
                                     }
@@ -988,6 +999,10 @@ fun QuestionSessionScreen(
                                 onClick = {
                                     activeCtvEvaluation?.let { onDismissCtvOffer(it, question.id) }
                                     activeCtvEvaluation = null
+                                    userAnswers[question.id]?.let { prev ->
+                                        userAnswers[question.id] = prev.copy(pendingCtvEvaluation = null)
+                                    }
+                                    persistSessionNow(currentIndex, isSimuladoFinished, isSimuladoReviewMode)
                                 },
                                 modifier = Modifier
                                     .weight(1f)
@@ -1018,7 +1033,7 @@ fun QuestionSessionScreen(
                                                     null,
                                                     ctvActiveSeconds,
                                                     ctvDisplayedAtIso,
-                                                    consultedResources.toList(),
+                                                    ctvConsultedResources.toList(),
                                                     ctvFocusLossCount,
                                                     isUserCorrect
                                                 )
@@ -1041,12 +1056,17 @@ fun QuestionSessionScreen(
                                                     userAnswers[question.id] = prev.copy(
                                                         ctvCompleted = true,
                                                         ctvDiagnosticTitle = res.consolidatedDiagnosticTitlePt,
-                                                        ctvDiagnosticMessage = res.consolidatedDiagnosticMessagePt
+                                                        ctvDiagnosticMessage = res.consolidatedDiagnosticMessagePt,
+                                                        pendingCtvEvaluation = null
                                                     )
                                                 }
                                             } else {
                                                 activeCtvEvaluation = null
+                                                userAnswers[question.id]?.let { prev ->
+                                                    userAnswers[question.id] = prev.copy(pendingCtvEvaluation = null)
+                                                }
                                             }
+                                            persistSessionNow(currentIndex, isSimuladoFinished, isSimuladoReviewMode)
                                         } finally {
                                             ctvSubmitting = false
                                         }
@@ -1729,7 +1749,7 @@ fun QuestionSessionScreen(
                             null
                         }
                         val resolvedDeclConf = selectedDeclaredConfidence
-                            ?: DeclaredConfidence.fromLegacyBand(selectedConfidence, true)
+                            ?: DeclaredConfidence.fromLegacyBand(selectedConfidence, confidenceExplicitlySelected)
                         val confidenceBadgeText = resolvedDeclConf?.labelPt ?: "Não informada"
                         val hasCustomChForMeta = question.hasCustomEvidenceChallenge()
                         val normSelectedEvForMeta = normalizeEvidenceOptionId(historicalSelectedEvidenceId, hasCustomChForMeta)

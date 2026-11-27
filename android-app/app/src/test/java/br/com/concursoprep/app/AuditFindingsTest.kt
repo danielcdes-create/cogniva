@@ -223,4 +223,43 @@ class AuditFindingsTest {
         assertNotEquals("concurso_prep.db", AccountDatabaseOpener.fileName(0L, 1001L))
         assertEquals("concurso_prep.db", AccountDatabaseOpener.fileName(42L, 42L))
     }
+
+    @Test
+    fun legacyBandNeverFabricatesConfidenceWhenNotExplicitAndDeterministicOfferIdMatchesBackendV4() {
+        assertNull(br.com.concursoprep.app.domain.exam.DeclaredConfidence.fromLegacyBand(1, false))
+        assertNull(br.com.concursoprep.app.domain.exam.DeclaredConfidence.fromLegacyBand(2, false))
+        assertNull(br.com.concursoprep.app.domain.exam.DeclaredConfidence.fromLegacyBand(3, false))
+        assertEquals(
+            br.com.concursoprep.app.domain.exam.DeclaredConfidence.LOW,
+            br.com.concursoprep.app.domain.exam.DeclaredConfidence.fromLegacyBand(1, true)
+        )
+        assertEquals(
+            br.com.concursoprep.app.domain.exam.DeclaredConfidence.MEDIUM,
+            br.com.concursoprep.app.domain.exam.DeclaredConfidence.fromLegacyBand(2, true)
+        )
+        assertEquals(
+            br.com.concursoprep.app.domain.exam.DeclaredConfidence.HIGH,
+            br.com.concursoprep.app.domain.exam.DeclaredConfidence.fromLegacyBand(3, true)
+        )
+
+        val offerId = br.com.concursoprep.app.data.repository.ConcursoRepository.deterministicOfferId(42L, "  att-123  ")
+        val offerIdTrimmed = br.com.concursoprep.app.data.repository.ConcursoRepository.deterministicOfferId(42L, "att-123")
+        assertEquals(offerIdTrimmed, offerId)
+        assertTrue("Expected v4 UUID format, got $offerId", Regex("^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$").matches(offerId))
+
+        val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+        val encodedFeedback = json.encodeToString(
+            br.com.concursoprep.app.domain.model.RecommendationFeedbackRequestDto.serializer(),
+            br.com.concursoprep.app.domain.model.RecommendationFeedbackRequestDto(
+                recommendationId = "rec-1",
+                outcome = "ACCEPTED",
+                additionalSeconds = 45
+            )
+        )
+        assertTrue(encodedFeedback.contains("\"additional_active_seconds\":45"))
+        val decodedAck = json.decodeFromString<br.com.concursoprep.app.domain.model.RecommendationFeedbackResponseDto>(
+            """{"status":"recorded"}"""
+        )
+        assertEquals("recorded", decodedAck.status)
+    }
 }

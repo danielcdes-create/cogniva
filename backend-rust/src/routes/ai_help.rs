@@ -225,7 +225,7 @@ pub async fn handle_question_contextual_lookup(
         .find_one(doc! { "_id": oid })
         .await?
         .ok_or_else(|| AppError::NotFound("Questão não encontrada.".into()))?;
-    let questao = crate::services::question_compatibility::decode(raw_q)?;
+    let questao = crate::services::question_compatibility::decode_for_ctv(raw_q)?;
     let disciplina = if questao.disciplina.trim().is_empty() {
         "Concursos Públicos".to_string()
     } else {

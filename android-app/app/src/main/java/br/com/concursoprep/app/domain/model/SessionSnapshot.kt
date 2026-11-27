@@ -24,7 +24,9 @@ data class SessionAnswer(
     val focusLossCount: Int = 0,
     val ctvCompleted: Boolean = false,
     val ctvDiagnosticTitle: String? = null,
-    val ctvDiagnosticMessage: String? = null
+    val ctvDiagnosticMessage: String? = null,
+    val pendingCtvEvaluation: CtvEvaluateResponseDto? = null,
+    val ctvDisplayedAtIso: String? = null
 )
 
 @Serializable

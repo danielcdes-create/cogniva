@@ -642,10 +642,13 @@ def purge_sub5_multiple_choice_questions(tgt_db) -> int:
     for sat in (
         "question_classification_suggestions",
         "question_exam_compatibility",
-        "reportedQuestoes",
     ):
         if sat in existing_colls:
             tgt_db.get_collection(sat).delete_many({"question_id": {"$in": hex_ids}})
+    if "reportedQuestoes" in existing_colls:
+        tgt_db.get_collection("reportedQuestoes").delete_many(
+            {"$or": [{"question_id": {"$in": hex_ids}}, {"questao_id": {"$in": ids_to_delete + hex_ids}}]}
+        )
     return int(del_res.deleted_count)
 
 
@@ -1046,7 +1049,9 @@ def normalize_question_to_v2(
             doc["disciplina"] = "Geral"
 
         if default_contest_tag and not doc.get("concursos"):
-            doc["concursos"] = default_contest_tag
+            doc["concursos"] = [default_contest_tag]
+        elif doc.get("concursos") is None and "concursos" in doc:
+            doc["concursos"] = []
 
         qc.populate_v2_1_hashes(doc)
 
@@ -1193,11 +1198,13 @@ def normalize_question_to_v2(
 
     concursos_raw = raw_doc.get("concursos")
     if isinstance(concursos_raw, str) and concursos_raw.strip():
-        concursos = concursos_raw.strip()
+        concursos = [concursos_raw.strip()]
     elif isinstance(concursos_raw, list) and all(isinstance(x, str) for x in concursos_raw) and concursos_raw:
         concursos = concursos_raw
+    elif default_contest_tag:
+        concursos = [default_contest_tag]
     else:
-        concursos = default_contest_tag
+        concursos = []
 
     normalized_doc = {
         "_id": {"$oid": oid},
@@ -1671,9 +1678,10 @@ def run_mongo_migration(
     dry_run: bool,
     contest_filter: str | None = None,
     include_contest_subjects: bool = False,
+    force_overwrite: bool = False,
 ) -> dict:
     from bson import Int64, json_util
-    from pymongo import MongoClient, ReplaceOne
+    from pymongo import MongoClient, ReplaceOne, UpdateOne
 
     if source_uri == target_uri and source_db_name == target_db_name:
         raise ValueError("source and target database cannot be identical; CNU must remain untouched")
@@ -1901,7 +1909,10 @@ def run_mongo_migration(
             ops = []
             for v2 in migrated:
                 mdoc = _to_mongo_doc(v2)
-                ops.append(ReplaceOne({"_id": mdoc["_id"]}, mdoc, upsert=True))
+                if force_overwrite:
+                    ops.append(ReplaceOne({"_id": mdoc["_id"]}, mdoc, upsert=True))
+                else:
+                    ops.append(UpdateOne({"_id": mdoc["_id"]}, {"$setOnInsert": mdoc}, upsert=True))
             res = tgt_db.get_collection("todasQuestoes").bulk_write(ops, ordered=False)
             stats["questions_upserted"] = res.upserted_count + res.modified_count + res.matched_count
         else:
@@ -1913,6 +1924,8 @@ def run_mongo_migration(
 
 
 def main(argv: list[str] | None = None) -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-uri", default=os.environ.get("SOURCE_MONGODB_URI", ""))
     parser.add_argument("--source-db", default="CNU")
@@ -1920,6 +1933,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--target-db", default=os.environ.get("MONGODB_DB_NAME") or os.environ.get("DATABASE_NAME") or "cogniva")
     parser.add_argument("--contest-filter", default=None, help="Case-insensitive regex to selectively migrate matching contest(s) and questions")
     parser.add_argument("--include-contest-subjects", action="store_true", help="Also include questions matching any subject/topic of matched contest(s)")
+    parser.add_argument("--force-overwrite", action="store_true", help="Overwrite existing questions in target DB instead of insert-only")
     parser.add_argument("--input-json", type=Path, help="Optional offline JSON file instead of MongoDB source")
     parser.add_argument("--output-report", type=Path)
     mode_group = parser.add_mutually_exclusive_group()
@@ -1948,6 +1962,7 @@ def main(argv: list[str] | None = None) -> int:
             dry_run=effective_dry_run,
             contest_filter=args.contest_filter,
             include_contest_subjects=args.include_contest_subjects,
+            force_overwrite=args.force_overwrite,
         )
 
     output = json.dumps(report, ensure_ascii=False, indent=2)

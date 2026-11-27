@@ -949,6 +949,16 @@ pub fn regular_index_specs() -> Vec<(&'static str, Document, &'static str)> {
             "idx_ctv_status_dmeta_topic_cursor",
         ),
         (
+            "todasQuestoes",
+            doc! { "status": 1, "classification.links.topic_id": 1, "_id": 1 },
+            "idx_ctv_status_cls_topic_cursor",
+        ),
+        (
+            "todasQuestoes",
+            doc! { "diagnostic_meta.generation_origin": 1, "_id": -1 },
+            "idx_ctv_dmeta_origin_id",
+        ),
+        (
             "ctv_offers",
             doc! { "user_id": 1, "complementary_question_id": 1, "first_displayed_at": 1 },
             "idx_ctv_offers_user_question_displayed",
@@ -959,6 +969,16 @@ pub fn regular_index_specs() -> Vec<(&'static str, Document, &'static str)> {
             "idx_ctv_offers_user_crev_displayed",
         ),
         (
+            "ctv_offers",
+            doc! { "user_id": 1, "session_uuid": 1 },
+            "idx_ctv_offers_user_session",
+        ),
+        (
+            "ctv_offers",
+            doc! { "first_displayed_at": 1 },
+            "idx_ctv_offers_displayed_at",
+        ),
+        (
             "conceptual_transfer_attempts",
             doc! { "user_id": 1, "complementary_question_id": 1, "occurred_at": 1 },
             "idx_ctv_attempts_user_question_time",
@@ -967,6 +987,11 @@ pub fn regular_index_specs() -> Vec<(&'static str, Document, &'static str)> {
             "conceptual_transfer_attempts",
             doc! { "user_id": 1, "occurred_at": 1 },
             "idx_ctv_attempts_user_time",
+        ),
+        (
+            "conceptual_transfer_attempts",
+            doc! { "occurred_at": 1 },
+            "idx_ctv_attempts_occurred_at",
         ),
         (
             "ai_generation_audit",
@@ -1082,6 +1107,12 @@ pub async fn ensure_indexes(db: &Database) -> Result<Vec<String>, AppError> {
             "updated_at",
             Duration::from_secs(30 * 24 * 60 * 60),
             "idx_tutor_budgets_updated_ttl",
+        ),
+        (
+            "study_recommendation_events",
+            "recommended_at",
+            Duration::from_secs(90 * 24 * 60 * 60),
+            "idx_study_rec_events_ttl",
         ),
     ] {
         create_index_tolerant(
@@ -2030,7 +2061,15 @@ async fn execute_write_steps(
         );
     }
 
-    for opt_key in ["level", "exam_year", "disciplina", "concursos"] {
+    for opt_key in [
+        "level",
+        "exam_year",
+        "disciplina",
+        "concursos",
+        "editorial_card",
+        "diagnostic_meta",
+        "evidence_challenge",
+    ] {
         if let Some(val) = r.document.get(opt_key) {
             update.insert(
                 opt_key,
@@ -2105,6 +2144,9 @@ async fn execute_write_steps(
             "correct_answer_indices",
             "classification",
             "validity",
+            "editorial_card",
+            "diagnostic_meta",
+            "evidence_challenge",
         ] {
             filter.insert(
                 key,
@@ -2430,7 +2472,8 @@ mod tests {
     }
 
     #[test]
-    fn validator_migration_table_matches_v2_0_0_v2_0_1_v2_0_2_v2_2_0_v2_3_0_and_current_v2_4_0_hashes() {
+    fn validator_migration_table_matches_v2_0_0_v2_0_1_v2_0_2_v2_2_0_v2_3_0_and_current_v2_4_0_hashes(
+    ) {
         let old_bundle = v2_0_0_schema_bundle();
         let v2_0_1_bundle = v2_0_1_schema_bundle();
         let v2_0_2_bundle = v2_0_2_schema_bundle();

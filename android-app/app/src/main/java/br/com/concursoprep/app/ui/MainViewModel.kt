@@ -165,7 +165,12 @@ class MainViewModel(
         operation {
             val session=when(authMode){
                 "login"->repository.loginWithEmail(email.orEmpty(),password.orEmpty())
-                "register"->repository.registerAccount(email.orEmpty(),password.orEmpty(),displayName)
+                "register" -> {
+                    if (repository.ownerUserId < 0L) {
+                        runCatching { repository.syncPendingAttempts(repository.ownerUserId) }
+                    }
+                    repository.registerAccount(email.orEmpty(), password.orEmpty(), displayName)
+                }
                 else->repository.startGuestOrOfflineSession(displayName)
             }
             val targetRepo = if (session.profile.userId != repository.ownerUserId && appContext != null) {
@@ -212,9 +217,16 @@ class MainViewModel(
         _accountAuthState.value=AccountAuthUiState(isSubmitting=true,isAuthenticated=!_userProfile.value.isGuest)
         vmScope.launch {
             try {
+                if(isRegister && repository.ownerUserId < 0L){
+                    runCatching { repository.syncPendingAttempts(repository.ownerUserId) }
+                }
                 val session=if(isRegister) repository.registerAccount(normalizedEmail,password,displayName?:_userProfile.value.displayName) else repository.loginWithEmail(normalizedEmail,password)
                 saveProfile(session.profile);_isOnboardingCompleted.value=true
-                if(session.profile.userId!=repository.ownerUserId){_accountChanged.emit(session.profile.userId);return@launch}
+                if(session.profile.userId!=repository.ownerUserId){
+                    appContext?.let{OfflineSyncWorker.enqueueNow(it)}
+                    _accountChanged.emit(session.profile.userId)
+                    return@launch
+                }
                 _userProfile.value=session.profile;refreshAllData()
                 appContext?.let{OfflineSyncWorker.enqueueNow(it)}
                 _accountAuthState.value=AccountAuthUiState(
@@ -730,6 +742,7 @@ class MainViewModel(
             declaredConfidence = declaredConfidence,
             cognitiveStrategy = cognitiveStrategy,
             confidenceLevel = confidenceLevel,
+            confidenceExplicit = declaredConfidence != null,
             sessionCtvCount = session.sessionCtvCount,
             attemptsSinceLastCtv = (session.attemptsSinceLastCtv - 1).coerceAtLeast(0),
             forcePostInstruction = false

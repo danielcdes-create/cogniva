@@ -1,6 +1,10 @@
 """Idempotently synchronize /etc/nginx/sites-available/cogniva and rate-limit zones."""
 from __future__ import annotations
 
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows unit test runner compatibility
+    fcntl = None  # type: ignore[assignment]
 import os
 import pathlib
 import re
@@ -71,44 +75,49 @@ def sync_nginx_site(
 
         bak = effective_app_root / 'cogniva-nginx.bak'
         rates_bak = effective_app_root / 'cogniva-nginx-rates.bak'
+        lock_path = effective_app_root / '.cogniva-deploy.lock'
         bak.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(site_file, bak)
-        had_rates = rates_file.is_file()
-        if had_rates:
-            shutil.copy2(rates_file, rates_bak)
+        with lock_path.open('w', encoding='utf-8') as lock_file:
+            if fcntl is not None:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            shutil.copy2(site_file, bak)
+            had_rates = rates_file.is_file()
+            if had_rates:
+                shutil.copy2(rates_file, rates_bak)
 
-        if site_changed:
-            atomic_write(site_file, rendered)
-        if rates_changed and rates_rendered is not None:
-            atomic_write(rates_file, rates_rendered)
-        if gate_stale:
-            atomic_write(gate_file, 'set $cogniva_maintenance 0;\n')
-
-        def rollback() -> None:
             if site_changed:
-                atomic_write(site_file, bak.read_text(encoding='utf-8'))
-            if rates_changed:
-                if had_rates:
-                    atomic_write(rates_file, rates_bak.read_text(encoding='utf-8'))
-                else:
-                    rates_file.unlink(missing_ok=True)
-            if gate_stale and gate_prev is not None:
-                atomic_write(gate_file, gate_prev)
+                atomic_write(site_file, rendered)
+            if rates_changed and rates_rendered is not None:
+                atomic_write(rates_file, rates_rendered)
+            if gate_stale:
+                atomic_write(gate_file, 'set $cogniva_maintenance 0;\n')
 
-        if subprocess.call(['nginx', '-t']) != 0:
-            rollback()
-            raise SystemExit('nginx -t failed when applying Cogniva Nginx configuration')
+            def rollback() -> None:
+                if site_changed:
+                    atomic_write(site_file, bak.read_text(encoding='utf-8'))
+                if rates_changed:
+                    if had_rates:
+                        atomic_write(rates_file, rates_bak.read_text(encoding='utf-8'))
+                    else:
+                        rates_file.unlink(missing_ok=True)
+                if gate_stale and gate_prev is not None:
+                    atomic_write(gate_file, gate_prev)
 
-        try:
-            subprocess.check_call(['systemctl', 'reload', 'nginx'])
-        except (subprocess.CalledProcessError, OSError) as exc:
-            rollback()
-            raise SystemExit('systemctl reload nginx failed when applying Cogniva Nginx configuration') from exc
+            if subprocess.call(['nginx', '-t']) != 0:
+                rollback()
+                raise SystemExit('nginx -t failed when applying Cogniva Nginx configuration')
 
-        return True
+            try:
+                subprocess.check_call(['systemctl', 'reload', 'nginx'])
+            except (subprocess.CalledProcessError, OSError) as exc:
+                rollback()
+                raise SystemExit('systemctl reload nginx failed when applying Cogniva Nginx configuration') from exc
+
+            return True
     finally:
-        tpl_path.unlink(missing_ok=True)
-        if rates_tpl_path is not None:
+        if tpl_path.suffix == '.tpl':
+            tpl_path.unlink(missing_ok=True)
+        if rates_tpl_path is not None and rates_tpl_path.suffix == '.tpl':
             rates_tpl_path.unlink(missing_ok=True)
 
 

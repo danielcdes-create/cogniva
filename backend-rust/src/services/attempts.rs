@@ -110,7 +110,12 @@ fn validate(
         || item.session_uuid.len() > 100
         || !(0..=3).contains(&item.confidence_level)
         || !(1..=86400).contains(&item.time_spent_seconds)
-        || item.active_seconds.is_some_and(|s| !(0..=86400).contains(&s))
+        || item
+            .active_seconds
+            .is_some_and(|s| !(0..=86400).contains(&s))
+        || item
+            .elapsed_session_seconds
+            .is_some_and(|s| !(0..=86400).contains(&s))
         || item.consulted_resources.len() > 20
         || item.consulted_resources.iter().any(|r| r.len() > 64)
         || item.user_note.as_ref().is_some_and(|s| s.len() > 20000)
@@ -118,7 +123,7 @@ fn validate(
         return Err(AppError::BadRequest("Tentativa fora dos limites".into()));
     }
     if let Some(init_idx) = item.initial_chosen_index {
-        if !item.is_blank && init_idx >= question.answers.len() {
+        if !question.answers.is_empty() && init_idx >= question.answers.len() {
             return Err(AppError::BadRequest(
                 "Alternativa inicial fora dos limites da questão".into(),
             ));
@@ -158,6 +163,7 @@ fn empty(user_id: i64, question: &QuestionDocument, at: DateTime<Utc>) -> UserAc
         question_id: question.id,
         datas: ActivityDates {
             ultima_sessao: at,
+            ultima_resposta_em: None,
             ultima_revisao: None,
             data_primeira_sessao: at,
             data_primeiro_acerto: None,
@@ -200,6 +206,14 @@ fn project(
     let correct = !item.is_blank && question.answer_indices()?.contains(&item.chosen_index);
     let prior_had_history = !activity.past_sessions.is_empty() || activity.quantidade_praticas > 0;
     let prior_ultima_sessao = prior_had_history.then_some(activity.datas.ultima_sessao);
+    let prior_ultima_resposta = activity.datas.ultima_resposta_em.or_else(|| {
+        activity
+            .past_sessions
+            .iter()
+            .rev()
+            .find(|s| !s.is_blank)
+            .map(|s| s.data)
+    });
 
     let mut event = PastSessionEntry {
         attempt_id: item.attempt_id.clone(),
@@ -322,6 +336,9 @@ fn project(
         let step_dias_ultima = prev_session_date
             .map(|p| (s.data - p).num_days().max(0))
             .unwrap_or(0);
+        let step_elapsed_days_f64 = prev_session_date
+            .map(|p| ((s.data - p).num_seconds().max(0) as f64) / 86_400.0)
+            .unwrap_or(0.0);
         if s.is_blank {
             s.dias_desde_ultima_sessao = step_dias_ultima;
             s.percentual_acertos_acumulado = if running_non_blank > 0 {
@@ -372,7 +389,7 @@ fn project(
             running_difficulty,
             s.status,
             s.nivel_confianca,
-            step_dias_ultima as f64,
+            step_elapsed_days_f64,
             s.tempo_gasto_segundos,
             avg_for_srs,
         );
@@ -438,11 +455,16 @@ fn project(
         .cloned()
         .collect();
     let last_answered = answered_sessions.last();
+    let monotonic_ultima_resposta = last_answered
+        .map(|la| prior_ultima_resposta.map_or(la.data, |prev| prev.max(la.data)))
+        .or(prior_ultima_resposta);
+    let srs_anchor = monotonic_ultima_resposta.unwrap_or(monotonic_ultima);
+    activity.datas.ultima_resposta_em = monotonic_ultima_resposta;
 
     activity.streak_atual = final_streak.streak_atual;
     activity.streak_max = final_streak.streak_max;
     activity.points = final_streak.points_total;
-    activity.points_with_decay = calculate_decay(activity.points, monotonic_ultima, Utc::now());
+    activity.points_with_decay = calculate_decay(activity.points, srs_anchor, Utc::now());
     activity.nivel_confianca_med_rec = calculate_recent_confidence_avg(&answered_sessions, 3);
     activity.dominada =
         is_mastered(activity.points) && activity.nivel_confianca_med_rec.unwrap_or(0) >= 2;
@@ -456,7 +478,7 @@ fn project(
     activity.memory_difficulty = running_difficulty;
     activity.revisao_necessaria = running_non_blank > 0
         && Utc::now()
-            >= monotonic_ultima + Duration::days(activity.spaced_repetition_interval.max(1) as i64);
+            >= srs_anchor + Duration::days(activity.spaced_repetition_interval.max(1) as i64);
     activity.high_confidence_error_flag =
         last_answered.is_some_and(|la| !la.status && la.nivel_confianca >= 2);
     activity.in_error_notebook = replay_notebook;
@@ -555,7 +577,7 @@ fn project(
         accuracy_accumulated_pct: activity.percentual_acertos,
         in_error_notebook: activity.in_error_notebook,
         metacognitive_assessment,
-        next_review_at: (monotonic_ultima + Duration::days(next_review_interval_days as i64))
+        next_review_at: (srs_anchor + Duration::days(next_review_interval_days as i64))
             .to_rfc3339(),
         canonical_subject_id: activity.canonical_subject_id.clone(),
         canonical_topic_id: activity.canonical_topic_id.clone(),
@@ -573,10 +595,12 @@ fn project(
             }
         }
     }
-    fields.insert(
-        "datas.ultima_resposta_em",
-        bson::DateTime::from_chrono(monotonic_ultima),
-    );
+    if let Some(last_ans_dt) = monotonic_ultima_resposta {
+        fields.insert(
+            "datas.ultima_resposta_em",
+            bson::DateTime::from_chrono(last_ans_dt),
+        );
+    }
     fields.insert("projection_version", 2);
     let mut event =
         bson::to_document(&event).map_err(|_| AppError::Internal("Evento inválido".into()))?;
@@ -696,7 +720,7 @@ pub async fn commit(
             })?,
             None => empty(user_id, &question, at),
         };
-        let (fields, event, ack) = project(activity, &question, item, at)?;
+        let (mut fields, event, ack) = project(activity, &question, item, at)?;
         let digest =
             Sha256::digest(format!("cogniva-activity:{user_id}:{}", item.question_id).as_bytes());
         let id = existing
@@ -714,22 +738,67 @@ pub async fn commit(
         } else {
             filter.insert("state_revision", doc! { "$exists": false });
         }
-        let write = activities
-            .update_one(
-                filter,
-                doc! {
-                    "$set": fields,
-                    "$push": {
-                        "pastSessions": {
-                            "$each": [event],
-                            "$sort": { "data": 1, "attempt_id": 1 },
-                            "$slice": -50
-                        }
-                    },
-                    "$inc": { "state_revision": 1_i64 },
-                    "$setOnInsert": { "user_id": user_id, "question_id": qid }
+        let existing_sessions_len = existing
+            .as_ref()
+            .and_then(|d| d.get_array("pastSessions").ok())
+            .map_or(0, Vec::len);
+        let update_doc = if existing_sessions_len >= 49 {
+            // Preserva sessões respondidas contra despejo por sequência de omissões em branco ($slice: -50)
+            let mut merged_docs: Vec<Document> = existing
+                .as_ref()
+                .and_then(|d| d.get_array("pastSessions").ok())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_document().cloned())
+                        .collect()
+                })
+                .unwrap_or_default();
+            merged_docs.push(event);
+            merged_docs.sort_by(|a, b| {
+                let da = a
+                    .get_datetime("data")
+                    .map(|t| t.timestamp_millis())
+                    .unwrap_or(0);
+                let db = b
+                    .get_datetime("data")
+                    .map(|t| t.timestamp_millis())
+                    .unwrap_or(0);
+                let ida = a.get_str("attempt_id").unwrap_or("");
+                let idb = b.get_str("attempt_id").unwrap_or("");
+                (da, ida).cmp(&(db, idb))
+            });
+            while merged_docs.len() > 50 {
+                if let Some(blank_pos) = merged_docs
+                    .iter()
+                    .position(|d| d.get_bool("is_blank").unwrap_or(false))
+                {
+                    merged_docs.remove(blank_pos);
+                } else {
+                    merged_docs.remove(0);
+                }
+            }
+            fields.insert("pastSessions", merged_docs);
+            doc! {
+                "$set": fields,
+                "$inc": { "state_revision": 1_i64 },
+                "$setOnInsert": { "user_id": user_id, "question_id": qid }
+            }
+        } else {
+            doc! {
+                "$set": fields,
+                "$push": {
+                    "pastSessions": {
+                        "$each": [event],
+                        "$sort": { "data": 1, "attempt_id": 1 },
+                        "$slice": -50
+                    }
                 },
-            )
+                "$inc": { "state_revision": 1_i64 },
+                "$setOnInsert": { "user_id": user_id, "question_id": qid }
+            }
+        };
+        let write = activities
+            .update_one(filter, update_doc)
             .upsert(existing.is_none())
             .await;
         match write {
@@ -750,6 +819,28 @@ pub async fn commit(
                     )
                     .upsert(true)
                     .await;
+                if !item.is_blank && ack.is_correct && ack.attempts_total == 1 {
+                    if let Some(tid) = ack.canonical_topic_id.as_deref().filter(|s| !s.is_empty()) {
+                        let _ = state
+                            .db
+                            .collection::<Document>("study_recommendation_events")
+                            .update_many(
+                                doc! {
+                                    "user_id": user_id,
+                                    "priority_topic_id": tid,
+                                    "entry_question_id": { "$ne": &item.question_id },
+                                    "recommended_at": { "$lt": bson::DateTime::from_chrono(at) }
+                                },
+                                doc! {
+                                    "$set": {
+                                        "subsequent_unseen_correct_observed": true,
+                                        "updated_at": bson::DateTime::now()
+                                    }
+                                },
+                            )
+                            .await;
+                    }
+                }
                 let _ = crate::services::ctv_reconciliation::reconcile_user_ctv_history(
                     &state.db,
                     user_id,

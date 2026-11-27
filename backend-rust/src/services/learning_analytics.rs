@@ -142,7 +142,8 @@ pub struct AdminAiCtvMetricsResponse {
 }
 
 fn round2_opt(v: Option<f64>) -> Option<f64> {
-    v.filter(|x| x.is_finite()).map(|x| (x * 100.0).round() / 100.0)
+    v.filter(|x| x.is_finite())
+        .map(|x| (x * 100.0).round() / 100.0)
 }
 
 fn ratio_pct(num: f64, den: f64) -> Option<f64> {
@@ -212,6 +213,18 @@ pub async fn compute_student_analytics(
             .db
             .collection::<Document>("todasQuestoes")
             .find(doc! { "_id": { "$in": &qids } })
+            .projection(doc! {
+                "explanation": 0,
+                "explanationExtra": 0,
+                "drSincero": 0,
+                "ajudaInfantil": 0,
+                "explicacaoInfantil": 0,
+                "mnemonico": 0,
+                "contextualHint": 0,
+                "plausibilityMarkdown": 0,
+                "plausibilityAnalysis": 0,
+                "ai_resource_meta": 0
+            })
             .await?
             .try_collect::<Vec<_>>()
             .await?
@@ -277,8 +290,7 @@ pub async fn compute_student_analytics(
             continue;
         };
         let q_doc_opt = q_map.get(&act.question_id);
-        let decoded_q = q_doc_opt
-            .and_then(|d| question_compatibility::decode(d.clone()).ok());
+        let decoded_q = q_doc_opt.and_then(|d| question_compatibility::decode(d.clone()).ok());
         let q_type = decoded_q
             .as_ref()
             .map(|q| q.effective_question_type().to_string())
@@ -324,7 +336,12 @@ pub async fn compute_student_analytics(
                 .iter()
                 .filter_map(|v| v.as_document())
                 .filter(|l| l.get_str("role").ok() == Some("PRIMARY"))
-                .filter_map(|l| l.get_str("concept_id").ok().map(str::trim).filter(|s| !s.is_empty()))
+                .filter_map(|l| {
+                    l.get_str("concept_id")
+                        .ok()
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                })
                 .map(str::to_string)
                 .collect();
             if prim.len() == 1 {
@@ -413,12 +430,8 @@ pub async fn compute_student_analytics(
                 rationale_contradicted,
             });
 
-            let hit_grounding = classify_hit_grounding(
-                s.status,
-                decl_conf,
-                s.cognitive_strategy,
-                ev_compatible,
-            );
+            let hit_grounding =
+                classify_hit_grounding(s.status, decl_conf, s.cognitive_strategy, ev_compatible);
             if s.status {
                 match hit_grounding {
                     HitGroundingCategory::ValidConceptualGrounding => {
@@ -439,7 +452,6 @@ pub async fn compute_student_analytics(
                     }
                     HitGroundingCategory::RetrospectiveLegacyEvidence => {
                         grounding_summary.retrospective_legacy_hits += 1;
-                        grounding_summary.unknown_grounding_hits += 1;
                     }
                     HitGroundingCategory::UnknownGrounding => {
                         grounding_summary.unknown_grounding_hits += 1;
@@ -493,7 +505,9 @@ pub async fn compute_student_analytics(
                     u.earliest_correct_ms =
                         Some(u.earliest_correct_ms.map_or(ts_ms, |c| c.min(ts_ms)));
                     u.latest_correct_ms = Some(u.latest_correct_ms.map_or(ts_ms, |c| c.max(ts_ms)));
-                } else if decl_conf.is_some_and(DeclaredConfidence::is_high) || s.nivel_confianca >= 3 {
+                } else if decl_conf.is_some_and(DeclaredConfidence::is_high)
+                    || s.nivel_confianca >= 3
+                {
                     u.high_conf_errors += 1;
                 }
                 u.last_answered_ms = u.last_answered_ms.max(ts_ms);
@@ -512,6 +526,14 @@ pub async fn compute_student_analytics(
 
     grounding_summary.coverage_sentence_pt = if grounding_summary.raw_correct_hits == 0 {
         "Ainda não há acertos registrados para avaliação de fundamento.".to_string()
+    } else if grounding_summary.retrospective_legacy_hits > 0 {
+        format!(
+            "Dos {} acertos brutos, {} têm fundamento pré-exposição avaliável ({} sem estratégia informada e {} apenas com justificativa pós-gabarito legada).",
+            grounding_summary.raw_correct_hits,
+            grounding_summary.evaluable_grounding_hits,
+            grounding_summary.unknown_grounding_hits,
+            grounding_summary.retrospective_legacy_hits
+        )
     } else {
         format!(
             "Dos {} acertos brutos, {} têm fundamento avaliável ({} sem estratégia ou justificativa informada).",
@@ -816,7 +838,8 @@ pub async fn compute_student_analytics(
         let (att, corr) = level_counts.get(&dc).copied().unwrap_or((0, 0));
         let tf_n = level_tf_counts.get(&dc).copied().unwrap_or(0);
         // Usa o formato efetivamente predominante na faixa (ou ponderação exata entre formatos), nunca fixando MULTIPLE_CHOICE para Certo/Errado!
-        let (tf_mean, tf_sd) = calibrated_level_posterior("TRUE_FALSE", dc, corr as u32, att as u32);
+        let (tf_mean, tf_sd) =
+            calibrated_level_posterior("TRUE_FALSE", dc, corr as u32, att as u32);
         let (mc_mean, mc_sd) =
             calibrated_level_posterior("MULTIPLE_CHOICE", dc, corr as u32, att as u32);
         let (post_mean, post_sd) = if att == 0 {

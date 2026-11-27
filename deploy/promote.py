@@ -372,8 +372,9 @@ def _promote_locked(release: pathlib.Path, *, exercise_rollback: bool | None = N
             compose_up()
             for retry in range(30):
                 try:
-                    with urllib.request.urlopen(f'{LOCAL_API}/api/v1/health', timeout=5) as resp:
-                        assert resp.status == 200
+                    with urllib.request.urlopen(f'{LOCAL_API}/api/v1/ready', timeout=5) as resp:
+                        body = json.load(resp)
+                        assert resp.status == 200 and body.get('status') == 'ready'
                     restored_previous = True
                     print('ROLLBACK_HEALTHY')
                     break

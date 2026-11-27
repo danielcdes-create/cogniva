@@ -20,6 +20,7 @@ data class LearningEvent(
     @SerialName("time_spent_seconds") val timeSpentSeconds: Int,
     @SerialName("question_revision") val questionRevision: String? = null,
     @SerialName("is_blank") val isBlank: Boolean = false,
+    @SerialName("confidence_explicit") val confidenceExplicit: Boolean = false,
     @SerialName("selected_evidence_id") val selectedEvidenceId: String? = null,
     @SerialName("quiz_mode") val quizMode: String? = null,
     @SerialName("session_uuid") val sessionUuid: String? = null,
@@ -103,6 +104,8 @@ object LearningProjection {
             }
         return result
     }
+    private fun parseInstantSafe(iso: String): Instant = runCatching { Instant.parse(iso) }.getOrDefault(Instant.EPOCH)
+
     fun project(base: LearningRecord?, question: QuestionDto, pending: List<LearningEvent>): LearningRecord {
         val history=projectHistory(base,question,pending)
         if(question.knowledgeProjectionVersion==0)return history
@@ -110,7 +113,7 @@ object LearningProjection {
         if(!question.knowledgeBindingVerified || subject==null || topic==null || br.com.concursoprep.app.domain.exam.ExamCatalog.catalogTopics(subject).none { it.canonicalTopicId==topic } || !br.com.concursoprep.app.data.local.QuestionCacheMapping.withinReviewDate(question,java.time.LocalDate.now(studyZone)))return history.copy(knowledgeProjectionVersion=1,knowledgeEvidence=null)
         val previous=base?.knowledgeEvidence?.takeIf { it.questionRevision==question.questionRevision }
         val confirmed=base?.events.orEmpty().map { it.attemptId }.toSet()
-        val fresh=pending.filter { !it.isBlank && it.attemptId !in confirmed && it.questionRevision==question.questionRevision }.distinctBy { it.attemptId }.sortedWith(compareBy<LearningEvent> { Instant.parse(it.occurredAt) }.thenBy { it.attemptId })
+        val fresh=pending.filter { !it.isBlank && it.attemptId !in confirmed && it.questionRevision==question.questionRevision }.distinctBy { it.attemptId }.sortedWith(compareBy<LearningEvent> { parseInstantSafe(it.occurredAt) }.thenBy { it.attemptId })
         val attempts=(previous?.attempts?:0)+fresh.size
         if(attempts==0)return history.copy(knowledgeProjectionVersion=1,knowledgeEvidence=null)
         val correct=(previous?.correct?:0)+fresh.count { it.isCorrect }
@@ -123,17 +126,27 @@ object LearningProjection {
         val freshAll = pending.filter { it.attemptId !in confirmed }.distinctBy { it.attemptId }
         val fresh = freshAll.filter { !it.isBlank }
         if (freshAll.isEmpty() && base != null) return base
-        val events = (base?.events.orEmpty() + freshAll).sortedWith(compareBy<LearningEvent> { Instant.parse(it.occurredAt) }.thenBy { it.attemptId })
+        val events = (base?.events.orEmpty() + freshAll).sortedWith(compareBy<LearningEvent> { parseInstantSafe(it.occurredAt) }.thenBy { it.attemptId })
         val nonBlankEvents = events.filter { !it.isBlank }
         val attempts = (base?.attempts ?: 0) + fresh.size
         val correct = (base?.correct ?: 0) + fresh.count { it.isCorrect }
         if (base != null && base.events.count { !it.isBlank } < base.attempts) {
             // An ACK can precede a full pull. Unknown older events must never
             // be replaced with an invented streak starting at zero.
-            val nextReviewMillis = runCatching { Instant.parse(base.nextReviewAt).toEpochMilli() }.getOrDefault(Long.MAX_VALUE)
+            val lastFresh = fresh.maxByOrNull { parseInstantSafe(it.occurredAt) }
+            val nextReviewAt = if (lastFresh != null && !lastFresh.isCorrect) {
+                parseInstantSafe(lastFresh.occurredAt).plusSeconds(86400L).toString()
+            } else {
+                base.nextReviewAt
+            }
+            val nextReviewMillis = runCatching { Instant.parse(nextReviewAt).toEpochMilli() }.getOrDefault(Long.MAX_VALUE)
+            val highConfErr = lastFresh?.let { !it.isCorrect && it.confidenceLevel >= 2 } ?: base.highConfidenceError
             return base.copy(attempts=attempts,correct=correct,accuracyPct=if (attempts > 0) correct*100.0/attempts else 0.0,
                 isMastered=base.isMastered&&fresh.none { !it.isCorrect },
-                inErrorNotebook=base.inErrorNotebook||fresh.any { !it.isCorrect },events=events,
+                inErrorNotebook=base.inErrorNotebook||fresh.any { !it.isCorrect },
+                highConfidenceError=highConfErr,
+                nextReviewAt=nextReviewAt,
+                events=events,
                 reviewRequired=if (nonBlankEvents.isEmpty()) base.reviewRequired else System.currentTimeMillis() >= nextReviewMillis,
                 practiceAvailable=base.practiceAvailable ?: true)
         }
@@ -154,7 +167,7 @@ object LearningProjection {
         val confidence = if (recent.isEmpty()) null else kotlin.math.floor(recent.map { it.confidenceLevel }.average() + 0.5).toInt()
         val mastered = points >= 1.0 - 1e-6 && (confidence ?: 0) >= 2
         val interval = if (last == null || !last.isCorrect || last.confidenceLevel <= 1) 1 else if (streak <= 2) 7 else 30
-        val nextReviewAt = last?.let { Instant.parse(it.occurredAt).plusSeconds(interval * 86400L).toString() } ?: (base?.nextReviewAt ?: Instant.EPOCH.toString())
+        val nextReviewAt = last?.let { parseInstantSafe(it.occurredAt).plusSeconds(interval * 86400L).toString() } ?: (base?.nextReviewAt ?: Instant.EPOCH.toString())
         val nextReviewMillis = runCatching { Instant.parse(nextReviewAt).toEpochMilli() }.getOrDefault(Long.MAX_VALUE)
         val reviewRequired = if (nonBlankEvents.isEmpty()) (base?.reviewRequired ?: false) else System.currentTimeMillis() >= nextReviewMillis
         return LearningRecord(question.id, question.disciplina, question.canonicalSubjectId, question.canonicalTopicId,

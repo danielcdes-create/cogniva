@@ -123,11 +123,21 @@ class ConcursoRepository(
         fun deterministicAttemptId(sessionUuid: String, questionId: String): String =
             UUID.nameUUIDFromBytes("$sessionUuid:$questionId".toByteArray(Charsets.UTF_8)).toString()
 
-        fun deterministicOfferId(userId: Long, parentAttemptId: String, complementaryQuestionId: String): String {
-            val digest = java.security.MessageDigest.getInstance("SHA-256")
-                .digest("ctv-offer-v1:$userId:$parentAttemptId:$complementaryQuestionId".toByteArray(Charsets.UTF_8))
-            val hex = digest.take(16).joinToString("") { "%02x".format(it) }
-            return "ctvo_$hex"
+        fun deterministicOfferId(
+            userId: Long,
+            parentAttemptId: String,
+            @Suppress("UNUSED_PARAMETER") complementaryQuestionId: String = ""
+        ): String {
+            val bytes = java.security.MessageDigest.getInstance("SHA-256")
+                .digest("ctv-offer:$userId:${parentAttemptId.trim()}".toByteArray(Charsets.UTF_8))
+                .copyOf(16)
+            bytes[6] = ((bytes[6].toInt() and 0x0f) or 0x40).toByte()
+            bytes[8] = ((bytes[8].toInt() and 0x3f) or 0x80).toByte()
+            var msb = 0L
+            var lsb = 0L
+            for (i in 0 until 8) msb = (msb shl 8) or (bytes[i].toLong() and 0xffL)
+            for (i in 8 until 16) lsb = (lsb shl 8) or (bytes[i].toLong() and 0xffL)
+            return UUID(msb, lsb).toString()
         }
     }
 
@@ -407,6 +417,7 @@ class ConcursoRepository(
         timeSpentSeconds = timeSpentSeconds,
         questionRevision = questionRevision,
         isBlank = isBlank,
+        confidenceExplicit = confidenceExplicit,
         selectedEvidenceId = selectedEvidenceId,
         quizMode = quizMode,
         sessionUuid = sessionUuid,
@@ -864,7 +875,7 @@ class ConcursoRepository(
                         null
                     }
                     val lastDeclConf = lastEv?.declaredConfidence
-                        ?: lastEv?.let { DeclaredConfidence.fromLegacyBand(it.confidenceLevel, it.confidenceLevel > 0) }
+                        ?: lastEv?.let { DeclaredConfidence.fromLegacyBand(it.confidenceLevel, it.confidenceExplicit) }
                     val evChallengePassed = when {
                         legacyEvCompatible == false -> false
                         lastDeclConf?.isLowOrGuess != true && lastEv?.cognitiveStrategy?.isGroundedOrFunctional == true -> true
@@ -877,7 +888,7 @@ class ConcursoRepository(
                     val hasSpaced = unitRows.any { r ->
                         val sorted = r.events.filter { !it.isBlank && it.isCorrect }.map { safeInstant(it.occurredAt).toEpochMilli() }.sorted()
                         sorted.size >= 2 && (sorted.last() - sorted.first()) >= 86_400_000L
-                    } || unitRows.any { it.isMastered }
+                    }
 
                     val topicQuestions = cachedByTopic[top.canonicalTopicId].orEmpty()
                     val attemptedSet = unitRows.filter { it.attempts > 0 }.map { it.questionId }.toSet()
@@ -926,8 +937,8 @@ class ConcursoRepository(
                     )
                     when (transferStatus) {
                         TransferStatus.TRANSFER_VERIFIED -> transferVerifiedUnits++
-                        TransferStatus.TRANSFER_AVAILABLE, TransferStatus.TRANSFER_PROVISIONAL -> transferAvailableUnits++
-                        TransferStatus.TRANSFER_UNMEASURED, TransferStatus.TRANSFER_FAILED -> transferUnmeasuredUnits++
+                        TransferStatus.TRANSFER_AVAILABLE, TransferStatus.TRANSFER_PROVISIONAL, TransferStatus.TRANSFER_FAILED -> transferAvailableUnits++
+                        TransferStatus.TRANSFER_UNMEASURED -> transferUnmeasuredUnits++
                     }
 
                     val diag = DiagnosticEngine.classifyDiagnostic(
@@ -966,20 +977,22 @@ class ConcursoRepository(
                     }
                     val retr = RetentionEngine.retrievability(elapsedDays, approxStability)
                     val avgSec = if (nonBlankEvents.isNotEmpty()) nonBlankEvents.map { it.timeSpentSeconds }.average() else 60.0
-                    val entryBoost = if (distinctQuestions >= 1 && retr < 0.90) {
+                    val signals = signalsByTopic[top.canonicalTopicId] ?: MetacognitivePrioritySignals()
+                    val entryBoost = if (signals.functionalEliminationTransferVerified || signals.postExplanationFixationPendingSpacing) {
+                        1.0
+                    } else if (distinctQuestions >= 1 && retr < 0.90) {
                         1.65
                     } else if (distinctQuestions >= 1) {
                         1.20
                     } else {
                         1.0
                     }
-                    val signals = signalsByTopic[top.canonicalTopicId] ?: MetacognitivePrioritySignals()
                     val u = PrioritizationEngine.priorityUtilityMetacognitive(
                         PrioritizationInputs(
                             editalWeight = normW,
                             incidenceWeight = 1.0,
                             retrievability = retr,
-                            verifiedCompetence = diag == DiagnosticStatus.VERIFIED_COMPETENCE,
+                            verifiedCompetence = diag == DiagnosticStatus.VERIFIED_COMPETENCE || signals.functionalEliminationTransferVerified,
                             distinctQuestions = distinctQuestions,
                             avgSeconds = avgSec,
                             unmetPrerequisitesCount = 0,
@@ -1041,15 +1054,17 @@ class ConcursoRepository(
                     strategicOmissions++
                     continue
                 }
-                val band = ev.confidenceLevel.coerceIn(1, 3)
-                val key = qt to band
-                val cur = cellCounts[key] ?: (0 to 0)
-                cellCounts[key] = (cur.first + if (ev.isCorrect) 1 else 0) to (cur.second + 1)
+                if (ev.declaredConfidence != null || ev.confidenceExplicit) {
+                    val band = ev.declaredConfidence?.toLegacyBand() ?: ev.confidenceLevel.coerceIn(1, 3)
+                    val key = qt to band
+                    val cur = cellCounts[key] ?: (0 to 0)
+                    cellCounts[key] = (cur.first + if (ev.isCorrect) 1 else 0) to (cur.second + 1)
+                }
 
                 val normSel = normalizeEvidenceOptionId(ev.selectedEvidenceId, customCh)
                 val evCompat = if (correctEvId != null && normSel != null) normSel == correctEvId else null
                 val evWrong = evCompat == false
-                val dc = ev.declaredConfidence ?: DeclaredConfidence.fromLegacyBand(ev.confidenceLevel, ev.confidenceLevel > 0)
+                val dc = ev.declaredConfidence ?: DeclaredConfidence.fromLegacyBand(ev.confidenceLevel, ev.confidenceExplicit)
                 if (ev.isCorrect) {
                     when (MetacognitiveEngine.classifyHitGrounding(true, dc, ev.cognitiveStrategy, evCompat)) {
                         HitGroundingCategory.DIVERGENT_RATIONALE -> illusoryHits++
@@ -1355,6 +1370,7 @@ class ConcursoRepository(
         var rawCorrectHits = 0
         var evaluableGroundingHits = 0
         var unknownGroundingHits = 0
+        var retrospectiveLegacyHits = 0
         var validConceptualHits = 0
         var validFunctionalHits = 0
         var divergentRationaleHits = 0
@@ -1372,7 +1388,7 @@ class ConcursoRepository(
             for (ev in row.events) {
                 if (ev.isBlank) continue
                 totalAttempts++
-                val dc = ev.declaredConfidence ?: DeclaredConfidence.fromLegacyBand(ev.confidenceLevel, ev.confidenceLevel > 0)
+                val dc = ev.declaredConfidence ?: DeclaredConfidence.fromLegacyBand(ev.confidenceLevel, ev.confidenceExplicit)
                 if (dc?.isHigh == true) {
                     highConfTotal++
                     if (!ev.isCorrect) highConfErrors++
@@ -1394,8 +1410,10 @@ class ConcursoRepository(
                         HitGroundingCategory.FRAGILE_OR_GUESS -> {
                             evaluableGroundingHits++; fragileHits++
                         }
+                        HitGroundingCategory.RETROSPECTIVE_LEGACY_EVIDENCE -> {
+                            retrospectiveLegacyHits++
+                        }
                         HitGroundingCategory.UNKNOWN_GROUNDING,
-                        HitGroundingCategory.RETROSPECTIVE_LEGACY_EVIDENCE,
                         HitGroundingCategory.NOT_APPLICABLE_ERROR -> {
                             unknownGroundingHits++
                         }
@@ -1423,7 +1441,25 @@ class ConcursoRepository(
             val matching = wfInputs.filter { it.declaredConfidence == level }
             val att = matching.size
             val corr = matching.count { it.isCorrect }
-            val (postMean, sd) = CalibrationEngine.calibratedLevelPosterior(dominantQt, level, corr, att)
+            val (postMean, sd) = if (att > 0) {
+                val tfSub = matching.filter { it.questionType == "TRUE_FALSE" }
+                val mcSub = matching.filter { it.questionType != "TRUE_FALSE" }
+                when {
+                    tfSub.isNotEmpty() && mcSub.isEmpty() ->
+                        CalibrationEngine.calibratedLevelPosterior("TRUE_FALSE", level, corr, att)
+                    mcSub.isNotEmpty() && tfSub.isEmpty() ->
+                        CalibrationEngine.calibratedLevelPosterior("MULTIPLE_CHOICE", level, corr, att)
+                    else -> {
+                        val (tfM, tfSd) = CalibrationEngine.calibratedLevelPosterior("TRUE_FALSE", level, tfSub.count { it.isCorrect }, tfSub.size)
+                        val (mcM, mcSd) = CalibrationEngine.calibratedLevelPosterior("MULTIPLE_CHOICE", level, mcSub.count { it.isCorrect }, mcSub.size)
+                        val wTf = tfSub.size.toDouble() / att.toDouble()
+                        val wMc = mcSub.size.toDouble() / att.toDouble()
+                        (wTf * tfM + wMc * mcM) to kotlin.math.sqrt(wTf * tfSd * tfSd + wMc * mcSd * mcSd)
+                    }
+                }
+            } else {
+                CalibrationEngine.calibratedLevelPosterior(dominantQt, level, 0, 0)
+            }
             ConfidenceLevelCalibrationDto(
                 declaredConfidence = level,
                 labelPt = level.labelPt,
@@ -1551,12 +1587,12 @@ class ConcursoRepository(
                 val correctEvId = q?.effectiveEvidenceChallenge()?.correctEvidenceId
                 val normSel = normalizeEvidenceOptionId(ev.selectedEvidenceId, customCh)
                 val evCompat = if (correctEvId != null && normSel != null) normSel == correctEvId else null
-                val dc = ev.declaredConfidence ?: DeclaredConfidence.fromLegacyBand(ev.confidenceLevel, ev.confidenceLevel > 0)
+                val dc = ev.declaredConfidence ?: DeclaredConfidence.fromLegacyBand(ev.confidenceLevel, ev.confidenceExplicit)
                 MetacognitiveEngine.classifyHitGrounding(ev.isCorrect, dc, ev.cognitiveStrategy, evCompat).creditsComprehension
             }
             val groundedRate = if (att > 0) grounded.toDouble() / att.toDouble() else 0.0
             val hce = uEvents.count { ev ->
-                val dc = ev.declaredConfidence ?: DeclaredConfidence.fromLegacyBand(ev.confidenceLevel, ev.confidenceLevel > 0)
+                val dc = ev.declaredConfidence ?: DeclaredConfidence.fromLegacyBand(ev.confidenceLevel, ev.confidenceExplicit)
                 !ev.isCorrect && dc?.isHigh == true
             }
             val hceRate = if (att > 0) hce.toDouble() / att.toDouble() else 0.0
@@ -1570,7 +1606,7 @@ class ConcursoRepository(
             val hasSpaced = unitRows.any { r ->
                 val ts = r.events.filter { !it.isBlank && it.isCorrect }.map { safeInstant(it.occurredAt).toEpochMilli() }.sorted()
                 ts.size >= 2 && (ts.last() - ts.first()) >= 86_400_000L
-            } || unitRows.any { it.isMastered }
+            }
             val lastMs = uEvents.maxOfOrNull { safeInstant(it.occurredAt).toEpochMilli() } ?: 0L
             val elapsedDays = if (lastMs > 0L) ((nowMs - lastMs).coerceAtLeast(0L).toDouble() / 86_400_000.0) else 0.0
             val stab = when {
@@ -1579,13 +1615,19 @@ class ConcursoRepository(
                 else -> 0.0
             }
             val retr = if (att > 0) RetentionEngine.retrievability(elapsedDays, stab) else 0.0
-            val perQAcc = unitRows.filter { it.attempts > 0 }.map { it.accuracyPct / 100.0 }
-            val cons = if (perQAcc.size >= 2) {
-                val mean = perQAcc.average()
-                val sd = kotlin.math.sqrt(perQAcc.sumOf { (it - mean) * (it - mean) } / perQAcc.size)
-                (1.0 - sd * 1.5).coerceIn(0.0, 1.0)
-            } else if (att > 0) {
+            val sortedUnitEvents = uEvents.sortedBy { safeInstant(it.occurredAt).toEpochMilli() }
+            val transitions = if (sortedUnitEvents.size >= 2) {
+                sortedUnitEvents.zipWithNext().count { (a, b) -> a.isCorrect != b.isCorrect }
+            } else {
+                0
+            }
+            val stabilitySeq = if (sortedUnitEvents.size >= 2) {
+                1.0 - transitions.toDouble() / (sortedUnitEvents.size - 1).toDouble()
+            } else {
                 acc
+            }
+            val cons = if (att > 0) {
+                (0.6 * acc + 0.4 * stabilitySeq).coerceIn(0.0, 1.0)
             } else {
                 0.0
             }
@@ -1603,7 +1645,7 @@ class ConcursoRepository(
                     retrievability = retr,
                     consistency = cons,
                     avgActiveSeconds = avgAct,
-                    referenceSeconds = 60.0
+                    referenceSeconds = 50.0
                 )
             )
             when (eval.state) {
@@ -1634,7 +1676,12 @@ class ConcursoRepository(
         val groundingSentence = if (rawCorrectHits == 0) {
             "Ainda não há acertos objetivos para avaliar a força do fundamento."
         } else {
-            "Dos $rawCorrectHits acertos brutos, $evaluableGroundingHits têm evidência avaliável de fundamento e $unknownGroundingHits permanecem com fundamento não declarado."
+            val retroSuffix = if (retrospectiveLegacyHits > 0) {
+                ", além de $retrospectiveLegacyHits com evidência retroativa pós-gabarito"
+            } else {
+                ""
+            }
+            "Dos $rawCorrectHits acertos brutos, $evaluableGroundingHits têm evidência avaliável de fundamento e $unknownGroundingHits permanecem com fundamento não declarado$retroSuffix."
         }
 
         val localKpis = listOf(
@@ -1699,6 +1746,7 @@ class ConcursoRepository(
                 rawCorrectHits = rawCorrectHits,
                 evaluableGroundingHits = evaluableGroundingHits,
                 unknownGroundingHits = unknownGroundingHits,
+                retrospectiveLegacyHits = retrospectiveLegacyHits,
                 validConceptualHits = validConceptualHits,
                 validFunctionalStrategyHits = validFunctionalHits,
                 divergentRationaleHits = divergentRationaleHits,
@@ -2056,14 +2104,19 @@ class ConcursoRepository(
                 return CtvEvaluateResponseDto(triggered = false, status = "cooldown_suppressed")
             }
             val dc = request.declaredConfidence
-                ?: DeclaredConfidence.fromLegacyBand(request.confidenceLevel, true)
-            val highPriority = (request.isCorrect && (dc == DeclaredConfidence.GUESS || request.cognitiveStrategy == CognitiveStrategy.RANDOM_GUESS)) ||
-                (!request.isCorrect && dc?.isHigh == true)
-            val mediumPriority = request.isCorrect && (
-                dc == DeclaredConfidence.LOW ||
-                    request.cognitiveStrategy == CognitiveStrategy.PATTERN_RECOGNITION ||
-                    request.cognitiveStrategy == CognitiveStrategy.INTUITION
+                ?: DeclaredConfidence.fromLegacyBand(request.confidenceLevel, request.confidenceExplicit)
+            val (_, _, ctvPrio) = MetacognitiveEngine.classifyPreliminaryMatrix(
+                MetacognitiveMatrixInputs(
+                    isBlank = request.isBlank,
+                    isCorrect = request.isCorrect,
+                    declaredConfidence = dc,
+                    cognitiveStrategy = request.cognitiveStrategy,
+                    consistentHistory = false,
+                    rationaleContradicted = false
                 )
+            )
+            val highPriority = ctvPrio == br.com.concursoprep.app.domain.exam.CtvTriggerPriority.HIGH
+            val mediumPriority = ctvPrio == br.com.concursoprep.app.domain.exam.CtvTriggerPriority.RECOMMENDED
             val periodicBucket = run {
                 val dig = java.security.MessageDigest.getInstance("SHA-256")
                     .digest("periodic:${request.parentAttemptId}:${request.sourceQuestionId}".toByteArray(Charsets.UTF_8))
@@ -2880,6 +2933,7 @@ class ConcursoRepository(
                                     LearningProjection.project(base, question, listOf(local.event().copy(isCorrect = ack.isCorrect))).copy(
                                         isMastered = ack.isMastered,
                                         inErrorNotebook = ack.inErrorNotebook,
+                                        highConfidenceError = ack.highConfidenceErrorAlert,
                                         accuracyPct = ack.accuracyAccumulatedPct,
                                         points = ack.pointsTotal,
                                         nextReviewAt = ack.nextReviewAt,
@@ -2923,12 +2977,10 @@ class ConcursoRepository(
                     .filter { it.ownerUserId == userId && it.syncError != null }
                     .map { it.attemptId }
                     .toSet()
-                val remainingPatches = mutableListOf<PendingEvidencePatch>()
-                for ((idx, patch) in rawPatches.withIndex()) {
-                    if (patch.ownerUserId != userId) {
-                        remainingPatches += patch
-                        continue
-                    }
+                val completedPatchKeys = HashSet<String>()
+                fun patchKey(p: PendingEvidencePatch) = "${p.ownerUserId}:${p.attemptId}:${p.selectedEvidenceId}"
+                for (patch in rawPatches) {
+                    if (patch.ownerUserId != userId) continue
                     try {
                         val resp = api.attachAttemptEvidence(
                             AttachAttemptEvidencePayload(
@@ -2939,33 +2991,47 @@ class ConcursoRepository(
                         )
                         if (resp.status == "applied" || resp.status == "already_applied") {
                             synced++
-                        } else if (patch.attemptId !in quarantinedIds) {
+                            completedPatchKeys += patchKey(patch)
+                        } else if (patch.attemptId in quarantinedIds) {
+                            completedPatchKeys += patchKey(patch)
+                        } else {
                             // Retém com segurança em "pending_parent_attempt" até confirmação pelo servidor
-                            remainingPatches += patch
                             transient = true
                         }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: retrofit2.HttpException) {
                         if (e.code() == 401) {
-                            val tail = rawPatches.subList(idx, rawPatches.size)
-                            val preserved = remainingPatches + tail
-                            mutationMutex.withLock {
-                                metadata("pending_evidence_patches", json.encodeToString(preserved))
+                            if (completedPatchKeys.isNotEmpty()) {
+                                mutationMutex.withLock {
+                                    val live = metadata("pending_evidence_patches")
+                                        ?.takeIf { it.isNotBlank() }
+                                        ?.let { runCatching { json.decodeFromString<List<PendingEvidencePatch>>(it) }.getOrDefault(emptyList()) }
+                                        .orEmpty()
+                                        .filterNot { patchKey(it) in completedPatchKeys }
+                                    metadata("pending_evidence_patches", if (live.isEmpty()) "" else json.encodeToString(live))
+                                }
                             }
                             throw e
                         }
-                        if (e.code() !in listOf(400, 404, 422)) {
-                            remainingPatches += patch
+                        if (e.code() in listOf(400, 404, 422)) {
+                            completedPatchKeys += patchKey(patch)
+                        } else {
                             transient = true
                         }
                     } catch (_: Exception) {
-                        remainingPatches += patch
                         transient = true
                     }
                 }
-                mutationMutex.withLock {
-                    metadata("pending_evidence_patches", if (remainingPatches.isEmpty()) "" else json.encodeToString(remainingPatches))
+                if (completedPatchKeys.isNotEmpty()) {
+                    mutationMutex.withLock {
+                        val live = metadata("pending_evidence_patches")
+                            ?.takeIf { it.isNotBlank() }
+                            ?.let { runCatching { json.decodeFromString<List<PendingEvidencePatch>>(it) }.getOrDefault(emptyList()) }
+                            .orEmpty()
+                            .filterNot { patchKey(it) in completedPatchKeys }
+                        metadata("pending_evidence_patches", if (live.isEmpty()) "" else json.encodeToString(live))
+                    }
                 }
             }
 
@@ -2977,35 +3043,40 @@ class ConcursoRepository(
                     compareBy<CtvLifecycleEventRequestDto> { safeInstant(it.occurredAt.orEmpty()).toEpochMilli() }
                         .thenBy { if (it.eventKind == "DISPLAYED") 0 else 1 }
                 )
-                val remainingEvents = mutableListOf<CtvLifecycleEventRequestDto>()
-                for ((idx, evReq) in orderedEvents.withIndex()) {
+                val completedEventKeys = HashSet<String>()
+                fun evKey(ev: CtvLifecycleEventRequestDto) = "${ev.offerId.orEmpty()}:${ev.parentAttemptId.orEmpty()}:${ev.eventKind}"
+                for (evReq in orderedEvents) {
                     try {
                         api.recordCtvEvent(evReq)
                         synced++
                         hadAnyCtvSyncActivity = true
+                        completedEventKeys += evKey(evReq)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: retrofit2.HttpException) {
                         if (e.code() == 401) {
-                            val preserved = remainingEvents + orderedEvents.subList(idx, orderedEvents.size)
-                            mutationMutex.withLock {
-                                val cur = loadCtvLedger(userId)
-                                saveCtvLedger(userId, cur.copy(pendingEvents = preserved))
+                            if (completedEventKeys.isNotEmpty()) {
+                                mutationMutex.withLock {
+                                    val cur = loadCtvLedger(userId)
+                                    saveCtvLedger(userId, cur.copy(pendingEvents = cur.pendingEvents.filterNot { evKey(it) in completedEventKeys }))
+                                }
                             }
                             throw e
                         }
-                        if (e.code() !in listOf(400, 404, 422)) {
-                            remainingEvents += evReq
+                        if (e.code() in listOf(400, 404, 422)) {
+                            completedEventKeys += evKey(evReq)
+                        } else {
                             transient = true
                         }
                     } catch (_: Exception) {
-                        remainingEvents += evReq
                         transient = true
                     }
                 }
-                mutationMutex.withLock {
-                    val cur = loadCtvLedger(userId)
-                    saveCtvLedger(userId, cur.copy(pendingEvents = remainingEvents))
+                if (completedEventKeys.isNotEmpty()) {
+                    mutationMutex.withLock {
+                        val cur = loadCtvLedger(userId)
+                        saveCtvLedger(userId, cur.copy(pendingEvents = cur.pendingEvents.filterNot { evKey(it) in completedEventKeys }))
+                    }
                 }
             }
 
@@ -3016,16 +3087,15 @@ class ConcursoRepository(
                 .orEmpty()
             if (rawCtv.isNotEmpty()) {
                 val orderedCtv = rawCtv.sortedBy { safeInstant(it.request.occurredAt.orEmpty()).toEpochMilli() }
-                val remainingCtv = mutableListOf<PendingCtvSubmission>()
-                for ((idx, item) in orderedCtv.withIndex()) {
-                    if (item.ownerUserId != userId) {
-                        remainingCtv += item
-                        continue
-                    }
+                val completedCtvKeys = HashSet<String>()
+                fun ctvKey(item: PendingCtvSubmission) = "${item.ownerUserId}:${item.request.ctvAttemptId}"
+                for (item in orderedCtv) {
+                    if (item.ownerUserId != userId) continue
                     try {
                         val serverResp = api.submitCtvAttempt(item.request)
                         synced++
                         hadAnyCtvSyncActivity = true
+                        completedCtvKeys += ctvKey(item)
                         mutationMutex.withLock {
                             val cur = loadCtvLedger(userId)
                             val prevAtt = cur.attempts[serverResp.ctvAttemptId]
@@ -3048,43 +3118,81 @@ class ConcursoRepository(
                         throw e
                     } catch (e: retrofit2.HttpException) {
                         if (e.code() == 401) {
-                            val preserved = remainingCtv + orderedCtv.subList(idx, orderedCtv.size)
-                            mutationMutex.withLock {
-                                metadata("pending_ctv_submissions", json.encodeToString(preserved))
+                            if (completedCtvKeys.isNotEmpty()) {
+                                mutationMutex.withLock {
+                                    val live = metadata("pending_ctv_submissions")
+                                        ?.takeIf { it.isNotBlank() }
+                                        ?.let { runCatching { json.decodeFromString<List<PendingCtvSubmission>>(it) }.getOrDefault(emptyList()) }
+                                        .orEmpty()
+                                        .filterNot { ctvKey(it) in completedCtvKeys }
+                                    metadata("pending_ctv_submissions", if (live.isEmpty()) "" else json.encodeToString(live))
+                                }
                             }
                             throw e
                         }
-                        if (e.code() !in listOf(400, 404, 422)) {
-                            remainingCtv += item
+                        if (e.code() in listOf(400, 404, 422)) {
+                            completedCtvKeys += ctvKey(item)
+                        } else {
                             transient = true
                         }
                     } catch (_: Exception) {
-                        remainingCtv += item
                         transient = true
                     }
                 }
-                mutationMutex.withLock {
-                    metadata("pending_ctv_submissions", if (remainingCtv.isEmpty()) "" else json.encodeToString(remainingCtv))
+                if (completedCtvKeys.isNotEmpty()) {
+                    mutationMutex.withLock {
+                        val live = metadata("pending_ctv_submissions")
+                            ?.takeIf { it.isNotBlank() }
+                            ?.let { runCatching { json.decodeFromString<List<PendingCtvSubmission>>(it) }.getOrDefault(emptyList()) }
+                            .orEmpty()
+                            .filterNot { ctvKey(it) in completedCtvKeys }
+                        metadata("pending_ctv_submissions", if (live.isEmpty()) "" else json.encodeToString(live))
+                    }
                 }
             }
 
             // Sincroniza feedback de recomendação registrado offline (`POST /api/v1/study/recommendation-feedback`)
             val curForRec = loadCtvLedger(userId)
             if (curForRec.pendingRecommendationFeedback.isNotEmpty()) {
-                val remainingFeedback = mutableListOf<RecommendationFeedbackRequestDto>()
+                val completedRecKeys = HashSet<String>()
+                fun recKey(fb: RecommendationFeedbackRequestDto) = "${fb.recommendationId}:${fb.outcome}:${fb.additionalSeconds}:${fb.occurredAt.orEmpty()}"
                 for (fb in curForRec.pendingRecommendationFeedback) {
-                    val ok = runCatching {
+                    try {
                         api.recordRecommendationFeedback(fb)
-                        true
-                    }.getOrElse { err ->
-                        if (err is CancellationException) throw err
-                        if (err is retrofit2.HttpException && err.code() in listOf(400, 404, 422)) true else false
+                        synced++
+                        completedRecKeys += recKey(fb)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: retrofit2.HttpException) {
+                        if (e.code() == 401) {
+                            if (completedRecKeys.isNotEmpty()) {
+                                mutationMutex.withLock {
+                                    val cur = loadCtvLedger(userId)
+                                    saveCtvLedger(
+                                        userId,
+                                        cur.copy(pendingRecommendationFeedback = cur.pendingRecommendationFeedback.filterNot { recKey(it) in completedRecKeys })
+                                    )
+                                }
+                            }
+                            throw e
+                        }
+                        if (e.code() in listOf(400, 404, 422)) {
+                            completedRecKeys += recKey(fb)
+                        } else {
+                            transient = true
+                        }
+                    } catch (_: Exception) {
+                        transient = true
                     }
-                    if (ok) synced++ else remainingFeedback += fb
                 }
-                mutationMutex.withLock {
-                    val cur = loadCtvLedger(userId)
-                    saveCtvLedger(userId, cur.copy(pendingRecommendationFeedback = remainingFeedback))
+                if (completedRecKeys.isNotEmpty()) {
+                    mutationMutex.withLock {
+                        val cur = loadCtvLedger(userId)
+                        saveCtvLedger(
+                            userId,
+                            cur.copy(pendingRecommendationFeedback = cur.pendingRecommendationFeedback.filterNot { recKey(it) in completedRecKeys })
+                        )
+                    }
                 }
             }
 
@@ -3452,7 +3560,51 @@ class ConcursoRepository(
                 canDismiss = !err.isNullOrBlank()
             )
         }
-        return attempts + exams + backups + reports
+        val ctvSubs = metadata("pending_ctv_submissions")
+            ?.takeIf { it.isNotBlank() }
+            ?.let { runCatching { json.decodeFromString<List<PendingCtvSubmission>>(it) }.getOrDefault(emptyList()) }
+            .orEmpty()
+            .filter { it.ownerUserId == ownerUserId }
+            .map { sub ->
+                PendingReviewItem(
+                    id = sub.request.ctvAttemptId,
+                    title = "Verificação complementar (CTV)",
+                    detail = "Questão ${sub.request.complementaryQuestionId}",
+                    status = "Aguardando confirmação do servidor",
+                    canDismiss = false
+                )
+            }
+        val ledger = loadCtvLedger(ownerUserId)
+        val ctvEvents = ledger.pendingEvents.mapIndexed { idx, ev ->
+            PendingReviewItem(
+                id = "ctv-event:${ev.offerId ?: ev.parentAttemptId ?: idx}:${ev.eventKind}",
+                title = "Evento de verificação CTV",
+                detail = ev.eventKind,
+                status = "Aguardando confirmação do servidor",
+                canDismiss = false
+            )
+        }
+        val recFeedbacks = ledger.pendingRecommendationFeedback.map { fb ->
+            PendingReviewItem(
+                id = "rec-fb:${fb.recommendationId}",
+                title = "Retorno de recomendação adaptativa",
+                detail = fb.recommendationId,
+                status = "Aguardando confirmação do servidor",
+                canDismiss = false
+            )
+        }
+        val dirtyMissions = loadLocalMissionsEnvelope().missions.values
+            .filter { it.dirty }
+            .map { m ->
+                PendingReviewItem(
+                    id = "mission:${m.missionId}",
+                    title = "Progresso em Missão (${m.missionId})",
+                    detail = "Situação: ${m.status}",
+                    status = "Aguardando confirmação do servidor",
+                    canDismiss = false
+                )
+            }
+        return attempts + ctvSubs + ctvEvents + recFeedbacks + dirtyMissions + exams + backups + reports
     }
 
     suspend fun dismissQuarantinedAttempt(attemptId: String): Boolean = mutationMutex.withLock {

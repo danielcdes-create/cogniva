@@ -4,7 +4,7 @@ Plataforma inteligente de preparação de alta performance para concursos públi
 
 ---
 
-## 🚀 Versão Atual: `2.4.5` (`build 35`)
+## 🚀 Versão Atual: `2.4.6` (`build 36`)
 
 - **Arquitetura Disruptiva em 3 Camadas (`contract_version: 5`):**
   1. **Escassez — Diagnóstico Metacognitivo Pré-Exposição & Verificação Conceitual (`CTV`):** Ficha Editorial Rastreável (`editorial_card` com dispositivos legais, regra cobrada, exceção, trecho decisivo e erros conceituais plausíveis), captura pré-gabarito de confiança em 5 níveis e estratégia cognitiva em cartões uniformes (com desambiguação contextual de chutes), **Leitura Metacognitiva em Duas Camadas**, restrição explícita **`< 15` questões humanas** (`MIN_QUESTIONS_FOR_MASTERY = 15`) e **Transferência Cross-Banca (`TRANSFER_PROBE`) / `CTV`** com registro explícito de `TRANSFER_UNMEASURED` quando não há item válido de outra banca.
@@ -13,7 +13,7 @@ Plataforma inteligente de preparação de alta performance para concursos públi
 - **Autenticação Nativa e LGPD (Art. 18):** Modo convidado imediato + contas nativas Cogniva com e-mail, senha `Argon2id`, sessões revogáveis e exclusão física imediata de dados pessoais (`DELETE /api/v1/auth/account` / app Android) preservando 100% do acervo compartilhado ([`PRIVACY.md`](PRIVACY.md)).
 - **Saúde e Prontidão:** `GET /api/v1/health` (processo) e `GET /api/v1/ready` (validação MongoDB com retorno `503` em falha, catálogo ativo e revisão).
 - **Distribuição OTA Android:** `GET /api/v1/apk/info` e streaming binário direto em `GET /api/v1/apk/download` (`ETag` / `304`, `Cache-Control: no-store, no-transform`, `proxy_buffering off`), preservando `applicationId = "br.com.concursoprep.app"` para atualização contínua.
-- **Políticas e Histórico:** Consulte [`CHANGELOG.md`](CHANGELOG.md), [`PRIVACY.md`](PRIVACY.md) e [`SECURITY.md`](SECURITY.md).
+- **Políticas, Auditoria e Histórico:** Consulte [`CHANGELOG.md`](CHANGELOG.md), [`AUDIT_REPORT_2_4_6.md`](AUDIT_REPORT_2_4_6.md), [`PRIVACY.md`](PRIVACY.md) e [`SECURITY.md`](SECURITY.md).
 
 ---
 

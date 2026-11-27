@@ -122,7 +122,8 @@ pub struct ProcessedAttemptResult {
     pub accuracy_accumulated_pct: f64,
     pub in_error_notebook: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub metacognitive_assessment: Option<crate::services::metacognitive_engine::MetacognitiveAssessment>,
+    pub metacognitive_assessment:
+        Option<crate::services::metacognitive_engine::MetacognitiveAssessment>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -308,6 +309,12 @@ pub async fn handle_report_problem(
     let unique_reports = rep_coll
         .count_documents(doc! { "questao_id": q_oid })
         .await?;
+    let open_reports = rep_coll
+        .count_documents(doc! {
+            "questao_id": q_oid,
+            "fix.status_solved": { "$ne": true }
+        })
+        .await?;
     let mut question_update = doc! {
         "$max": { "reports": unique_reports as i64, "reports_unique": unique_reports as i64 }
     };
@@ -319,13 +326,11 @@ pub async fn handle_report_problem(
     {
         if let Ok(dmeta) = q_raw.get_document("diagnostic_meta") {
             let mut set_meta = doc! {
-                "diagnostic_meta.quality_metrics.open_reports_count": unique_reports as i64
+                "diagnostic_meta.quality_metrics.open_reports_count": open_reports as i64
             };
-            if dmeta.get_str("generation_origin").ok() == Some("AI_ON_DEMAND")
-                && unique_reports >= 1
-                && dmeta.get_str("validation_status").ok() == Some("AUTO_APPROVED")
+            if dmeta.get_str("generation_origin").ok() == Some("AI_ON_DEMAND") && open_reports >= 1
             {
-                // Questão gerada por IA com sinalização de problema é suspensa preventivamente para curadoria humana.
+                // Questão gerada por IA com reporte aberto é suspensa preventivamente para curadoria humana.
                 set_meta.insert("diagnostic_meta.quality_status", "SUSPENDED");
                 set_meta.insert("diagnostic_meta.validation_status", "PENDING_HUMAN_REVIEW");
             }

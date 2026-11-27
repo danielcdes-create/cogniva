@@ -546,7 +546,7 @@ pub async fn get_or_generate_ai_assist_with_context(
         .await?
         .ok_or_else(|| AppError::NotFound(format!("Questão {} não encontrada", question_id)))?;
 
-    let questao = crate::services::question_compatibility::decode(original.clone())?;
+    let questao = crate::services::question_compatibility::decode_for_ctv(original.clone())?;
 
     // 1. Verificar se já existe no cache compartilhado SOMENTE quando não há entrada pessoal do estudante
     if !has_personal_student_input {
@@ -763,8 +763,11 @@ pub async fn get_or_generate_ai_assist_with_context(
         let mut set_doc = match &kind {
             AiAssistKind::Explanation => doc! { "explanation": &generated_text },
             AiAssistKind::ContextualHint => {
-                let index = hint_index.unwrap_or(0);
+                let index = hint_index.unwrap_or(0).min(2);
                 let mut hints = base_questao.contextual_hint.clone();
+                if hints.len() > 3 {
+                    hints.truncate(3);
+                }
                 hints.resize(hints.len().max(index + 1), String::new());
                 hints[index] = generated_text.clone();
                 doc! { "contextualHint": hints }
@@ -986,6 +989,7 @@ fn format_plausibility_markdown(pa: &PlausibilityAnalysis) -> String {
 #[derive(Debug)]
 pub(crate) enum VerifiedTutorGenerationError {
     SpoilerBlockedAfterPaidCalls(AppError),
+    PaidCallIncomplete(AppError),
     ProviderFailure(AppError),
 }
 
@@ -1005,8 +1009,9 @@ pub(crate) async fn settle_tutor_generation_quota(
                 "xAI devolveu conteúdo vazio".into(),
             ))
         }
-        Err(VerifiedTutorGenerationError::SpoilerBlockedAfterPaidCalls(err)) => {
-            // Chamadas pagas à xAI foram efetivamente consumidas e bloqueadas pelo filtro anti-spoiler:
+        Err(VerifiedTutorGenerationError::SpoilerBlockedAfterPaidCalls(err))
+        | Err(VerifiedTutorGenerationError::PaidCallIncomplete(err)) => {
+            // Chamadas pagas à xAI foram efetivamente consumidas (bloqueio anti-spoiler ou falha na 2ª tentativa):
             // comita a cota para impedir dreno financeiro infinito por tentativas repetidas/maliciosas.
             if let Some(g) = quota_guard.take() {
                 g.commit();
@@ -1043,7 +1048,7 @@ pub(crate) async fn generate_verified_tutor_text(
     );
     let retry_text = call_xai_text(config, system_prompt, &corrective_user_prompt)
         .await
-        .map_err(VerifiedTutorGenerationError::ProviderFailure)?;
+        .map_err(VerifiedTutorGenerationError::PaidCallIncomplete)?;
     if detect_pre_answer_spoiler(&retry_text).is_some() {
         return Err(VerifiedTutorGenerationError::SpoilerBlockedAfterPaidCalls(
             AppError::ExternalAiError(
@@ -1112,9 +1117,24 @@ pub(crate) async fn call_xai_text(
         };
         return Err(AppError::ExternalAiError(msg));
     }
-    let body: serde_json::Value = response
-        .json()
+    if response
+        .content_length()
+        .is_some_and(|len| len > 2 * 1024 * 1024)
+    {
+        return Err(AppError::ExternalAiError(
+            "Resposta xAI excedeu o limite seguro de tamanho".into(),
+        ));
+    }
+    let raw_bytes = response
+        .bytes()
         .await
+        .map_err(|_| AppError::ExternalAiError("Resposta xAI inválida".into()))?;
+    if raw_bytes.len() > 2 * 1024 * 1024 {
+        return Err(AppError::ExternalAiError(
+            "Resposta xAI excedeu o limite seguro de tamanho".into(),
+        ));
+    }
+    let body: serde_json::Value = serde_json::from_slice(&raw_bytes)
         .map_err(|_| AppError::ExternalAiError("Resposta xAI inválida".into()))?;
     if body["status"] != "completed" {
         return Err(AppError::ExternalAiError(

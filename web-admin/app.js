@@ -276,9 +276,11 @@ export function setMobileMenuOpen(open, {restoreFocus = false} = {}) {
   const sidebar = $('#sidebar');
   const toggle = $('#menu-toggle');
   const backdrop = $('#sidebar-backdrop');
+  const mainShell = $('#main-shell') || document.querySelector('.main-shell');
   const shouldOpen = Boolean(open);
   app?.classList.toggle('menu-open', shouldOpen);
   sidebar?.classList.toggle('open', shouldOpen);
+  if (mainShell) mainShell.inert = shouldOpen;
   if (toggle) {
     toggle.setAttribute('aria-expanded', String(shouldOpen));
     toggle.setAttribute('aria-label', shouldOpen ? 'Fechar menu' : 'Abrir menu');
@@ -366,7 +368,7 @@ export async function api(path, {method='GET', body, skipAuthRedirect=false} = {
     });
     const payload = await response.json().catch(() => ({message: `Resposta inesperada (HTTP ${response.status}).`}));
     if (!response.ok) {
-      const error = new Error(payload.message || `HTTP ${response.status}`);
+      const error = new Error(payload.detail || payload.message || `HTTP ${response.status}`);
       error.status = response.status;
       if (response.status === 401 && !skipAuthRedirect && (me !== null || ($('#app') && !$('#app').hidden))) {
         error.handledSessionExpiry = true;
@@ -1230,7 +1232,7 @@ function questionsView() {
     ),
     h('select',{'aria-label':'Classificação da questão','data-focus-key':'questions:classification',onchange:e=>questionClassState=e.target.value},
       h('option',{value:''},'Todas as classificações'),
-      ...[['CONFIRMED','Confirmada'],['UNCLASSIFIED','Sem classificação']].map(([v,t])=>h('option',{value:v,selected:questionClassState===v},t))
+      ...[['CONFIRMED','Confirmada'],['PARTIAL','Parcial'],['UNCLASSIFIED','Sem classificação']].map(([v,t])=>h('option',{value:v,selected:questionClassState===v},t))
     ),
     h('button',{type:'submit'},'Buscar')
   );
@@ -1602,6 +1604,10 @@ function questionView() {
         q.validity.evaluated_content_revision=null;
         q.validity.evaluated_semantic_revision=null;
         q.validity.evaluation_mode=null;
+      } else {
+        q.validity.evaluated_content_revision=draft.original?.validity?.evaluated_content_revision ?? null;
+        q.validity.evaluated_semantic_revision=draft.original?.validity?.evaluated_semantic_revision ?? null;
+        q.validity.evaluation_mode=draft.original?.validity?.evaluation_mode ?? null;
       }
       draft.text=pretty(q);
       draft.preview=null;
@@ -1630,7 +1636,7 @@ function questionView() {
       docPayload.validity.evaluation_mode=null;
     }
     try {
-      draft.preview=await api(`admin/questions/${encodeURIComponent(selectedQuestion)}/prepare-edit`,{method:'POST',body:{operation_id:draft.operationId,expected_revision:original.revision || 0,document:docPayload}});
+      draft.preview=await api(`admin/questions/${encodeURIComponent(selectedQuestion)}/prepare-edit`,{method:'POST',body:{operation_id:draft.operationId,expected_revision:original.revision || 0,reconfirm_validity:Boolean(draft.reconfirmValidity),document:docPayload}});
     } catch (error) {
       if (error.status === 409) {
         draft.server = await api(`admin/questions/v2/${encodeURIComponent(selectedQuestion)}`).catch(() => null);

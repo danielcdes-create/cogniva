@@ -9,7 +9,9 @@ use crate::{
     services::{
         concept_mastery_engine::{simulate_ai_reuse_economy, ReuseEconomySimulation},
         ctv_alignment::trigger_cohort_for_reason,
-        learning_analytics::{AdminAiCtvMetricsResponse, FormalKpiDto, DEFAULT_REFERENCE_COST_PER_GENERATION_USD},
+        learning_analytics::{
+            AdminAiCtvMetricsResponse, FormalKpiDto, DEFAULT_REFERENCE_COST_PER_GENERATION_USD,
+        },
         question_contracts, question_storage,
     },
     AppState,
@@ -181,19 +183,26 @@ pub async fn compute_admin_ctv_metrics_with_window(
 
     let mut audit_filter = doc! {};
     let mut attempt_filter = doc! {};
-    let mut offer_filter = doc! { "first_displayed_at": { "$ne": bson::Bson::Null, "$exists": true } };
+    let mut offer_filter =
+        doc! { "first_displayed_at": { "$ne": bson::Bson::Null, "$exists": true } };
+    let mut question_dmeta_filter =
+        doc! { "diagnostic_meta": { "$exists": true, "$ne": bson::Bson::Null } };
 
     if from_dt.is_some() || to_dt.is_some() {
         let mut range = doc! {};
+        let mut iso_range = doc! {};
         if let Some(f) = from_dt {
             range.insert("$gte", bson::DateTime::from_chrono(f));
+            iso_range.insert("$gte", f.to_rfc3339());
         }
         if let Some(t) = to_dt {
             range.insert("$lte", bson::DateTime::from_chrono(t));
+            iso_range.insert("$lte", t.to_rfc3339());
         }
         audit_filter.insert("recorded_at", range.clone());
         attempt_filter.insert("occurred_at", range.clone());
         offer_filter.insert("first_displayed_at", range);
+        question_dmeta_filter.insert("diagnostic_meta.generated_at", iso_range);
     }
 
     // Varredura em streaming de TODO o período filtrado sem cortes silenciosos de 5.000 ou 200 registros!
@@ -216,7 +225,8 @@ pub async fn compute_admin_ctv_metrics_with_window(
     let mut duplicates_barred_after_call = 0usize;
     let mut persisted_ai_items_count = 0usize;
     let mut total_attributable_cost_usd = 0.0f64;
-    let mut any_estimated_cost = true;
+    let mut saw_estimated_cost = false;
+    let mut saw_provider_reported_cost = false;
 
     while let Some(doc) = audit_cursor.try_next().await? {
         total_requests_evaluated += 1;
@@ -235,8 +245,12 @@ pub async fn compute_admin_ctv_metrics_with_window(
             let persisted = doc.get_bool("persisted_item").unwrap_or(false);
             let channel = doc.get_str("delivery_channel").unwrap_or("");
             let cost = doc.get_f64("estimated_cost_usd").unwrap_or(0.0);
-            if doc.get_str("cost_source").ok() == Some("PROVIDER_REPORTED") {
-                any_estimated_cost = false;
+            if calls > 0 {
+                if doc.get_str("cost_source").ok() == Some("PROVIDER_REPORTED") {
+                    saw_provider_reported_cost = true;
+                } else {
+                    saw_estimated_cost = true;
+                }
             }
 
             real_provider_calls += calls;
@@ -273,17 +287,20 @@ pub async fn compute_admin_ctv_metrics_with_window(
                     real_provider_calls += 1;
                     ai_approved_generations += 1;
                     persisted_ai_items_count += 1;
+                    saw_estimated_cost = true;
                     total_attributable_cost_usd +=
                         doc.get_f64("estimated_cost_usd").unwrap_or(ref_cost);
                 }
                 "QUEUED_HUMAN_REVIEW" => {
                     real_provider_calls += 1;
                     persisted_ai_items_count += 1;
+                    saw_estimated_cost = true;
                     total_attributable_cost_usd +=
                         doc.get_f64("estimated_cost_usd").unwrap_or(ref_cost);
                 }
                 "VALIDATION_REJECTED" => {
                     real_provider_calls += 1;
+                    saw_estimated_cost = true;
                     total_attributable_cost_usd +=
                         doc.get_f64("estimated_cost_usd").unwrap_or(ref_cost);
                 }
@@ -291,6 +308,7 @@ pub async fn compute_admin_ctv_metrics_with_window(
                     // Houve 1 chamada real e 1 duplicata barrada -> ZERO chamadas evitadas!
                     real_provider_calls += 1;
                     duplicates_barred_after_call += 1;
+                    saw_estimated_cost = true;
                     if doc.get_str("question_id").is_ok() {
                         requests_with_student_delivery += 1;
                     }
@@ -304,12 +322,14 @@ pub async fn compute_admin_ctv_metrics_with_window(
             }
         }
     }
+    let any_estimated_cost = saw_estimated_cost || !saw_provider_reported_cost;
 
     // Contagem completa de verificações concluídas (respondidas) e recortes adaptativos na janela!
     let mut att_cursor = state
         .db
         .collection::<Document>("conceptual_transfer_attempts")
         .find(attempt_filter)
+        .projection(doc! { "response_ack": 0 })
         .await?;
 
     let mut completed_verifications_count = 0usize;
@@ -336,12 +356,16 @@ pub async fn compute_admin_ctv_metrics_with_window(
             .get_str("trigger_cohort")
             .ok()
             .unwrap_or_else(|| trigger_cohort_for_reason(att.get_str("trigger_reason").ok()));
+        let vmode = att
+            .get_str("verification_mode")
+            .unwrap_or("CONCEPTUAL_TRANSFER");
         let indep = att
             .get_bool("counts_as_independent_transfer")
             .unwrap_or_else(|_| {
                 att.get_str("verification_timing").ok() == Some("PRE_FEEDBACK")
                     && !att.get_bool("was_previously_exposed").unwrap_or(false)
-            });
+            })
+            && vmode == "CONCEPTUAL_TRANSFER";
         let ok = att.get_bool("is_correct").unwrap_or(false);
         if cohort == "PERIODIC_SAMPLING" {
             per_resp += 1;
@@ -366,6 +390,7 @@ pub async fn compute_admin_ctv_metrics_with_window(
         .db
         .collection::<Document>("ctv_offers")
         .find(offer_filter)
+        .projection(doc! { "cached_response": 0 })
         .await?;
     let mut diff_offers = 0usize;
     let mut diff_dismissals = 0usize;
@@ -395,7 +420,8 @@ pub async fn compute_admin_ctv_metrics_with_window(
     // Varredura completa das questões CTV no banco (sem limite de 200 nos totais; apenas a lista visual recente é limitada a 25!)
     let questions_coll = question_storage::collection(&state.db, "todasQuestoes");
     let mut q_cursor = questions_coll
-        .find(doc! { "diagnostic_meta": { "$exists": true, "$ne": bson::Bson::Null } })
+        .find(question_dmeta_filter)
+        .projection(doc! { "diagnostic_meta": 1, "question": 1 })
         .sort(doc! { "_id": -1 })
         .await?;
 
@@ -455,7 +481,9 @@ pub async fn compute_admin_ctv_metrics_with_window(
         requests_with_student_delivery as f64,
     );
     let avg_reuse_per_generated = if ai_generated_total > 0 {
-        round2_opt(Some((total_reuse_usage_sum as f64) / (ai_generated_total as f64)))
+        round2_opt(Some(
+            (total_reuse_usage_sum as f64) / (ai_generated_total as f64),
+        ))
     } else {
         None
     };

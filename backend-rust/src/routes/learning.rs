@@ -22,6 +22,8 @@ pub struct LearningEvent {
     pub is_correct: bool,
     pub is_blank: bool,
     pub confidence_level: i32,
+    #[serde(default)]
+    pub confidence_explicit: bool,
     pub time_spent_seconds: i32,
     pub selected_evidence_id: Option<String>,
     pub quiz_mode: String,
@@ -32,6 +34,8 @@ pub struct LearningEvent {
     pub declared_confidence: Option<crate::services::metacognitive_engine::DeclaredConfidence>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cognitive_strategy: Option<crate::services::metacognitive_engine::CognitiveStrategy>,
+    #[serde(default)]
+    pub strategy_skipped: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub active_seconds: Option<i32>,
     #[serde(skip_serializing_if = "is_zero_u16")]
@@ -124,6 +128,7 @@ pub async fn get_state(
                 is_correct: e.status,
                 is_blank: e.is_blank,
                 confidence_level: e.nivel_confianca,
+                confidence_explicit: e.confidence_explicit,
                 time_spent_seconds: e.tempo_gasto_segundos,
                 selected_evidence_id: e.selected_evidence_id.clone(),
                 quiz_mode: e.modo_sessao.clone(),
@@ -132,6 +137,7 @@ pub async fn get_state(
                 session_interrupted: e.session_interrupted,
                 declared_confidence: e.declared_confidence,
                 cognitive_strategy: e.cognitive_strategy,
+                strategy_skipped: e.strategy_skipped,
                 active_seconds: e.active_seconds,
                 answer_change_count: e.answer_change_count,
                 initial_chosen_index: e.initial_chosen_index,
@@ -144,6 +150,7 @@ pub async fn get_state(
             .iter()
             .filter(|s| !s.is_blank)
             .count() as i32;
+        let last_answered_anchor = activity.effective_last_answered();
         let clamped_interval = activity.spaced_repetition_interval.clamp(1, 3650) as i64;
         records.push(LearningRecord {
             knowledge_projection_version: 1,
@@ -162,9 +169,8 @@ pub async fn get_state(
             review_required: activity.revisao_necessaria,
             practice_available: false,
             points: activity.points,
-            next_review_at: (activity.datas.ultima_sessao
-                + chrono::Duration::days(clamped_interval))
-            .to_rfc3339(),
+            next_review_at: (last_answered_anchor + chrono::Duration::days(clamped_interval))
+                .to_rfc3339(),
             revision: raw.get_i64("state_revision").unwrap_or(0),
             events,
         });
@@ -207,8 +213,7 @@ pub async fn get_analytics(
     State(state): State<Arc<AppState>>,
     Extension(user): Extension<SessionUser>,
 ) -> Result<Json<crate::services::learning_analytics::StudentLearningAnalyticsResponse>, AppError> {
-    let resp =
-        crate::services::learning_analytics::compute_student_analytics(&state, user.user_id)
-            .await?;
+    let resp = crate::services::learning_analytics::compute_student_analytics(&state, user.user_id)
+        .await?;
     Ok(Json(resp))
 }

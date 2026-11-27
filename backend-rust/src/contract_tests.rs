@@ -522,20 +522,22 @@ fn both_runtimes_share_utf8_mastery_weighted_score_srs_and_calendar_fixtures() {
         .collect();
     let ref_brier = crate::services::calibration_engine::compute_brier_score(&ref_pairs).unwrap();
     assert!((ref_brier - wf_sec["expected_reference_brier"].as_f64().unwrap()).abs() < 1e-12);
-    let wf_events: Vec<crate::services::calibration_engine::WalkforwardCalibrationInput> =
-        wf_sec["sequence"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|ev| crate::services::calibration_engine::WalkforwardCalibrationInput {
+    let wf_events: Vec<crate::services::calibration_engine::WalkforwardCalibrationInput> = wf_sec
+        ["sequence"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(
+            |ev| crate::services::calibration_engine::WalkforwardCalibrationInput {
                 attempt_id: ev["attempt_id"].as_str().unwrap().to_string(),
                 occurred_at_ms: ev["occurred_at_ms"].as_i64().unwrap(),
                 question_type: ev["question_type"].as_str().unwrap().to_string(),
                 declared_confidence: serde_json::from_value(ev["declared_confidence"].clone())
                     .unwrap(),
                 is_correct: ev["is_correct"].as_bool().unwrap(),
-            })
-            .collect();
+            },
+        )
+        .collect();
     let wf_rep = crate::services::calibration_engine::evaluate_walkforward_calibration(&wf_events);
     for (idx, ev) in wf_sec["sequence"].as_array().unwrap().iter().enumerate() {
         assert!(
@@ -570,7 +572,14 @@ fn both_runtimes_share_utf8_mastery_weighted_score_srs_and_calendar_fixtures() {
     };
     let hce_u =
         crate::services::prioritization_engine::priority_utility_metacognitive(&mp_base, &hce_sig);
-    assert!((hce_u - mp_sec["recurrent_hce"]["expected_utility"].as_f64().unwrap()).abs() < 1e-8);
+    assert!(
+        (hce_u
+            - mp_sec["recurrent_hce"]["expected_utility"]
+                .as_f64()
+                .unwrap())
+        .abs()
+            < 1e-8
+    );
     let (hce_rule, _, _) =
         crate::services::prioritization_engine::build_metacognitive_decision_reason(
             &hce_sig,
@@ -594,7 +603,12 @@ fn both_runtimes_share_utf8_mastery_weighted_score_srs_and_calendar_fixtures() {
     let func_u =
         crate::services::prioritization_engine::priority_utility_metacognitive(&mp_base, &func_sig);
     assert!(
-        (func_u - mp_sec["functional_verified"]["expected_utility"].as_f64().unwrap()).abs() < 1e-8
+        (func_u
+            - mp_sec["functional_verified"]["expected_utility"]
+                .as_f64()
+                .unwrap())
+        .abs()
+            < 1e-8
     );
 
     for cv in f["operational_cost_vectors"].as_array().unwrap() {
@@ -609,7 +623,9 @@ fn both_runtimes_share_utf8_mastery_weighted_score_srs_and_calendar_fixtures() {
             (None, None) => assert!(rounded.is_none()),
             (Some(a), Some(b)) => {
                 assert!((a - b).abs() < 1e-12);
-                assert!((rounded.unwrap() - cv["expected_rounded"].as_f64().unwrap()).abs() < 1e-12);
+                assert!(
+                    (rounded.unwrap() - cv["expected_rounded"].as_f64().unwrap()).abs() < 1e-12
+                );
             }
             other => panic!("cost vector mismatch: {other:?}"),
         }

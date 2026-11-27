@@ -1187,7 +1187,7 @@ enum class DeclaredConfidence(
 
     companion object {
         fun fromLegacyBand(band: Int, explicit: Boolean): DeclaredConfidence? {
-            if (!explicit && band <= 0) return null
+            if (!explicit) return null
             return when (band) {
                 0 -> GUESS
                 1 -> LOW

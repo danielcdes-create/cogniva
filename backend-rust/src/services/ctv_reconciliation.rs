@@ -106,12 +106,7 @@ pub struct UserExposureSnapshot {
 }
 
 impl UserExposureSnapshot {
-    pub fn has_seen(
-        &self,
-        question_id: &str,
-        content_rev: &str,
-        semantic_rev: &str,
-    ) -> bool {
+    pub fn has_seen(&self, question_id: &str, content_rev: &str, semantic_rev: &str) -> bool {
         self.seen_question_ids.contains(question_id)
             || (!content_rev.is_empty() && self.seen_content_revisions.contains(content_rev))
             || (!semantic_rev.is_empty() && self.seen_semantic_revisions.contains(semantic_rev))
@@ -119,7 +114,8 @@ impl UserExposureSnapshot {
 }
 
 pub fn deterministic_offer_id(user_id: i64, parent_attempt_id: &str) -> String {
-    let bytes = Sha256::digest(format!("ctv-offer:{user_id}:{}", parent_attempt_id.trim()).as_bytes());
+    let bytes =
+        Sha256::digest(format!("ctv-offer:{user_id}:{}", parent_attempt_id.trim()).as_bytes());
     let mut raw = [0u8; 16];
     raw.copy_from_slice(&bytes[..16]);
     raw[6] = (raw[6] & 0x0f) | 0x40;
@@ -142,6 +138,214 @@ pub fn parse_client_timestamp_or_now(raw: Option<&str>) -> Result<DateTime<Utc>,
     Ok(dt)
 }
 
+#[derive(Default)]
+struct RawUserExposureHistory {
+    regular_docs: Vec<Document>,
+    q_revs_by_oid: std::collections::HashMap<ObjectId, (String, String)>,
+    offer_docs: Vec<Document>,
+    ctv_docs: Vec<Document>,
+}
+
+impl RawUserExposureHistory {
+    async fn load(db: &Database, user_id: i64) -> Result<Self, AppError> {
+        let regular_docs: Vec<Document> = db
+            .collection::<Document>("userActivityLog")
+            .find(doc! { "user_id": user_id })
+            .projection(doc! {
+                "question_id": 1,
+                "datas.data_primeira_sessao": 1,
+                "pastSessions.data": 1,
+                "pastSessions.question_revision": 1
+            })
+            .await?
+            .try_collect()
+            .await?;
+
+        let all_oids: Vec<ObjectId> = regular_docs
+            .iter()
+            .filter_map(|d| d.get_object_id("question_id").ok())
+            .collect();
+        let mut q_revs_by_oid = std::collections::HashMap::new();
+        if !all_oids.is_empty() {
+            let q_revs: Vec<Document> = db
+                .collection::<Document>("todasQuestoes")
+                .find(doc! { "_id": { "$in": &all_oids } })
+                .projection(doc! { "content_revision": 1, "semantic_revision": 1 })
+                .await?
+                .try_collect()
+                .await?;
+            for qr in q_revs {
+                if let Ok(oid) = qr.get_object_id("_id") {
+                    let cr = qr.get_str("content_revision").unwrap_or("").to_string();
+                    let sr = qr.get_str("semantic_revision").unwrap_or("").to_string();
+                    q_revs_by_oid.insert(oid, (cr, sr));
+                }
+            }
+        }
+
+        let offer_docs: Vec<Document> = db
+            .collection::<Document>("ctv_offers")
+            .find(doc! {
+                "user_id": user_id,
+                "first_displayed_at": { "$ne": bson::Bson::Null, "$exists": true }
+            })
+            .projection(doc! { "cached_response": 0 })
+            .await?
+            .try_collect()
+            .await?;
+
+        let ctv_docs: Vec<Document> = db
+            .collection::<Document>("conceptual_transfer_attempts")
+            .find(doc! { "user_id": user_id })
+            .projection(doc! { "response_ack": 0 })
+            .await?
+            .try_collect()
+            .await?;
+
+        Ok(Self {
+            regular_docs,
+            q_revs_by_oid,
+            offer_docs,
+            ctv_docs,
+        })
+    }
+
+    fn build_snapshot(
+        &self,
+        exclude_offer_id: Option<&str>,
+        exclude_ctv_attempt_id: Option<&str>,
+        cutoff: Option<(DateTime<Utc>, &str)>,
+    ) -> UserExposureSnapshot {
+        let mut snap = UserExposureSnapshot::default();
+        for doc in &self.regular_docs {
+            let Some(qid) = doc.get_object_id("question_id").ok() else {
+                continue;
+            };
+            let mut earliest_session: Option<DateTime<Utc>> = doc
+                .get_document("datas")
+                .ok()
+                .and_then(|d| d.get_datetime("data_primeira_sessao").ok())
+                .map(|dt| dt.to_chrono());
+
+            if let Ok(sessions) = doc.get_array("pastSessions") {
+                for s in sessions.iter().filter_map(|v| v.as_document()) {
+                    if let Ok(sdt) = s.get_datetime("data") {
+                        let cdt = sdt.to_chrono();
+                        let is_before = match cutoff {
+                            Some((cut_ts, _)) => cdt <= cut_ts,
+                            None => true,
+                        };
+                        if is_before {
+                            if let Ok(qrev) = s.get_str("question_revision") {
+                                if !qrev.is_empty() {
+                                    snap.seen_content_revisions.insert(qrev.to_string());
+                                }
+                            }
+                        }
+                        earliest_session = Some(earliest_session.map_or(cdt, |prev| prev.min(cdt)));
+                    }
+                }
+            }
+
+            let qualifies = match (cutoff, earliest_session) {
+                (Some((cut_ts, _)), Some(es)) => es <= cut_ts,
+                (Some(_), None) => false,
+                (None, _) => true,
+            };
+            if qualifies {
+                snap.seen_question_ids.insert(qid.to_hex());
+                if let Some((cr, sr)) = self.q_revs_by_oid.get(&qid) {
+                    if !cr.is_empty() {
+                        snap.seen_content_revisions.insert(cr.clone());
+                    }
+                    if !sr.is_empty() {
+                        snap.seen_semantic_revisions.insert(sr.clone());
+                    }
+                }
+            }
+        }
+
+        for off in &self.offer_docs {
+            let off_id = off.get_str("offer_id").unwrap_or("");
+            if exclude_offer_id.is_some_and(|ex| ex == off_id) {
+                continue;
+            }
+            let Some(disp_dt) = off
+                .get_datetime("first_displayed_at")
+                .ok()
+                .map(|d| d.to_chrono())
+            else {
+                continue;
+            };
+            if let Some((cut_ts, cut_tie)) = cutoff {
+                if (disp_dt, off_id) >= (cut_ts, cut_tie) {
+                    continue;
+                }
+            }
+            if let Ok(cq) = off.get_str("complementary_question_id") {
+                if !cq.is_empty() {
+                    snap.seen_question_ids.insert(cq.to_string());
+                }
+            }
+            if let Ok(cr) = off.get_str("content_revision") {
+                if !cr.is_empty() {
+                    snap.seen_content_revisions.insert(cr.to_string());
+                }
+            }
+            if let Ok(sr) = off.get_str("semantic_revision") {
+                if !sr.is_empty() {
+                    snap.seen_semantic_revisions.insert(sr.to_string());
+                }
+            }
+        }
+
+        for att in &self.ctv_docs {
+            let att_id = att.get_str("ctv_attempt_id").unwrap_or("");
+            let att_off_id = att.get_str("offer_id").unwrap_or("");
+            if exclude_ctv_attempt_id.is_some_and(|ex| ex == att_id) {
+                continue;
+            }
+            if !att_off_id.is_empty() && exclude_offer_id.is_some_and(|ex| ex == att_off_id) {
+                continue;
+            }
+            let eff_dt = att
+                .get_datetime("displayed_at")
+                .or_else(|_| att.get_datetime("occurred_at"))
+                .ok()
+                .map(|d| d.to_chrono());
+            if let Some((cut_ts, cut_tie)) = cutoff {
+                let Some(dt) = eff_dt else {
+                    continue;
+                };
+                let tie_id = if !att_off_id.is_empty() {
+                    att_off_id
+                } else {
+                    att_id
+                };
+                if (dt, tie_id) >= (cut_ts, cut_tie) {
+                    continue;
+                }
+            }
+            if let Ok(cq) = att.get_str("complementary_question_id") {
+                if !cq.is_empty() {
+                    snap.seen_question_ids.insert(cq.to_string());
+                }
+            }
+            if let Ok(cr) = att.get_str("content_revision") {
+                if !cr.is_empty() {
+                    snap.seen_content_revisions.insert(cr.to_string());
+                }
+            }
+            if let Ok(sr) = att.get_str("semantic_revision") {
+                if !sr.is_empty() {
+                    snap.seen_semantic_revisions.insert(sr.to_string());
+                }
+            }
+        }
+        snap
+    }
+}
+
 /// Carrega todas as exposições reais do estudante anteriores a `cutoff` (excluindo a própria `current_offer_id`
 /// e `current_ctv_attempt_id`), considerando tanto `question_id` quanto `content_revision` e `semantic_revision`.
 /// Ofertas apenas pré-carregadas (`first_displayed_at == null` e sem resposta/dispensa) NÃO marcam o item como visto!
@@ -152,176 +356,8 @@ pub async fn load_user_exposure_snapshot(
     exclude_ctv_attempt_id: Option<&str>,
     cutoff: Option<(DateTime<Utc>, &str)>,
 ) -> Result<UserExposureSnapshot, AppError> {
-    let mut snap = UserExposureSnapshot::default();
-    let mut regular_oids = Vec::new();
-
-    // 1. Histórico de baterias comuns (`userActivityLog`)
-    let regular_docs: Vec<Document> = db
-        .collection::<Document>("userActivityLog")
-        .find(doc! { "user_id": user_id })
-        .projection(doc! {
-            "question_id": 1,
-            "datas.data_primeira_sessao": 1,
-            "pastSessions.data": 1,
-            "pastSessions.question_revision": 1
-        })
-        .await?
-        .try_collect()
-        .await?;
-
-    for doc in &regular_docs {
-        let Some(qid) = doc.get_object_id("question_id").ok() else {
-            continue;
-        };
-        let mut earliest_session: Option<DateTime<Utc>> = doc
-            .get_document("datas")
-            .ok()
-            .and_then(|d| d.get_datetime("data_primeira_sessao").ok())
-            .map(|dt| dt.to_chrono());
-
-        if let Ok(sessions) = doc.get_array("pastSessions") {
-            for s in sessions.iter().filter_map(|v| v.as_document()) {
-                if let Ok(sdt) = s.get_datetime("data") {
-                    let cdt = sdt.to_chrono();
-                    let is_before = match cutoff {
-                        Some((cut_ts, _)) => cdt <= cut_ts,
-                        None => true,
-                    };
-                    if is_before {
-                        if let Ok(qrev) = s.get_str("question_revision") {
-                            if !qrev.is_empty() {
-                                snap.seen_content_revisions.insert(qrev.to_string());
-                            }
-                        }
-                    }
-                    earliest_session = Some(earliest_session.map_or(cdt, |prev| prev.min(cdt)));
-                }
-            }
-        }
-
-        let qualifies = match (cutoff, earliest_session) {
-            (Some((cut_ts, _)), Some(es)) => es <= cut_ts,
-            (Some(_), None) => false,
-            (None, _) => true,
-        };
-        if qualifies {
-            snap.seen_question_ids.insert(qid.to_hex());
-            regular_oids.push(qid);
-        }
-    }
-
-    if !regular_oids.is_empty() {
-        let q_revs: Vec<Document> = db
-            .collection::<Document>("todasQuestoes")
-            .find(doc! { "_id": { "$in": &regular_oids } })
-            .projection(doc! { "content_revision": 1, "semantic_revision": 1 })
-            .await?
-            .try_collect()
-            .await?;
-        for qr in q_revs {
-            if let Ok(cr) = qr.get_str("content_revision") {
-                if !cr.is_empty() {
-                    snap.seen_content_revisions.insert(cr.to_string());
-                }
-            }
-            if let Ok(sr) = qr.get_str("semantic_revision") {
-                if !sr.is_empty() {
-                    snap.seen_semantic_revisions.insert(sr.to_string());
-                }
-            }
-        }
-    }
-
-    // 2. Ofertas CTV efetivamente exibidas ou dispensadas (`first_displayed_at != null`)
-    let offer_docs: Vec<Document> = db
-        .collection::<Document>("ctv_offers")
-        .find(doc! {
-            "user_id": user_id,
-            "first_displayed_at": { "$ne": bson::Bson::Null, "$exists": true }
-        })
-        .await?
-        .try_collect()
-        .await?;
-
-    for off in offer_docs {
-        let off_id = off.get_str("offer_id").unwrap_or("");
-        if exclude_offer_id.is_some_and(|ex| ex == off_id) {
-            continue;
-        }
-        let Some(disp_dt) = off.get_datetime("first_displayed_at").ok().map(|d| d.to_chrono()) else {
-            continue;
-        };
-        if let Some((cut_ts, cut_tie)) = cutoff {
-            if (disp_dt, off_id) >= (cut_ts, cut_tie) {
-                continue;
-            }
-        }
-        if let Ok(cq) = off.get_str("complementary_question_id") {
-            if !cq.is_empty() {
-                snap.seen_question_ids.insert(cq.to_string());
-            }
-        }
-        if let Ok(cr) = off.get_str("content_revision") {
-            if !cr.is_empty() {
-                snap.seen_content_revisions.insert(cr.to_string());
-            }
-        }
-        if let Ok(sr) = off.get_str("semantic_revision") {
-            if !sr.is_empty() {
-                snap.seen_semantic_revisions.insert(sr.to_string());
-            }
-        }
-    }
-
-    // 3. Tentativas CTV registradas (`conceptual_transfer_attempts`)
-    let ctv_docs: Vec<Document> = db
-        .collection::<Document>("conceptual_transfer_attempts")
-        .find(doc! { "user_id": user_id })
-        .await?
-        .try_collect()
-        .await?;
-
-    for att in ctv_docs {
-        let att_id = att.get_str("ctv_attempt_id").unwrap_or("");
-        let att_off_id = att.get_str("offer_id").unwrap_or("");
-        if exclude_ctv_attempt_id.is_some_and(|ex| ex == att_id) {
-            continue;
-        }
-        if !att_off_id.is_empty() && exclude_offer_id.is_some_and(|ex| ex == att_off_id) {
-            continue;
-        }
-        let eff_dt = att
-            .get_datetime("displayed_at")
-            .or_else(|_| att.get_datetime("occurred_at"))
-            .ok()
-            .map(|d| d.to_chrono());
-        if let Some((cut_ts, cut_tie)) = cutoff {
-            let Some(dt) = eff_dt else {
-                continue;
-            };
-            let tie_id = if !att_off_id.is_empty() { att_off_id } else { att_id };
-            if (dt, tie_id) >= (cut_ts, cut_tie) {
-                continue;
-            }
-        }
-        if let Ok(cq) = att.get_str("complementary_question_id") {
-            if !cq.is_empty() {
-                snap.seen_question_ids.insert(cq.to_string());
-            }
-        }
-        if let Ok(cr) = att.get_str("content_revision") {
-            if !cr.is_empty() {
-                snap.seen_content_revisions.insert(cr.to_string());
-            }
-        }
-        if let Ok(sr) = att.get_str("semantic_revision") {
-            if !sr.is_empty() {
-                snap.seen_semantic_revisions.insert(sr.to_string());
-            }
-        }
-    }
-
-    Ok(snap)
+    let raw = RawUserExposureHistory::load(db, user_id).await?;
+    Ok(raw.build_snapshot(exclude_offer_id, exclude_ctv_attempt_id, cutoff))
 }
 
 /// Reconcilia cronologicamente todas as tentativas CTV do usuário que tocam a questão ou revisão informada,
@@ -372,6 +408,7 @@ pub async fn reconcile_user_ctv_history(
         (ta, ida).cmp(&(tb, idb))
     });
 
+    let raw_history = RawUserExposureHistory::load(db, user_id).await?;
     let mut reconciled_updates = 0usize;
     for att in matching_attempts {
         let Ok(doc_id) = att.get_str("_id") else {
@@ -397,14 +434,8 @@ pub async fn reconcile_user_ctv_history(
         let cq_srev = att.get_str("semantic_revision").unwrap_or(semantic_rev);
 
         let discovered_prior_exposure = if let Some(eff_dt) = eff_dt_opt {
-            let snap = load_user_exposure_snapshot(
-                db,
-                user_id,
-                off_id_opt,
-                Some(att_id),
-                Some((eff_dt, tie_key)),
-            )
-            .await?;
+            let snap =
+                raw_history.build_snapshot(off_id_opt, Some(att_id), Some((eff_dt, tie_key)));
             snap.has_seen(cq_id, cq_crev, cq_srev)
         } else {
             false
@@ -490,7 +521,9 @@ pub async fn record_ctv_event(
 ) -> Result<CtvLifecycleEventResponse, AppError> {
     let offer_id = req.offer_id.trim();
     if offer_id.is_empty() || offer_id.len() > 120 {
-        return Err(AppError::BadRequest("Identificador da oferta CTV inválido".into()));
+        return Err(AppError::BadRequest(
+            "Identificador da oferta CTV inválido".into(),
+        ));
     }
     uuid::Uuid::parse_str(&req.parent_attempt_id)
         .map_err(|_| AppError::BadRequest("Identificador da tentativa original inválido".into()))?;
@@ -534,7 +567,10 @@ pub async fn record_ctv_event(
             .unwrap_or_default();
         (cr, sr)
     } else {
-        (req.question_revision.clone().unwrap_or_default(), String::new())
+        (
+            req.question_revision.clone().unwrap_or_default(),
+            String::new(),
+        )
     };
 
     let offers_coll = state.db.collection::<Document>("ctv_offers");
@@ -554,7 +590,7 @@ pub async fn record_ctv_event(
         .and_then(|d| d.get_str("state").ok())
         .unwrap_or("SUPPLIED");
 
-    let effective_disp = Some(prev_disp.map_or(event_dt, |p| p.min(event_dt)));
+    let effective_disp = prev_disp.map_or(event_dt, |p| p.min(event_dt));
     let effective_dism = if kind == "DISMISSED" {
         Some(prev_dism.map_or(event_dt, |p| p.min(event_dt)))
     } else {
@@ -577,12 +613,14 @@ pub async fn record_ctv_event(
     );
 
     let mut set_doc = doc! {
-        "first_displayed_at": effective_disp.map(bson::DateTime::from_chrono),
         "state": next_state,
         "updated_at": bson::DateTime::now(),
     };
+    let mut min_doc = doc! {
+        "first_displayed_at": bson::DateTime::from_chrono(effective_disp),
+    };
     if let Some(dism) = effective_dism {
-        set_doc.insert("dismissed_at", bson::DateTime::from_chrono(dism));
+        min_doc.insert("dismissed_at", bson::DateTime::from_chrono(dism));
     }
     if !content_rev.is_empty() {
         set_doc.insert("content_revision", &content_rev);
@@ -611,40 +649,51 @@ pub async fn record_ctv_event(
     offers_coll
         .update_one(
             doc! { "_id": &doc_key },
-            doc! { "$set": set_doc, "$setOnInsert": on_insert },
+            doc! { "$set": set_doc, "$min": min_doc, "$setOnInsert": on_insert },
         )
         .upsert(true)
         .await?;
 
-    // Se a entrega ocorreu inicialmente por cache offline, registra auditoria operacional idempotente
-    if req.delivery_source.as_deref() == Some("OFFLINE_LOCAL_BANK") {
-        let audit_id = format!("ctv-offline-offer:{user_id}:{offer_id}");
-        // Hash anonimizado para idempotência sem gravar user_id pessoal em ai_generation_audit
-        let anon_req_id = format!("{:x}", Sha256::digest(audit_id.as_bytes()));
-        let _ = state
-            .db
-            .collection::<Document>("ai_generation_audit")
-            .update_one(
-                doc! { "_id": &anon_req_id },
-                doc! {
-                    "$setOnInsert": {
-                        "_id": &anon_req_id,
-                        "request_id": &anon_req_id,
-                        "outcome": "OFFLINE_CACHE_REUSE_RECONCILED",
-                        "delivery_channel": "OFFLINE_CACHE_RECONCILED",
-                        "question_id": &req.complementary_question_id,
-                        "provider_calls": 0_i32,
-                        "persisted_item": false,
-                        "duplicate_barred": false,
-                        "delivered_to_student": true,
-                        "estimated_cost_usd": 0.0_f64,
-                        "cost_source": "ESTIMATED_REFERENCE",
-                        "recorded_at": event_bson,
-                    }
-                },
-            )
-            .upsert(true)
-            .await;
+    // Se a entrega ocorreu inicialmente por cache offline e há recibo válido da tentativa pai (ou oferta prévia), registra auditoria idempotente
+    if req.delivery_source.as_deref() == Some("OFFLINE_LOCAL_BANK") && comp_raw_opt.is_some() {
+        let parent_receipt_exists = existing.is_some()
+            || state
+                .db
+                .collection::<Document>("attempt_receipts")
+                .find_one(doc! { "_id": format!("{user_id}:{}", req.parent_attempt_id) })
+                .await
+                .ok()
+                .flatten()
+                .is_some();
+        if parent_receipt_exists {
+            let audit_id = format!("ctv-offline-offer:{user_id}:{offer_id}");
+            // Hash anonimizado para idempotência sem gravar user_id pessoal em ai_generation_audit
+            let anon_req_id = format!("{:x}", Sha256::digest(audit_id.as_bytes()));
+            let _ = state
+                .db
+                .collection::<Document>("ai_generation_audit")
+                .update_one(
+                    doc! { "_id": &anon_req_id },
+                    doc! {
+                        "$setOnInsert": {
+                            "_id": &anon_req_id,
+                            "request_id": &anon_req_id,
+                            "outcome": "OFFLINE_CACHE_REUSE_RECONCILED",
+                            "delivery_channel": "OFFLINE_CACHE_RECONCILED",
+                            "question_id": &req.complementary_question_id,
+                            "provider_calls": 0_i32,
+                            "persisted_item": false,
+                            "duplicate_barred": false,
+                            "delivered_to_student": true,
+                            "estimated_cost_usd": 0.0_f64,
+                            "cost_source": "ESTIMATED_REFERENCE",
+                            "recorded_at": event_bson,
+                        }
+                    },
+                )
+                .upsert(true)
+                .await;
+        }
     }
 
     let reconciled = reconcile_user_ctv_history(
@@ -659,7 +708,7 @@ pub async fn record_ctv_event(
     Ok(CtvLifecycleEventResponse {
         offer_id: offer_id.to_string(),
         state: next_state.to_string(),
-        first_displayed_at: effective_disp.map(|d| d.to_rfc3339()),
+        first_displayed_at: Some(effective_disp.to_rfc3339()),
         dismissed_at: effective_dism.map(|d| d.to_rfc3339()),
         reconciled_attempts_count: reconciled,
     })

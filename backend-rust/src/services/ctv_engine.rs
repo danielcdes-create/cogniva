@@ -8,6 +8,7 @@
 //! 5. Valida estrutural, semântica e pedagogicamente o candidato gerado (schema V2.4, coerência de gabarito, filtro antipistas, independência lexical/antiparáfrase e deduplicação JCS/quase-duplicata).
 //! 6. Persiste permanentemente a questão aprovada em `cogniva.todasQuestoes` (sem dados pessoais do aluno), tornando-a reutilizável para toda a base.
 
+pub use crate::services::{ctv_alignment::*, ctv_reconciliation::*};
 use crate::{
     error::AppError,
     models::question::QuestionDto,
@@ -25,7 +26,6 @@ use crate::{
     },
     AppState,
 };
-pub use crate::services::{ctv_alignment::*, ctv_reconciliation::*};
 use bson::{doc, oid::ObjectId, Document};
 use chrono::Utc;
 use futures::TryStreamExt;
@@ -121,6 +121,8 @@ pub struct CtvEvaluateRequest {
     #[serde(default)]
     pub confidence_level: i32,
     #[serde(default)]
+    pub confidence_explicit: bool,
+    #[serde(default)]
     pub session_ctv_count: u16,
     #[serde(default)]
     pub attempts_since_last_ctv: u16,
@@ -128,9 +130,9 @@ pub struct CtvEvaluateRequest {
     pub force_post_instruction: bool,
     #[serde(default)]
     pub rationale_contradicted: bool,
-    #[serde(default)]
+    #[serde(skip)]
     pub max_search_pages: Option<usize>,
-    #[serde(default)]
+    #[serde(skip)]
     pub simulate_search_error_after_page: Option<usize>,
 }
 
@@ -298,7 +300,12 @@ pub fn decide_ctv_trigger(
     intra_concept_inconsistent: bool,
     insufficient_unit_evidence: bool,
     has_prior_independent_transfer: bool,
-) -> (bool, &'static str, Option<&'static str>, Option<&'static str>) {
+) -> (
+    bool,
+    &'static str,
+    Option<&'static str>,
+    Option<&'static str>,
+) {
     if !policy.enabled || req.is_blank {
         return (false, "not_triggered", None, None);
     }
@@ -311,12 +318,20 @@ pub fn decide_ctv_trigger(
         );
     }
     if req.session_ctv_count >= policy.max_per_session {
-        return (false, "cooldown_suppressed", Some("SESSION_CAP_REACHED"), None);
+        return (
+            false,
+            "cooldown_suppressed",
+            Some("SESSION_CAP_REACHED"),
+            None,
+        );
     }
 
-    let decl_conf = req
-        .declared_confidence
-        .or_else(|| DeclaredConfidence::from_legacy_band(req.confidence_level, true));
+    let decl_conf = req.declared_confidence.or_else(|| {
+        DeclaredConfidence::from_legacy_band(
+            req.confidence_level,
+            req.confidence_explicit || matches!(req.confidence_level, 1 | 3),
+        )
+    });
     let (diag, _, prio) = classify_preliminary_matrix(&MetacognitiveMatrixInputs {
         is_blank: req.is_blank,
         is_correct: req.is_correct,
@@ -614,9 +629,17 @@ pub(crate) fn build_v2_ctv_question_contract(
         .unwrap_or(2);
 
     let tested_rule = if cand.tested_rule.trim().chars().count() >= 10 {
-        cand.tested_rule.trim().chars().take(600).collect::<String>()
+        cand.tested_rule
+            .trim()
+            .chars()
+            .take(600)
+            .collect::<String>()
     } else {
-        cand.explanation.trim().chars().take(300).collect::<String>()
+        cand.explanation
+            .trim()
+            .chars()
+            .take(300)
+            .collect::<String>()
     };
     let decisive_excerpt = if cand.decisive_stem_excerpt.trim().chars().count() >= 10 {
         cand.decisive_stem_excerpt
@@ -934,12 +957,13 @@ async fn find_eligible_bank_candidate_paginated(
     max_pages_override: Option<usize>,
     simulate_error_after_page: Option<usize>,
 ) -> Result<BankSearchOutcome, BankSearchError> {
-    let max_pages = max_pages_override.unwrap_or(DEFAULT_MAX_SEARCH_PAGES).max(1);
+    let max_pages = max_pages_override
+        .unwrap_or(DEFAULT_MAX_SEARCH_PAGES)
+        .clamp(1, DEFAULT_MAX_SEARCH_PAGES);
 
-    let exposure_snap =
-        load_user_exposure_snapshot(&state.db, user_id, Some(offer_id), None, None)
-            .await
-            .map_err(|_| BankSearchError::Inconclusive)?;
+    let exposure_snap = load_user_exposure_snapshot(&state.db, user_id, Some(offer_id), None, None)
+        .await
+        .map_err(|_| BankSearchError::Inconclusive)?;
 
     let reported_by_user: HashSet<ObjectId> = state
         .db
@@ -968,6 +992,9 @@ async fn find_eligible_bank_candidate_paginated(
             return Err(BankSearchError::Inconclusive);
         }
         if pages_scanned >= max_pages {
+            if best_transfer_scored.is_some() {
+                break;
+            }
             return Err(BankSearchError::Inconclusive);
         }
 
@@ -1015,6 +1042,12 @@ async fn find_eligible_bank_candidate_paginated(
             &mut best_practice_scored,
         );
 
+        if best_transfer_scored
+            .as_ref()
+            .is_some_and(|(s, _)| *s >= 150)
+        {
+            break;
+        }
         if (fetched_len as i64) < CTV_BANK_PAGE_SIZE {
             break;
         }
@@ -1157,10 +1190,13 @@ async fn persist_supplied_offer_and_build_response(
 pub async fn evaluate_and_supply(
     state: &AppState,
     user: &SessionUser,
-    req: CtvEvaluateRequest,
+    mut req: CtvEvaluateRequest,
 ) -> Result<CtvEvaluateResponse, AppError> {
     uuid::Uuid::parse_str(&req.parent_attempt_id)
         .map_err(|_| AppError::BadRequest("Identificador da tentativa original inválido".into()))?;
+    if req.session_uuid.len() > 100 {
+        return Err(AppError::BadRequest("Sessão CTV fora dos limites".into()));
+    }
     let source_oid = ObjectId::parse_str(&req.source_question_id)?;
     let offer_id = deterministic_offer_id(user.user_id, &req.parent_attempt_id);
     let offer_doc_key = format!("{}:{offer_id}", user.user_id);
@@ -1173,12 +1209,53 @@ pub async fn evaluate_and_supply(
         .await?
     {
         if let Ok(cached_doc) = existing_offer.get_document("cached_response") {
-            if let Ok(cached_resp) = bson::from_document::<CtvEvaluateResponse>(cached_doc.clone()) {
+            if let Ok(cached_resp) = bson::from_document::<CtvEvaluateResponse>(cached_doc.clone())
+            {
                 return Ok(cached_resp);
             }
         }
     }
 
+    rate_limit::check_auth_rate_limit(&state.db, "ctv_eval", &user.user_id.to_string(), 30, 60)
+        .await?;
+
+    let session_uuid_trimmed = req.session_uuid.trim().to_string();
+    if !session_uuid_trimmed.is_empty() {
+        let server_session_count = state
+            .db
+            .collection::<Document>("ctv_offers")
+            .count_documents(doc! {
+                "user_id": user.user_id,
+                "session_uuid": &session_uuid_trimmed
+            })
+            .await
+            .unwrap_or(0);
+        let clamped_server = server_session_count.min(u16::MAX as u64) as u16;
+        req.session_ctv_count = req.session_ctv_count.max(clamped_server);
+    }
+
+    let resp = evaluate_and_supply_inner(state, user, req, source_oid, &offer_id).await?;
+    if resp.triggered && !session_uuid_trimmed.is_empty() {
+        let _ = state
+            .db
+            .collection::<Document>("ctv_offers")
+            .update_one(
+                doc! { "_id": &offer_doc_key },
+                doc! { "$set": { "session_uuid": &session_uuid_trimmed } },
+            )
+            .await;
+    }
+    Ok(resp)
+}
+
+async fn evaluate_and_supply_inner(
+    state: &AppState,
+    user: &SessionUser,
+    req: CtvEvaluateRequest,
+    source_oid: ObjectId,
+    offer_id: &str,
+) -> Result<CtvEvaluateResponse, AppError> {
+    let offer_id = offer_id.to_string();
     let policy = CtvPolicyConfig::from_env();
 
     let source_raw = state
@@ -1435,7 +1512,32 @@ pub async fn evaluate_and_supply(
         purpose
     );
     let unit_mutex = generation_lock_for(&unit_lock_key).await;
-    let _unit_guard = unit_mutex.lock().await;
+    let Ok(_unit_guard) =
+        tokio::time::timeout(std::time::Duration::from_secs(5), unit_mutex.lock()).await
+    else {
+        if let Some(tp_cand) = fallback_topic_practice {
+            return persist_supplied_offer_and_build_response(
+                state,
+                user.user_id,
+                &offer_id,
+                &req.parent_attempt_id,
+                &source_profile,
+                tp_cand,
+                trigger_reason,
+                "TOPIC_PRACTICE",
+                "REUSED_FROM_DB",
+                verification_timing,
+            )
+            .await;
+        }
+        return Ok(build_non_triggered_response(
+            "unavailable_graceful",
+            trigger_reason,
+            Some(purpose),
+            verification_timing,
+            Some(&source_profile),
+        ));
+    };
 
     // Reconsulta paginada após adquirir a trava: aproveita questão recém-persistida por pedido concorrente (A11)!
     if let Ok(locked_search) = find_eligible_bank_candidate_paginated(
@@ -1562,10 +1664,8 @@ pub async fn evaluate_and_supply(
         ));
     };
 
-    let user_limit = rate_limit::effective_user_daily_limit(
-        state.config.xai_daily_user_limit,
-        user.is_guest,
-    );
+    let user_limit =
+        rate_limit::effective_user_daily_limit(state.config.xai_daily_user_limit, user.is_guest);
     let reservation = match rate_limit::reserve_xai_quota(
         &state.db,
         Some(user.user_id),
@@ -1601,59 +1701,6 @@ pub async fn evaluate_and_supply(
         }
     };
     let quota_guard = rate_limit::QuotaGuard::new(state.db.clone(), reservation);
-
-    // Reconsulta ao adquirir a reserva de geração (Seção 5.2)
-    if let Ok(post_quota_search) = find_eligible_bank_candidate_paginated(
-        state,
-        user.user_id,
-        &offer_id,
-        source_oid,
-        &source_profile,
-        &topic_id,
-        allow_seen,
-        req.max_search_pages,
-        None,
-    )
-    .await
-    {
-        if let Some(reused_cand) = post_quota_search.best_transfer {
-            quota_guard.release_now().await;
-            log_ctv_audit_idempotent(
-                state,
-                CtvAuditEvent {
-                    request_id: &offer_id,
-                    outcome: "REUSED_CONCURRENT_GENERATION",
-                    subject_id: &subject_id,
-                    topic_id: &topic_id,
-                    concept_id: primary_concept,
-                    diagnostic_purpose: purpose,
-                    question_id: Some(&reused_cand.dto.id),
-                    model_name: None,
-                    latency_ms: Some(0),
-                    provider_calls: 0,
-                    persisted_item: false,
-                    duplicate_barred: false,
-                    delivered_to_student: true,
-                    delivery_channel: "ONLINE_DB_REUSE",
-                    estimated_cost_usd: 0.0,
-                },
-            )
-            .await;
-            return persist_supplied_offer_and_build_response(
-                state,
-                user.user_id,
-                &offer_id,
-                &req.parent_attempt_id,
-                &source_profile,
-                reused_cand,
-                trigger_reason,
-                purpose,
-                "REUSED_FROM_DB",
-                verification_timing,
-            )
-            .await;
-        }
-    }
 
     let cat = question_contracts::catalog_ref();
     let subject_label = cat["subjects"]
@@ -1698,41 +1745,41 @@ pub async fn evaluate_and_supply(
     );
 
     let started = Instant::now();
-    let raw_ai_text = match ai_tutor::call_xai_text(&state.config, system_prompt, &user_prompt).await
-    {
-        Ok(txt) => txt,
-        Err(_) => {
-            quota_guard.release_now().await;
-            log_ctv_audit_idempotent(
-                state,
-                CtvAuditEvent {
-                    request_id: &offer_id,
-                    outcome: "PROVIDER_FAILURE_GRACEFUL",
-                    subject_id: &subject_id,
-                    topic_id: &topic_id,
-                    concept_id: primary_concept,
-                    diagnostic_purpose: purpose,
-                    question_id: None,
-                    model_name: Some(model_name),
-                    latency_ms: Some(started.elapsed().as_millis() as u64),
-                    provider_calls: 0,
-                    persisted_item: false,
-                    duplicate_barred: false,
-                    delivered_to_student: false,
-                    delivery_channel: "NONE",
-                    estimated_cost_usd: 0.0,
-                },
-            )
-            .await;
-            return Ok(build_non_triggered_response(
-                "unavailable_graceful",
-                trigger_reason,
-                Some(purpose),
-                verification_timing,
-                Some(&source_profile),
-            ));
-        }
-    };
+    let raw_ai_text =
+        match ai_tutor::call_xai_text(&state.config, system_prompt, &user_prompt).await {
+            Ok(txt) => txt,
+            Err(_) => {
+                quota_guard.release_now().await;
+                log_ctv_audit_idempotent(
+                    state,
+                    CtvAuditEvent {
+                        request_id: &offer_id,
+                        outcome: "PROVIDER_FAILURE_GRACEFUL",
+                        subject_id: &subject_id,
+                        topic_id: &topic_id,
+                        concept_id: primary_concept,
+                        diagnostic_purpose: purpose,
+                        question_id: None,
+                        model_name: Some(model_name),
+                        latency_ms: Some(started.elapsed().as_millis() as u64),
+                        provider_calls: 0,
+                        persisted_item: false,
+                        duplicate_barred: false,
+                        delivered_to_student: false,
+                        delivery_channel: "NONE",
+                        estimated_cost_usd: 0.0,
+                    },
+                )
+                .await;
+                return Ok(build_non_triggered_response(
+                    "unavailable_graceful",
+                    trigger_reason,
+                    Some(purpose),
+                    verification_timing,
+                    Some(&source_profile),
+                ));
+            }
+        };
     let latency_ms = started.elapsed().as_millis() as u64;
 
     let parsed_cand: GeneratedCtvPayload = match extract_json_object(&raw_ai_text)
@@ -1854,23 +1901,43 @@ pub async fn evaluate_and_supply(
     let c_rev = v2_json["content_revision"].as_str().unwrap_or_default();
     let s_rev = v2_json["semantic_revision"].as_str().unwrap_or_default();
 
-    // ETAPA 4 (Seção 5.4 / A12): Deduplicação exata ou quase-duplicata + revalidação integral de elegibilidade, conceito e exposição!
-    let existing_same_topic: Vec<Document> = state
+    // ETAPA 4 (Seção 5.4 / A12): Deduplicação exata indexada + quase-duplicata nas 200 mais recentes do tópico!
+    let mut hash_or = vec![doc! { "content_revision": c_rev }];
+    if !s_rev.is_empty() {
+        hash_or.push(doc! { "semantic_revision": s_rev });
+    }
+    let exact_matches: Vec<Document> = state
+        .db
+        .collection::<Document>("todasQuestoes")
+        .find(doc! { "$or": hash_or })
+        .limit(10)
+        .await?
+        .try_collect()
+        .await?;
+    let recent_topic_docs: Vec<Document> = state
         .db
         .collection::<Document>("todasQuestoes")
         .find(doc! {
             "$or": [
-                { "content_revision": c_rev },
-                { "semantic_revision": s_rev },
                 { "canonical_topic_id": &topic_id },
+                { "classification.links.topic_id": &topic_id },
                 { "diagnostic_meta.topic_id": &topic_id }
             ]
         })
-        .sort(doc! { "_id": 1 })
+        .sort(doc! { "_id": -1 })
         .limit(200)
         .await?
         .try_collect()
         .await?;
+    let mut seen_dedup_oids = HashSet::new();
+    let mut existing_same_topic = Vec::with_capacity(exact_matches.len() + recent_topic_docs.len());
+    for doc_item in exact_matches.into_iter().chain(recent_topic_docs) {
+        if let Ok(oid) = doc_item.get_object_id("_id") {
+            if seen_dedup_oids.insert(oid) {
+                existing_same_topic.push(doc_item);
+            }
+        }
+    }
 
     for ex in &existing_same_topic {
         let exact_dup = ex.get_str("content_revision").ok() == Some(c_rev)
@@ -1899,14 +1966,9 @@ pub async fn evaluate_and_supply(
             } else {
                 false
             };
-            let exposure_snap = load_user_exposure_snapshot(
-                &state.db,
-                user.user_id,
-                Some(&offer_id),
-                None,
-                None,
-            )
-            .await?;
+            let exposure_snap =
+                load_user_exposure_snapshot(&state.db, user.user_id, Some(&offer_id), None, None)
+                    .await?;
 
             let reusable_cand = revalidate_post_ai_duplicate_candidate(
                 ex,
@@ -2150,18 +2212,18 @@ pub async fn submit_ctv_attempt(
     let existing_offer = offers_coll.find_one(doc! { "_id": &offer_doc_key }).await?;
 
     let occurred_dt = parse_client_timestamp_or_now(req.occurred_at.as_deref())?;
-    let displayed_dt = if let Some(d_str) = req.displayed_at.as_deref().filter(|s| !s.trim().is_empty())
-    {
-        parse_client_timestamp_or_now(Some(d_str))?.min(occurred_dt)
-    } else if let Some(off_disp) = existing_offer
-        .as_ref()
-        .and_then(|d| d.get_datetime("first_displayed_at").ok())
-        .map(|d| d.to_chrono())
-    {
-        off_disp.min(occurred_dt)
-    } else {
-        occurred_dt
-    };
+    let displayed_dt =
+        if let Some(d_str) = req.displayed_at.as_deref().filter(|s| !s.trim().is_empty()) {
+            parse_client_timestamp_or_now(Some(d_str))?.min(occurred_dt)
+        } else if let Some(off_disp) = existing_offer
+            .as_ref()
+            .and_then(|d| d.get_datetime("first_displayed_at").ok())
+            .map(|d| d.to_chrono())
+        {
+            off_disp.min(occurred_dt)
+        } else {
+            occurred_dt
+        };
 
     let (verification_mode, framing_reason_code, framing_reason_pt) =
         if let Some(src_prof) = &source_profile_opt {
@@ -2366,7 +2428,10 @@ pub async fn submit_ctv_attempt(
         "response_ack": bson::to_document(&response).unwrap_or_default(),
     };
     let insert_res = ctv_coll
-        .update_one(doc! { "_id": &receipt_key }, doc! { "$setOnInsert": record_doc })
+        .update_one(
+            doc! { "_id": &receipt_key },
+            doc! { "$setOnInsert": record_doc },
+        )
         .upsert(true)
         .await?;
 
@@ -2415,13 +2480,12 @@ pub async fn submit_ctv_attempt(
     .await?;
 
     if insert_res.upserted_id.is_some() {
-        // Atualiza métricas operacionais de qualidade e reutilização em diagnostic_meta apenas 1 vez por tentativa!
+        // Atualiza métricas operacionais de qualidade e reutilização em diagnostic_meta de forma atômica ($inc)!
         if let Ok(dmeta) = comp_raw.get_document("diagnostic_meta") {
-            let prev_usage = dmeta
-                .get_i64("usage_count")
-                .or_else(|_| dmeta.get_i32("usage_count").map(i64::from))
-                .unwrap_or(0);
-            let qm = dmeta.get_document("quality_metrics").cloned().unwrap_or_default();
+            let qm = dmeta
+                .get_document("quality_metrics")
+                .cloned()
+                .unwrap_or_default();
             let prev_att = qm
                 .get_i64("attempts_count")
                 .or_else(|_| qm.get_i32("attempts_count").map(i64::from))
@@ -2432,7 +2496,6 @@ pub async fn submit_ctv_attempt(
                 .unwrap_or(0);
             let prev_avg_s = qm.get_f64("avg_active_seconds").unwrap_or(0.0);
 
-            let next_usage = prev_usage.saturating_add(1);
             let next_att = prev_att.saturating_add(1);
             let next_corr = prev_corr.saturating_add(i64::from(is_correct));
             let next_avg_s = if next_att > 0 {
@@ -2443,9 +2506,6 @@ pub async fn submit_ctv_attempt(
             };
 
             let mut set_doc = doc! {
-                "diagnostic_meta.usage_count": next_usage,
-                "diagnostic_meta.quality_metrics.attempts_count": next_att,
-                "diagnostic_meta.quality_metrics.correct_count": next_corr,
                 "diagnostic_meta.quality_metrics.avg_active_seconds": (next_avg_s * 100.0).round() / 100.0,
             };
 
@@ -2458,7 +2518,17 @@ pub async fn submit_ctv_attempt(
             }
 
             let _ = question_storage::collection(&state.db, "todasQuestoes")
-                .update_one(doc! { "_id": comp_oid }, doc! { "$set": set_doc })
+                .update_one(
+                    doc! { "_id": comp_oid },
+                    doc! {
+                        "$inc": {
+                            "diagnostic_meta.usage_count": 1_i64,
+                            "diagnostic_meta.quality_metrics.attempts_count": 1_i64,
+                            "diagnostic_meta.quality_metrics.correct_count": i64::from(is_correct),
+                        },
+                        "$set": set_doc
+                    },
+                )
                 .await;
         }
     }
@@ -2494,7 +2564,8 @@ mod tests {
     }
 
     #[test]
-    fn generated_ctv_question_satisfies_v2_4_contract_and_remains_isolated_from_standard_simulado() {
+    fn generated_ctv_question_satisfies_v2_4_contract_and_remains_isolated_from_standard_simulado()
+    {
         let cat = question_contracts::catalog();
         let active_subject = cat["subjects"]
             .as_array()
@@ -2573,7 +2644,9 @@ mod tests {
             EligibilityMode::StandardObjective,
         );
         assert!(!std_elig.eligible);
-        assert!(std_elig.reason_codes.contains(&"CLASSIFICATION_NOT_CONFIRMED"));
+        assert!(std_elig
+            .reason_codes
+            .contains(&"CLASSIFICATION_NOT_CONFIRMED"));
     }
 
     #[test]
@@ -2589,6 +2662,7 @@ mod tests {
             declared_confidence: Some(DeclaredConfidence::Guess),
             cognitive_strategy: Some(CognitiveStrategy::RandomGuess),
             confidence_level: 1,
+            confidence_explicit: true,
             session_ctv_count: 0,
             attempts_since_last_ctv: 0,
             force_post_instruction: false,
@@ -2657,7 +2731,8 @@ mod tests {
     }
 
     #[test]
-    fn a02_dubious_ai_candidate_routes_to_pending_human_review_and_is_blocked_from_student_delivery() {
+    fn a02_dubious_ai_candidate_routes_to_pending_human_review_and_is_blocked_from_student_delivery(
+    ) {
         let cat = question_contracts::catalog();
         let eval_date = NaiveDate::from_ymd_opt(2026, 11, 25).unwrap();
         let dubious_doc = make_duration_ctv_bson_doc(
@@ -2669,7 +2744,10 @@ mod tests {
             false,
         );
         let dmeta = dubious_doc.get_document("diagnostic_meta").unwrap();
-        assert_eq!(dmeta.get_str("validation_status").unwrap(), "PENDING_HUMAN_REVIEW");
+        assert_eq!(
+            dmeta.get_str("validation_status").unwrap(),
+            "PENDING_HUMAN_REVIEW"
+        );
         assert_eq!(dmeta.get_str("quality_status").unwrap(), "MONITORING");
 
         let elig = question_eligibility::evaluate_bson_question_for_practice(
@@ -2687,7 +2765,8 @@ mod tests {
     }
 
     #[test]
-    fn a08_adaptive_cohorts_separate_difficulty_1_of_2_with_dismissal_excluded_from_periodic_3_of_4() {
+    fn a08_adaptive_cohorts_separate_difficulty_1_of_2_with_dismissal_excluded_from_periodic_3_of_4(
+    ) {
         use crate::services::ctv_admin_metrics::build_adaptive_cohort_dto;
         let diff = build_adaptive_cohort_dto(
             "DIFFICULTY_DETECTED",
@@ -2722,7 +2801,8 @@ mod tests {
     }
 
     #[test]
-    fn a10_cursor_pagination_scans_past_80_seen_items_to_find_81st_unseen_with_zero_ai_calls_and_flags_inconclusive() {
+    fn a10_cursor_pagination_scans_past_80_seen_items_to_find_81st_unseen_with_zero_ai_calls_and_flags_inconclusive(
+    ) {
         let source_oid = ObjectId::parse_str("000000000000000000000001").unwrap();
         let source_profile = QuestionAlignmentProfile {
             question_id: source_oid.to_hex(),
@@ -2761,14 +2841,17 @@ mod tests {
 
         // Simula o cursor estável `_id > cursor_oid` em páginas de 40 (`CTV_BANK_PAGE_SIZE = 40`):
         // 81 itens exigem 3 páginas (40 + 40 + 1).
-        let run_cursor_scan = |max_pages: usize, fail_after_page: Option<usize>| -> Result<Option<String>, BankSearchError> {
+        let run_cursor_scan = |max_pages: usize,
+                               fail_after_page: Option<usize>|
+         -> Result<Option<String>, BankSearchError> {
             let mut cursor_oid: Option<ObjectId> = None;
             let mut pages_scanned = 0usize;
             let mut best_transfer: Option<(i32, SelectedBankCandidate)> = None;
             let mut best_practice: Option<(i32, SelectedBankCandidate)> = None;
             let empty_reports = HashSet::new();
             loop {
-                if fail_after_page.is_some_and(|f| pages_scanned >= f) || pages_scanned >= max_pages {
+                if fail_after_page.is_some_and(|f| pages_scanned >= f) || pages_scanned >= max_pages
+                {
                     return Err(BankSearchError::Inconclusive);
                 }
                 let page: Vec<Document> = all_docs
@@ -2810,12 +2893,19 @@ mod tests {
         assert_eq!(ai_calls.load(std::sync::atomic::Ordering::SeqCst), 0);
 
         // Falha de leitura na página 2 ou teto de 2 páginas -> SEARCH_INCONCLUSIVE (nunca "0 elegíveis"!)
-        assert!(matches!(run_cursor_scan(DEFAULT_MAX_SEARCH_PAGES, Some(1)), Err(BankSearchError::Inconclusive)));
-        assert!(matches!(run_cursor_scan(2, None), Err(BankSearchError::Inconclusive)));
+        assert!(matches!(
+            run_cursor_scan(DEFAULT_MAX_SEARCH_PAGES, Some(1)),
+            Err(BankSearchError::Inconclusive)
+        ));
+        assert!(matches!(
+            run_cursor_scan(2, None),
+            Err(BankSearchError::Inconclusive)
+        ));
     }
 
     #[tokio::test]
-    async fn a11_generation_lock_and_bank_recheck_ensure_single_ai_call_and_shared_permanent_item() {
+    async fn a11_generation_lock_and_bank_recheck_ensure_single_ai_call_and_shared_permanent_item()
+    {
         let source_oid = ObjectId::parse_str("000000000000000000000001").unwrap();
         let source_profile = Arc::new(QuestionAlignmentProfile {
             question_id: source_oid.to_hex(),
@@ -2823,7 +2913,9 @@ mod tests {
             topic_id: Some("MFIN_01_004".to_string()),
             target_concept_id: Some("CON_MFIN_DURATION_MODIFICADA".to_string()),
             all_concept_ids: vec!["CON_MFIN_DURATION_MODIFICADA".to_string()],
-            tested_rule: Some("Sensibilidade percentual aproximada de preço via duration modificada.".to_string()),
+            tested_rule: Some(
+                "Sensibilidade percentual aproximada de preço via duration modificada.".to_string(),
+            ),
             question_type: "MULTIPLE_CHOICE".to_string(),
             stem: "Qual é o significado econômico da duration modificada de um título?".to_string(),
             content_revision: "src-rev-a11".to_string(),
@@ -2831,7 +2923,10 @@ mod tests {
         });
         let bank: Arc<Mutex<Vec<Document>>> = Arc::new(Mutex::new(Vec::new()));
         let ai_calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let lock_key = format!("MFIN:CON_MFIN_DURATION_MODIFICADA:CONCEPTUAL_TRANSFER:{}", uuid::Uuid::new_v4());
+        let lock_key = format!(
+            "MFIN:CON_MFIN_DURATION_MODIFICADA:CONCEPTUAL_TRANSFER:{}",
+            uuid::Uuid::new_v4()
+        );
 
         let spawn_worker = |user_seen: UserExposureSnapshot| {
             let bank = bank.clone();
@@ -2881,8 +2976,15 @@ mod tests {
         );
         let (id_a, src_a) = res_a.unwrap();
         let (id_b, src_b) = res_b.unwrap();
-        assert_eq!(id_a, id_b, "Both concurrent students must receive the exact same permanent _id");
-        assert_eq!(ai_calls.load(std::sync::atomic::Ordering::SeqCst), 1, "Only 1 real AI call may occur");
+        assert_eq!(
+            id_a, id_b,
+            "Both concurrent students must receive the exact same permanent _id"
+        );
+        assert_eq!(
+            ai_calls.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "Only 1 real AI call may occur"
+        );
         assert!(
             (src_a == "AI_GENERATED_PERMANENT" && src_b == "REUSED_FROM_DB")
                 || (src_b == "AI_GENERATED_PERMANENT" && src_a == "REUSED_FROM_DB")
@@ -2891,7 +2993,8 @@ mod tests {
     }
 
     #[test]
-    fn a12_post_ai_duplicate_revalidates_eligibility_concept_and_exposure_and_bars_suspended_or_seen() {
+    fn a12_post_ai_duplicate_revalidates_eligibility_concept_and_exposure_and_bars_suspended_or_seen(
+    ) {
         let source_oid = ObjectId::parse_str("000000000000000000000001").unwrap();
         let source_profile = QuestionAlignmentProfile {
             question_id: source_oid.to_hex(),
@@ -2899,7 +3002,9 @@ mod tests {
             topic_id: Some("MFIN_01_004".to_string()),
             target_concept_id: Some("CON_MFIN_DURATION_MODIFICADA".to_string()),
             all_concept_ids: vec!["CON_MFIN_DURATION_MODIFICADA".to_string()],
-            tested_rule: Some("Sensibilidade percentual aproximada de preço via duration modificada.".to_string()),
+            tested_rule: Some(
+                "Sensibilidade percentual aproximada de preço via duration modificada.".to_string(),
+            ),
             question_type: "MULTIPLE_CHOICE".to_string(),
             stem: "Qual é o significado econômico da duration modificada de um título?".to_string(),
             content_revision: "src-rev-a12".to_string(),
@@ -2924,7 +3029,10 @@ mod tests {
             true,
             false,
         );
-        assert_eq!(ok_reused.as_ref().map(|c| c.dto.id.as_str()), Some(valid_oid.to_hex().as_str()));
+        assert_eq!(
+            ok_reused.as_ref().map(|c| c.dto.id.as_str()),
+            Some(valid_oid.to_hex().as_str())
+        );
 
         // 2. Mesmo item já visto pelo aluno -> bloqueado como verificação inédita!
         let mut seen_snap = UserExposureSnapshot::default();
@@ -2979,7 +3087,8 @@ mod tests {
     }
 
     #[test]
-    fn a14_legacy_records_without_timing_or_strategy_preserve_unknown_condition_and_unknown_grounding() {
+    fn a14_legacy_records_without_timing_or_strategy_preserve_unknown_condition_and_unknown_grounding(
+    ) {
         let legacy_indep = evaluate_ctv_independence(&CtvIndependenceInput {
             verification_mode: VerificationMode::ConceptualTransfer,
             action: "ANSWERED".to_string(),
@@ -2993,12 +3102,8 @@ mod tests {
         assert_eq!(legacy_indep.independent_attempts_delta, 0);
         assert_eq!(legacy_indep.independent_correct_delta, 0);
 
-        let legacy_grounding = crate::services::metacognitive_engine::classify_hit_grounding(
-            true,
-            None,
-            None,
-            None,
-        );
+        let legacy_grounding =
+            crate::services::metacognitive_engine::classify_hit_grounding(true, None, None, None);
         assert_eq!(legacy_grounding.code(), "UNKNOWN_GROUNDING");
         assert!(!legacy_grounding.credits_comprehension());
         assert!(!legacy_grounding.is_evaluable());

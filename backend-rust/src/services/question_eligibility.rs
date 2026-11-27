@@ -145,6 +145,20 @@ pub fn evaluate_question_eligibility(
         push_unique(&mut reasons, err.code);
     }
 
+    // 3b. CTV quality / validation gate: suspended, retired, or unapproved AI items never enter student practice
+    if let Some(dmeta) = question.get("diagnostic_meta").filter(|v| v.is_object()) {
+        let qstat = dmeta.get("quality_status").and_then(Value::as_str);
+        let vstat = dmeta.get("validation_status").and_then(Value::as_str);
+        if matches!(qstat, Some("SUSPENDED" | "RETIRED"))
+            || matches!(
+                vstat,
+                Some("PENDING_HUMAN_REVIEW" | "REJECTED" | "SUSPENDED")
+            )
+        {
+            push_unique(&mut reasons, "CTV_QUALITY_SUSPENDED");
+        }
+    }
+
     // 4 & 5. Confirmed classification with active PRIMARY DIRECT link & trusted human review
     let links = question["classification"]["links"]
         .as_array()
@@ -191,9 +205,9 @@ pub fn evaluate_question_eligibility(
                 let crev = question.get("content_revision").and_then(Value::as_str);
                 let subj = dmeta.get("subject_id").and_then(Value::as_str);
                 let top = dmeta.get("topic_id").and_then(Value::as_str);
-                let taxonomy_ok = subj
-                    .zip(top)
-                    .is_some_and(|(s, t)| active_subjects.contains(s) && active_topics.contains(&(s, t)));
+                let taxonomy_ok = subj.zip(top).is_some_and(|(s, t)| {
+                    active_subjects.contains(s) && active_topics.contains(&(s, t))
+                });
                 matches!(vstat, Some("AUTO_APPROVED" | "HUMAN_CONFIRMED"))
                     && matches!(qstat, Some("OPERATIONAL" | "MONITORING"))
                     && chash.is_some()

@@ -259,6 +259,28 @@ pub fn validate_against(
             return Err(bad("Relação simétrica repetida"));
         }
     }
+    let mut seed_normative_ids = HashSet::new();
+    if let Some(seed_norms) = super::catalog_runtime::seed_graph()
+        .get("normative_sources")
+        .and_then(Value::as_array)
+    {
+        for ns in seed_norms {
+            if let Some(sid) = ns["source_id"].as_str() {
+                seed_normative_ids.insert(sid);
+            }
+        }
+    }
+    let mut seed_concepts_map: HashMap<&str, &Value> = HashMap::new();
+    if let Some(seed_concepts) = super::catalog_runtime::seed_graph()
+        .get("concepts")
+        .and_then(Value::as_array)
+    {
+        for sc in seed_concepts {
+            if let Some(cid) = sc["concept_id"].as_str() {
+                seed_concepts_map.insert(cid, sc);
+            }
+        }
+    }
     let mut normative_source_ids = HashSet::new();
     if let Some(norm_arr) = catalog.get("normative_sources").and_then(Value::as_array) {
         for ns in norm_arr {
@@ -292,20 +314,27 @@ pub fn validate_against(
             }
             for s in c["source_ids"].as_array().unwrap() {
                 let s_id = s.as_str().unwrap_or("");
-                if !sources.contains_key(s_id) && !normative_source_ids.contains(s_id) {
+                if !sources.contains_key(s_id)
+                    && !normative_source_ids.contains(s_id)
+                    && !seed_normative_ids.contains(s_id)
+                {
                     return Err(bad(format!("Fonte desconhecida no conceito {cid}: {s_id}")));
                 }
             }
         }
+        let mut merged_concepts: HashMap<&str, &Value> = seed_concepts_map;
+        for (&cid, &c) in &concepts_map {
+            merged_concepts.insert(cid, c);
+        }
         let mut indegree: HashMap<&str, usize> = HashMap::new();
         let mut dependents: HashMap<&str, Vec<&str>> = HashMap::new();
-        for (&cid, c) in &concepts_map {
+        for (&cid, c) in &merged_concepts {
             let prereqs = c["prerequisite_concept_ids"].as_array().unwrap();
             indegree.insert(cid, prereqs.len());
             dependents.entry(cid).or_default();
             for p in prereqs {
                 let pid = p.as_str().unwrap_or("");
-                if pid == cid || !concepts_map.contains_key(pid) {
+                if pid == cid || !merged_concepts.contains_key(pid) {
                     return Err(bad(format!("Pré-requisito inválido em {cid}: {pid}")));
                 }
                 dependents.entry(pid).or_default().push(cid);
@@ -329,7 +358,7 @@ pub fn validate_against(
                 }
             }
         }
-        if visited != concepts_map.len() {
+        if visited != merged_concepts.len() {
             return Err(bad("Ciclo detectado em prerequisite_concept_ids"));
         }
     }

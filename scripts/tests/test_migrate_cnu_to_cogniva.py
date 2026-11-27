@@ -39,6 +39,7 @@ class MigrateCnuToCognivaTest(unittest.TestCase):
         self.assertEqual(v2["explanation"], "Explicação preservada integralmente.")
         self.assertEqual(v2["exam_year"], 2024)
         self.assertEqual(v2["level"], "Superior")
+        self.assertEqual(v2["concursos"], [])
         # Idempotency: re-normalizing V2 produces identical document
         v2_again = migrator.normalize_question_to_v2(v2, self.catalog)
         self.assertEqual(v2, v2_again)
@@ -229,7 +230,7 @@ class MigrateCnuToCognivaTest(unittest.TestCase):
         self.assertEqual(stats["skipped_invalid_count"], 0)
         for doc in v2_docs:
             qc.validate_question(doc, self.catalog)
-        self.assertEqual(v2_docs[1]["concursos"], "BCB_2027_EF")
+        self.assertEqual(v2_docs[1]["concursos"], ["BCB_2027_EF"])
 
     def test_merge_source_catalog_extensions_preserves_confirmed_v2_links_and_is_idempotent(self):
         registry = kc.read(kc.ROOT / "shared/knowledge-id-registry.json")

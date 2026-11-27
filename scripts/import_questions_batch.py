@@ -574,8 +574,14 @@ def inspect_and_import_mongo(
             mongo_doc["classification"]["revision"] = Int64(int(mongo_doc["classification"]["revision"]))
             mongo_doc["classification"]["catalog_version"] = Int64(int(mongo_doc["classification"]["catalog_version"]))
             mongo_doc["validity"]["revision"] = Int64(int(mongo_doc["validity"]["revision"]))
-            mongo_doc["grading"]["max_score"] = Int64(int(mongo_doc["grading"]["max_score"]))
-            mongo_doc["grading"]["pass_score"] = Int64(int(mongo_doc["grading"]["pass_score"]))
+            def _score_bson(v):
+                if isinstance(v, (int, Int64)) and not isinstance(v, bool):
+                    return Int64(int(v))
+                fv = float(v)
+                return Int64(int(fv)) if fv.is_integer() else fv
+
+            mongo_doc["grading"]["max_score"] = _score_bson(mongo_doc["grading"]["max_score"])
+            mongo_doc["grading"]["pass_score"] = _score_bson(mongo_doc["grading"]["pass_score"])
             mongo_doc["correct_answer_indices"] = [Int64(int(i)) for i in mongo_doc["correct_answer_indices"]]
 
             up_res = q_coll.update_one(
@@ -629,6 +635,8 @@ def inspect_and_import_mongo(
 
 
 def main(argv: list[str] | None = None) -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mongo-uri", default=os.environ.get("MONGODB_URI", ""))
     parser.add_argument("--target-db", default=os.environ.get("MONGODB_DB_NAME") or "cogniva")

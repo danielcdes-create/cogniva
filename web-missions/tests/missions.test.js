@@ -962,6 +962,8 @@ test('style.css enforces WCAG 2.1 AA (>= 4.5:1) across dark theater tokens, stat
     const ratio = contrastRatio(fg, bg);
     assert.ok(ratio >= 4.5, `${label} contrast ${ratio.toFixed(2)}:1 must be >= 4.5:1`);
   }
+  const borderContrast = contrastRatio(vars['--line'], vars['--surface-elevated']);
+  assert.ok(borderContrast >= 3.0, `--line on --surface-elevated contrast ${borderContrast.toFixed(2)}:1 must be >= 3.0:1 (WCAG 1.4.11)`);
   assert.match(css, /:focus-visible/);
   assert.match(css, /cursor:\s*not-allowed/);
   assert.match(css, /aspect-ratio:\s*16\s*\/\s*9/);
@@ -1257,6 +1259,7 @@ test('real human questions send QuestionDto.question_revision to /api/v1/quiz/su
   assert.equal(sentPayload.attempts[0].is_correct, true);
   assert.equal(sentPayload.attempts[0].confidence_level, 3);
   assert.equal(sentPayload.attempts[0].confidence_explicit, true);
+  assert.equal(sentPayload.attempts[0].declared_confidence, 'HIGH');
   assert.equal(sentPayload.attempts[0].quiz_mode, 'STANDARD');
   assert.equal(sentPayload.attempts[0].canonical_subject_id, 'MFIN');
   assert.equal(sentPayload.attempts[0].canonical_topic_id, 'MFIN_07_001');
@@ -1265,13 +1268,23 @@ test('real human questions send QuestionDto.question_revision to /api/v1/quiz/su
   assert.match(main.textContent, /Resposta correta no acervo oficial!/);
   assert.match(main.textContent, /1\/15/);
 
-  // Advance to 2nd human question and answer wrong to verify review feedback branch
+  // Advance to 2nd human question without clicking confidence -> must NOT fabricate confidence from Q1!
   submitMode = 'normal';
   findButton(main, 'Próxima questão real').click();
   assert.match(main.textContent, /QUESTÃO 2 DE 2/);
-  findButton(main, 'Certo').click();
+  const confBtnsQ2 = main.querySelectorAll('.confidence-btn');
+  assert.equal(confBtnsQ2.length, 5);
+  assert.ok(confBtnsQ2.every(b => b.getAttribute('aria-pressed') === 'false'));
+  const certoBtnQ2 = findButton(main, 'Certo');
+  assert.equal(certoBtnQ2.getAttribute('aria-pressed'), 'false');
+  certoBtnQ2.click();
+  assert.equal(findButton(main, 'Certo').getAttribute('aria-pressed'), 'true');
   findButton(main, 'Confirmar resposta formal').click();
   await flush();
+  const submitCallQ2 = calls.filter(c => c.url === '/api/v1/quiz/submit-batch').at(-1);
+  const sentPayloadQ2 = JSON.parse(submitCallQ2.opts.body);
+  assert.equal(sentPayloadQ2.attempts[0].confidence_explicit, false);
+  assert.equal(sentPayloadQ2.attempts[0].declared_confidence, null);
   assert.match(main.textContent, /Resposta incorreta — revise o fundamento oficial/);
   assert.match(main.textContent, /2\/15/);
 });

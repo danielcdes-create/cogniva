@@ -43,6 +43,8 @@ pub struct UserDocument {
     pub daily_study_hours_target: f64,
     #[serde(default)]
     pub onboarding_completed: bool,
+    #[serde(default)]
+    pub deleting_account: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<bson::DateTime>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

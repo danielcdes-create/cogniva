@@ -211,7 +211,10 @@ pub fn evaluate_from_activities(activities: &[UserActivityDocument]) -> FatigueR
             if s.is_blank || !s.modo_sessao.eq_ignore_ascii_case("SIMULADO") {
                 continue;
             }
-            let Some(elapsed) = s.elapsed_session_seconds else {
+            let Some(elapsed) = s
+                .elapsed_session_seconds
+                .filter(|&e| (0..=86_400).contains(&e))
+            else {
                 continue;
             };
             let entry = sessions
@@ -238,7 +241,10 @@ pub fn evaluate_from_activities(activities: &[UserActivityDocument]) -> FatigueR
     let mut late_min_sum = 0.0f64;
 
     for obs in sessions.values() {
-        if obs.interrupted || (obs.max_elapsed < 5400 && obs.events.len() < 40) {
+        if obs.interrupted
+            || obs.max_elapsed < 1800
+            || (obs.max_elapsed < 5400 && obs.events.len() < 40)
+        {
             continue;
         }
         qualifying_sessions += 1;
@@ -421,6 +427,7 @@ mod tests {
             question_id: ObjectId::new(),
             datas: ActivityDates {
                 ultima_sessao: now,
+                ultima_resposta_em: Some(now),
                 ultima_revisao: None,
                 data_primeira_sessao: now,
                 data_primeiro_acerto: None,

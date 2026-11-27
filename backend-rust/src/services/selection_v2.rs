@@ -428,9 +428,14 @@ pub async fn generate(
     let mut analogous_ids = HashSet::new();
     let questions = match req.mode {
         QuizMode::Shuffle => {
+            let fetch_limit = if exam.is_some() {
+                800
+            } else {
+                (quantity * 12).clamp(160, 800)
+            };
             let candidates = exclude_holdout_for_practice(
                 req.user_id,
-                pool(state, req.user_id, filter, 2000).await?,
+                pool(state, req.user_id, filter, fetch_limit).await?,
                 quantity,
             );
             let recent_window = (quantity * 4).clamp(40, 150);
@@ -438,7 +443,7 @@ pub async fn generate(
             apply_anti_repetition_tiers(
                 candidates,
                 &buckets,
-                if exam.is_some() { 2000 } else { quantity },
+                if exam.is_some() { 800 } else { quantity },
             )
         }
         QuizMode::Simulado => {
@@ -550,9 +555,14 @@ pub async fn generate(
             selected
         }
         QuizMode::AdaptiveLoop => {
+            let fetch_limit = if exam.is_some() {
+                800
+            } else {
+                (quantity * 12).clamp(160, 800)
+            };
             let candidates = exclude_holdout_for_practice(
                 req.user_id,
-                pool(state, req.user_id, filter, 2000).await?,
+                pool(state, req.user_id, filter, fetch_limit).await?,
                 quantity,
             );
             let mut act_cursor = state
@@ -597,14 +607,18 @@ pub async fn generate(
                         || act.high_confidence_error_flag
                         || topic_failed_transfer
                     {
-                        let gap_rank = (if act.high_confidence_error_flag { 40 } else { 0 })
-                            + (if topic_failed_transfer { 30 } else { 0 })
+                        let gap_rank = (if act.high_confidence_error_flag {
+                            40
+                        } else {
+                            0
+                        }) + (if topic_failed_transfer { 30 } else { 0 })
                             + (if act.error_notebook() { 15 } else { 0 });
                         persistent_gaps.push((gap_rank, hex, q));
                     } else if act.review_due(now)
                         || (act.memory_stability_days > 0.0
                             && crate::services::retention_engine::retrievability(
-                                (now - act.datas.ultima_sessao).num_hours().max(0) as f64 / 24.0,
+                                (now - act.effective_last_answered()).num_hours().max(0) as f64
+                                    / 24.0,
                                 act.memory_stability_days,
                             ) <= 0.90)
                     {
@@ -636,7 +650,12 @@ pub async fn generate(
             .collect()
         }
         QuizMode::StrategyBattery => {
-            let mut candidates = pool(state, req.user_id, filter, 2000).await?;
+            let fetch_limit = if exam.is_some() {
+                800
+            } else {
+                (quantity * 12).clamp(160, 800)
+            };
+            let mut candidates = pool(state, req.user_id, filter, fetch_limit).await?;
             let pool_len = candidates.len().max(5);
             let buckets = fetch_user_history_buckets(&state.db, req.user_id, 80).await?;
             // Prioriza questões reservadas (Holdout) ainda não respondidas para treino fiel de decisão
@@ -649,13 +668,18 @@ pub async fn generate(
                 let attempted = buckets.all_attempted_ids.contains(&q.id);
                 (!reserved, attempted)
             });
-            candidates.truncate(if exam.is_some() { 2000 } else { quantity });
+            candidates.truncate(if exam.is_some() { 800 } else { quantity });
             candidates
         }
         QuizMode::Entry60s => {
+            let fetch_limit = if exam.is_some() {
+                600
+            } else {
+                (quantity * 12).clamp(160, 600)
+            };
             let candidates = exclude_holdout_for_practice(
                 req.user_id,
-                pool(state, req.user_id, filter, 1500).await?,
+                pool(state, req.user_id, filter, fetch_limit).await?,
                 quantity,
             );
             let mut act_cursor = state
@@ -673,13 +697,13 @@ pub async fn generate(
                 if !has_answered {
                     continue;
                 }
-                if (now - act.datas.ultima_sessao).num_hours() < 18 {
+                let last_ans = act.effective_last_answered();
+                if (now - last_ans).num_hours() < 18 {
                     recent_qids.insert(act.question_id);
                 }
                 if let Some(tid) = act.canonical_topic_id.as_deref() {
                     familiar_topics.insert(tid.to_string());
-                    let elapsed_days =
-                        (now - act.datas.ultima_sessao).num_hours().max(0) as f64 / 24.0;
+                    let elapsed_days = (now - last_ans).num_hours().max(0) as f64 / 24.0;
                     if act.review_due(now)
                         || (act.memory_stability_days > 0.0
                             && crate::services::retention_engine::retrievability(
@@ -857,15 +881,17 @@ pub async fn generate(
                     eligible.sort_by(|a, b| {
                         b.high_confidence_error_flag
                             .cmp(&a.high_confidence_error_flag)
-                            .then_with(|| a.datas.ultima_sessao.cmp(&b.datas.ultima_sessao))
+                            .then_with(|| {
+                                a.effective_last_answered()
+                                    .cmp(&b.effective_last_answered())
+                            })
                             .then_with(|| a.percentual_acertos.total_cmp(&b.percentual_acertos))
                     });
                 }
                 QuizMode::SrsReview => {
                     eligible.sort_by(|a, b| {
-                        a.datas
-                            .ultima_sessao
-                            .cmp(&b.datas.ultima_sessao)
+                        a.effective_last_answered()
+                            .cmp(&b.effective_last_answered())
                             .then_with(|| a.points_with_decay.total_cmp(&b.points_with_decay))
                             .then_with(|| a.percentual_acertos.total_cmp(&b.percentual_acertos))
                     });
@@ -874,14 +900,18 @@ pub async fn generate(
                     eligible.sort_by(|a, b| {
                         a.percentual_acertos
                             .total_cmp(&b.percentual_acertos)
-                            .then_with(|| a.datas.ultima_sessao.cmp(&b.datas.ultima_sessao))
+                            .then_with(|| {
+                                a.effective_last_answered()
+                                    .cmp(&b.effective_last_answered())
+                            })
                             .then_with(|| b.quantidade_erros.cmp(&a.quantidade_erros))
                     });
                 }
             }
+            eligible.truncate((quantity * 8).clamp(120, 800));
             let ids: Vec<_> = eligible.iter().map(|a| a.question_id).collect();
             filter.insert("_id", doc! { "$in": ids });
-            let candidates = pool(state, req.user_id, filter, 2000).await?;
+            let candidates = pool(state, req.user_id, filter, 800).await?;
             let mut by_id: HashMap<_, _> = candidates.into_iter().map(|q| (q.id, q)).collect();
             let mut available: Vec<_> = eligible
                 .into_iter()
@@ -912,9 +942,14 @@ pub async fn generate(
             }
         }
         _ => {
+            let fetch_limit = if exam.is_some() {
+                800
+            } else {
+                (quantity * 12).clamp(160, 800)
+            };
             let candidates = exclude_holdout_for_practice(
                 req.user_id,
-                pool(state, req.user_id, filter, 2000).await?,
+                pool(state, req.user_id, filter, fetch_limit).await?,
                 quantity,
             );
             let recent_window = (quantity * 4).clamp(40, 150);
@@ -922,7 +957,7 @@ pub async fn generate(
             apply_anti_repetition_tiers(
                 candidates,
                 &buckets,
-                if exam.is_some() { 2000 } else { quantity },
+                if exam.is_some() { 800 } else { quantity },
             )
         }
     };
@@ -1039,6 +1074,7 @@ mod tests {
             question_id: ObjectId::new(),
             datas: ActivityDates {
                 ultima_sessao: now,
+                ultima_resposta_em: Some(now),
                 ultima_revisao: None,
                 data_primeira_sessao: now,
                 data_primeiro_acerto: None,
@@ -1090,6 +1126,7 @@ mod tests {
             question_id: ObjectId::new(),
             datas: ActivityDates {
                 ultima_sessao: now,
+                ultima_resposta_em: Some(now),
                 ultima_revisao: None,
                 data_primeira_sessao: now,
                 data_primeiro_acerto: Some(now),

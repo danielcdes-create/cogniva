@@ -27,17 +27,18 @@ pub fn evaluate_daily_maintenance_item(
     if item.quantidade_praticas <= 0 || item.spaced_repetition_interval <= 0 {
         return (None, false);
     }
+    let anchor = item.effective_last_answered();
     let clamped_days = item.spaced_repetition_interval.clamp(1, 3650) as i64;
     let retention_due = item.memory_stability_days > 0.0
         && crate::services::retention_engine::retrievability(
-            (now - item.datas.ultima_sessao).num_hours().max(0) as f64 / 24.0,
+            (now - anchor).num_hours().max(0) as f64 / 24.0,
             item.memory_stability_days,
         ) <= 0.90;
     let needs_review = item.revisao_necessaria
         || retention_due
-        || now >= item.datas.ultima_sessao + chrono::Duration::days(clamped_days);
+        || now >= anchor + chrono::Duration::days(clamped_days);
 
-    let new_points_with_decay = calculate_decay(item.points, item.datas.ultima_sessao, now);
+    let new_points_with_decay = calculate_decay(item.points, anchor, now);
     let decay_update = ((new_points_with_decay - item.points_with_decay).abs() > 1e-5)
         .then_some(new_points_with_decay);
     let mark_review = needs_review && !item.revisao_necessaria;
@@ -53,7 +54,10 @@ pub async fn run_daily_reviews_decay_and_countdown(
     let now = Utc::now();
     let act_coll = db.collection::<Document>("userActivityLog");
 
-    let mut cursor = act_coll.find(doc! {}).await?;
+    let mut cursor = act_coll
+        .find(doc! {})
+        .projection(doc! { "pastSessions.ack": 0, "pastSessions.payload_sha256": 0 })
+        .await?;
     let mut scanned_records = 0usize;
     let mut skipped_malformed = 0usize;
     let mut marked_for_review = 0usize;
@@ -185,6 +189,7 @@ mod tests {
             question_id: ObjectId::new(),
             datas: ActivityDates {
                 ultima_sessao: last_session,
+                ultima_resposta_em: Some(last_session),
                 ultima_revisao: None,
                 data_primeira_sessao: last_session,
                 data_primeiro_acerto: None,

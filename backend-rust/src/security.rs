@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 pub const MOBILE_SESSION_TTL_SECS: i64 = 30 * 24 * 60 * 60;
 pub const WEB_SESSION_TTL_SECS: i64 = 12 * 60 * 60;
 pub const WEB_COOKIE_NAME: &str = "cogniva_web_session";
+pub const MISSIONS_COOKIE_NAME: &str = "cogniva_missions_session";
 pub const LEGACY_ADMIN_COOKIE_NAME: &str = "cogniva_admin_session";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -108,34 +109,58 @@ pub fn verify_session_token(
     Ok(claims)
 }
 
-pub fn extract_web_cookies(headers: &HeaderMap) -> Vec<String> {
-    let mut primary = Vec::new();
-    let mut legacy = Vec::new();
+pub fn extract_named_cookies(headers: &HeaderMap, cookie_name: &str) -> Vec<String> {
+    let prefix = format!("{cookie_name}=");
+    let mut found = Vec::new();
     for header_val in headers.get_all(header::COOKIE) {
         let Ok(raw) = header_val.to_str() else {
             continue;
         };
         for pair in raw.split(';') {
             let trimmed = pair.trim();
-            if let Some(val) = trimmed.strip_prefix("cogniva_web_session=") {
+            if let Some(val) = trimmed.strip_prefix(&prefix) {
                 let clean = val.trim().trim_matches('"').trim();
-                if !clean.is_empty() && !primary.iter().any(|existing| existing == clean) {
-                    primary.push(clean.to_string());
-                }
-            } else if let Some(val) = trimmed.strip_prefix("cogniva_admin_session=") {
-                let clean = val.trim().trim_matches('"').trim();
-                if !clean.is_empty() && !legacy.iter().any(|existing| existing == clean) {
-                    legacy.push(clean.to_string());
+                if !clean.is_empty() && !found.iter().any(|existing| existing == clean) {
+                    found.push(clean.to_string());
                 }
             }
         }
     }
-    for item in legacy {
-        if !primary.iter().any(|existing| existing == &item) {
-            primary.push(item);
+    found
+}
+
+pub fn extract_web_cookies_for_route(headers: &HeaderMap, prefer_missions: bool) -> Vec<String> {
+    let web = extract_named_cookies(headers, WEB_COOKIE_NAME);
+    let missions = extract_named_cookies(headers, MISSIONS_COOKIE_NAME);
+    let legacy = extract_named_cookies(headers, LEGACY_ADMIN_COOKIE_NAME);
+    let mut ordered = Vec::new();
+    let groups = if prefer_missions {
+        [missions, web, legacy]
+    } else {
+        [web, missions, legacy]
+    };
+    for grp in groups {
+        for item in grp {
+            if !ordered.iter().any(|existing| existing == &item) {
+                ordered.push(item);
+            }
         }
     }
-    primary
+    ordered
+}
+
+pub fn extract_web_cookies(headers: &HeaderMap) -> Vec<String> {
+    extract_web_cookies_for_route(headers, false)
+}
+
+pub fn has_missions_cookie(headers: &HeaderMap) -> bool {
+    headers
+        .get_all(header::COOKIE)
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .flat_map(|raw| raw.split(';'))
+        .map(str::trim)
+        .any(|pair| pair.starts_with("cogniva_missions_session="))
 }
 
 pub fn has_legacy_admin_cookie(headers: &HeaderMap) -> bool {
@@ -324,6 +349,7 @@ pub fn verify_csrf_same_origin(
 async fn resolve_db_session(
     state: &AppState,
     claims: &TokenClaims,
+    allow_deleting_account: bool,
 ) -> Result<SessionUser, AppError> {
     let now = bson::DateTime::now();
     let session = state
@@ -346,6 +372,12 @@ async fn resolve_db_session(
         .find_one(doc! { "user_id": claims.uid })
         .await?
         .ok_or_else(|| AppError::Unauthorized("Conta da sessão não encontrada".into()))?;
+
+    if user.deleting_account && !allow_deleting_account {
+        return Err(AppError::Unauthorized(
+            "Exclusão definitiva da conta em andamento".into(),
+        ));
+    }
 
     let is_admin = user.is_admin()
         || user
@@ -412,16 +444,23 @@ pub async fn authenticate(
     mut request: Request,
     next: Next,
 ) -> Result<Response, AppError> {
+    let path = request.uri().path();
+    let allow_deleting_account = (request.method() == Method::DELETE
+        && path == "/api/v1/auth/account")
+        || path.ends_with("/logout")
+        || path.ends_with("/web-logout");
+    let prefer_missions = !path.starts_with("/api/v1/admin");
+
     let mut used_cookie_auth = false;
     let user = if let Some(bearer) = extract_bearer_token(request.headers()) {
         let claims = verify_session_token(&state.config.jwt_secret, &bearer, "mobile")?;
-        resolve_db_session(&state, &claims).await?
+        resolve_db_session(&state, &claims, allow_deleting_account).await?
     } else if request.headers().contains_key(header::AUTHORIZATION) {
         return Err(AppError::Unauthorized(
             "Cabeçalho Authorization inválido".into(),
         ));
     } else {
-        let cookies = extract_web_cookies(request.headers());
+        let cookies = extract_web_cookies_for_route(request.headers(), prefer_missions);
         if cookies.is_empty() {
             return Err(AppError::Unauthorized("Sessão obrigatória".into()));
         }
@@ -433,7 +472,12 @@ pub async fn authenticate(
         let mut resolved = None;
         for token in cookies {
             if let Ok(claims) = verify_session_token(&state.config.jwt_secret, &token, "web") {
-                if let Ok(session_user) = resolve_db_session(&state, &claims).await {
+                if let Ok(session_user) =
+                    resolve_db_session(&state, &claims, allow_deleting_account).await
+                {
+                    if path.starts_with("/api/v1/admin") && !session_user.is_admin {
+                        continue;
+                    }
                     resolved = Some(session_user);
                     break;
                 }
@@ -498,6 +542,23 @@ mod tests {
             extract_web_cookies(&headers),
             vec!["stale", "fresh", "legacy_tok"]
         );
+
+        let mut missions_headers = HeaderMap::new();
+        missions_headers.append(
+            header::COOKIE,
+            "cogniva_web_session=admin_tok; cogniva_missions_session=student_tok"
+                .parse()
+                .unwrap(),
+        );
+        assert_eq!(
+            extract_web_cookies_for_route(&missions_headers, true),
+            vec!["student_tok", "admin_tok"]
+        );
+        assert_eq!(
+            extract_web_cookies_for_route(&missions_headers, false),
+            vec!["admin_tok", "student_tok"]
+        );
+        assert!(has_missions_cookie(&missions_headers));
     }
 
     #[test]

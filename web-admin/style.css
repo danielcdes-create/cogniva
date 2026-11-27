@@ -60,7 +60,7 @@ button,
 .button-link {
   cursor: pointer;
   min-height: 42px;
-  border: 1px solid #cdd8df;
+  border: 1px solid #758691;
   background: #ffffff;
   border-radius: 7px;
   padding: 9px 15px;
@@ -169,7 +169,7 @@ input:not([type=checkbox]):not([type=radio]), select, textarea {
   width: 100%;
   min-height: 43px;
   background: #ffffff;
-  border: 1px solid #cdd8df;
+  border: 1px solid #758691;
   border-radius: 7px;
   padding: 10px 12px;
   color: var(--ink);

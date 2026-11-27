@@ -72,8 +72,9 @@ class DeployWorkflowAndNginxConfigTest(unittest.TestCase):
         bootstrap = (ROOT / "deploy/bootstrap-ip-tls.sh").read_text(encoding="utf-8")
 
         self.assertIn("admin/questions/import/assist", nginx)
+        self.assertIn("quiz/ctv/evaluate$", nginx)
         self.assertIn(
-            "location ~ ^/api/v1/auth/(login|register|guest|logout|web-session|web-logout|account|native-session|missions-session|missions-register|missions-logout)$",
+            "location ~ ^/api/v1/auth/(login|register|guest|logout|web-session|web-logout|account|native-session)$",
             nginx,
         )
         self.assertIn('Retry-After "15"', nginx)

@@ -887,6 +887,7 @@ data class CtvEvaluateRequestDto(
     @SerialName("declared_confidence") val declaredConfidence: DeclaredConfidence? = null,
     @SerialName("cognitive_strategy") val cognitiveStrategy: CognitiveStrategy? = null,
     @SerialName("confidence_level") val confidenceLevel: Int = 2,
+    @SerialName("confidence_explicit") val confidenceExplicit: Boolean = false,
     @SerialName("session_ctv_count") val sessionCtvCount: Int = 0,
     @SerialName("attempts_since_last_ctv") val attemptsSinceLastCtv: Int = 0,
     @SerialName("force_post_instruction") val forcePostInstruction: Boolean = false
@@ -1033,14 +1034,17 @@ data class RecommendationFeedbackRequestDto(
     val outcome: String,
     @SerialName("priority_topic_id") val priorityTopicId: String? = null,
     @SerialName("decision_rule_code") val decisionRuleCode: String? = null,
-    @SerialName("additional_seconds") val additionalSeconds: Int = 0,
+    @SerialName("additional_active_seconds") val additionalSeconds: Int = 0,
     @SerialName("occurred_at") val occurredAt: String? = null
 )
 
 @Serializable
 data class RecommendationFeedbackResponseDto(
-    val status: String,
-    @SerialName("recommendation_id") val recommendationId: String
+    val status: String = "recorded",
+    @SerialName("recommendation_id") val recommendationId: String = "",
+    val outcome: String = "",
+    @SerialName("additional_active_seconds") val additionalActiveSeconds: Int = 0,
+    @SerialName("subsequent_unseen_correct_observed") val subsequentUnseenCorrectObserved: Boolean = false
 )
 
 @Serializable
@@ -1078,6 +1082,7 @@ data class GroundingEvidenceSummaryDto(
     @SerialName("raw_correct_hits") val rawCorrectHits: Int = 0,
     @SerialName("evaluable_grounding_hits") val evaluableGroundingHits: Int = 0,
     @SerialName("unknown_grounding_hits") val unknownGroundingHits: Int = 0,
+    @SerialName("retrospective_legacy_hits") val retrospectiveLegacyHits: Int = 0,
     @SerialName("valid_conceptual_hits") val validConceptualHits: Int = 0,
     @SerialName("valid_functional_strategy_hits") val validFunctionalStrategyHits: Int = 0,
     @SerialName("divergent_rationale_hits") val divergentRationaleHits: Int = 0,

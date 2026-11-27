@@ -193,13 +193,11 @@ pub fn project_units(activity: &Document, question: &Document) -> Vec<UnitQuesti
     let has_curated_ch = q.evidence_challenge.is_some();
     let effective_ch = q.effective_evidence_challenge();
     let is_fragile_pre_exposure = |e: &Document| -> bool {
-        matches!(
-            e.get_str("declared_confidence").ok(),
-            Some("GUESS" | "LOW")
-        ) || matches!(
-            e.get_str("cognitive_strategy").ok(),
-            Some("RANDOM_GUESS" | "PATTERN_RECOGNITION" | "INTUITION")
-        )
+        matches!(e.get_str("declared_confidence").ok(), Some("GUESS" | "LOW"))
+            || matches!(
+                e.get_str("cognitive_strategy").ok(),
+                Some("RANDOM_GUESS" | "PATTERN_RECOGNITION" | "INTUITION")
+            )
     };
     let is_grounded_pre_exposure = |e: &Document| -> bool {
         !matches!(e.get_str("declared_confidence").ok(), Some("GUESS" | "LOW"))

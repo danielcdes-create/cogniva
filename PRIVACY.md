@@ -32,7 +32,7 @@ O Cogniva **não coleta** localização GPS, agenda de contatos, microfone, câm
 Em cumprimento ao **Art. 18, incisos IV e VI da LGPD**, o titular pode exercer a eliminação imediata de sua conta e de todos os seus dados pessoais a qualquer momento, **diretamente pelo aplicativo Android** (em **Ajustes → Privacidade e LGPD → Excluir minha conta e dados pessoais**, confirmando `EXCLUIR`) ou via endpoint autenticado `DELETE /api/v1/auth/account` com corpo `{"confirm": "EXCLUIR"}`:
 
 1. **Eliminação Física Imediata dos Dados Pessoais:** A confirmação anonimiza eventuais relatos técnicos prévios, remove todas as coleções derivadas do titular e, por último, apaga as sessões e o registro da conta no banco `cogniva` e no armazenamento local do dispositivo:
-   - Todo o histórico de resoluções, progresso em Missões, recibos de sincronização, avaliações discursivas e métricas SRS (`userActivityLog`, `learning_records`, `mission_progress`, `attempt_receipts` e `answer_evaluations`);
+   - Todo o histórico de resoluções, progresso em Missões, verificações complementares e recomendações (`userActivityLog`, `learning_records`, `mission_progress`, `ctv_offers`, `conceptual_transfer_attempts`, `study_recommendation_events`, `attempt_receipts` e `answer_evaluations`);
    - Concursos, revisões, editais e compatibilidades personalizadas pelo titular (`user_exams`, `exam_revisions` de usuário e `question_exam_compatibility`);
    - Orçamentos individuais de IA, rascunhos privados e operações vinculadas ao titular (`tutor_budgets`, `catalog_editor_drafts`, `question_import_commits`, `question_import_ai_requests` e `question_commands`);
    - Todas as sessões ativas (`sessions`) e a conta, credenciais Argon2id e preferências do titular (`usuarios`).

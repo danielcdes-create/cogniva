@@ -297,6 +297,7 @@ export async function openMission(missionId, {resume = true, allowWhenBusy = fal
 }
 
 export async function exitMissionToCatalog() {
+  if (state.busy) return;
   const doc = boundDoc || document;
   const videoEl = doc.getElementById('active-scene-video');
   const currentPosMs = videoEl && Number.isFinite(videoEl.currentTime)
@@ -449,6 +450,8 @@ async function openRelatedHumanQuestions() {
       index: 0,
       selectedIndex: null,
       confidence: 2,
+      declaredConfidence: null,
+      confidenceExplicit: false,
       submittedResult: null,
       questionStartedAtMs: Date.now(),
     };
@@ -493,7 +496,8 @@ async function submitRealPracticeAnswer() {
             is_correct: isCorrect,
             time_spent_seconds: spentSec,
             confidence_level: ps.confidence,
-            confidence_explicit: true,
+            confidence_explicit: Boolean(ps.confidenceExplicit),
+            declared_confidence: ps.confidenceExplicit ? ps.declaredConfidence : null,
             session_uuid: crypto.randomUUID(),
             quiz_mode: 'STANDARD',
             canonical_subject_id: q.canonical_subject_id || 'MFIN',
@@ -889,6 +893,7 @@ function renderPracticePanel() {
           {
             type: 'button',
             class: cls,
+            'aria-pressed': String(ps.selectedIndex === idx),
             disabled: Boolean(submitted),
             onclick: () => {
               ps.selectedIndex = idx;
@@ -905,23 +910,29 @@ function renderPracticePanel() {
         'div',
         {class: 'confidence-row', role: 'group', 'aria-label': 'Nível de confiança'},
         ...[
-          [1, '1 · Chute / Dúvida'],
-          [2, '2 · Conhecimento parcial'],
-          [3, '3 · Certeza fundamentada'],
-        ].map(([lvl, text]) =>
-          h(
+          ['GUESS', 1, 'Chute puro'],
+          ['LOW', 1, '1 · Baixa confiança'],
+          ['MEDIUM', 2, '2 · Conhecimento parcial'],
+          ['HIGH', 3, '3 · Certeza fundamentada'],
+          ['VERY_HIGH', 3, 'Certeza plena'],
+        ].map(([decl, lvl, text]) => {
+          const isSelected = Boolean(ps.confidenceExplicit && ps.declaredConfidence === decl);
+          return h(
             'button',
             {
               type: 'button',
-              class: `confidence-btn ${ps.confidence === lvl ? 'active' : ''}`,
+              class: `confidence-btn ${isSelected ? 'active' : ''}`,
+              'aria-pressed': String(isSelected),
               onclick: () => {
                 ps.confidence = lvl;
+                ps.declaredConfidence = decl;
+                ps.confidenceExplicit = true;
                 renderMissionsView();
               },
             },
             text
-          )
-        )
+          );
+        })
       ),
     !submitted &&
       h(
@@ -950,6 +961,9 @@ function renderPracticePanel() {
               onclick: () => {
                 ps.index += 1;
                 ps.selectedIndex = null;
+                ps.confidence = 2;
+                ps.declaredConfidence = null;
+                ps.confidenceExplicit = false;
                 ps.submittedResult = null;
                 ps.questionStartedAtMs = Date.now();
                 renderMissionsView();
@@ -1469,6 +1483,7 @@ function renderPlayerView(detail) {
                 {
                   type: 'button',
                   class: cls,
+                  'aria-pressed': String(Boolean(answered && opt.option_id === answered.selected_option_id)),
                   disabled: state.busy,
                   onclick: () => selectDecisionOption(scene, interaction, opt.option_id),
                 },

@@ -154,7 +154,8 @@ pub fn evaluate_ctv_independence(input: &CtvIndependenceInput) -> CtvIndependenc
     }
 
     let timing_norm = input.verification_timing.trim().to_ascii_uppercase();
-    if !input.exposure_history_known || timing_norm == "UNKNOWN_CONDITION" || timing_norm.is_empty() {
+    if !input.exposure_history_known || timing_norm == "UNKNOWN_CONDITION" || timing_norm.is_empty()
+    {
         return CtvIndependenceVerdict {
             counts_as_independent_attempt: false,
             counts_as_independent_correct: false,
@@ -176,7 +177,9 @@ pub fn evaluate_ctv_independence(input: &CtvIndependenceInput) -> CtvIndependenc
         };
     }
 
-    if input.verification_mode == VerificationMode::IntentionalReview || input.was_previously_exposed {
+    if input.verification_mode == VerificationMode::IntentionalReview
+        || input.was_previously_exposed
+    {
         return CtvIndependenceVerdict {
             counts_as_independent_attempt: false,
             counts_as_independent_correct: false,
@@ -244,13 +247,67 @@ fn normalize_compact_text(raw: &str) -> String {
 
 fn domain_content_tokens(raw: &str) -> HashSet<String> {
     const STOPWORDS: &[&str] = &[
-        "para", "como", "sobre", "entre", "qual", "quais", "quando", "onde", "pelo", "pela",
-        "pelos", "pelas", "uma", "uns", "umas", "dos", "das", "nos", "nas", "com", "sem",
-        "mais", "menos", "maior", "menor", "assinale", "opcao", "opção", "correta", "correto",
-        "errado", "errada", "certo", "acerca", "relacao", "relação", "segundo", "conforme",
-        "pode", "deve", "sendo", "sera", "será", "item", "questao", "questão", "alternativa",
-        "aplicacao", "aplicação", "criterio", "critério", "cobrado", "oficial", "gabarito",
-        "significado", "definicao", "definição", "conceito", "apresenta", "informa", "pergunta",
+        "para",
+        "como",
+        "sobre",
+        "entre",
+        "qual",
+        "quais",
+        "quando",
+        "onde",
+        "pelo",
+        "pela",
+        "pelos",
+        "pelas",
+        "uma",
+        "uns",
+        "umas",
+        "dos",
+        "das",
+        "nos",
+        "nas",
+        "com",
+        "sem",
+        "mais",
+        "menos",
+        "maior",
+        "menor",
+        "assinale",
+        "opcao",
+        "opção",
+        "correta",
+        "correto",
+        "errado",
+        "errada",
+        "certo",
+        "acerca",
+        "relacao",
+        "relação",
+        "segundo",
+        "conforme",
+        "pode",
+        "deve",
+        "sendo",
+        "sera",
+        "será",
+        "item",
+        "questao",
+        "questão",
+        "alternativa",
+        "aplicacao",
+        "aplicação",
+        "criterio",
+        "critério",
+        "cobrado",
+        "oficial",
+        "gabarito",
+        "significado",
+        "definicao",
+        "definição",
+        "conceito",
+        "apresenta",
+        "informa",
+        "pergunta",
     ];
     raw.to_lowercase()
         .chars()
@@ -329,7 +386,10 @@ pub fn detect_paraphrase_or_preserved_cues(
     false
 }
 
-fn rule_overlap_ratio(source: &QuestionAlignmentProfile, candidate: &QuestionAlignmentProfile) -> f64 {
+fn rule_overlap_ratio(
+    source: &QuestionAlignmentProfile,
+    candidate: &QuestionAlignmentProfile,
+) -> f64 {
     if !source.legal_provisions.is_empty() && !candidate.legal_provisions.is_empty() {
         let shared_prov = source.legal_provisions.iter().any(|sp| {
             candidate
@@ -416,14 +476,14 @@ pub fn evaluate_candidate_alignment(
         };
     }
 
-    let app_bonus = if is_definition_prompt(&source.stem) && is_application_scenario(&candidate.stem)
-    {
-        35
-    } else if is_application_scenario(&candidate.stem) {
-        15
-    } else {
-        0
-    };
+    let app_bonus =
+        if is_definition_prompt(&source.stem) && is_application_scenario(&candidate.stem) {
+            35
+        } else if is_application_scenario(&candidate.stem) {
+            15
+        } else {
+            0
+        };
 
     if source.target_concept_ambiguous {
         return CandidateAlignmentDecision::Accepted {
@@ -655,19 +715,15 @@ pub fn resolve_question_alignment_profile(
         || validation_status == "REJECTED"
         || quality_status == "SUSPENDED";
 
-    let has_ai_origin = raw
-        .get_array("origins")
-        .ok()
-        .is_some_and(|arr| {
-            arr.iter()
-                .filter_map(|b| b.as_document())
-                .any(|o| o.get_str("kind").ok() == Some("AI_GENERATED"))
-        })
-        || dmeta.and_then(|d| d.get_str("generation_origin").ok()) == Some("AI_ON_DEMAND");
+    let has_ai_origin = raw.get_array("origins").ok().is_some_and(|arr| {
+        arr.iter()
+            .filter_map(|b| b.as_document())
+            .any(|o| o.get_str("kind").ok() == Some("AI_GENERATED"))
+    }) || dmeta.and_then(|d| d.get_str("generation_origin").ok())
+        == Some("AI_ON_DEMAND");
 
-    let is_ai_unconfirmed_binding = has_ai_origin
-        && !classification_confirmed
-        && validation_status != "HUMAN_CONFIRMED";
+    let is_ai_unconfirmed_binding =
+        has_ai_origin && !classification_confirmed && validation_status != "HUMAN_CONFIRMED";
 
     let candidate_pool = if !primary_direct_concepts.is_empty() {
         primary_direct_concepts
@@ -900,7 +956,10 @@ mod tests {
             had_decisive_help: false,
             is_correct: true,
         });
-        assert_eq!((ok.independent_attempts_delta, ok.independent_correct_delta), (1, 1));
+        assert_eq!(
+            (ok.independent_attempts_delta, ok.independent_correct_delta),
+            (1, 1)
+        );
 
         // 2. Mesmas condições, resposta ERRADA -> +1 tentativa, 0 acertos!
         let err = evaluate_ctv_independence(&CtvIndependenceInput {
@@ -912,7 +971,13 @@ mod tests {
             had_decisive_help: false,
             is_correct: false,
         });
-        assert_eq!((err.independent_attempts_delta, err.independent_correct_delta), (1, 0));
+        assert_eq!(
+            (
+                err.independent_attempts_delta,
+                err.independent_correct_delta
+            ),
+            (1, 0)
+        );
         assert_eq!(err.classification_code, "INDEPENDENT_ERROR");
 
         // 3. Ver gabarito agora (dispensa) -> 0 tentativas, 0 acertos
@@ -925,7 +990,13 @@ mod tests {
             had_decisive_help: false,
             is_correct: false,
         });
-        assert_eq!((dism.independent_attempts_delta, dism.independent_correct_delta), (0, 0));
+        assert_eq!(
+            (
+                dism.independent_attempts_delta,
+                dism.independent_correct_delta
+            ),
+            (0, 0)
+        );
         assert_eq!(dism.classification_code, "EXPOSED_AND_DISMISSED");
 
         // 4. Apenas pré-carregada -> 0 tentativas, 0 acertos
@@ -938,7 +1009,13 @@ mod tests {
             had_decisive_help: false,
             is_correct: false,
         });
-        assert_eq!((pre.independent_attempts_delta, pre.independent_correct_delta), (0, 0));
+        assert_eq!(
+            (
+                pre.independent_attempts_delta,
+                pre.independent_correct_delta
+            ),
+            (0, 0)
+        );
         assert_eq!(pre.classification_code, "PRELOADED_NOT_DISPLAYED");
 
         // 5. Resposta após explicação decisiva -> 0 tentativas, 0 acertos (fixação pós-instrução)
@@ -951,7 +1028,13 @@ mod tests {
             had_decisive_help: true,
             is_correct: true,
         });
-        assert_eq!((post.independent_attempts_delta, post.independent_correct_delta), (0, 0));
+        assert_eq!(
+            (
+                post.independent_attempts_delta,
+                post.independent_correct_delta
+            ),
+            (0, 0)
+        );
         assert_eq!(post.classification_code, "POST_INSTRUCTION_FIXATION");
 
         // 6. Histórico legado incapaz de estabelecer ineditismo -> UNKNOWN_CONDITION
@@ -964,7 +1047,13 @@ mod tests {
             had_decisive_help: false,
             is_correct: true,
         });
-        assert_eq!((unk.independent_attempts_delta, unk.independent_correct_delta), (0, 0));
+        assert_eq!(
+            (
+                unk.independent_attempts_delta,
+                unk.independent_correct_delta
+            ),
+            (0, 0)
+        );
         assert_eq!(unk.classification_code, "UNKNOWN_CONDITION");
     }
 }

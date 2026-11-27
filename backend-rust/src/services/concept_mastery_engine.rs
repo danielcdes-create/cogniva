@@ -109,7 +109,10 @@ fn clamp01(v: f64) -> f64 {
     }
 }
 
-pub fn compute_fluency_score(avg_active_seconds: Option<f64>, reference_seconds: f64) -> Option<f64> {
+pub fn compute_fluency_score(
+    avg_active_seconds: Option<f64>,
+    reference_seconds: f64,
+) -> Option<f64> {
     let secs = avg_active_seconds.filter(|s| s.is_finite() && *s > 0.0)?;
     let ref_s = if reference_seconds.is_finite() && reference_seconds > 5.0 {
         reference_seconds
@@ -139,7 +142,8 @@ pub fn classify_concept_mastery_with_policy(
     let metacog = clamp01(1.0 - hce);
     let cons = clamp01(inputs.consistency);
     let retr = clamp01(inputs.retrievability);
-    let transfer_dim = (inputs.transfer_attempts > 0).then(|| clamp01(inputs.transfer_success_rate));
+    let transfer_dim =
+        (inputs.transfer_attempts > 0).then(|| clamp01(inputs.transfer_success_rate));
     let retention_dim = (inputs.attempts > 0).then_some(retr);
     let fluency_dim = if inputs.attempts > 0 {
         compute_fluency_score(inputs.avg_active_seconds, inputs.reference_seconds)
@@ -154,7 +158,8 @@ pub fn classify_concept_mastery_with_policy(
     {
         ConceptMasteryState::InsufficientEvidence
     } else {
-        let had_strong_mastery_profile = inputs.distinct_questions >= policy.min_distinct_for_demonstrated
+        let had_strong_mastery_profile = inputs.distinct_questions
+            >= policy.min_distinct_for_demonstrated
             && perf >= 0.75
             && comp >= 0.70
             && hce <= 0.15
@@ -184,7 +189,11 @@ pub fn classify_concept_mastery_with_policy(
             ConceptMasteryState::ConsolidatedMastery
         } else if had_strong_mastery_profile && retr >= policy.at_risk_retrievability_threshold {
             ConceptMasteryState::DemonstratedMastery
-        } else if perf >= 0.70 && comp >= 0.60 && hce < policy.high_conf_error_instability_threshold && cons >= 0.60 {
+        } else if perf >= 0.70
+            && comp >= 0.60
+            && hce < policy.high_conf_error_instability_threshold
+            && cons >= 0.60
+        {
             ConceptMasteryState::DevelopingMastery
         } else {
             ConceptMasteryState::EmergingKnowledge
