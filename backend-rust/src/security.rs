@@ -470,12 +470,16 @@ pub async fn authenticate(
             &state.config.public_origin,
         )?;
         let mut resolved = None;
+        let mut fallback_non_admin = None;
         for token in cookies {
             if let Ok(claims) = verify_session_token(&state.config.jwt_secret, &token, "web") {
                 if let Ok(session_user) =
                     resolve_db_session(&state, &claims, allow_deleting_account).await
                 {
                     if path.starts_with("/api/v1/admin") && !session_user.is_admin {
+                        if fallback_non_admin.is_none() {
+                            fallback_non_admin = Some(session_user);
+                        }
                         continue;
                     }
                     resolved = Some(session_user);
@@ -484,7 +488,9 @@ pub async fn authenticate(
             }
         }
         used_cookie_auth = true;
-        resolved.ok_or_else(|| AppError::Unauthorized("Sessão web inválida ou expirada".into()))?
+        resolved
+            .or(fallback_non_admin)
+            .ok_or_else(|| AppError::Unauthorized("Sessão web inválida ou expirada".into()))?
     };
 
     let catalog = state.catalog.refresh(&state.db).await?;
