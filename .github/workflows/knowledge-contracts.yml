@@ -9,6 +9,7 @@ on:
       - 'docs/catalogo/**'
       - '.github/workflows/knowledge-contracts.yml'
   push:
+    branches: ['main']
     paths:
       - 'shared/**'
       - 'scripts/**'

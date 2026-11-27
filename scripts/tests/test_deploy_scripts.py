@@ -55,6 +55,14 @@ class DeployWorkflowAndNginxConfigTest(unittest.TestCase):
         self.assertNotIn("--exercise-rollback || true", workflow)
         self.assertIn("--exercise-rollback", workflow)
         self.assertIn("sha256sum -c SHA256SUMS", workflow)
+        self.assertIn("build-apk:", workflow)
+        self.assertIn("build-image:", workflow)
+        self.assertIn("needs: [build-apk, build-image]", workflow)
+        self.assertIn("needs: [verify, emulator, rollback-drill]", workflow)
+
+        dockerfile = (ROOT / "backend-rust/Dockerfile").read_text(encoding="utf-8")
+        self.assertIn("FROM rust:1.93.1-alpine AS manifest-norm", dockerfile)
+        self.assertIn("COPY --from=manifest-norm /norm/Cargo.toml /norm/Cargo.lock ./", dockerfile)
 
     def test_validate_workflow_enforces_clippy_zero_warnings_and_scoped_skip_ci(self):
         workflow = (ROOT / ".github/workflows/validate.yml").read_text(encoding="utf-8")

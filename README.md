@@ -73,14 +73,14 @@ npm --prefix web-missions test
 cargo clippy --manifest-path backend-rust/Cargo.toml --all-targets --locked -- -D warnings
 cargo test --manifest-path backend-rust/Cargo.toml --locked
 
-# 4. Aplicativo Android (JVM, Lint e snapshots Paparazzi — requer JDK 17+ e Android SDK 35)
+# 4. Aplicativo Android (JVM, Lint e snapshots Paparazzi com daemon/build-cache — requer JDK 17+ e Android SDK 35)
 cd android-app
-./gradlew :app:testDebugUnitTest :app:lintDebug :app:verifyPaparazziDebug :app:assembleRelease
+./gradlew :app:testDebugUnitTest :app:lintDebug :app:verifyPaparazziDebug --build-cache
 ```
 
 ---
 
 ## 🚢 CI/CD e Promoção Atômica
 
-- **Validação Contínua ([`.github/workflows/validate.yml`](.github/workflows/validate.yml) e [`knowledge-contracts.yml`](.github/workflows/knowledge-contracts.yml)):** Executada automaticamente em todo `push`, `pull_request` e `workflow_dispatch`, validando contratos Python, links Markdown, paridade da Ajuda, testes do `/admin/`, `cargo clippy -D warnings`, suíte Rust (incluindo integração em MongoDB sintético) e testes JVM/Lint/Paparazzi Android.
-- **Release e Deploy ([`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)):** Disparado por tags `v*` ou execução manual, valida geometria e fluxos em emulador API 35, compila a imagem `cogniva-api`, assina o APK release com chave privada v2/v3, confere `SHA256SUMS`, roda `rollback-drill` isolado e executa [`deploy/promote.py`](deploy/promote.py) com gate Nginx `503` (`Retry-After: 15`), `--prepare-storage`, troca atômica de symlink e poda automática de releases antigas.
+- **Validação Contínua ([`.github/workflows/validate.yml`](.github/workflows/validate.yml) e [`knowledge-contracts.yml`](.github/workflows/knowledge-contracts.yml)):** Executada automaticamente em todo `push` em `main`, `pull_request` e `workflow_dispatch`, validando contratos Python, links Markdown, paridade da Ajuda, testes do `/admin/`, `cargo clippy -D warnings`, suíte Rust (incluindo integração em MongoDB sintético) e testes JVM/Lint/Paparazzi Android com daemon e build-cache aquecidos.
+- **Release e Deploy Paralelizado ([`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)):** Disparado por tags `v*` ou execução manual, dispara em paralelo `verify`, `emulator` (com pré-compilação dos APKs antes do boot QEMU API 35), `build-apk` (R8 + assinatura privada v2/v3) e `build-image` (`cogniva-api` com camada cacheada de dependências `musl`), empacota e valida `SHA256SUMS` + `rollback-drill` isolado e, somente após 100% dos gates verdes, executa [`deploy/promote.py`](deploy/promote.py) com gate Nginx `503` (`Retry-After: 15`), `--prepare-storage`, troca atômica de symlink e poda automática de releases antigas.

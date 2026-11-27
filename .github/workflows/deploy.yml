@@ -32,15 +32,12 @@ jobs:
   emulator:
     needs: guard
     uses: ./.github/workflows/emulator-insets.yml
-  build:
-    needs: [verify, emulator]
+  build-apk:
+    needs: guard
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 25
     permissions:
       contents: read
-      packages: write
-    outputs:
-      image: ${{ steps.image.outputs.reference }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -54,7 +51,7 @@ jobs:
         working-directory: android-app
         run: |
           chmod +x gradlew
-          ./gradlew :app:assembleRelease --no-daemon --console=plain
+          ./gradlew :app:assembleRelease --build-cache --console=plain
       - name: Private release signing
         env:
           KEYSTORE: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
@@ -64,14 +61,30 @@ jobs:
           test -n "$KEYSTORE" && test -n "$RELEASE_PASSWORD"
           umask 077
           printf '%s' "$KEYSTORE" | base64 --decode > "$RUNNER_TEMP/cogniva.p12"
-          mkdir -p release-bundle
+          mkdir -p signed-apk
           signer="$ANDROID_HOME/build-tools/35.0.0/apksigner"
-          "$signer" sign --out release-bundle/cogniva.apk --ks "$RUNNER_TEMP/cogniva.p12" --ks-key-alias cogniva --ks-pass env:RELEASE_PASSWORD android-app/app/build/outputs/apk/release/app-release-unsigned.apk
-          "$signer" verify --verbose --print-certs release-bundle/cogniva.apk > release-bundle/signature.txt
-          "$signer" verify --min-sdk-version 28 --max-sdk-version 35 release-bundle/cogniva.apk
-          if "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging release-bundle/cogniva.apk | grep -q application-debuggable; then exit 1; fi
-          cp android-app/app/build/outputs/apk/release/output-metadata.json release-bundle/
+          "$signer" sign --out signed-apk/cogniva.apk --ks "$RUNNER_TEMP/cogniva.p12" --ks-key-alias cogniva --ks-pass env:RELEASE_PASSWORD android-app/app/build/outputs/apk/release/app-release-unsigned.apk
+          "$signer" verify --verbose --print-certs signed-apk/cogniva.apk > signed-apk/signature.txt
+          "$signer" verify --min-sdk-version 28 --max-sdk-version 35 signed-apk/cogniva.apk
+          if "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging signed-apk/cogniva.apk | grep -q application-debuggable; then exit 1; fi
+          cp android-app/app/build/outputs/apk/release/output-metadata.json signed-apk/
           rm -f "$RUNNER_TEMP/cogniva.p12"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cogniva-apk-${{ github.sha }}
+          path: signed-apk/
+          retention-days: 1
+  build-image:
+    needs: guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.image.outputs.reference }}
+    steps:
+      - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -100,20 +113,10 @@ jobs:
           docker push "$tag"
           reference=$(docker image inspect "$tag" --format '{{index .RepoDigests 0}}')
           echo "reference=$reference" >> "$GITHUB_OUTPUT"
-          python3 scripts/package-release.py release-bundle --image "$reference" --revision "$REVISION"
-          cp deploy/promote.py release-bundle/
-          cp deploy/stage_bundle.py release-bundle/
-          cp scripts/cleanup-registry.py release-bundle/
-          (cd release-bundle && sha256sum cogniva.apk output-metadata.json release.json promote.py stage_bundle.py cleanup-registry.py > SHA256SUMS)
-      - uses: actions/upload-artifact@v4
-        with:
-          name: cogniva-release-${{ github.sha }}
-          path: release-bundle/
-          retention-days: 5
   rollback-drill:
-    needs: build
+    needs: [build-apk, build-image]
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     permissions:
       contents: read
       packages: read
@@ -121,11 +124,25 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: cogniva-release-${{ github.sha }}
+          name: cogniva-apk-${{ github.sha }}
           path: release-bundle
-      - name: Verify release bundle SHA256SUMS
-        working-directory: release-bundle
-        run: sha256sum -c SHA256SUMS
+      - name: Package release bundle and verify SHA256SUMS
+        env:
+          CANDIDATE_IMAGE: ${{ needs.build-image.outputs.image }}
+          REVISION: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          python3 scripts/package-release.py release-bundle --image "$CANDIDATE_IMAGE" --revision "$REVISION"
+          cp deploy/promote.py release-bundle/
+          cp deploy/stage_bundle.py release-bundle/
+          cp scripts/cleanup-registry.py release-bundle/
+          (cd release-bundle && sha256sum cogniva.apk output-metadata.json release.json promote.py stage_bundle.py cleanup-registry.py > SHA256SUMS)
+          (cd release-bundle && sha256sum -c SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cogniva-release-${{ github.sha }}
+          path: release-bundle/
+          retention-days: 5
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -133,7 +150,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Exercise promote.py rollback in isolated Docker Compose stack
         env:
-          CANDIDATE_IMAGE: ${{ needs.build.outputs.image }}
+          CANDIDATE_IMAGE: ${{ needs.build-image.outputs.image }}
           REVISION: ${{ github.sha }}
         run: |
           set -euo pipefail
@@ -189,7 +206,7 @@ jobs:
         if: always()
         run: docker rm -f api-rust-core sibling-tenant cogniva-drill-mongo 2>/dev/null || true
   promote:
-    needs: [build, rollback-drill]
+    needs: [verify, emulator, rollback-drill]
     if: github.event_name == 'push' || inputs.promote
     environment: production
     runs-on: ubuntu-latest
